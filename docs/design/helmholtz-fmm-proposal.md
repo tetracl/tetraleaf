@@ -340,8 +340,25 @@ Top level (level 2) against kD, at ε = 10⁻⁴ / 10⁻⁶ / 10⁻⁸:
 
 Doubling kD moves the whole table up one level.
 
-**Calibrated (H3, CH3.3; amended at H3.G).** The full FMM's rule, `DegreeRule::CALIBRATED`
-of `tetraleaf_exec::helmholtz`, with L = log₁₀(1/ε) and x = Re(k) a:
+**Calibrated (H3, CH3.3; amended at H3.G; the high-frequency branch amended at CH4.3c2).** The
+full FMM's rule, `DegreeRule::CALIBRATED` of `tetraleaf_exec::helmholtz`, with L = log₁₀(1/ε)
+and x = Re(k) a:
+
+```math
+p(x, \varepsilon) = \max\!\left(\lceil 0.30 L^2 + 0.25 L + 2.60 \rceil,\;
+\left\lceil \min\!\left(x + \max(0, e(\varepsilon))\, x^{1/3} + 5,\;
+x + 0.80 (\ln\tfrac{1}{\varepsilon})^{2/3} x^{1/3}\right) \right\rceil\right),
+\quad e(\varepsilon) = 2.30 (\ln\tfrac{1}{\varepsilon})^{2/3} - 0.75 L - 5.73
+```
+
+(amended at CH4.3c2) The plateau is CH3.3's. The high-frequency branch is refitted to level
+scans from ⌊x⌋ − 2 at x = 27–216 (random charges), its excess linear in L beside CH3.3's term,
+raised by 2 degrees because W1's constant density, whose boxes' errors add coherently, missed ε
+by up to 2.6× under the fit alone, and capped by CH3.3's branch (`DegreeRule::cap`), so that no
+degree exceeds CH3.3's rule (`DegreeRule::CH3_3`, the rule below as CH3.3 fitted it). It is
+CH3.3's rule at x ≤ 7 and 4–10 degrees below it at x ≥ 43 at 10⁻³, 0–3 at 10⁻⁸; every case of
+CH3.1c's matrix, CH3.3's held-out cases and W1 at kD = 250–1000 with the three densities is
+within ε under it (`tetraleaf-validate/results/helmholtz-ch4-3c2.md`). CH3.3's rule:
 
 ```math
 p(x, \varepsilon) = \max\!\left(\lceil 0.30 L^2 + 0.25 L + 2.60 \rceil,\;
@@ -353,24 +370,25 @@ sampled targets within ε/2 on W1, W3 and W4, measured over 0.14 ≤ x ≤ 65 an
 10⁻⁸ ≤ ε ≤ 10⁻³ and checked in the full FMM at x = 108 (W1 at kD = 500) and at x = 216 and
 108 (W1 at kD = 1000, within ε at 10⁻⁸ to 10⁻³, at most 0.83 ε; raising either level moves the
 error by under 1 %; amended at CH4.0c). Beyond that it is
-an extrapolation, below S7's per-pair p* as x grows and ε falls; CH4.3 recalibrates the
-high-frequency levels. The low-frequency plateau is 7, 9, 12, 15, 20 and 24 at
+an extrapolation, below S7's per-pair p* as x grows and ε falls; CH4.3c2 recalibrated the
+high-frequency levels (above). The low-frequency plateau is 7, 9, 12, 15, 20 and 24 at
 10⁻³ … 10⁻⁸, about half of S7's 16 … 46. On the example above (CH3.6's W1 tree at kD = 500,
-10⁻⁶, leaves on level 7):
+10⁻⁶, leaves on level 7; the calibrated column CH4.3c2's rule, CH3.3's 131 and 72 on levels 2
+and 3):
 
 | Level | Box width | p_l, formula | p_l, calibrated |
 | --- | --- | ---: | ---: |
-| 2 | 19.9 λ | 144 | 131 |
-| 3 | 9.9 λ | 82 | 72 |
+| 2 | 19.9 λ | 144 | 128 |
+| 3 | 9.9 λ | 82 | 71 |
 | 4 | 5.0 λ | 50 | 41 |
 | 5 | 2.5 λ | 33 | 25 |
 | 6 | 1.2 λ | 25 | 16 |
 | 7 | 0.6 λ | 23 | 15 |
 
 The top level, formula and calibrated rule, at 10⁻⁶ and 10⁻⁸: 43 and 48 against 35 and
-38 at kD = 100; 144 and 151 against 131 and 135 at kD = 500. The formula stays above as the
-uncalibrated reference. The excess p − x on the high-frequency levels grows about linearly
-in L, faster than the formula's (ln 1/ε)^{2/3}, which is CH4.3's to refit.
+38 at kD = 100; 144 and 151 against 128 and 134 at kD = 500 (CH3.3's rule 131 and 135). The
+formula stays above as the uncalibrated reference. The excess p − x on the high-frequency levels
+grows about linearly in L, faster than the formula's (ln 1/ε)^{2/3}, which CH4.3c2 refitted.
 
 **The M2L's degree on levels with waves (amended at H6.G).** Below ε = 10⁻⁶ a level that runs
 the exponential M2L (Section 5.3) has two degrees: the calibrated p_l above, and the
@@ -1925,6 +1943,11 @@ these.
   its question 1, signed off by the user, "Both questions as recommended"): Section 5.4, the
   interpolated build of the transfer functions the default, the per-sample build the trusted
   path.
+- **Amended at CH4.3c2, 2026-11-21** (`tetraleaf-validate/results/helmholtz-ch4-3c2.md`; PR #249,
+  its questions 1 and 2, signed off by the user, "Merge when green" and "q2 and Q3 as you
+  recommend"): Section 3.5, the calibrated rule's high-frequency branch refitted (excess linear
+  in L, raised by 2 for the constant density, capped by CH3.3's branch), CH3.3's rule kept
+  beside it, and the example table's calibrated degrees on levels 2 and 3.
 
 ## Appendix B. The stability check behind Section 3.6
 
