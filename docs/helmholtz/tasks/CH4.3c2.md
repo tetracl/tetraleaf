@@ -84,7 +84,7 @@ What the items mean here:
   ε over the existing grids; `CH3_3` reproduces CH3.3's rule's degrees on the old grid (exact);
   the shapes (S7's closed form, the ceilings' 10⁻⁹) still expressible; `resolve` and the doctest's
   degrees at the refit.
-- `fmm-validate`'s `helmholtz_calibration` unit tests: the new fit recovers a known rule from
+- `tetraleaf-validate`'s `helmholtz_calibration` unit tests: the new fit recovers a known rule from
   synthetic points, covers the points, and its least excess (as the existing `fit` tests do).
 - The FMM tests that use the default rule (`tests/helmholtz_fmm.rs`, `helmholtz_accuracy`,
   `tetraleaf-tables`' helmholtz tests) pass on the refit unchanged in their bounds: they compare

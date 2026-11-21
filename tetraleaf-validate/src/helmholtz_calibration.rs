@@ -190,7 +190,7 @@ pub const CH3_3_EPSILONS: [f64; 6] = [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8];
 /// CH3.3's level scans (`tetraleaf-validate/results/helmholtz-ch3-3.md` §3; Helmholtz CH4.3c2 keeps
 /// them as data, since the scans' outputs were not archived): (workload, kD, level, x, the
 /// smallest degree meeting ε/2 at each of [`CH3_3_EPSILONS`]). x = Re(k) a_l to four places
-/// (`fmm-exec`'s `tests/helmholtz/degree.rs`, `MEASURED`).
+/// (`tetraleaf-exec`'s `tests/helmholtz/degree.rs`, `MEASURED`).
 pub const CH3_3_LEVELS: [(&str, f64, usize, f64, [usize; 6]); 16] = [
     ("w3:108849", 30.0, 4, 1.6238, [6, 8, 11, 14, 18, 22]),
     ("w1", 100.0, 5, 2.7063, [7, 8, 11, 14, 17, 20]),
@@ -286,7 +286,10 @@ impl BranchForm {
 }
 
 /// The (x, ε) on which [`fit_branch`] holds a cap: x = 4 · 2^{k/16} for k = 0 … 112 (4 to
-/// 512) and ε = 10⁻³ … 10⁻⁸ (D1's range).
+/// 512) and ε = 10⁻³ … 10⁻⁸ (D1's range), at the decades. Between them a capped rule may
+/// exceed the cap: CH4.3c2's by one degree at 2 of the 5,763 points of the same x and
+/// ε = 10^{−j/10}, j = 30 … 80; holding the cap there too raised the fit's degrees at
+/// x = 216 by 2–4 (Helmholtz CH4.3c2's report).
 pub fn cap_grid() -> Vec<(f64, f64)> {
     (0..=112)
         .flat_map(|k| {

@@ -1125,9 +1125,11 @@ fn the_rcr_pairs_after_f2r_at_every_chunk_size() {
 // ---------------------------------------------------------------------------------------
 // CH4.3a: the bound on the FMM's levels (docs/helmholtz/tasks/CH4.3a.md).
 
-/// The calibrated degree of `tetraleaf_exec::helmholtz::DegreeRule::CALIBRATED` (proposal §3.5,
-/// CH3.3), restated: this crate cannot depend on tetraleaf-exec. x = Re(k) a, L = log₁₀(1/ε); the
-/// ceilings forgive 10⁻⁹ as the rule's do.
+/// CH3.3's calibrated degree, `tetraleaf_exec::helmholtz::DegreeRule::CH3_3` (proposal §3.5),
+/// the default when CH4.3a's and CH4.3c1's studies ran, restated: this crate cannot depend on
+/// tetraleaf-exec. x = Re(k) a, L = log₁₀(1/ε); the ceilings forgive 10⁻⁹ as the rule's do.
+/// The default since Helmholtz CH4.3c2, `DegreeRule::CALIBRATED`, is lower at x ≥ 43; the
+/// studies keep the degrees they reported.
 fn calibrated_degree(x: f64, eps: f64) -> usize {
     let l = (1.0 / eps).log10();
     let ceil = |v: f64| (v - 1e-9).ceil() as usize;

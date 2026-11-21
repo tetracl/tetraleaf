@@ -1,7 +1,8 @@
-//! The degree p_l of each level of a Helmholtz FMM (Helmholtz CH3.1a, calibrated in CH3.3;
-//! docs/design/helmholtz-fmm-proposal.md §3.5; spike S7,
-//! `spikes/truncation/SPIKE_REPORT.md` §3 and §8, question 1, signed off on 2026-10-29;
-//! `tetraleaf-validate/results/helmholtz-ch3-3.md`).
+//! The degree p_l of each level of a Helmholtz FMM (Helmholtz CH3.1a, calibrated in CH3.3,
+//! its high-frequency branch refitted in CH4.3c2; docs/design/helmholtz-fmm-proposal.md §3.5;
+//! spike S7, `spikes/truncation/SPIKE_REPORT.md` §3 and §8, question 1, signed off on
+//! 2026-10-29; `tetraleaf-validate/results/helmholtz-ch3-3.md`,
+//! `tetraleaf-validate/results/helmholtz-ch4-3c2.md`).
 //!
 //! The degrees are a setting of the FMM, [`Degrees`]: by default a rule at a tolerance ε,
 //! or degrees named per level, which tests and the calibration use. The rule is
@@ -9,15 +10,17 @@
 //! the level's boxes and L = log₁₀(1/ε),
 //!
 //! ```text
-//! p(x, ε) = max(⌈0.30 L² + 0.25 L + 2.60⌉, ⌈x + 0.80 (ln 1/ε)^{2/3} x^{1/3}⌉),
+//! p(x, ε) = max(⌈0.30 L² + 0.25 L + 2.60⌉, ⌈x + max(0, e(ε)) x^{1/3} + 3⌉),
+//! e(ε) = 2.30 (ln 1/ε)^{2/3} − 0.75 L − 5.73,
 //! ```
 //!
 //! a low-frequency plateau and a high-frequency branch, calibrated in the full FMM
-//! (Helmholtz CH3.3): every degree the smallest that keeps the relative ℓ2 errors of φ and
+//! (the plateau and CH3.3's branch in Helmholtz CH3.3, the branch refitted in CH4.3c2):
+//! every degree the smallest that keeps the relative ℓ2 errors of φ and
 //! ∇φ over 1,000 sampled targets within ε/2, on W1, W3 and W4 of proposal §9.1, one level
 //! scanned at a time (the plateau on trees with every level at x ≤ 2.2, all levels together),
-//! over 0.14 ≤ x ≤ 65 and 10⁻⁸ ≤ ε ≤ 10⁻³ (the plateau to 10⁻¹⁰); the rule is at least
-//! every measured degree. That is the range the rule is measured on, D1's 10⁻⁸ ≤ ε ≤ 10⁻³
+//! over 0.14 ≤ x ≤ 65 and 10⁻⁸ ≤ ε ≤ 10⁻³ (the plateau to 10⁻¹⁰; CH3.3), and at x = 54,
+//! 108 and 216 on W1 and the cube (CH4.3c2); the rule is at least every measured degree. That is the range the rule is measured on, D1's 10⁻⁸ ≤ ε ≤ 10⁻³
 //! (Helmholtz CH4.0c, review 2026-11-12 M6); outside it the rule is an extrapolation. Below
 //! 10⁻⁸ the constant density on W1 at kD = 100 misses ε in ℓ2, 1.5× at 10⁻⁹ and 3.4× at
 //! 10⁻¹⁰, all from level 2 on the high-frequency branch (CH4.0b, report §4), although the
@@ -38,16 +41,20 @@
 //! at low frequency (34 against 15 at ε = 10⁻⁶), where the full FMM's errors lay 10³ to 10⁶
 //! below ε (CH3.1c).
 //!
-//! The high-frequency branch is measured to x = 65 (kD = 300 on the unit cube) and checked
-//! in the full FMM at x = 108 (W1 at kD = 500, 0.63 ε at ε = 10⁻⁸; CH3.3) and at x = 216 and
-//! 108 (W1 at kD = 1000, levels 2 and 3, at 10⁻⁸ to 10⁻³, all-RCR and the default, random
-//! charges, the plane wave's trace and the constant density: within ε in ℓ2, at most 0.83 ε,
-//! raising either level beyond x = 65 moves the error at 10⁻⁸ by under 1 %; and the
-//! under-resolved W3 at N = 10⁶, x = 108 at kD = 500, at most 0.72 ε; Helmholtz CH4.0c,
-//! `tetraleaf-validate/results/helmholtz-ch4-0c.md`). Beyond, it is an extrapolation that falls
-//! increasingly below S7's per-pair p* as x grows and ε falls (157 against 161 at x = 128,
-//! 292 against 297 at x = 256, both at 10⁻⁸): the measured excess p − x grows about linearly
-//! in log₁₀(1/ε), faster than (ln 1/ε)^{2/3}. CH4.3 recalibrates the high-frequency levels.
+//! The high-frequency branch is CH4.3c2's refit ([`DegreeRule::CALIBRATED`]): the shape
+//! x + e(ε) x^{1/3} + d of CH3.3's, the excess e(ε) given a term linear in L and a constant
+//! beside C (ln 1/ε)^{2/3}, fitted to CH3.3's level scans and CH4.3c2's at x = 54, 108 and
+//! 216 (W1 at kD = 250 and 500, the cube at kD = 250, 500 and 1000) as the least total
+//! excess over the measured degrees that covers every one of them, subject to staying at or
+//! below CH3.3's rule ([`DegreeRule::CH3_3`]) on 4 ≤ x ≤ 512, 10⁻⁸ ≤ ε ≤ 10⁻³. It is 4–12
+//! degrees below CH3.3's at x ≥ 43 (222 against 234 at x = 216, ε = 10⁻³; 246 against 251
+//! at 10⁻⁸), within 0–4 of the measured degrees at x = 216. Spike S7's per-pair worst case at
+//! the rule's degrees stays within the largest the FMM's measured degrees reach at x ≥ 43
+//! (at most 18 ε against 34 ε at 10⁻⁸) on k a = 45 … 256. The FMM's errors under it are
+//! checked on CH3.1c's matrix, CH3.3's held-out cases and W1 at kD = 500 and 1000 (CH4.3c2's
+//! report). Beyond x = 216 it is an extrapolation. The excess is taken at least 0: e(ε) < 0
+//! for ε above about 2 · 10⁻³, outside the measured range, where the fitted terms alone would
+//! put the degree below x.
 //!
 //! Complex k takes Re(k) a, provisionally: S7 found η = Im k / Re k = 0.1 within 10 degrees
 //! of real k, and the damping-dependent rule is CH5.2's.
@@ -67,12 +74,13 @@
 //! assert_eq!(degree(&k, 0.01, 1e-6), 15);
 //! assert_eq!(s7_degree(&k, 0.01, 1e-6), 34);
 //!
-//! // kD = 100 on the unit cube: level 2 has x = 100 · √3 / 8 ≈ 21.65, so
-//! // ⌈21.65 + 0.80 · 13.8^{2/3} · 21.65^{1/3}⌉ = 35; level 3 (x ≈ 10.8) 22.
+//! // kD = 100 on the unit cube: level 2 has x = 100 · √3 / 8 ≈ 21.65 and e(10⁻⁶) =
+//! // 2.30 · 13.8^{2/3} − 4.5 − 5.73 ≈ 3.01, so ⌈21.65 + 3.01 · 21.65^{1/3} + 3⌉ = ⌈33.05⌉
+//! // = 34 (CH3.3's rule 35); level 3 (x ≈ 10.8) 21 (22).
 //! let k = Wavenumber::new(100.0, 0.0).unwrap();
 //! let domain = Domain::new(&PhysicalBox::new([0.0, 0.0, 0.0, 1.0, 1.0, 1.0])).unwrap();
 //! let degrees = Degrees::Tolerance(1e-6).resolve(&k, &domain, 4).unwrap();
-//! assert_eq!(degrees, [0, 0, 35, 22]);
+//! assert_eq!(degrees, [0, 0, 34, 21]);
 //! ```
 
 use thiserror::Error;
@@ -216,8 +224,18 @@ impl DegreeRule {
     /// γ = 0.30, α = 0.25, β = 2.60, C = 0.80, the default until CH4.3c2.
     pub const CH3_3: Self = Self::gd(0.30, 0.25, 2.60, 0.80);
 
-    /// The default rule, calibrated in the full FMM (module documentation).
-    pub const CALIBRATED: Self = Self::CH3_3;
+    /// The default rule, calibrated in the full FMM (module documentation): CH3.3's plateau
+    /// and CH4.3c2's high-frequency branch, γ = 0.30, α = 0.25, β = 2.60, C = 2.30, a = −0.75,
+    /// b = −5.73, d = 3 (`tetraleaf-validate/results/helmholtz-ch4-3c2.md`).
+    pub const CALIBRATED: Self = Self {
+        gamma: 0.30,
+        alpha: 0.25,
+        beta: 2.60,
+        c: 2.30,
+        a: -0.75,
+        b: -5.73,
+        d: 3.0,
+    };
 
     /// The rule of S7's shape, max(⌈γ L² + α L + β⌉, ⌈x + C (ln 1/ε)^{2/3} x^{1/3}⌉): a = b =
     /// d = 0.
@@ -246,9 +264,10 @@ impl DegreeRule {
         self.c * inverse.ln().powf(2.0 / 3.0) + self.a * inverse.log10() + self.b
     }
 
-    /// The high-frequency branch ⌈x + (C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉, at least 0.
+    /// The high-frequency branch ⌈x + max(0, C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉, at least
+    /// 0: the excess taken at least 0, so that no ε puts the branch below x + d.
     pub fn high(&self, x: f64, epsilon: f64) -> usize {
-        rounded_up(x + self.excess(epsilon) * x.cbrt() + self.d)
+        rounded_up(x + self.excess(epsilon).max(0.0) * x.cbrt() + self.d)
     }
 
     /// The larger of [`DegreeRule::plateau`] and [`DegreeRule::high`].

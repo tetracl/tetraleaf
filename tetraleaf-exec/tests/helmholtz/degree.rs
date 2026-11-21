@@ -1,7 +1,9 @@
 //! The degree rules: S7's closed form (Helmholtz CH3.1a; spike S7,
 //! `spikes/truncation/results/summary.md`, "Per-level degree p*") at its grid points, never
-//! below p*; the calibrated default (Helmholtz CH3.3, `tetraleaf-validate/results/helmholtz-ch3-3.md`)
-//! never above S7's, monotone, at its fitted points; and `Degrees::resolve`. Exact integers.
+//! below p*; the calibrated default (Helmholtz CH3.3, its high-frequency branch refitted in
+//! CH4.3c2; `tetraleaf-validate/results/helmholtz-ch3-3.md`, `helmholtz-ch4-3c2.md`) never above
+//! S7's or CH3.3's, monotone, at its fitted points; CH3.3's rule kept; and `Degrees::resolve`.
+//! Exact integers.
 
 use tetraleaf_exec::geometry::{Domain, radius};
 use tetraleaf_exec::helmholtz::{DegreeError, DegreeRule, Degrees, Wavenumber, degree, s7_degree};
@@ -120,9 +122,12 @@ fn the_closed_form_at_s7_grid_points() {
 }
 
 /// The largest measured degree at ε/2 per ε (10⁻³ … 10⁻⁸) at the levels' x of CH3.3's
-/// scans (`tetraleaf-validate/results/helmholtz-ch3-3.md` §2 and §3): (x, [p per ε]); the plateau
-/// scans' envelope at their largest x, then the level scans.
-const MEASURED: [(f64, [usize; 6]); 12] = [
+/// scans (`tetraleaf-validate/results/helmholtz-ch3-3.md` §2 and §3) and CH4.3c2's
+/// (`tetraleaf-validate/results/helmholtz-ch4-3c2.md`): (x, [p per ε]); the plateau scans'
+/// envelope at their largest x, then the level scans. CH4.3c2's rows take the largest degree
+/// over the workloads at one x and the smallest of their x (the cube at N = 10⁴ has a
+/// slightly smaller box).
+const MEASURED: [(f64, [usize; 6]); 16] = [
     (2.1651, [6, 9, 12, 15, 20, 24]),
     (1.6238, [6, 8, 11, 14, 18, 22]),
     (2.7063, [7, 8, 11, 14, 17, 20]),
@@ -135,6 +140,10 @@ const MEASURED: [(f64, [usize; 6]); 12] = [
     (21.6507, [26, 28, 31, 33, 35, 37]),
     (43.3018, [47, 51, 54, 57, 60, 62]),
     (64.9528, [69, 73, 77, 80, 83, 86]),
+    (27.0637, [32, 34, 37, 39, 41, 44]),
+    (54.1273, [58, 62, 65, 68, 71, 74]),
+    (108.2478, [112, 117, 121, 126, 129, 132]),
+    (216.4956, [218, 225, 230, 235, 240, 244]),
 ];
 
 #[test]
@@ -166,6 +175,70 @@ fn the_calibrated_rule_is_at_most_s7s_and_monotone() {
             assert!(p >= degree(&k, 0.9, epsilon), "not monotone in x");
         }
     }
+}
+
+/// The refit's cap (Helmholtz CH4.3c2): the default at or below CH3.3's rule on
+/// 4 ≤ x ≤ 512 at ε = 10⁻³ … 10⁻⁸, the grid of the fit's cap; between the decades
+/// (ε = 10^{−j/10}) at most one degree above it, at two points only.
+#[test]
+fn the_calibrated_rule_is_at_most_ch3_3s() {
+    let mut above = Vec::new();
+    for k in 0..=112 {
+        let x = 4.0 * 2f64.powf(f64::from(k) / 16.0);
+        for j in 30..=80 {
+            let epsilon = 10f64.powf(-f64::from(j) / 10.0);
+            let (p, ch3_3) = (
+                DegreeRule::CALIBRATED.degree(x, epsilon),
+                DegreeRule::CH3_3.degree(x, epsilon),
+            );
+            assert!(
+                p <= ch3_3 + 1 && (j % 10 != 0 || p <= ch3_3),
+                "x = {x}, ε = {epsilon:e}: {p} against CH3.3's {ch3_3}"
+            );
+            if p > ch3_3 {
+                above.push((k, j));
+            }
+        }
+    }
+    // x = 4 · 2^{19/16} ≈ 9.11 at 10^{−7.2} and x = 4 · 2^{23/16} ≈ 10.84 at 10^{−7.8}.
+    assert_eq!(above, [(19, 72), (23, 78)]);
+}
+
+/// The excess is taken at least 0 (the refit's e(ε) < 0 above ε ≈ 2 · 10⁻³): at any ε the
+/// high-frequency branch is at least ⌈x + d⌉ = ⌈x⌉ + 3.
+#[test]
+fn the_high_branch_is_never_below_x() {
+    let rule = DegreeRule::CALIBRATED;
+    assert!(rule.excess(1e-2) < 0.0 && rule.excess(1e-3) > 0.0);
+    for x in [10.0, 100.0, 216.5, 1000.0] {
+        for epsilon in [0.5, 0.1, 1e-2, 2e-3, 1e-3] {
+            assert!(
+                rule.high(x, epsilon) >= x.ceil() as usize + 3,
+                "x = {x}, ε = {epsilon:e}"
+            );
+        }
+    }
+    // At ε = 10⁻² and x = 216.5 the unclamped branch would be ⌈216.5 − 0.86 · 6.0 + 3⌉ = 215.
+    assert_eq!(rule.high(216.5, 1e-2), 220);
+}
+
+/// CH3.3's rule is kept as [`DegreeRule::CH3_3`]: the degrees of the default before CH4.3c2.
+#[test]
+fn ch3_3s_rule_is_kept() {
+    let rule = DegreeRule::CH3_3;
+    assert_eq!(rule, DegreeRule::gd(0.30, 0.25, 2.60, 0.80));
+    // kD = 100 on the unit cube at 10⁻⁶ (the module example before CH4.3c2): 35 and 22.
+    let x = 100.0 * 3f64.sqrt() / 8.0;
+    assert_eq!(rule.degree(x, 1e-6), 35);
+    assert_eq!(rule.degree(x / 2.0, 1e-6), 22);
+    assert_eq!(DegreeRule::CALIBRATED.degree(x, 1e-6), 34);
+    assert_eq!(DegreeRule::CALIBRATED.degree(x / 2.0, 1e-6), 21);
+    // x = 216.5: CH3.3's 234 … 251 at 10⁻³ … 10⁻⁸, the refit's 222 … 246.
+    let ch3_3: Vec<usize> = [1e-3, 1e-8].map(|e| rule.degree(216.5, e)).to_vec();
+    let refit: Vec<usize> = [1e-3, 1e-8]
+        .map(|e| DegreeRule::CALIBRATED.degree(216.5, e))
+        .to_vec();
+    assert_eq!((ch3_3, refit), (vec![234, 251], vec![222, 246]));
 }
 
 #[test]
@@ -201,11 +274,23 @@ fn complex_k_takes_its_real_part() {
 fn resolve() {
     let domain = Domain::new(&PhysicalBox::new([-1.0, -1.0, -1.0, 3.0, 3.0, 3.0])).unwrap();
     let k = Wavenumber::new(50.0, 0.0).unwrap();
-    // Side 4: r₂ = 0.5, x₂ = 50 · 0.866 = 43.3 and ⌈43.3 + 0.8 · 18.42^{2/3} · 43.3^{1/3}⌉
-    // = ⌈43.3 + 0.8 · 6.975 · 3.512⌉ = 63; level 3 ⌈21.65 + 0.8 · 6.975 · 2.787⌉ = 38;
-    // level 4 (x = 10.8) and 5 the plateau ⌈0.30 · 64 + 0.25 · 8 + 2.60⌉ = 24.
+    // Side 4: r₂ = 0.5, x₂ = 50 · 0.866 = 43.3 and, with e(10⁻⁸) = 2.30 · 18.42^{2/3} − 6 − 5.73
+    // = 4.31, ⌈43.3 + 4.31 · 43.3^{1/3} + 3⌉ = ⌈61.44⌉ = 62; level 3 ⌈21.65 + 4.31 · 2.787 + 3⌉
+    // = 37; level 4 (x = 10.8) and 5 the plateau ⌈0.30 · 64 + 0.25 · 8 + 2.60⌉ = 24.
     let degrees = Degrees::Tolerance(1e-8).resolve(&k, &domain, 6).unwrap();
-    assert_eq!(degrees, [0, 0, 63, 38, 24, 24]);
+    assert_eq!(degrees, [0, 0, 62, 37, 24, 24]);
+    // CH3.3's rule, named: ⌈43.3 + 0.8 · 6.975 · 3.512⌉ = 63, ⌈21.65 + 0.8 · 6.975 · 2.787⌉
+    // = 38, the same plateau.
+    let ch3_3 = Degrees::Tolerance(1e-8)
+        .resolve_with(&DegreeRule::CH3_3, &k, &domain, 6)
+        .unwrap();
+    assert_eq!(ch3_3, [0, 0, 63, 38, 24, 24]);
+    assert_eq!(
+        Degrees::Tolerance(1e-8)
+            .resolve_with(&DegreeRule::CALIBRATED, &k, &domain, 6)
+            .unwrap(),
+        degrees
+    );
     // S7's closed form: 68 on level 2, its floor ⌈6 · 8⌉ − 2 = 46 below.
     let s7: Vec<usize> = (2..6)
         .map(|l| s7_degree(&k, 3f64.sqrt() * radius(l, &domain), 1e-8))

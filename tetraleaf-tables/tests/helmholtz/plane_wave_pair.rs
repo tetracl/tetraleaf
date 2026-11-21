@@ -837,9 +837,10 @@ const STUDY_KAPPAS: [(f64, f64); 13] = [
     (10.0, 5.0),
 ];
 
-/// The FMM's degree of a level of κ = k w at ε: `tetraleaf_exec::helmholtz::DegreeRule::
-/// CALIBRATED` at x = Re(k) a = (√3/2) Re κ, restated (tetraleaf-tables does not depend on
-/// tetraleaf-exec).
+/// The FMM's degree of a level of κ = k w at ε when CH6.1f's study ran: CH3.3's rule,
+/// `tetraleaf_exec::helmholtz::DegreeRule::CH3_3` at x = Re(k) a = (√3/2) Re κ, restated
+/// (tetraleaf-tables does not depend on tetraleaf-exec). The default since Helmholtz CH4.3c2,
+/// `DegreeRule::CALIBRATED`, is lower at x ≥ 43; the study keeps the degrees it reported.
 fn calibrated_degree(kappa: C, eps: f64) -> usize {
     let l = (1.0 / eps).log10();
     let up = |v: f64| (v - 1e-9).ceil().max(0.0) as usize;
