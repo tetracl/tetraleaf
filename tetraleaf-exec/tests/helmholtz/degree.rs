@@ -171,12 +171,7 @@ fn the_calibrated_rule_is_at_most_s7s_and_monotone() {
 #[test]
 fn degree_rule_shapes() {
     // S7's closed form is γ = 0, α = 6, β = −2, C = 1 (up to the forgiving ceilings).
-    let s7 = DegreeRule {
-        gamma: 0.0,
-        alpha: 6.0,
-        beta: -2.0,
-        c: 1.0,
-    };
+    let s7 = DegreeRule::gd(0.0, 6.0, -2.0, 1.0);
     for (ka, row) in ROWS {
         for (epsilon, (_, closed)) in EPSILONS.into_iter().zip(row) {
             assert_eq!(
@@ -187,12 +182,7 @@ fn degree_rule_shapes() {
         }
     }
     // The ceilings forgive 10⁻⁹: 2.5 · 6 + 1 = 16 exactly at ε = 10⁻⁶.
-    let rule = DegreeRule {
-        gamma: 0.0,
-        alpha: 2.5,
-        beta: 1.0,
-        c: 0.0,
-    };
+    let rule = DegreeRule::gd(0.0, 2.5, 1.0, 0.0);
     assert_eq!(rule.plateau(1e-6), 16);
     assert_eq!(rule.high(0.0, 1e-6), 0);
     assert_eq!(rule.degree(20.0, 1e-6), 20);

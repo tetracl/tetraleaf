@@ -26,6 +26,12 @@
 //!   `DegreeRule` (the plateau's γ, α and β to the points whose x is at most `PLATEAU_X`, of
 //!   either scan, C to every point), and prints the rule and each point against it and
 //!   against S7.
+//! - **`refit [files…]`** (no MPI; Helmholtz CH4.3c2): the high-frequency branch refitted with
+//!   CH3.3's plateau kept, over CH3.3's level points (`helmholtz_calibration::CH3_3_LEVELS`)
+//!   and the `point: level` lines of the files with x above `PLATEAU_X`, in both forms of
+//!   `fit_branch` (A: ⌈x + (a L + b) x^{1/3}⌉; B: with an offset d); prints each rule's
+//!   constants, whether it covers every point, its total excess, and every point against
+//!   CH3.3's rule, A and B.
 //!
 //! Options of the scans: `--workload w` (as `helmholtz_accuracy`: `w1`, `w2`, `w3`,
 //! `w3:<n>`, `w4-<distribution>:<n>`), `--kd x,…`, `--kim y`, `--eps e,…` (default
@@ -50,7 +56,9 @@ use tetraleaf_exec::helmholtz::{ChargeKind, DegreeRule, Degrees, Wavenumber, s7_
 use tetraleaf_validate::bench::{cores, cpu_model, target};
 use tetraleaf_validate::fmm_accuracy::Distribution;
 use tetraleaf_validate::helmholtz_accuracy::{Case, Oracle, Problem, complex_k, run};
-use tetraleaf_validate::helmholtz_calibration::{Curve, Point, covers, fit};
+use tetraleaf_validate::helmholtz_calibration::{
+    BranchForm, CH3_3_LEVELS, Curve, Point, ch3_3_level_points, covers, fit, fit_branch,
+};
 use tetraleaf_validate::helmholtz_workloads::Workload;
 
 /// Plateau points with x at most this go to the plateau's fit (S7: p is flat in k a below
@@ -158,12 +166,7 @@ fn arguments(args: &[String]) -> Arguments {
             "--min-x" => value.parse().map(|v| parsed.min_x = v).is_ok(),
             "--hold-eps" => value.parse().map(|v| parsed.hold_epsilon = Some(v)).is_ok(),
             "--hold" => match list::<f64>(value).as_deref() {
-                Some(&[gamma, alpha, beta, c]) => Some(DegreeRule {
-                    gamma,
-                    alpha,
-                    beta,
-                    c,
-                }),
+                Some(&[gamma, alpha, beta, c]) => Some(DegreeRule::gd(gamma, alpha, beta, c)),
                 _ => None,
             }
             .map(|r| parsed.hold = Some(r))
@@ -491,10 +494,107 @@ fn fit_files(files: &[String]) {
     }
 }
 
+/// The `refit` mode of the module documentation (Helmholtz CH4.3c2).
+fn refit_files(files: &[String]) {
+    let mut points = ch3_3_level_points();
+    let mut names: Vec<String> = CH3_3_LEVELS
+        .iter()
+        .flat_map(|&(workload, kd, level, _, _)| {
+            (0..6).map(move |_| format!("CH3.3 | {workload} | {kd} | {level}"))
+        })
+        .collect();
+    for file in files {
+        let text = std::fs::read_to_string(file).unwrap_or_else(|e| panic!("{file}: {e}"));
+        for line in text.lines().filter_map(|l| l.strip_prefix("point: ")) {
+            let f: Vec<&str> = line.split_whitespace().collect();
+            let [kind, workload, kd, level, x, epsilon, half, _, _] = f[..] else {
+                panic!("{file}: a malformed point line: {line}");
+            };
+            let parse = |v: &str| v.parse::<f64>().unwrap_or_else(|_| panic!("{line}"));
+            if kind != "level" || parse(x) <= PLATEAU_X {
+                continue;
+            }
+            points.push(Point {
+                x: parse(x),
+                epsilon: parse(epsilon),
+                degree: parse(half) as usize,
+            });
+            names.push(format!("{kind} | {workload} | {kd} | {level}"));
+        }
+    }
+    let ch3_3 = DegreeRule::CH3_3;
+    println!("# Helmholtz degree calibration: the high-frequency branch refitted");
+    println!();
+    println!(
+        "{} level points (CH3.3's {} and {} from {}); the plateau CH3.3's, \
+         ⌈{:.2} L² + {:.2} L + {:.2}⌉, L = log₁₀(1/ε)",
+        points.len(),
+        CH3_3_LEVELS.len() * 6,
+        points.len() - CH3_3_LEVELS.len() * 6,
+        if files.is_empty() {
+            "no files".to_string()
+        } else {
+            files.join(", ")
+        },
+        ch3_3.gamma,
+        ch3_3.alpha,
+        ch3_3.beta
+    );
+    println!();
+    let excess = |rule: &DegreeRule| {
+        points
+            .iter()
+            .map(|p| rule.degree(p.x, p.epsilon) as i64 - p.degree as i64)
+            .sum::<i64>()
+    };
+    let mut rules = vec![("CH3.3", ch3_3)];
+    for (name, form) in [("A", BranchForm::Linear), ("B", BranchForm::LinearOffset)] {
+        match fit_branch(&points, &ch3_3, form) {
+            Some(rule) => rules.push((name, rule)),
+            None => println!("form {name}: no rule fits"),
+        }
+    }
+    println!("| rule | C | a | b | d | covers | Σ (rule − p) |");
+    println!("| --- | ---: | ---: | ---: | ---: | --- | ---: |");
+    for (name, rule) in &rules {
+        println!(
+            "| {name} | {:.2} | {:.2} | {:.2} | {:.2} | {} | {} |",
+            rule.c,
+            rule.a,
+            rule.b,
+            rule.d,
+            covers(rule, &points),
+            excess(rule)
+        );
+    }
+    println!();
+    print!("| source | workload | kD | level | x | ε | p at ε/2 |");
+    for (name, _) in &rules {
+        print!(" {name} |");
+    }
+    println!();
+    print!("| --- | --- | --- | ---: | ---: | --- | ---: |");
+    for _ in &rules {
+        print!(" ---: |");
+    }
+    println!();
+    for (point, name) in points.iter().zip(&names) {
+        print!(
+            "| {name} | {:.3} | {:e} | {} |",
+            point.x, point.epsilon, point.degree
+        );
+        for (_, rule) in &rules {
+            print!(" {} |", rule.degree(point.x, point.epsilon));
+        }
+        println!();
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.split_first() {
         Some((mode, files)) if mode == "fit" && !files.is_empty() => fit_files(files),
+        Some((mode, files)) if mode == "refit" => refit_files(files),
         _ => scans(&arguments(&args)),
     }
 }

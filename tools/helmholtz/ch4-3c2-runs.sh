@@ -17,11 +17,14 @@
 # - `scans-w1`: the same on W1 at kD = 250 level 2 (x = 54.1) and kD = 500 levels 2 and 3
 #   (x = 108.3, 54.1);
 # - `verify-matrix`: CH3.1c's matrix and CH3.3's held-out cases (`helmholtz_accuracy`)
-#   under Rotation and the library's default, against ε, the rule as built (the refit), and
-#   with `--rule ch3-3` (CH3.3's rule) for the errors and times before;
+#   under Rotation (`--m2l rotation`, the near rules off, as CH3.3 verified) and the
+#   library's defaults (`--m2l auto-pw --near-v cost --near-wx cost`, as CH4.3b2*), against
+#   ε, the rule as built (the refit), and with `--rule ch3-3` (CH3.3's rule) for the errors
+#   and times before;
 # - `verify-w1`: W1 at kD = 500 and 1000 (`helmholtz_boxes`, the samples only) at 10⁻⁸,
 #   10⁻⁷, 10⁻⁶ and 10⁻³, the random charges, the plane wave's trace and the constant
-#   density, Rotation and the default.
+#   density, Rotation and `helmholtz_boxes`' default (Auto, the near rules off, as CH4.0c),
+#   the rule as built and CH3.3's.
 # Each launch's output in <out-dir>/<name>.md (stderr in <name>.err), a line per launch in
 # <out-dir>/runs.log. BLAS threads 1. Accuracy runs; times are read on Kathleen only
 # (exclusive nodes), never asserted. TIMEOUT (default 18000) bounds a launch; ONLY (a
@@ -69,27 +72,34 @@ scans-w1)
     ;;
 verify-matrix)
     A=helmholtz_accuracy
-    M=(--m2l rotation,default)
     for rule in calibrated ch3-3; do
-        R=(--rule "$rule" "${M[@]}")
-        # CH3.1c's matrix (its §6) with W3 at kD = 100 also at 10⁻⁸, as CH3.3 verified.
-        launch "$rule-w1" $A --workload w1 --kd 10,30,100,500 --eps 1e-3,1e-6,1e-8 "${R[@]}"
-        launch "$rule-w3" $A --workload w3 --kd 10,30,100 --eps 1e-3,1e-6,1e-8 "${R[@]}"
-        for d in cube sphere plummer clusters; do
-            launch "$rule-w4-$d" $A --workload "w4-$d:100000" --kd 1,10,100 \
-                --eps 1e-3,1e-6,1e-8 "${R[@]}"
+        for m2l in rotation defaults; do
+            if [ $m2l = rotation ]; then
+                R=(--rule "$rule" --m2l rotation)
+            else
+                R=(--rule "$rule" --m2l auto-pw --near-v cost --near-wx cost)
+            fi
+            n=$rule-$m2l
+            # CH3.1c's matrix (its §6) with W3 at kD = 100 also at 10⁻⁸, as CH3.3 verified.
+            launch "$n-w1" $A --workload w1 --kd 10,30,100,500 --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            launch "$n-w3" $A --workload w3 --kd 10,30,100 --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            for d in cube sphere plummer clusters; do
+                launch "$n-w4-$d" $A --workload "w4-$d:100000" --kd 1,10,100 \
+                    --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            done
+            launch "$n-w1-real" $A --workload w1 --kd 100 --eps 1e-3,1e-6 --charges real \
+                "${R[@]}"
+            launch "$n-w1-complex-k" $A --workload w1 --kd 100 --kim 10 --eps 1e-3,1e-6 \
+                "${R[@]}"
+            # CH3.3's held-out cases.
+            launch "$n-w2" $A --workload w2 --kd 30,100 --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            launch "$n-w1-held" $A --workload w1 --kd 50,150 --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            for d in cube plummer; do
+                launch "$n-w4-$d-held" $A --workload "w4-$d:100000" --kd 3,30 \
+                    --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            done
+            launch "$n-w1-mid" $A --workload w1 --kd 100 --eps 1e-4,1e-7 "${R[@]}"
         done
-        launch "$rule-w1-variants" $A --workload w1 --kd 100 --eps 1e-3,1e-6 \
-            --charges real "${R[@]}"
-        launch "$rule-w1-complex" $A --workload w1 --kd 100 --kim 10 --eps 1e-3,1e-6 "${R[@]}"
-        # CH3.3's held-out cases.
-        launch "$rule-w2" $A --workload w2 --kd 30,100 --eps 1e-3,1e-6,1e-8 "${R[@]}"
-        launch "$rule-w1-held" $A --workload w1 --kd 50,150 --eps 1e-3,1e-6,1e-8 "${R[@]}"
-        for d in cube plummer; do
-            launch "$rule-w4-$d-held" $A --workload "w4-$d:100000" --kd 3,30 \
-                --eps 1e-3,1e-6,1e-8 "${R[@]}"
-        done
-        launch "$rule-w1-mid" $A --workload w1 --kd 100 --eps 1e-4,1e-7 "${R[@]}"
     done
     ;;
 verify-w1)

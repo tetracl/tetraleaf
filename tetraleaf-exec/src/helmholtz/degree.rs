@@ -119,6 +119,23 @@ impl Degrees {
         domain: &Domain,
         nlevels: usize,
     ) -> Result<Vec<usize>, DegreeError> {
+        self.resolve_with(&DegreeRule::CALIBRATED, k, domain, nlevels)
+    }
+
+    /// [`Degrees::resolve`] with `rule` in place of the default rule under a tolerance
+    /// (Helmholtz CH4.3c2: `HelmholtzFmmBuilder::degree_rule`, for the measurements of a
+    /// rule against another); named degrees are returned as they are.
+    ///
+    /// # Errors
+    ///
+    /// As [`Degrees::resolve`].
+    pub fn resolve_with(
+        &self,
+        rule: &DegreeRule,
+        k: &Wavenumber,
+        domain: &Domain,
+        nlevels: usize,
+    ) -> Result<Vec<usize>, DegreeError> {
         match self {
             Self::Tolerance(epsilon) => {
                 check_tolerance(*epsilon)?;
@@ -127,7 +144,7 @@ impl Degrees {
                         if l < 2 {
                             0
                         } else {
-                            degree(k, 3f64.sqrt() * radius(l, domain), *epsilon)
+                            rule.degree(k.re() * (3f64.sqrt() * radius(l, domain)), *epsilon)
                         }
                     })
                     .collect())
@@ -167,11 +184,14 @@ pub fn s7_degree(k: &Wavenumber, circumradius: f64, epsilon: f64) -> usize {
     floor.max(high) as usize
 }
 
-/// A degree rule of S7's shape (module documentation), with a quadratic plateau,
-/// p(x, ε) = max(⌈γ L² + α L + β⌉, ⌈x + C (ln 1/ε)^{2/3} x^{1/3}⌉) at x = Re(k) a and
-/// L = log₁₀(1/ε): a low-frequency plateau and a high-frequency branch. S7's closed form is
-/// γ = 0, α = 6, β = −2, C = 1 up to the ceilings, which here forgive 10⁻⁹, so that a value
-/// an integer up to rounding (α log₁₀(10⁶) with α a multiple of 0.05) stays that integer.
+/// A degree rule (module documentation): a low-frequency plateau and a high-frequency branch,
+/// p(x, ε) = max(⌈γ L² + α L + β⌉, ⌈x + (C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉) at
+/// x = Re(k) a and L = log₁₀(1/ε). S7's shape (Helmholtz CH3.1a) and CH3.3's calibration have
+/// a = b = d = 0 ([`DegreeRule::gd`]); S7's closed form is γ = 0, α = 6, β = −2, C = 1 up to the
+/// ceilings, which here forgive 10⁻⁹, so that a value an integer up to rounding
+/// (α log₁₀(10⁶) with α a multiple of 0.05) stays that integer. The branch's excess over x
+/// linear in L (a, b; Helmholtz CH4.3c2, proposal §3.5) and the offset d were added by the
+/// refit of the high-frequency levels.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DegreeRule {
     /// γ, the plateau's quadratic coefficient in L = log₁₀(1/ε).
@@ -180,19 +200,38 @@ pub struct DegreeRule {
     pub alpha: f64,
     /// β, the plateau's offset.
     pub beta: f64,
-    /// C, the constant of the high-frequency branch.
+    /// C, the coefficient of (ln 1/ε)^{2/3} in the high-frequency branch's excess over x per
+    /// x^{1/3} (Gumerov and Duraiswami's and S7's shape).
     pub c: f64,
+    /// a, the coefficient of L in the high-frequency branch's excess over x per x^{1/3}.
+    pub a: f64,
+    /// b, the constant of the high-frequency branch's excess over x per x^{1/3}.
+    pub b: f64,
+    /// d, a constant added to the high-frequency branch.
+    pub d: f64,
 }
 
 impl DegreeRule {
-    /// The default rule, calibrated in the full FMM (Helmholtz CH3.3; module
-    /// documentation): γ = 0.30, α = 0.25, β = 2.60, C = 0.80.
-    pub const CALIBRATED: Self = Self {
-        gamma: 0.30,
-        alpha: 0.25,
-        beta: 2.60,
-        c: 0.80,
-    };
+    /// CH3.3's calibrated rule (Helmholtz CH3.3, `tetraleaf-validate/results/helmholtz-ch3-3.md`):
+    /// γ = 0.30, α = 0.25, β = 2.60, C = 0.80, the default until CH4.3c2.
+    pub const CH3_3: Self = Self::gd(0.30, 0.25, 2.60, 0.80);
+
+    /// The default rule, calibrated in the full FMM (module documentation).
+    pub const CALIBRATED: Self = Self::CH3_3;
+
+    /// The rule of S7's shape, max(⌈γ L² + α L + β⌉, ⌈x + C (ln 1/ε)^{2/3} x^{1/3}⌉): a = b =
+    /// d = 0.
+    pub const fn gd(gamma: f64, alpha: f64, beta: f64, c: f64) -> Self {
+        Self {
+            gamma,
+            alpha,
+            beta,
+            c,
+            a: 0.0,
+            b: 0.0,
+            d: 0.0,
+        }
+    }
 
     /// The plateau ⌈γ L² + α L + β⌉ with L = log₁₀(1/ε), at least 0.
     pub fn plateau(&self, epsilon: f64) -> usize {
@@ -200,9 +239,16 @@ impl DegreeRule {
         rounded_up((self.gamma * l + self.alpha) * l + self.beta)
     }
 
-    /// The high-frequency branch ⌈x + C (ln 1/ε)^{2/3} x^{1/3}⌉, at least 0.
+    /// The high-frequency branch's excess over x per x^{1/3} at ε,
+    /// C (ln 1/ε)^{2/3} + a L + b.
+    pub fn excess(&self, epsilon: f64) -> f64 {
+        let inverse = 1.0 / epsilon;
+        self.c * inverse.ln().powf(2.0 / 3.0) + self.a * inverse.log10() + self.b
+    }
+
+    /// The high-frequency branch ⌈x + (C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉, at least 0.
     pub fn high(&self, x: f64, epsilon: f64) -> usize {
-        rounded_up(x + self.c * (1.0 / epsilon).ln().powf(2.0 / 3.0) * x.cbrt())
+        rounded_up(x + self.excess(epsilon) * x.cbrt() + self.d)
     }
 
     /// The larger of [`DegreeRule::plateau`] and [`DegreeRule::high`].

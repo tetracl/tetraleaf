@@ -139,12 +139,7 @@ pub fn fit_plateau(points: &[Point]) -> Option<DegreeRule> {
                     .map(|(p, &l)| p.degree as f64 - 1.0 - curve(l))
                     .fold(f64::NEG_INFINITY, f64::max),
             );
-            let rule = DegreeRule {
-                gamma,
-                alpha,
-                beta,
-                c: 0.0,
-            };
+            let rule = DegreeRule::gd(gamma, alpha, beta, 0.0);
             let excess = points
                 .iter()
                 .map(|p| rule.plateau(p.epsilon).saturating_sub(p.degree))
@@ -187,6 +182,148 @@ pub fn fit(plateau: &[Point], others: &[Point]) -> Option<DegreeRule> {
     let c = fit_high(&all, &plateau_rule)?;
     let rule = DegreeRule { c, ..plateau_rule };
     covers(&rule, &all).then_some(rule)
+}
+
+/// The ε of CH3.3's level scans, [`CH3_3_LEVELS`]' columns: 10⁻³ … 10⁻⁸.
+pub const CH3_3_EPSILONS: [f64; 6] = [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8];
+
+/// CH3.3's level scans (`tetraleaf-validate/results/helmholtz-ch3-3.md` §3; Helmholtz CH4.3c2 keeps
+/// them as data, since the scans' outputs were not archived): (workload, kD, level, x, the
+/// smallest degree meeting ε/2 at each of [`CH3_3_EPSILONS`]). x = Re(k) a_l to four places
+/// (`fmm-exec`'s `tests/helmholtz/degree.rs`, `MEASURED`).
+pub const CH3_3_LEVELS: [(&str, f64, usize, f64, [usize; 6]); 16] = [
+    ("w3:108849", 30.0, 4, 1.6238, [6, 8, 11, 14, 18, 22]),
+    ("w1", 100.0, 5, 2.7063, [7, 8, 11, 14, 17, 20]),
+    ("w1", 30.0, 3, 3.2474, [7, 9, 11, 14, 17, 20]),
+    ("w3:108849", 30.0, 3, 3.2474, [7, 9, 11, 14, 17, 22]),
+    ("w1", 100.0, 4, 5.4127, [9, 11, 13, 15, 18, 21]),
+    ("w4-cube:100000", 100.0, 4, 5.4127, [10, 11, 13, 15, 18, 21]),
+    ("w1", 30.0, 2, 6.4948, [10, 12, 14, 16, 19, 22]),
+    ("w3:108849", 30.0, 2, 6.4948, [10, 12, 14, 16, 19, 22]),
+    (
+        "w4-clusters:100000",
+        100.0,
+        3,
+        6.7862,
+        [8, 10, 11, 13, 14, 16],
+    ),
+    ("w1", 100.0, 3, 10.8253, [15, 17, 19, 20, 22, 24]),
+    (
+        "w4-cube:100000",
+        100.0,
+        3,
+        10.8253,
+        [15, 17, 19, 21, 23, 24],
+    ),
+    (
+        "w4-clusters:100000",
+        100.0,
+        2,
+        13.5725,
+        [13, 16, 18, 20, 22, 24],
+    ),
+    ("w1", 100.0, 2, 21.6507, [25, 28, 31, 33, 35, 37]),
+    (
+        "w4-cube:100000",
+        100.0,
+        2,
+        21.6507,
+        [26, 28, 31, 33, 35, 37],
+    ),
+    ("w1", 200.0, 2, 43.3018, [47, 51, 54, 57, 60, 62]),
+    ("w1", 300.0, 2, 64.9528, [69, 73, 77, 80, 83, 86]),
+];
+
+/// [`CH3_3_LEVELS`] as points, one per row and ε.
+pub fn ch3_3_level_points() -> Vec<Point> {
+    CH3_3_LEVELS
+        .iter()
+        .flat_map(|&(_, _, _, x, degrees)| {
+            CH3_3_EPSILONS
+                .iter()
+                .zip(degrees)
+                .map(move |(&epsilon, degree)| Point { x, epsilon, degree })
+        })
+        .collect()
+}
+
+/// The step of the grids of a, b and d's fit ([`fit_branch`]).
+pub const BRANCH_STEP: f64 = 0.01;
+
+/// The step of the grid of d ([`fit_branch`]).
+pub const OFFSET_STEP: f64 = 0.25;
+
+/// The forms of the high-frequency branch that [`fit_branch`] fits (Helmholtz CH4.3c2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BranchForm {
+    /// ⌈x + (a L + b) x^{1/3}⌉: the excess linear in L (CH3.3's report §6).
+    Linear,
+    /// ⌈x + (a L + b) x^{1/3} + d⌉: with a constant d ≥ 0, which weighs small x more.
+    LinearOffset,
+}
+
+/// The high-frequency branch beside `plateau`'s plateau (its γ, α and β kept, C = 0) in
+/// `form`: over a on the grid of [`BRANCH_STEP`] in [0, 2] (so the branch never falls as ε
+/// does) and, for [`BranchForm::LinearOffset`], d on the grid of [`OFFSET_STEP`] in [0, 10],
+/// b the smallest multiple of [`BRANCH_STEP`] with the rule at least every point's degree, the
+/// constants with the least total excess Σ (rule − p) over the points, ties to the smaller
+/// Σ of the branch's values. Points the plateau reaches constrain nothing but count in the
+/// excess. Points with x = 0 above the plateau cannot be covered: `None`, as without points.
+pub fn fit_branch(points: &[Point], plateau: &DegreeRule, form: BranchForm) -> Option<DegreeRule> {
+    if points.is_empty() {
+        return None;
+    }
+    let base = DegreeRule {
+        c: 0.0,
+        a: 0.0,
+        b: 0.0,
+        d: 0.0,
+        ..*plateau
+    };
+    let above: Vec<&Point> = points
+        .iter()
+        .filter(|p| base.plateau(p.epsilon) < p.degree)
+        .collect();
+    if above.iter().any(|p| p.x <= 0.0) {
+        return None;
+    }
+    let offsets = match form {
+        BranchForm::Linear => 0,
+        BranchForm::LinearOffset => (10.0 / OFFSET_STEP).round() as usize,
+    };
+    let mut best: Option<(usize, f64, DegreeRule)> = None;
+    for j in 0..=offsets {
+        let d = j as f64 * OFFSET_STEP;
+        for i in 0..=(2.0 / BRANCH_STEP).round() as usize {
+            let a = i as f64 * BRANCH_STEP;
+            // ⌈x + (a L + b) x^{1/3} + d − 10⁻⁹⌉ ≥ p ⟺ b > (p − 1 − x − d + 10⁻⁹) / x^{1/3} − a L.
+            let needed = above
+                .iter()
+                .map(|p| {
+                    (p.degree as f64 - 1.0 - p.x - d + 1e-9) / p.x.cbrt()
+                        - a * (1.0 / p.epsilon).log10()
+                })
+                .fold(f64::NEG_INFINITY, f64::max);
+            let b = if needed.is_finite() {
+                ((needed / BRANCH_STEP).floor() + 1.0) * BRANCH_STEP
+            } else {
+                -10.0
+            };
+            let rule = DegreeRule { a, b, d, ..base };
+            let excess = points
+                .iter()
+                .map(|p| rule.degree(p.x, p.epsilon).saturating_sub(p.degree))
+                .sum::<usize>();
+            let total = points
+                .iter()
+                .map(|p| p.x + rule.excess(p.epsilon) * p.x.cbrt() + d)
+                .sum::<f64>();
+            if best.is_none_or(|(e, t, _)| excess < e || (excess == e && total < t)) {
+                best = Some((excess, total, rule));
+            }
+        }
+    }
+    best.map(|(_, _, rule)| rule).filter(|r| covers(r, points))
 }
 
 #[cfg(test)]
@@ -265,12 +402,7 @@ mod tests {
 
     #[test]
     fn the_plateau_fit_recovers_a_rule_and_covers_its_points() {
-        let truth = DegreeRule {
-            gamma: 0.3,
-            alpha: 0.2,
-            beta: 2.8,
-            c: 0.0,
-        };
+        let truth = DegreeRule::gd(0.3, 0.2, 2.8, 0.0);
         let points = points_of(&truth, &[0.5]);
         let fitted = fit_plateau(&points).unwrap();
         assert!(covers(&fitted, &points));
@@ -298,12 +430,7 @@ mod tests {
 
     #[test]
     fn the_full_fit_covers_plateau_and_level_points() {
-        let truth = DegreeRule {
-            gamma: 0.0,
-            alpha: 3.0,
-            beta: -2.0,
-            c: 0.8,
-        };
+        let truth = DegreeRule::gd(0.0, 3.0, -2.0, 0.8);
         let plateau = points_of(&truth, &[0.1, 1.0]);
         let levels = points_of(&truth, &[8.0, 21.7, 43.3, 64.9]);
         let rule = fit(&plateau, &levels).unwrap();
@@ -327,15 +454,90 @@ mod tests {
             epsilon: 1e-3,
             degree: 10,
         }];
-        let low = DegreeRule {
-            gamma: 0.0,
-            alpha: 0.0,
-            beta: 0.0,
-            c: 0.0,
-        };
+        let low = DegreeRule::gd(0.0, 0.0, 0.0, 0.0);
         assert_eq!(fit_high(&points, &low), None);
         let high = DegreeRule { beta: 10.0, ..low };
         assert_eq!(fit_high(&points, &high), Some(0.0));
+    }
+
+    /// Level points of a rule at the decades 3..=8 and the given x.
+    fn level_points(rule: &DegreeRule, xs: &[f64]) -> Vec<Point> {
+        (3..=8)
+            .flat_map(|d| {
+                let epsilon = 10f64.powi(-d);
+                xs.iter().map(move |&x| Point {
+                    x,
+                    epsilon,
+                    degree: rule.degree(x, epsilon),
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_branch_fit_covers_and_matches_a_rule_of_its_form() {
+        let xs = [5.4, 10.8, 21.7, 43.3, 64.9, 108.3, 216.5];
+        let plateau = DegreeRule::CH3_3;
+        for (form, truth) in [
+            (
+                BranchForm::Linear,
+                DegreeRule {
+                    c: 0.0,
+                    a: 0.8,
+                    b: -0.3,
+                    ..plateau
+                },
+            ),
+            (
+                BranchForm::LinearOffset,
+                DegreeRule {
+                    c: 0.0,
+                    a: 0.8,
+                    b: -2.2,
+                    d: 3.5,
+                    ..plateau
+                },
+            ),
+        ] {
+            let points = level_points(&truth, &xs);
+            let fitted = fit_branch(&points, &plateau, form).unwrap();
+            assert!(covers(&fitted, &points), "{form:?}: {fitted:?}");
+            // The truth is on the grid, so the fit's excess is at most its (none).
+            for p in &points {
+                assert_eq!(fitted.degree(p.x, p.epsilon), p.degree, "{form:?}: {p:?}");
+            }
+            assert_eq!(
+                (fitted.gamma, fitted.alpha, fitted.beta, fitted.c),
+                (plateau.gamma, plateau.alpha, plateau.beta, 0.0)
+            );
+            if form == BranchForm::Linear {
+                assert_eq!(fitted.d, 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn the_branch_fit_on_ch3_3s_points() {
+        let points = ch3_3_level_points();
+        assert_eq!(points.len(), 96);
+        // CH3.3's rule covers its own points.
+        assert!(covers(&DegreeRule::CH3_3, &points));
+        let excess = |rule: &DegreeRule| {
+            points
+                .iter()
+                .map(|p| rule.degree(p.x, p.epsilon) - p.degree)
+                .sum::<usize>()
+        };
+        let a = fit_branch(&points, &DegreeRule::CH3_3, BranchForm::Linear).unwrap();
+        let b = fit_branch(&points, &DegreeRule::CH3_3, BranchForm::LinearOffset).unwrap();
+        // The offset form contains the linear one (d = 0), so it fits at least as closely; the
+        // linear one fits CH3.3's points more closely than CH3.3's own branch (its report §6).
+        assert!(excess(&b) <= excess(&a), "{a:?} {b:?}");
+        assert!(excess(&a) <= excess(&DegreeRule::CH3_3), "{a:?}");
+        assert_eq!(
+            fit_branch(&[], &DegreeRule::CH3_3, BranchForm::Linear),
+            None
+        );
     }
 
     #[test]

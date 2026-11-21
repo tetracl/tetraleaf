@@ -25,9 +25,14 @@
 //!   named in a line under the machine's;
 //! - `--threads t,…` (default 1), `--oracle-threads t` (default the largest of
 //!   `--threads`);
-//! - `--rule calibrated|s7` (default `calibrated`, Helmholtz CH3.3): with `s7`, a tolerance
-//!   gives S7's closed form (`s7_degree`) per level in place of the default rule, through
-//!   one run at degree 1 for the levels' circumradii (the times before CH3.3's rule);
+//! - `--rule calibrated|ch3-3|s7` (default `calibrated`, Helmholtz CH3.3): with `s7`, a
+//!   tolerance gives S7's closed form (`s7_degree`) per level in place of the default rule,
+//!   through one run at degree 1 for the levels' circumradii (the times before CH3.3's rule);
+//!   with `ch3-3` (Helmholtz CH4.3c2) the tolerance stays one, under CH3.3's rule
+//!   (`DegreeRule::CH3_3` through `HelmholtzFmmBuilder::degree_rule`, `Case::degree_rule`), so
+//!   every rule that reads ε (the exponential M2L's precision and raise, the diagonal form's
+//!   classes) runs as under the default, at CH3.3's degrees (the errors and times before the
+//!   refit);
 //! - `--p2p auto|reference|<isa>,…` (default `auto`): the P2P kernels (Helmholtz CH3.4c),
 //!   each case run with each in turn; an ISA this machine lacks is refused before MPI
 //!   starts.
@@ -226,7 +231,7 @@ use std::time::Instant;
 use mpi::Threading;
 use mpi::traits::*;
 use tetraleaf_exec::helmholtz::{
-    ChargeKind, DEFAULT_DENSE_BUDGET, DIAGONAL_AUTO_MIN_KA, Degrees, DiagonalCosts,
+    ChargeKind, DEFAULT_DENSE_BUDGET, DIAGONAL_AUTO_MIN_KA, DegreeRule, Degrees, DiagonalCosts,
     HelmholtzDiagonal, HelmholtzM2l, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit,
     TransferBuild, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WxNear, s7_degree,
 };
@@ -278,6 +283,9 @@ struct Arguments {
     leaf_sizes: Vec<Option<usize>>,
     c_leaves: Vec<Option<f64>>,
     s7: bool,
+    /// The degree rule under a tolerance (`--rule ch3-3`, Helmholtz CH4.3c2; `None` the
+    /// library's).
+    degree_rule: Option<DegreeRule>,
     levels: bool,
     evaluations: usize,
 }
@@ -341,7 +349,7 @@ fn arguments() -> Arguments {
             "usage: helmholtz_accuracy [--workload w1|w2|w3|w3:<n>|w4-<distribution>:<n>] \
              [--kd x,…] [--kim y] [--eps e,…|--degree p] [--charges real|complex] \
              [--density random|planewave|constant] [--vectors m] [--samples n] [--no-gradients] [--threads t,…] \
-             [--oracle-threads t] [--rule calibrated|s7] [--p2p auto|reference|<isa>,…] \
+             [--oracle-threads t] [--rule calibrated|ch3-3|s7] [--p2p auto|reference|<isa>,…] \
              [--m2l rotation|dense|classes|batched|batched-fused|auto|auto:<d>|auto-pw|\
              auto-pw:<d>|sweep|\
              planewave|planewave:<1|2|3>|planewave-scan|planewave-scan:<1|2|3>,…] \
@@ -390,6 +398,7 @@ fn arguments() -> Arguments {
         leaf_sizes: vec![None],
         c_leaves: vec![None],
         s7: false,
+        degree_rule: None,
         levels: false,
         evaluations: 1,
     };
@@ -693,11 +702,12 @@ fn arguments() -> Arguments {
                         .map(|b| parsed.blocks = b)
                         .is_some(),
                     "--rule" => match value.as_str() {
-                        "calibrated" => Some(false),
-                        "s7" => Some(true),
+                        "calibrated" => Some((false, None)),
+                        "ch3-3" => Some((false, Some(DegreeRule::CH3_3))),
+                        "s7" => Some((true, None)),
                         _ => None,
                     }
-                    .map(|s7| parsed.s7 = s7)
+                    .map(|(s7, rule)| (parsed.s7, parsed.degree_rule) = (s7, rule))
                     .is_some(),
                     "--evaluations" => value
                         .parse()
@@ -1071,6 +1081,7 @@ fn main() {
         for degrees in &arguments.degrees {
             let mut case = Case::new(workload, (kd, arguments.kim), degrees.clone());
             case.charges = arguments.charges;
+            case.degree_rule = arguments.degree_rule;
             case.density = arguments.density;
             case.vectors = arguments.vectors;
             case.samples = arguments.samples;
@@ -1096,6 +1107,9 @@ fn main() {
             };
             let degrees_name = match degrees {
                 Degrees::Tolerance(eps) if arguments.s7 => format!("S7 ε = {eps:e}"),
+                Degrees::Tolerance(eps) if arguments.degree_rule.is_some() => {
+                    format!("CH3.3 ε = {eps:e}")
+                }
                 Degrees::Tolerance(eps) => format!("ε = {eps:e}"),
                 Degrees::PerLevel(p) => format!("p = {}", p[0]),
             };
