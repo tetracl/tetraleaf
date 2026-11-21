@@ -1,6 +1,8 @@
 # CH4.3c2 The high-frequency degrees refit
 
-Started 2026-11-21 on `tbetcke/h-ch4-3c2`. Roadmap: CH4.3c2 "The high-frequency degrees refit"
+Started 2026-11-21 on `tbetcke/h-ch4-3c2`; moved the same day onto the tetraleaf rename (the
+commits replayed with the new crate names on `tbetcke/h-ch4-3c2-tetraleaf`; the pre-rename
+branch is bundled in `~/projects/fmm-archive/ch4-3c2-pre-rename/`). Roadmap: CH4.3c2 "The high-frequency degrees refit"
 (the second of CH4.3c1–CH4.3c2, split on 2026-11-21; a *Need* of CH4.3b2c since CH4.3c1's
 question 2). Proposal: §10 CH4.3 (the per-(level, class) rule, calibrated); §3.5 (truncation, the
 calibrated rule, "CH4.3 recalibrates the high-frequency levels", "the excess p − x … grows about
@@ -68,12 +70,20 @@ What the items mean here:
   (A) x + (a L + b) x^{1/3}, CH3.3's §6, and, if (A) covering the small-x points leaves the
   x ≥ 54 points over-resolved by more than 2 degrees, (B) one more constant term. Module docs:
   the measured range and the refit's record. Plateau and Laplace untouched.
+  As built: the branch ⌈x + max(0, C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉ (fields `c, a, b,
+  d`; `DegreeRule::gd` for a = b = d = 0); the fit compares (A), (B) = (A) + d and (C) = (B) with
+  C free, each also capped at CH3.3's rule on 4 ≤ x ≤ 512 at the decades of D1, since (B) and (C)
+  uncapped raise the degree by one at x = 10–27, 10⁻⁸ (the costly lower levels). The default is
+  (C) capped: C = 2.30, a = −0.75, b = −5.73, d = 3. The excess is clamped at 0: the fitted e(ε)
+  is negative above ε ≈ 2 · 10⁻³, outside D1.
 - `tetraleaf-validate`: `helmholtz_calibration`'s fit of the new branch (grids over the branch's
   constants, least total excess over the points above the plateau, covering every point);
   `helmholtz_calibrate fit` printing CH3.3's rule and the refit against each point;
   `helmholtz_accuracy --rule calibrated|ch3-3|s7` (CH3.3's rule named, for the times and errors
   before). The measured points stay constants in the tests, as `MEASURED` is (no fixture file).
-- `tetraleaf-tables`' two test restatements of the rule follow `CALIBRATED`.
+- `tetraleaf-tables`' two test restatements of the rule: used only by ignored studies that
+  reproduce CH6.1f's, CH4.3a's and CH4.3c1's recorded tables, so they stay CH3.3's rule, their
+  docs saying so (as built; the plan first had them follow `CALIBRATED`).
 - `tools/helmholtz/ch4-3c2-runs.sh` (the stages below), `tools/helmholtz/ch4-3c2-pairs.py` (the
   pair evidence from S7's CSVs), report `tetraleaf-validate/results/helmholtz-ch4-3c2.md`.
 - Conventions: none. Dependencies: none. `tetraleaf-plan`: untouched.
@@ -133,8 +143,33 @@ Kathleen, `singlenode`, one rank × 40 threads, BLAS threads 1, release; jobs th
   hence candidate (B). Risk: W1 at kD = 1000 measured only by verification.
 - Kathleen: single-node jobs within `singlenode`'s 6 h, as CH3.3 and CH4.0c ran.
 
+## Results so far
+- Scans (Kathleen jobs 653796 `scans-cube`, cancelled after its kD = 500 launch; 653797
+  `scans-w1`; 653806 `scans-cube-1000`; 653817 `scans-cube-small`; the cube at N = 10⁵ costs 760 s per
+  degree at kD = 1000, so x = 216 and kD = 1000's x = 108 were scanned on the cube at N = 10⁴,
+  `scans-cube-small`; 653806, the N = 10⁵ cube at kD = 1000 level 3, ends at its time limit with
+  part of its ε, and 653817's last launch, kD = 1000 level 3 on the N = 10⁴ cube, a cross-check
+  of x = 108 that three workloads measured, was cancelled for the verification's slot). Measured
+  at ε/2, 10⁻³ … 10⁻⁸: x = 54.1: 58, 62, 65, 68, 71, 74 (largest of four workloads); x = 108.3:
+  112, 117, 121, 126, 129, 132 (three); x = 216.5: 218, 225, 230, 235, 240, 244; x = 27.1: 32, 34,
+  37, 39, 41, 44. CH3.3's rule: 66–76, 123–135, 234–251, 36–44.
+- Fit over 150 points (CH3.3's 96 and 54): total excess Σ (rule − p) CH3.3 556, (A) 486, (B)
+  185, (C) 169, (C) capped 188 (the default; at x = 216 222–246, at x = 108 113–132). Capping at
+  tenths of a decade as well costs 328 (at x = 216 226–248); at the decades the default stays at
+  most CH3.3's, between them it is one degree above at 2 of 5,763 grid points (x = 9.1 at
+  10^{−7.2}, x = 10.8 at 10^{−7.8}), tested.
+- Pair evidence (`ch4-3c2-pairs.py`): the worst pair at the FMM's measured degrees at x ≥ 43 is
+  up to 19–42 ε per ε; the default's at k a = 45 … 256 at most 18.5 ε (k a = 128, 10⁻⁸), within
+  the FMM's largest at every grid k a and ε.
+
 ## Pending runs
-(filled in step 6)
+- Kathleen job 663560 (`run.sbatch`, singlenode, 6 h): `ch4-3c2-runs.sh verify-matrix` into
+  `/scratch/scratch/ucahtbe/fmm/runs/ch4-3c2/verify-matrix`. Decides the acceptance ≤ ε on CH3.1c's
+  matrix and CH3.3's held-out cases, Rotation and the defaults, with CH3.3's rule beside.
+- Kathleen job 663561 (`verify-w1`, singlenode, 6 h, queued behind 653806): W1 at kD = 500
+  and 1000, the three densities, Rotation and the default, 10⁻⁸ … 10⁻³. Decides the acceptance
+  ≤ ε at x = 108 and 216 under the refit.
 
 ## Open questions
-(filled when they arise)
+- The proposal's §3.5 states CH3.3's rule as the calibrated one: amended only on the sign-off
+  of the refit (the PR's question).

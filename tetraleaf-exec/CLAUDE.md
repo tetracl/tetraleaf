@@ -221,7 +221,10 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   `tetraleaf_ref::helmholtz::leaf`, and the chunks end to end against the direct sum.
 - The Helmholtz operator (Helmholtz CH3.1a; `helmholtz::{degree, operator}`, the module
   docs; docs/helmholtz/tasks/CH3.1a.md): `Degrees` (a tolerance, the rule `degree` at
-  Re(k) a, degree 0 on levels 0 and 1, which nothing reads; or degrees named per level)
+  Re(k) a, degree 0 on levels 0 and 1, which nothing reads; or degrees named per level;
+  `Degrees::resolve_with` another `DegreeRule`, the builder's `degree_rule`, default
+  `DegreeRule::CALIBRATED`, CH3.3's plateau with CH4.3c2's high-frequency branch;
+  `DegreeRule::CH3_3` the rule before, kept for the runs before and after)
   and `HelmholtzOperator` for real and complex k, real and complex charges and
   m vectors (Yukawa is `OperatorError::Yukawa`, CH2.1's path). Level l works in its own
   units at k̂_l = k r_l; a box holds r_l φ̃ there as a chunk does, so P2L scales its
