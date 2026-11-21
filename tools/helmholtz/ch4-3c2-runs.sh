@@ -25,7 +25,7 @@
 #   library's defaults (`--m2l auto-pw --near-v cost --near-wx cost`, as CH4.3b2*), against
 #   ε, the rule as built (the refit), and with `--rule ch3-3` (CH3.3's rule) for the errors
 #   and times before;
-# - `verify-w1`: W1 at kD = 500 and 1000 (`helmholtz_boxes`, the samples only) at 10⁻⁸,
+# - `verify-w1`: W1 at kD = 250, 500 and 1000 (`helmholtz_boxes`, the samples only) at 10⁻⁸,
 #   10⁻⁷, 10⁻⁶ and 10⁻³, the random charges, the plane wave's trace and the constant
 #   density, Rotation and `helmholtz_boxes`' default (Auto, the near rules off, as CH4.0c),
 #   under the rule as built, and with the random charges also under CH3.3's.
@@ -125,7 +125,7 @@ verify-matrix)
 verify-w1)
     # The refit with the three densities; CH3.3's rule with the random charges (the errors
     # and times before), kD = 500 first.
-    for kd in 500 1000; do
+    for kd in 250 500 1000; do
         for density in random planewave constant; do
             for rule in calibrated ch3-3; do
                 [ $rule = ch3-3 ] && [ $density != random ] && continue

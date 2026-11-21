@@ -10,7 +10,8 @@
 //! the level's boxes and L = log₁₀(1/ε),
 //!
 //! ```text
-//! p(x, ε) = max(⌈0.30 L² + 0.25 L + 2.60⌉, ⌈x + max(0, e(ε)) x^{1/3} + 3⌉),
+//! p(x, ε) = max(⌈0.30 L² + 0.25 L + 2.60⌉,
+//!               ⌈min(x + max(0, e(ε)) x^{1/3} + 5, x + 0.80 (ln 1/ε)^{2/3} x^{1/3})⌉),
 //! e(ε) = 2.30 (ln 1/ε)^{2/3} − 0.75 L − 5.73,
 //! ```
 //!
@@ -43,18 +44,20 @@
 //!
 //! The high-frequency branch is CH4.3c2's refit ([`DegreeRule::CALIBRATED`]): the shape
 //! x + e(ε) x^{1/3} + d of CH3.3's, the excess e(ε) given a term linear in L and a constant
-//! beside C (ln 1/ε)^{2/3}, fitted to CH3.3's level scans and CH4.3c2's at x = 54, 108 and
-//! 216 (W1 at kD = 250 and 500, the cube at kD = 250, 500 and 1000) as the least total
-//! excess over the measured degrees that covers every one of them, subject to staying at or
-//! below CH3.3's rule ([`DegreeRule::CH3_3`]) on 4 ≤ x ≤ 512, 10⁻⁸ ≤ ε ≤ 10⁻³. It is 4–12
-//! degrees below CH3.3's at x ≥ 43 (222 against 234 at x = 216, ε = 10⁻³; 246 against 251
-//! at 10⁻⁸), within 0–4 of the measured degrees at x = 216. Spike S7's per-pair worst case at
-//! the rule's degrees stays within the largest the FMM's measured degrees reach at x ≥ 43
-//! (at most 18 ε against 34 ε at 10⁻⁸) on k a = 45 … 256. The FMM's errors under it are
-//! checked on CH3.1c's matrix, CH3.3's held-out cases and W1 at kD = 500 and 1000 (CH4.3c2's
-//! report). Beyond x = 216 it is an extrapolation. The excess is taken at least 0: e(ε) < 0
-//! for ε above about 2 · 10⁻³, outside the measured range, where the fitted terms alone would
-//! put the degree below x.
+//! beside C (ln 1/ε)^{2/3}, fitted to CH3.3's level scans and CH4.3c2's at x = 27–216 (W1 at
+//! kD = 250 and 500, the cube at kD = 250, 500 and 1000, random charges) as the least total
+//! excess that covers every measured degree (d = 3 then), raised by 2 (d = 5) and capped by
+//! CH3.3's branch ([`DegreeRule::CH3_3`]). The fit on random charges missed ε on W1 with the
+//! constant density, whose boxes' errors add coherently (2.6 ε at kD = 1000, 10⁻⁸); 2 more
+//! degrees keep it within 0.60 ε at kD = 250, 500 and 1000 over 10⁻⁸ … 10⁻³, and the cap
+//! keeps every degree at most CH3.3's. The rule is CH3.3's at x ≤ 7 and within one of it to
+//! x ≈ 14; at x = 216 it is 224 … 248 against 234 … 251 (10⁻³ … 10⁻⁸), at x = 108 116 … 134
+//! against 123 … 135, covering every measured degree. Spike S7's per-pair worst case at the
+//! rule's degrees stays within the largest the FMM's measured degrees reach at x ≥ 43 on
+//! k a = 45 … 256. The FMM's errors under it are checked on CH3.1c's matrix, CH3.3's held-out
+//! cases and W1 at kD = 250, 500 and 1000 with the three densities (CH4.3c2's report). Beyond
+//! x = 216 it is an extrapolation. The excess is taken at least 0: e(ε) < 0 for ε above about
+//! 2 · 10⁻³, outside the measured range.
 //!
 //! Complex k takes Re(k) a, provisionally: S7 found η = Im k / Re k = 0.1 within 10 degrees
 //! of real k, and the damping-dependent rule is CH5.2's.
@@ -75,12 +78,13 @@
 //! assert_eq!(s7_degree(&k, 0.01, 1e-6), 34);
 //!
 //! // kD = 100 on the unit cube: level 2 has x = 100 · √3 / 8 ≈ 21.65 and e(10⁻⁶) =
-//! // 2.30 · 13.8^{2/3} − 4.5 − 5.73 ≈ 3.01, so ⌈21.65 + 3.01 · 21.65^{1/3} + 3⌉ = ⌈33.05⌉
-//! // = 34 (CH3.3's rule 35); level 3 (x ≈ 10.8) 21 (22).
+//! // 2.30 · 13.8^{2/3} − 4.5 − 5.73 ≈ 3.01, so 21.65 + 3.01 · 21.65^{1/3} + 5 = 35.05, capped
+//! // by CH3.3's branch 21.65 + 0.80 · 13.8^{2/3} · 21.65^{1/3} = 34.48: 35; level 3
+//! // (x ≈ 10.8) 22, CH3.3's too.
 //! let k = Wavenumber::new(100.0, 0.0).unwrap();
 //! let domain = Domain::new(&PhysicalBox::new([0.0, 0.0, 0.0, 1.0, 1.0, 1.0])).unwrap();
 //! let degrees = Degrees::Tolerance(1e-6).resolve(&k, &domain, 4).unwrap();
-//! assert_eq!(degrees, [0, 0, 34, 21]);
+//! assert_eq!(degrees, [0, 0, 35, 22]);
 //! ```
 
 use thiserror::Error;
@@ -194,7 +198,7 @@ pub fn s7_degree(k: &Wavenumber, circumradius: f64, epsilon: f64) -> usize {
 
 /// A degree rule (module documentation): a low-frequency plateau and a high-frequency branch,
 /// p(x, ε) = max(⌈γ L² + α L + β⌉, ⌈x + (C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉) at
-/// x = Re(k) a and L = log₁₀(1/ε). S7's shape (Helmholtz CH3.1a) and CH3.3's calibration have
+/// x = Re(k) a and L = log₁₀(1/ε), the branch at most x + cap (ln 1/ε)^{2/3} x^{1/3} with a cap. S7's shape (Helmholtz CH3.1a) and CH3.3's calibration have
 /// a = b = d = 0 ([`DegreeRule::gd`]); S7's closed form is γ = 0, α = 6, β = −2, C = 1 up to the
 /// ceilings, which here forgive 10⁻⁹, so that a value an integer up to rounding
 /// (α log₁₀(10⁶) with α a multiple of 0.05) stays that integer. The branch's excess over x
@@ -217,6 +221,9 @@ pub struct DegreeRule {
     pub b: f64,
     /// d, a constant added to the high-frequency branch.
     pub d: f64,
+    /// The cap: the high-frequency branch at most x + cap (ln 1/ε)^{2/3} x^{1/3} (before the
+    /// ceiling), CH3.3's branch with cap = 0.80; `None` for none.
+    pub cap: Option<f64>,
 }
 
 impl DegreeRule {
@@ -226,7 +233,8 @@ impl DegreeRule {
 
     /// The default rule, calibrated in the full FMM (module documentation): CH3.3's plateau
     /// and CH4.3c2's high-frequency branch, γ = 0.30, α = 0.25, β = 2.60, C = 2.30, a = −0.75,
-    /// b = −5.73, d = 3 (`tetraleaf-validate/results/helmholtz-ch4-3c2.md`).
+    /// b = −5.73, d = 5 (the fit's 3 raised by 2), capped by CH3.3's branch (cap = 0.80)
+    /// (`tetraleaf-validate/results/helmholtz-ch4-3c2.md`).
     pub const CALIBRATED: Self = Self {
         gamma: 0.30,
         alpha: 0.25,
@@ -234,7 +242,8 @@ impl DegreeRule {
         c: 2.30,
         a: -0.75,
         b: -5.73,
-        d: 3.0,
+        d: 5.0,
+        cap: Some(0.80),
     };
 
     /// The rule of S7's shape, max(⌈γ L² + α L + β⌉, ⌈x + C (ln 1/ε)^{2/3} x^{1/3}⌉): a = b =
@@ -248,6 +257,7 @@ impl DegreeRule {
             a: 0.0,
             b: 0.0,
             d: 0.0,
+            cap: None,
         }
     }
 
@@ -265,9 +275,15 @@ impl DegreeRule {
     }
 
     /// The high-frequency branch ⌈x + max(0, C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉, at least
-    /// 0: the excess taken at least 0, so that no ε puts the branch below x + d.
+    /// 0: the excess taken at least 0, so that no ε puts the branch below x + d; with a cap at
+    /// most ⌈x + cap (ln 1/ε)^{2/3} x^{1/3}⌉.
     pub fn high(&self, x: f64, epsilon: f64) -> usize {
-        rounded_up(x + self.excess(epsilon).max(0.0) * x.cbrt() + self.d)
+        let branch = x + self.excess(epsilon).max(0.0) * x.cbrt() + self.d;
+        let capped = match self.cap {
+            Some(cap) => branch.min(x + cap * (1.0 / epsilon).ln().powf(2.0 / 3.0) * x.cbrt()),
+            None => branch,
+        };
+        rounded_up(capped)
     }
 
     /// The larger of [`DegreeRule::plateau`] and [`DegreeRule::high`].

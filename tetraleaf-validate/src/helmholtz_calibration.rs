@@ -321,6 +321,7 @@ pub fn fit_branch(
         a: 0.0,
         b: 0.0,
         d: 0.0,
+        cap: None,
         ..*plateau
     };
     let above: Vec<&Point> = points

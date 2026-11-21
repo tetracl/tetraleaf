@@ -4,11 +4,12 @@
 //! ```text
 //! helmholtz_boxes [CASE] [--eps e,…] [--m2l rotation|default,…] [--study single|levels]
 //!     [--margin m] [--offset x,y,z] [--leaf-size n] [--raise-factor f] [--worst n]
-//!     [--per-box s] [--full-max n] [--rule calibrated|ch3-3] [--threads t]
+//!     [--per-box s] [--full-max n] [--rule calibrated|ch3-3|γ,α,β,C,a,b,d[,cap]] [--threads t]
 //! ```
 //!
 //! `--rule ch3-3` (Helmholtz CH4.3c2) runs CH3.3's degree rule (`DegreeRule::CH3_3`) in place
-//! of the library's default under the same tolerance, for the errors before the refit.
+//! of the library's default under the same tolerance, for the errors before the refit;
+//! `--rule γ,α,β,C,a,b,d[,cap]` a `DegreeRule` of those constants (the refit's offset varied).
 //!
 //! One case on one rank, against the direct sum (`tetraleaf_validate::helmholtz_boxes`): at
 //! every point when N ≤ `--full-max` (default 200,000), else at §9.1's samples plus
@@ -77,7 +78,8 @@ struct Arguments {
     per_box: usize,
     full_max: usize,
     threads: usize,
-    /// CH3.3's degree rule in place of the default (`--rule ch3-3`, Helmholtz CH4.3c2).
+    /// A degree rule in place of the default (`--rule ch3-3` or the constants, Helmholtz
+    /// CH4.3c2).
     degree_rule: Option<DegreeRule>,
 }
 
@@ -108,7 +110,7 @@ fn arguments() -> Arguments {
              [--density random|planewave|constant] [--charges real|complex] [--eps e] \
              [--m2l rotation|default] [--study single|levels] [--margin m] [--offset x,y,z] \
              [--leaf-size n|uniform] [--raise-factor f] [--worst n] [--per-box s] \
-             [--full-max n] [--rule calibrated|ch3-3] [--threads t]; got {args:?}"
+             [--full-max n] [--rule calibrated|ch3-3|γ,α,β,C,a,b,d[,cap]] [--threads t]; got {args:?}"
         );
         std::process::exit(2);
     };
@@ -201,7 +203,34 @@ fn arguments() -> Arguments {
             "--rule" => match value.as_str() {
                 "calibrated" => Some(None),
                 "ch3-3" => Some(Some(DegreeRule::CH3_3)),
-                _ => None,
+                constants => match constants
+                    .split(',')
+                    .map(|v| v.parse::<f64>().ok())
+                    .collect::<Option<Vec<f64>>>()
+                    .as_deref()
+                {
+                    Some(&[gamma, alpha, beta, c, a, b, d]) => Some(Some(DegreeRule {
+                        gamma,
+                        alpha,
+                        beta,
+                        c,
+                        a,
+                        b,
+                        d,
+                        cap: None,
+                    })),
+                    Some(&[gamma, alpha, beta, c, a, b, d, cap]) => Some(Some(DegreeRule {
+                        gamma,
+                        alpha,
+                        beta,
+                        c,
+                        a,
+                        b,
+                        d,
+                        cap: Some(cap),
+                    })),
+                    _ => None,
+                },
             }
             .map(|r| parsed.degree_rule = r)
             .is_some(),
