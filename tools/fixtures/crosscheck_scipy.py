@@ -10,7 +10,7 @@ Legendre functions with the Condon-Shortley phase removed:
   - separation identity and addition theorem of §3.4
   - gradient ladder of §3.4 (finite differences)
   - orthogonality of N D^n N^-1 for the rotation blocks of §3.8
-  - the committed mpmath fixtures fmm-math/fixtures/harmonics_*.json: values from the
+  - the committed mpmath fixtures tetraleaf-math/fixtures/harmonics_*.json: values from the
     definitions of §3.3, regular gradients from the ladder of §3.4, irregular gradients
     from the analogous ladder dz I_n^m = -I_{n+1}^m, (dx - i dy) I_n^m = I_{n+1}^{m-1},
     (dx + i dy) I_n^m = -I_{n+1}^{m+1}. Errors are relative to the largest reference
@@ -172,7 +172,7 @@ def fixture_errors(p, records, X, sign):
     return worst
 
 
-fixtures = sorted((Path(__file__).resolve().parents[2] / "fmm-math" / "fixtures").glob("harmonics_*.json"))
+fixtures = sorted((Path(__file__).resolve().parents[2] / "tetraleaf-math" / "fixtures").glob("harmonics_*.json"))
 if not fixtures:
     checks.append(("mpmath fixtures present", float("inf"), 0))
 for path in fixtures:

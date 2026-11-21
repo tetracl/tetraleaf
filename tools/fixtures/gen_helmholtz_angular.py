@@ -6,7 +6,7 @@
 """High-precision fixtures for the orthonormal harmonics and rotation blocks of
 docs/CONVENTIONS.md §3.15 ("Angular basis", "Rotations"), Helmholtz CH1.2a.
 
-Writes fmm-math/fixtures/helmholtz_angular.json with two parts:
+Writes tetraleaf-math/fixtures/helmholtz_angular.json with two parts:
 
   - "rotation": sampled entries of the real y-rotation blocks O^n(beta) of degrees 10 to
     1000 at six polar angles. The method is spike S1's (spikes/rotation-blocks/tools/
@@ -47,7 +47,7 @@ if mpmath.__version__ != "1.4.1":
     sys.exit(f"needs mpmath 1.4.1, found {mpmath.__version__}")
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "fmm-math" / "fixtures" / "helmholtz_angular.json"
+OUT = ROOT / "tetraleaf-math" / "fixtures" / "helmholtz_angular.json"
 CONVENTIONS = ROOT / "docs" / "CONVENTIONS.md"
 GENERATOR_VERSION = 1
 SEED = 20261027

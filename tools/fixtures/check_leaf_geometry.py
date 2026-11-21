@@ -7,10 +7,10 @@
 
 Checks, with seeded random keys and points, the geometry in exact rationals
 (fractions.Fraction), the f64 evaluation of leaf-scaled coordinates in IEEE doubles
-(Python floats, emulating nd_octree in the same operation order), and the scaling
+(Python floats, emulating tetraleaf_octree in the same operation order), and the scaling
 identities in mpmath at 40 significant digits:
   - integer centres: a + C_L w / 2^(L+1) with C_L = (2i + 1) 2^(L - l) is the midpoint
-    of the box of nd_octree::morton::physical_box (restated in exact rationals) and the
+    of the box of tetraleaf_octree::morton::physical_box (restated in exact rationals) and the
     centre of §3.12, on every level 0-16 and every reference level L >= l, for a dyadic
     and a generic domain;
   - relative frames: c^(s|t) = (C_L(s) - C_L(t)) 2^(l_t - L) and r^(s|t) = 2^(l_t - l_s)
@@ -226,12 +226,12 @@ def check_canonical_frames(rng):
 
 # ---------------------------------------------------------------------------------------
 # Leaf-scaled coordinates in IEEE doubles. Python floats are IEEE binary64 with correctly
-# rounded +, -, *, /, so these functions reproduce nd_octree and the formula of §3.13
+# rounded +, -, *, /, so these functions reproduce tetraleaf_octree and the formula of §3.13
 # operation by operation.
 
 
 def bounding_box(points):
-    """nd_octree::octree::compute_global_bounding_box on one rank, in f64."""
+    """tetraleaf_octree::octree::compute_global_bounding_box on one rank, in f64."""
     lo = [min(x[k] for x in points) for k in range(3)]
     hi = [max(x[k] for x in points) for k in range(3)]
     diam = [hi[k] - lo[k] for k in range(3)]

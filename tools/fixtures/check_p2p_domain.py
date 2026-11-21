@@ -13,7 +13,7 @@ with G_k = 2^-k Z:
   - every stored coordinate lies in G_53, every mapped U-list source
     y^ = fl(c^(s|t) + r^(s|t) u_s) in G_54, hence every d in G_54 (the short
     argument); so r^2 = 0 exactly when u_t == y^ in all three components (the rule of
-    nd_fmm_ref::p2p on the same inputs), and otherwise r^2 >= 2^-108, the lower end of
+    tetraleaf_ref::p2p on the same inputs), and otherwise r^2 >= 2^-108, the lower end of
     the kernel domain, a normal number in f32 (2^-126) with a margin of 2^18;
   - in fact y^ and d lie in G_53 (the finer argument, which uses |u| <= 1 + 1/8): a
     nonzero |d| is at least 2^-53 and a nonzero r^2 at least 2^-106, both attained;
@@ -61,7 +61,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import check_leaf_geometry as lg  # noqa: E402  (the emulation of nd_octree and §3.13)
+import check_leaf_geometry as lg  # noqa: E402  (the emulation of tetraleaf_octree and §3.13)
 import gen_harmonics as gh  # noqa: E402  (the pinned mpmath version)
 import mpmath  # noqa: E402
 
@@ -161,7 +161,7 @@ def p2(x):
 
 
 class Domain:
-    """A cubic domain as nd_fmm_exec::geometry::Domain sees it: the box lo, hi that
+    """A cubic domain as tetraleaf_exec::geometry::Domain sees it: the box lo, hi that
     points_to_morton uses (one side per axis) and the side w = max_k fl(hi_k - lo_k)."""
 
     def __init__(self, name, lo, hi):
