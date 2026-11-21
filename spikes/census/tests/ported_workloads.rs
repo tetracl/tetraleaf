@@ -1,10 +1,10 @@
-//! The reference workloads as ported into `nd-fmm-validate` (Helmholtz CH3.0b,
-//! `nd_fmm_validate::helmholtz_workloads`) equal this spike's point for point, so the
+//! The reference workloads as ported into `tetraleaf-validate` (Helmholtz CH3.0b,
+//! `tetraleaf_validate::helmholtz_workloads`) equal this spike's point for point, so the
 //! census's trees are the trees of the ported workloads.
 
-use nd_fmm_spike_census::workloads::Workload as Spike;
-use nd_fmm_validate::fmm_accuracy::Distribution;
-use nd_fmm_validate::helmholtz_workloads::{self as ported, Workload as Ported};
+use tetraleaf_spike_census::workloads::Workload as Spike;
+use tetraleaf_validate::fmm_accuracy::Distribution;
+use tetraleaf_validate::helmholtz_workloads::{self as ported, Workload as Ported};
 
 #[test]
 fn ported_workloads_equal_the_spike_bit_for_bit() {
@@ -24,7 +24,7 @@ fn ported_workloads_equal_the_spike_bit_for_bit() {
         );
         assert_eq!(
             ported::w1_count(kd),
-            nd_fmm_spike_census::workloads::w1_count(kd)
+            tetraleaf_spike_census::workloads::w1_count(kd)
         );
         let (Ported::W3 { n: a }, Spike::W3 { n: b }) =
             (Ported::w3_resolved(kd), Spike::w3_resolved(kd))

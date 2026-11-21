@@ -1,19 +1,19 @@
-//! The production P2P kernel of `nd-fmm-simd` against the Laplace kernels of
+//! The production P2P kernel of `tetraleaf-simd` against the Laplace kernels of
 //! green-kernels on NEON (Phase 3S T7, C3S.6). Prints Markdown on stdout and progress
 //! on stderr.
 //!
-//! The inputs are those of `nd-fmm-validate`'s `p2p_kernels` example
-//! (`nd_fmm_validate::p2p_kernels`): the W1 (FMM-shaped, per-pair and gathered) and W2
+//! The inputs are those of `tetraleaf-validate`'s `p2p_kernels` example
+//! (`tetraleaf_validate::p2p_kernels`): the W1 (FMM-shaped, per-pair and gathered) and W2
 //! (all-pairs) cells of docs/design/simd-p2p.md §8.2, in f32 and f64, with the
 //! potential only and with gradients. On each cell:
 //!
 //! - green-kernels' `Laplace3dKernel::evaluate_st`, `Value` or `ValueDeriv`, one
 //!   thread, at the commit pinned in the root `Cargo.toml`, through the pulp backend
 //!   printed in the header;
-//! - `nd_fmm_simd::P2pKernel::detect()`, the default, then every other available ISA.
+//! - `tetraleaf_simd::P2pKernel::detect()`, the default, then every other available ISA.
 //!
 //! Both are measured against `direct_sum` on the same four sets, and the reference
-//! `nd_fmm_ref::p2p` too (untimed), for the check of requirement 2. green-kernels
+//! `tetraleaf_ref::p2p` too (untimed), for the check of requirement 2. green-kernels
 //! takes the same interleaved triples, applies 1/(4π) and writes [φ, ∂x, ∂y, ∂z] per
 //! target; its output is multiplied by 4π and split before it is measured, and our
 //! gradients stay in their own layout. Neither conversion is timed (design §8.3).
@@ -25,7 +25,7 @@
 //! ```text
 //! OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 BLIS_NUM_THREADS=1 \
 //!     VECLIB_MAXIMUM_THREADS=1 RAYON_NUM_THREADS=1 \
-//!     cargo run --release -p nd-fmm-spike-p2p-simd --example compare [-- --quick]
+//!     cargo run --release -p tetraleaf-spike-p2p-simd --example compare [-- --quick]
 //! ```
 //!
 //! Timings are reported, never asserted. The example builds and runs on x86_64 too;
@@ -34,9 +34,9 @@
 use green_kernels::laplace_3d::Laplace3dKernel;
 use green_kernels::traits::Kernel as _;
 use green_kernels::types::GreenKernelEvalType;
-use nd_fmm_simd::{Isa, P2pKernel, SimdScalar};
-use nd_fmm_validate::bench::{cores, cpu_model, performance_cores, target, toolchain};
-use nd_fmm_validate::p2p_kernels::{
+use tetraleaf_simd::{Isa, P2pKernel, SimdScalar};
+use tetraleaf_validate::bench::{cores, cpu_model, performance_cores, target, toolchain};
+use tetraleaf_validate::p2p_kernels::{
     Accuracy, CHECKED_SETS, Cell, Form, Kernel, Oracle, Outputs, Set, accuracy, check, oracles,
     pairs_per_second, passes, precision_name, time_kernel,
 };
@@ -106,7 +106,7 @@ fn green_evaluate<T: Green>(set: &Set<T>, form: Form, gradients: bool, out: &mut
 /// green-kernels' output in our form, in f64, with its 1/(4π) removed.
 fn unpack<T: SimdScalar>(gradients: bool, out: &[T]) -> (Vec<f64>, Option<Vec<[f64; 3]>>) {
     let scale = 4.0 * std::f64::consts::PI;
-    let up = |v: T| nd_fmm_math::RealScalar::to_f64(v) * scale;
+    let up = |v: T| tetraleaf_math::RealScalar::to_f64(v) * scale;
     if gradients {
         let (values, rest) = out.as_chunks::<4>();
         assert!(rest.is_empty(), "four values per target");
@@ -246,7 +246,7 @@ fn main() {
 
 /// The machine, the toolchain, the backends and the method.
 fn print_header(quick: bool) {
-    println!("# P2P: nd-fmm-simd against green-kernels (Phase 3S T7)");
+    println!("# P2P: tetraleaf-simd against green-kernels (Phase 3S T7)");
     println!();
     println!("| item | value |");
     println!("| --- | --- |");
@@ -259,7 +259,7 @@ fn print_header(quick: bool) {
     println!("| target | {} |", target());
     println!("| toolchain | {} |", toolchain());
     println!(
-        "| nd-fmm-simd | default `P2pKernel::detect()` = {}; ISAs available: {} |",
+        "| tetraleaf-simd | default `P2pKernel::detect()` = {}; ISAs available: {} |",
         Isa::detect(),
         Isa::available()
             .map(|isa| isa.to_string())
@@ -299,7 +299,7 @@ fn print_header(quick: bool) {
     println!("| timing | median of 15 batches of ≥ 20 ms, one thread |");
     println!();
     println!(
-        "- Inputs: those of `p2p_kernels` (`nd_fmm_validate::p2p_kernels`, design §8.2). \
+        "- Inputs: those of `p2p_kernels` (`tetraleaf_validate::p2p_kernels`, design §8.2). \
          Gpairs/s counts n_s n_t pairs per evaluation, coincident ones included. \
          \"time ours/gk\": our time per evaluation over green-kernels' (below 1: ours is \
          faster)."
@@ -309,7 +309,7 @@ fn print_header(quick: bool) {
          green-kernels' output times 4π: \"max\" is the largest error relative to the \
          term magnitudes (Σ|q|/r for φ, Σ|q|/r² per component of ∇φ), \"L2\" the \
          relative L2 error. \"req. 2\": within 1e-6 (f32) or 1e-14 (f64), or twice the \
-         error of `nd_fmm_ref::p2p` on the same inputs (design §3, as decided in T5)."
+         error of `tetraleaf_ref::p2p` on the same inputs (design §3, as decided in T5)."
     );
     println!(
         "- Target (C3S.6): speed, ours ≥ green-kernels' Gpairs/s; accuracy, our largest \

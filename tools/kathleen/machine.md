@@ -49,7 +49,7 @@ and `python3` 3.9.
 | Open MPI | 4.1.6, configured `--with-slurm --without-pmi --with-psm2=/usr --with-ofi=/usr --without-ucx --without-verbs`; components: PML `cm`, `ob1`, `v`, `monitoring`; MTL `psm2`, `ofi`; BTL `self`, `vader`, `tcp`, `ofi`, `usnic`; PMIx `ext3x` (external PMIx 3.2.3), `isolated`, `flux`; thread support `MPI_THREAD_MULTIPLE: yes` (`ompi_info`) |
 | OpenBLAS, FFTW | 0.3.28 and 3.3.10 (`pkg-config --modversion openblas fftw3`); not linked by the workspace |
 | Transport | PML `cm` + MTL `psm2` (Omni-Path PSM2, priority 40; `ofi` 25) between nodes and within a node, under `mpirun` and `srun --mpi=pmix`; `ob1`/`vader` initialised, not selected; no TCP. The module sets `OMPI_MCA_btl=self,vader` (jobs 238826, 238840) |
-| Launch at 2 × 40 ranks | `mpirun` inside the allocation 0.89–0.91 s, `srun --mpi=pmix` 1.28–1.33 s, for a small nd-octree example (job 238840) |
+| Launch at 2 × 40 ranks | `mpirun` inside the allocation 0.89–0.91 s, `srun --mpi=pmix` 1.28–1.33 s, for a small tetraleaf-octree example (job 238840) |
 | Slurm settings that matter | `MpiDefault=pmix`; `TmpFS=/tmp` with `NamespaceType=namespace/tmpfs` (a private `/tmp` per job); `TaskPlugin=task/cgroup,task/affinity`; the batch step has `SLURM_STEP_ID=-5` and `OMPI_MCA_plm_slurm_args=--external-launcher` (`scontrol show config`, job 238830) |
 
 ## FFTW (Helmholtz CHR.4)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tools/scaling/run.sh: the scaling sweeps of Phase 5 T10 (C5.3), one launch of
-# nd-fmm-validate's `scaling` example per configuration, each under `mpirun` and an
+# tetraleaf-validate's `scaling` example per configuration, each under `mpirun` and an
 # external timeout.
 #
 #     tools/scaling/run.sh <sweep> [<sweep> ...]
@@ -267,7 +267,7 @@
 #            --budget`. Per machine class (Phase 5N T4): default 56 on macOS, the M3 Max
 #            and the M6, and 96 on Linux, locust, and under Slurm, Kathleen; signed off as
 #            64 for the M3 Max, set to 56 by the user on 2026-10-11 after T4's f64 p = 6
-#            runs at 8 and 10 ranks per node, fmm-validate/results/phase5n-kathleen.md,
+#            runs at 8 and 10 ranks per node, tetraleaf-validate/results/phase5n-kathleen.md,
 #            "Phase 5N, T4". Kept at 56 for the M6 by the user on 2026-10-31 after its crossover
 #            sweep at 2, 4 and 6 ranks (tools/m6/machine.md, "BUDGET": Dense wins f32 p = 8
 #            up to 52 MB per node, loses f64 p = 6 at every count, most at 2 ranks, which no
@@ -294,7 +294,7 @@
 #            1000000 and the errors of another machine at 10^7, the same problems)
 #   DEVICE   the device of t5-device: metal or cuda (default metal on macOS, cuda on
 #            Linux)
-#   FEATURES cargo features of nd-fmm-validate for the example's build (default: none;
+#   FEATURES cargo features of tetraleaf-validate for the example's build (default: none;
 #            t5-device builds with DEVICE unless FEATURES is set)
 #   TIMEOUT  seconds per launch (default 3600)
 #   QUIET    on macOS, the CPU percentage the other processes may use before a launch
@@ -462,9 +462,9 @@ exe=${CARGO_TARGET_DIR:-target}/release/examples/scaling
 if [ -z "${DRY_RUN:-}" ]; then
     mkdir -p "$OUT"
     if [ -n "${FEATURES:-}" ]; then
-        cargo build --release -p nd-fmm-validate --example scaling --features "$FEATURES"
+        cargo build --release -p tetraleaf-validate --example scaling --features "$FEATURES"
     else
-        cargo build --release -p nd-fmm-validate --example scaling
+        cargo build --release -p tetraleaf-validate --example scaling
     fi
 fi
 

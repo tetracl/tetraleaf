@@ -1,7 +1,7 @@
 # M2L on a node: design for Phase 5N T4 (C5N.3)
 
 > **Superseded on the host by Phase 6 T11** (2026-10-20, decision 7 of
-> docs/phase6/README.md; `fmm-validate/results/phase6.md`): with the batched M2L (C6.6,
+> docs/phase6/README.md; `tetraleaf-validate/results/phase6.md`): with the batched M2L (C6.6,
 > each table read once per block of targets) and the plane-wave M2L (C6.5, no dense
 > tables), `Auto` resolves by p and the precision alone (`Batched` at f64 p ≤ 6 and f32
 > p ≤ 7, `PlaneWave` above); the ranks per node and the node budget of this document's rule
@@ -467,7 +467,7 @@ change to the cache is needed.
 | option | verdict |
 | --- | --- |
 | MPI shared memory (`MPI_Win_allocate_shared`) | possible now: rsmpi 0.8.2 has no window API, but its `mpi-sys` 0.2.4 declares `MPI_Win_allocate_shared`, `MPI_Win_shared_query` and `MPI_Win_fence`, and the user allows calling them (2026-10-10) under a documented exception to the `unsafe` rule. Measured (Section 2.6): a shared copy cuts Dense's per-pair cost 2.4–5.8× against private copies, but Rotation stays faster at f64 p = 8 (by 1.4–1.7×) and ties at f32 p = 8 on the M3 Max and locust; the gain over B is up to 25% of M2L on Kathleen at f32 p = 8 and 5% at f64 p = 6, and only at one rank per core: Dense with threads (4 × 10) gets the same per-pair cost today |
-| memory-mapped cache files shared through the page cache | needs `mmap` (`unsafe` in `nd-fmm-tables`) or a new dependency; would give what the window gives, with the same verdict |
+| memory-mapped cache files shared through the page cache | needs `mmap` (`unsafe` in `tetraleaf-tables`) or a new dependency; would give what the window gives, with the same verdict |
 | threads per rank (few ranks per node) | available now; the measured equivalent of a shared copy (Section 7) |
 | the batched host M2L of Phase 6 (C6.6) | reads each table once per level for many targets; changes the bytes per pair, so Dense's per-rank copy stops mattering whatever the sharing |
 
@@ -496,7 +496,7 @@ ranks step (1.4× in every stage, T2 §1) is the all-core clock and is paid by a
 
 ## 8. Task check (what T4 builds)
 
-T4 builds, in `nd-fmm-exec` only:
+T4 builds, in `tetraleaf-exec` only:
 - the rule B: `M2lStrategy::resolve_on_node` (or a `NodeContext` struct of p, value
   bytes, ranks per node and budget, documented), the two constants with their source (this
   document, Sections 2.1 and 3), `AUTO_DENSE_MAX_P` deprecated, `resolve`'s documentation
@@ -561,7 +561,7 @@ locust and Kathleen; Section 4); question 7 a far-field build for the CPU, in Ph
 ## 10. Outcome (Phase 5N T4)
 
 Built and measured in T4 on 2026-10-11 (docs/phase5n/T4-node-m2l.md; the report is
-`fmm-validate/results/phase5n-kathleen.md`, "Phase 5N, T4": the M3 Max, locust, and one
+`tetraleaf-validate/results/phase5n-kathleen.md`, "Phase 5N, T4": the M3 Max, locust, and one
 Kathleen node in job 241833). The sections above stay as signed off; this one records what
 was built where it differs, and the numbers.
 
@@ -574,7 +574,7 @@ was built where it differs, and the numbers.
 | the node context (§4, §8) | one `split_shared` on the host path; ranks per node in step 7's all-reduce | as designed: one split on every backend in step 1 (the device path's `RankPlacement` takes the same communicator, so the device path splits once as before), step 7's all-reduce of two maxima; threads do not enter |
 | what is reported (§4) | `ThreadingReport` with the ranks per node and the reason | as designed: `ThreadingReport::{ranks_per_node, m2l}`, the `Display` ending "ranks per node 40; M2L Auto → Rotation: 40 ranks per node × 8.7 MB > 96 MB"; `Fmm::strategy` the resolved strategy, as before |
 | the budget per machine class (§4, question 5) | the library 64 MB; the harness 64 MB on the M3 Max, 96 MB on locust and Kathleen | `FmmBuilder::dense_node_budget`, the library default 64 MB; the harness (`tools/scaling/run.sh`, `BUDGET`) **56 MB on the M3 Max, set by the user on 2026-10-11** after T4 measured f64 p = 6 at 8 and 10 ranks per node (Dense 1.11 and 1.83× Rotation's time under 64 MB; §10.2), and 96 MB on locust and Kathleen |
-| tables at scale (§5, decision 7) | with `table_cache`, one rank per node first, a node barrier, the others load; `TableCache` unchanged | as designed: the node's lowest rank `load_or_build`s, `barrier` on the node's communicator, the others `load_or_build` (a load, unless a file was rejected); with no cache every rank builds. A warm cache costs one load more on the first rank. `nd-fmm-tables` unchanged |
+| tables at scale (§5, decision 7) | with `table_cache`, one rank per node first, a node barrier, the others load; `TableCache` unchanged | as designed: the node's lowest rank `load_or_build`s, `barrier` on the node's communicator, the others `load_or_build` (a load, unless a file was rejected); with no cache every rank builds. A warm cache costs one load more on the first rank. `tetraleaf-tables` unchanged |
 | one copy per node (§6, decision 6) | none in this phase | none; nothing built |
 | the guarantee (§4) | per resolved strategy | as designed: the one-rank references of `tests/mpi_exec.rs`, `tests/multi_rank.rs` and the `scaling` harness name the strategy the multi-rank run resolved |
 | the harness (§8) | the summary gains ranks per node and the reason; the crossover sweep; `--budget` | `scaling --budget MB`; the summary's `requested`, `budget_mb`, `dense_rank_mb`, `dense_node_mb` (the reason in the threading line); the sweeps `node-rule` (T3's grid: `auto` and the other strategy, the cap, the errors) and `crossover`; the T2 sweep `nodes-strong` names `8:dense` for its former `8:auto` |
@@ -620,7 +620,7 @@ with threads (4 × 10 the fastest split at f64 p = 8 on one Kathleen node), and 
 ## 11. Superseded (Phase 6 T11) and removed (Helmholtz CHA.3)
 
 **Replaced.** Phase 6 T11 (decision 7 of docs/phase6/README.md, signed off on 2026-10-20;
-fmm-validate/results/phase6.md) replaced the rule of §4: `M2lStrategy::Auto` resolves on the
+tetraleaf-validate/results/phase6.md) replaced the rule of §4: `M2lStrategy::Auto` resolves on the
 host to `Batched` below f64 p = 7 and f32 p = 8 and to `PlaneWave` from there, by p and the
 precision alone. Both strategies hold their tables once per rank, and at one rank per core
 Batched's dense tables (6.4 MB at f64 p = 6) cost less than Dense's per-target reads did, so

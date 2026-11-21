@@ -1,5 +1,5 @@
 [package]
-name = "nd-fmm-spike-radial"
+name = "tetraleaf-spike-radial"
 version = "0.0.0"
 description = "Throwaway study: the radial functions j_n, h_n, i_n, k_n of the Helmholtz FMM for real and complex arguments, their accuracy on every operator's range and their scaling (Helmholtz CH0.3, spike S3)."
 publish = false

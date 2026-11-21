@@ -1,0 +1,5059 @@
+//! The user-facing FMM: [`FmmBuilder`], [`Fmm`] and its [`Output`] (C3.2).
+//!
+//! [`FmmBuilder::build`] takes source and target points in the caller's order, on any
+//! rank, builds the octree, the plan of `tetraleaf-plan`, the tables, the
+//! [`LaplaceOperator`] and the evaluator, moves every point to the rank that owns its
+//! leaf, and loads the points there in the leaf-scaled form of CONVENTIONS §3.13.
+//! [`Fmm::evaluate`] takes charges in the caller's source order, moves them to the
+//! owners, runs the evaluator stage by stage, and returns potentials (and gradients) in
+//! the caller's target order on the caller's rank, with 1/(4π) and the target leaf radius
+//! applied once (§3.1, §3.13, "Output"):
+//!
+//! φ(x) = φ̂ / (4π r_t),  ∇φ(x) = ĝ / (4π r_t²),
+//!
+//! so φ(x) = Σⱼ qⱼ / (4π |x − yⱼ|), the free-space Green's function of −Δ. A source and a
+//! target at the same point do not interact (§3.13, "Coincident pairs").
+//!
+//! # Build
+//!
+//! [`FmmBuilder::build`] is collective. In order:
+//!
+//! 1. Checks the settings (among them that this rank's CPU runs the P2P kernel), the MPI
+//!    threading level when `threads` > 1, the supplied domain ([`Domain::new`]) and that
+//!    every point is finite, builds the thread pool if `threads` > 1, opens the device
+//!    of a device [`Backend`] (compiled in, a device that comes up, the precision
+//!    supported), and agrees the outcome on every rank (one all-reduce). Then it splits
+//!    the communicator by node once (`split_shared`; Phase 5N T4 on every backend, Phase 5
+//!    T8 with a device): its size is the ranks per node of the threading report (step
+//!    7), its barrier orders the table loading with a cache (step 7), and with a device
+//!    backend the rank's place there is in the device report, and on the CPU runtime the
+//!    units per cube are capped at the node's cores over its ranks.
+//! 2. Checks that some rank has points (one all-reduce); no point at all is an error.
+//! 3. Takes the supplied domain, or `compute_global_bounding_box` over the sources and
+//!    targets of every rank (after one all-reduce pair that rejects points spanning no
+//!    volume, which that function cannot handle). Checks that every point lies strictly
+//!    inside it and agrees the outcome (one all-reduce).
+//! 4. Builds one octree from the finest-level keys (`points_to_morton` at level 16) of
+//!    this rank's sources and targets together, with `max_level`, `max_points_per_leaf`
+//!    (`OctreeOptions::with_max_fine_keys`) and the ghost-children layer, and the plan
+//!    of its box index and lists. The octree's partition weighs every key it is passed,
+//!    so the points (`tetraleaf-octree`'s default since Phase 5 T4; docs/design/distributed-fmm.md
+//!    §3.5). On several ranks with [`FmmBuilder::work_cut`] (the default; Phase 5S T7,
+//!    docs/design/scale-out.md §6) it then cuts the blocks a second time by the modelled
+//!    cost of their work: it counts the points of every local leaf where they are (one
+//!    all-to-all-v of the distinct keys with their numbers of sources and targets),
+//!    learns the ghost leaves' source counts by the build of a source exchange, counts the
+//!    work of every own block by operator kind on the plan ([`cost::work_counts`]),
+//!    weighs it with the [`CostModel`] ([`FmmBuilder::cost_model`], by default
+//!    [`CostModel::calibrated`] for the strategy the host rule resolves at the precision
+//!    and p), repartitions the octree by those weights
+//!    (`Octree::repartition`: an all-gather-v of the weights, a sparse exchange of the
+//!    leaves and the push of the locally essential keys, unless the cut stays as it is),
+//!    taking the new cut only where it lowers the busiest rank's modelled block cost by
+//!    at least [`WORK_CUT_MIN_GAIN`] (2 %), and builds the plan again where the cut
+//!    changed ([`Fmm::recut`]). The leaves and every row stay the
+//!    same; only the owners of the blocks change, before any point moves
+//!    ([`BuildTimings::cut`]). With [`FmmBuilder::near_rule`] (Phase 6 T12) the plan is
+//!    built again with the near rule before the cut, which weighs that plan, and again
+//!    after a recut ([The near rule](#the-near-rule-c69)).
+//! 5. Moves every point to the rank that owns its leaf (Phase 5 T6, design §4.4): one
+//!    `tetraleaf_plan::redistribute::Redistribution` for the sources and one for the
+//!    targets, routed by the keys of step 4, then the f64 coordinates of each forwarded
+//!    to the owners, into leaf order. Within a leaf the points lie in the order (origin
+//!    rank, position on that rank).
+//! 6. Takes the points of every local leaf from the redistributions, the radius of every
+//!    local leaf, and the output order (local).
+//! 7. All-reduces the largest number of sources in a leaf, which sizes the P2P scratch,
+//!    and the largest number of ranks per node, reported in [`Fmm::threading`] (one
+//!    all-reduce of two maxima); with a device backend resolves the M2L strategy of
+//!    [`M2lStrategy::Auto`] for the device (Phase 4 T12: from the tuning cache, by timing
+//!    rotation against dense, or by the static rule; on several ranks with a tuning cache
+//!    rank 0's, broadcast, Phase 5 T8), and otherwise by the host rule
+//!    ([`M2lStrategy::resolve_on_node`]: p and the precision), so every rank resolves the
+//!    same strategy;
+//!    builds or loads the tables (with a cache, the lowest rank of each node first, the
+//!    others after a barrier of the node's communicator: [`FmmBuilder::table_cache`]), the
+//!    host operator, and the evaluator with the per-leaf counts (its own collectives).
+//! 8. Writes the leaf-scaled source coordinates and target positions, from the forwarded
+//!    f64 coordinates, into the evaluator's stores, once
+//!    ([`leaf_coordinates`](crate::geometry::leaf_coordinates)). With a
+//!    device backend (Phase 5 T8) it then builds the device operator around the host
+//!    operator, from the evaluator's source counts (the ghost leaves' included) and the
+//!    index lists of its exchanges: it checks that its buffers fit in device memory,
+//!    allocates them, uploads the views, the exchanges' columns and the tables, and takes
+//!    its GEMM decisions; swaps it in for the host operator; uploads the points, after
+//!    which the device takes its P2P decision and ends its tuning (device work only); and
+//!    agrees the outcome on every rank (one all-reduce).
+//!
+//! It also reads the BLAS thread variables once, for [`Fmm::threading`].
+//!
+//! Steps 3, 5, 6 and 8, step 4's keys and octree, and the evaluation's charge load, output
+//! pass and moves are the crate-private point pipeline (Helmholtz CH3.1b), which the
+//! Helmholtz FMM ([`HelmholtzFmm`](crate::helmholtz::HelmholtzFmm)) shares; they are the
+//! statements this module ran before, unchanged.
+//!
+//! An error that depends on one rank's input is agreed by every rank before the next
+//! collective: the rank that found it returns it, the others [`FmmError::OtherRank`];
+//! errors that every rank sees alike ([`NoPoints`](FmmError::NoPoints),
+//! [`DegenerateExtent`](FmmError::DegenerateExtent), and those of the plan, the
+//! redistributions and the evaluator) are returned on every rank. No communication sits
+//! in a rank-dependent branch.
+//!
+//! # Evaluation
+//!
+//! [`Fmm::evaluate`] is collective: it agrees the length of the charge vector (one
+//! all-reduce), forwards the charges to the ranks that own their sources, into leaf order
+//! (point to point on the routes fixed at build, no collective), writes them after the coordinates of each source chunk (§3.13,
+//! "Source chunks"), resets the evaluator and runs its six stages (or, with
+//! [`FmmBuilder::overlap`], its overlapped stages: [Overlap](#overlap-c52)), scales the target
+//! output of the owned targets in leaf order (the output pass, next section), and moves
+//! it back to the caller's ranks and order (point to point again), timing each step
+//! ([`StageTimings`]). For a fixed input on every rank, a fixed rank count and fixed
+//! settings, two evaluations are bit-identical (the accumulation order of
+//! `tetraleaf_plan::evaluator`), for every number of threads. [`Fmm::evaluate_into`]
+//! (Phase 4S T9, decision 11) does the same into the buffers of an [`Output`] the caller
+//! reuses, with the same bits; `evaluate` evaluates into a fresh one.
+//!
+//! # The output pass (Phase 4S T9)
+//!
+//! The evaluator leaves the target output in leaf order and leaf-scaled (§3.13); the
+//! output pass turns it into φ and ∇φ, dividing each value by 4π r_t or 4π r_t² in f64
+//! and rounding once to `T`: 1/(4π) and the leaf radius applied once, here (§3.1, §3.13,
+//! "Output"). It runs on the rank that owns the targets, in their received order, which
+//! is leaf order, and writes φ, or φ and ∇φ, of each target next to each other: the o = 1
+//! or 4 values per target that the backward move of the targets' redistribution returns
+//! to the caller's ranks and order, where they are copied into the [`Output`] (Phase 5
+//! T6). At build `Fmm` stores, for every owned target, its point in leaf order and its
+//! local leaf (`u32` each: 8 N_t bytes), and for every local leaf the two scales (16
+//! bytes), formed as the pass before T9 formed them. Where it runs ([`OutputPass`],
+//! [`FmmBuilder::output_pass`], [`Fmm::output_pass`]):
+//! - **on the host** (the host path, Metal, and every backend with [`OutputPass::Host`]):
+//!   one loop over the owned targets, on the `Fmm`'s pool when it has one (threads > 1,
+//!   not [`set_serial`](Fmm::set_serial)) and serially otherwise, each thread writing a
+//!   contiguous range of the values and gathering them from the store. On Metal and CUDA
+//!   the pool is idle by then (device-path.md §11);
+//! - **on the device** (by default on a device with f64 arithmetic: the CPU runtime and
+//!   CUDA): `tetraleaf_kernels::movement::gather_output` makes the same values on the device
+//!   from a copy of the order uploaded once, with the same f64 division and one rounding to
+//!   `T`; the evaluation still downloads o N_t values once and syncs once, and the host
+//!   places them next to each other (one more launch per evaluation, device-path.md §4.1).
+//!
+//! Both give the bits of the pass before T9, which the tests keep as their oracle
+//! (`Fmm::reference_output`). The charge load is parallel the same way: the forwarded
+//! charges, already in leaf order, are copied into the host's source chunks (by leaves),
+//! on the pool; on a device the forwarded buffer itself is the upload, which the device
+//! takes over without a copy (Phase 4S T11); with P2M, P2L and P2P on the device the
+//! host's source store, which feeds only host-fallback calls of those kinds, is not
+//! written at all. The output is read in place from CubeCL's host copy of the download (no
+//! host buffer of the operator in between).
+//!
+//! On request ([`FmmBuilder::kind_timings`], [`Fmm::set_kind_timings`]; Phase 4S T5) it
+//! also times every level call by operator kind and level ([`KindTiming`],
+//! [`StageTimings::kinds`]), on the host path and every device backend, with the same
+//! output bit for bit.
+//!
+//! # P2P kernel
+//!
+//! [`FmmBuilder::p2p_kernel`] chooses the kernel of P2P ([`P2pChoice`]): by default
+//! the SIMD kernel of `tetraleaf-simd` on the default ISA of the machine, or the reference
+//! loop of `tetraleaf-ref`, or an ISA named explicitly. Every other operator is the same.
+//! Kernels differ in the last bits of each near-field term, so outputs of different
+//! choices agree to rounding, not bit for bit; on one machine, ISA and build they are
+//! reproducible ([`operator`](crate::operator#p2p-kernel), "P2P kernel").
+//! [`Fmm::p2p_kernel`] reports the kernel that runs, for reports next to
+//! [`Fmm::threading`].
+//!
+//! # The batched M2L (Phase 6 T2, C6.6)
+//!
+//! [`M2lStrategy::Batched`] (`Auto`'s choice at f64 p ≤ 6 and f32 p ≤ 7 since Phase 6
+//! T11) holds `Dense`'s tables
+//! and applies M2L on the host per level, block by block of targets and offset by offset,
+//! through the column kernel of `tetraleaf-simd` on the ISA of the P2P choice
+//! ([`operator`](crate::operator#the-batched-m2l), "The batched M2L";
+//! docs/design/optimisation.md §2). Its output is `Dense`'s bit for bit, so every
+//! guarantee here holds for it unchanged. [`MulAdd::Fused`] (the default from p =
+//! [`FUSED_MUL_ADD_MIN_P`] since Phase 6 T11, [`default_m2l_mul_add`]; named by
+//! [`FmmBuilder::m2l_mul_add`] or [`Fmm::set_m2l_mul_add`]) forms each step with one fma: within
+//! n u per element of `Dense`, and still deterministic, the same for every thread count
+//! and, on P ranks, bit for bit the one-rank fused `Fmm` over the union. With a device
+//! backend M2L on the device runs as `Dense`. [`Fmm::threading`] names the kernel's ISA
+//! and mode ([`ThreadingReport::m2l_kernel`]).
+//!
+//! # The plane-wave M2L (Phase 6 T13, C6.5)
+//!
+//! [`M2lStrategy::PlaneWave`] (`Auto`'s choice at f64 p ≥ 7 and f32 p ≥ 8 since Phase 6
+//! T11) applies M2L by plane
+//! waves with merge and shift ([`operator`](crate::operator#the-plane-wave-m2l), "The
+//! plane-wave M2L"; CONVENTIONS §3.14), M2M and L2L by `Rotation`'s tables. It approximates
+//! M2L: the output is not `Dense`'s, but within its error budget (the errors against the
+//! direct sum within about 1.1× those of the exact M2L, the quadrature of
+//! `tetraleaf_tables::plane_wave::nodes_for_degree`; f32 and f64, p ≤ 20). Every other
+//! guarantee here holds for it: deterministic, the same for every thread count and overlap
+//! setting, and on P ranks bit for bit the one-rank `PlaneWave` `Fmm` over the union. `build`
+//! sizes its waves buffer from the plan (one frame of the largest level, 4H values per
+//! box), and its cost model counts M2L per box with a V row (`cost::M2lUnit::Boxes`). With a
+//! device backend M2L on the device runs by merge and shift on the device
+//! ([`FmmBuilder::device_plane_wave`], default [`DevicePlaneWave::Kernels`] since Helmholtz
+//! CH7.5c), or as `Dense` under [`DevicePlaneWave::Dense`]. [`Fmm::threading`] names the plane-wave
+//! kernels' ISA ([`ThreadingReport::wave_kernel`]).
+//!
+//! # Several charge vectors (Phase 6 T5)
+//!
+//! [`FmmBuilder::vectors`] m > 1 (C6.3; docs/design/optimisation.md §4) builds an FMM that
+//! carries m charge vectors at the same points through every stage: the plan, the tree,
+//! the lists, the tables and the exchanges' structure are those of one vector, and only the
+//! sizes the operator reports grow ([`LaplaceOperator::with_vectors`]: m (p + 1)² values
+//! per box, 3 + m per source, m or 4 m per target; CONVENTIONS §3.13, "Several charge
+//! vectors"), so every exchange sends one message per neighbour as before, with m times the
+//! values ([`Fmm::exchange_traffic`] counts them). [`Fmm::evaluate_many`] (or
+//! [`Fmm::evaluate_many_into`]) takes the m vectors in the caller's source order and
+//! returns an [`OutputMany`], vector after vector; [`Fmm::evaluate`] is refused with
+//! [`FmmError::VectorCount`] when m > 1, agreed in the charge-length all-reduce, and
+//! `evaluate_many` with m = 1 is `evaluate`.
+//! - **Bits.** Every operator gives each vector exactly the chain of operations one vector
+//!   gets and shares only what does not depend on the charge (the harmonics of a point, a
+//!   pair's distance, a table; [`operator`](crate::operator#several-charge-vectors)), and
+//!   the moves copy, so vector v of the output equals [`Fmm::evaluate`] of vector v on the
+//!   FMM of one vector and the same settings, bit for bit, on every strategy (the batched
+//!   M2L's columns grow by m), thread count, rank count, overlap setting and P2P choice.
+//! - **Moves.** The charges are packed point-major once, on the pool (`packed[i m + v]`,
+//!   timed in [`StageTimings::forward_charges`]); the forward then moves m values per
+//!   source and the backward o m per target; the charge load copies each leaf's m n
+//!   charges in one piece.
+//! - **The device** uploads m charges per source and downloads o m values per target, once
+//!   each per evaluation: the device path's transfers with m times the bytes (the `device`
+//!   module, "Several charge vectors").
+//! - **Cost model.** The work-weighted cut weighs the work of one vector
+//!   ([`cost::work_counts`]); only the partition depends on it, never a bit of the output.
+//!
+//! # Dipoles (Phase 6 T8)
+//!
+//! [`FmmBuilder::sources`] (C6.4; docs/design/optimisation.md §7) builds an FMM for point
+//! dipoles, or a charge and a dipole at every source point ([`SourceType`]): a moment d at
+//! y gives the potential d · ∇_y 1/|x − y| = d · (x − y)/|x − y|³ (CONVENTIONS §3.7,
+//! "Dipole sources"), and [`Fmm::evaluate_sources`] takes the strengths as a [`Sources`]
+//! in the caller's source order. [`Fmm::evaluate`] and [`Fmm::evaluate_many`] serve charges
+//! only and are refused with [`FmmError::SourceType`] otherwise, as is a [`Sources`] that
+//! does not match the build, agreed in the length all-reduce. The type is fixed at build
+//! because it sets the source chunks (6 or 7 values per point; CONVENTIONS §3.13, "Source
+//! chunks"):
+//! - **Moves.** The forward moves 1, 3 or 4 values per source (charges and moments packed
+//!   four per source, q first, on the pool); the charge load writes each leaf's charges and
+//!   its moments scaled into the leaf's units, d̂ = d / r_s, one rounding in f64 and one to
+//!   T; the ghost exchange moves the chunks as they are.
+//! - **Operators.** Only P2M, P2L and P2P change (the dipole terms after the charge terms of
+//!   each source leaf; [`operator`](crate::operator#dipoles)); the far field, L2P, M2P, the
+//!   lists, the exchanges of expansions and the output pass are those of charges. The
+//!   guarantees of the charge path hold: bits for every thread count, overlap setting and
+//!   routing; on P ranks the one-rank `Fmm` over the union.
+//! - **Charges unchanged.** With [`SourceType::Charges`], the default, nothing changes:
+//!   `evaluate_sources` of `Sources::charges(c)` is `evaluate(c)` bit for bit.
+//! - **One set.** Dipoles carry one set of strengths; with more than one vector `build`
+//!   returns [`SettingsError::SourcesWithVectors`].
+//! - **The device** runs P2M, P2L and P2P with the dipole kernels of `tetraleaf-kernels`
+//!   (Phase 6 T8d; the `device` module, "Dipoles"): an evaluation uploads the 3 or 4
+//!   strengths of every source once, the moments scaled into their leaf's units on the pool
+//!   first (the bits the charge load writes into the host's chunks), and the leaves the
+//!   source exchange sends take their chunks from that upload.
+//! - **Cost model.** The work-weighted cut weighs the charge kernels' work; only the
+//!   partition depends on it.
+//!
+//! # Threads (C3.5)
+//!
+//! With [`FmmBuilder::threads`] n > 1, the `Fmm` owns a rayon pool of n threads and the
+//! operator runs every level call in it, each target on one thread
+//! ([`LaplaceOperator::with_pool`]); with n = 1 (the default) there is no pool. Every
+//! collective, and so every MPI call, stays on the calling thread, which needs MPI at
+//! [`Threading::Funneled`] or above. The rules for threads, MPI and BLAS, and how to
+//! launch, are in [`threading`](crate::threading).
+//!
+//! # Backends (Phase 4)
+//!
+//! [`FmmBuilder::backend`] chooses where the operators run: [`Backend::Host`], the
+//! default and the host path above, or a device backend of the `gpu` feature
+//! ([`Backend::Cpu`], [`Backend::Metal`], [`Backend::Cuda`]). A device backend keeps
+//! the interface, the plan and the evaluator: the operator holds its data on the device,
+//! [`Fmm::evaluate`] tells it where an evaluation starts and reads its output once, and
+//! the output scaling is the same code. Every operator kind can run on the host
+//! fallback ([`OperatorKind`], [`Fmm::placement`]); with every kind there the output
+//! equals the host path's bit for bit. By default (Phase 4 T11) every kind runs on the
+//! device under every strategy: P2P ([`DeviceP2pLayout`]), P2M, L2P, P2L and M2P
+//! ([`DeviceLeafLayout`]), M2M, L2L and dense M2L as grouped GEMMs ([`DeviceGemm`]) and
+//! M2L under `Rotation` by the rotation kernel. The data stay on the device for the whole
+//! evaluation, which moves the charges up and the output down and syncs once, at that
+//! download; the output agrees with the host path's within the FMM bounds of
+//! docs/phase4/README.md, and its errors against the direct sum are the host path's.
+//! [`StageTimings`] time each stage on the host and, on request and where the device
+//! times on itself, on the device ([`FmmBuilder::device_timestamps`]). The `device` module (feature `gpu`)
+//! documents the residency, the transfers, the scheduling, the fallback, the errors and
+//! the threads rule; docs/design/device-path.md is the design.
+//!
+//! **Autotune** (Phase 4 T12, C4.7; the `tune` module, feature `gpu`): with
+//! [`FmmBuilder::tuning_cache`] the device path times its candidates at build (the M2L
+//! strategy under `Auto`, the GEMM of each level call under `DeviceGemm::Auto`, the P2P
+//! layout under `DeviceP2pLayout::Auto`) within [`FmmBuilder::tuning_budget`], keeps the
+//! fastest for the `Fmm`'s lifetime and stores it in the caller's directory; a later
+//! build with the same key reads it. Without a directory the static rule applies: f32
+//! `Dense`; f64 `Dense` at every p on CUDA (Phase 4S decision 9), and on Metal and the CPU
+//! runtime `Dense` to p = 11 and `Rotation` above (provisional); the GEMMs of
+//! `DeviceGemm::Auto` and the backend's P2P layout. Two builds from the same cache give
+//! the same bits; `evaluate` never tunes.
+//!
+//! # Several ranks (C5.1)
+//!
+//! Each rank passes any subset of the points, none included, and gets the output of its
+//! own targets in the order it passed them; where the points are is the library's
+//! business (Phase 5 T6, docs/design/distributed-fmm.md §4).
+//! - **Where points go.** The octree (step 4) partitions the coarse blocks over the ranks
+//!   by points, independently of where the points were passed, and by default
+//!   ([`FmmBuilder::work_cut`], Phase 5S T7) once more by the modelled cost of their work
+//!   ([`cost`]), which depends only on the tree, the points per leaf and the constants,
+//!   never on a timing; its leaves are those of the one-rank tree of the same points
+//!   either way. Each point goes to the rank that owns its leaf
+//!   (step 5), and each charge with its source on every evaluation; the output comes back
+//!   to the target's rank. Within a leaf the points lie in the order (origin rank,
+//!   position on that rank).
+//! - **Collectives.** Per build, besides those of step 1–3 (the split by node of step 1
+//!   included), `Octree::new`, `Plan::new` and `Evaluator::new`, with the second cut
+//!   (Phase 5S T7) those of step 4 and a second `Plan::new`; two `Redistribution::new`
+//!   (each rlst's `SparseRoutes::new`, a communicator duplicate, the counts by a sparse
+//!   exchange and an all-reduce, then an all-reduce of the errors and the keys point to
+//!   point; Phase 5S T8), the coordinates point to point along both routes, the
+//!   all-reduce of step 7 (two maxima since Phase 5N T4, the ranks per node added), and
+//!   with a table cache one barrier of the node's communicator. Phase 5N T4 added one
+//!   communicator split per build on the host path (the device path had it). Per
+//!   evaluation: the all-reduce of the charge length, the forward of the charges (point
+//!   to point along the routes, no collective), the evaluator's exchanges (the source exchange, the upward reduction of
+//!   every reduction level, the all-gather of the replicated top and the multipole
+//!   exchange of every level; Phase 5S T5), and the backward of the output (point to
+//!   point). Every rank enters each one, a rank with no points included.
+//! - **Equal to one rank.** On P ranks the output is bit for bit the output of the
+//!   one-rank `Fmm` of the same settings and the same *resolved* strategy
+//!   ([`Fmm::strategy`]) over the union of every rank's points in rank order (rank 0's
+//!   points, then rank 1's, …), with the second cut or without it. On the host
+//!   [`M2lStrategy::Auto`] resolves by p and the precision alone (Phase 6 T11), so the same
+//!   on every rank count; with a device backend it is the device path's choice, which a
+//!   caller who needs the same bits across rank counts names. Its leaves are the same (Phase 5 T4), the
+//!   points of a leaf lie in the same order, the near and X rows are ordered by the source
+//!   leaf's (level, key) (Phase 5 T5), received values are exact copies, and the owner of a
+//!   `Global` box forms it from exact copies of its children by octant, as one rank does
+//!   (design §5.1, §5.3; Phase 5S T5, docs/design/scale-out.md §4.2). Two distributions of the same points over the ranks
+//!   put the points of a leaf in different orders, so their outputs differ in the last
+//!   bits: within 100 u_T relative L2 over every target, φ and ∇φ (1.1e-14 in f64, 6.0e-6
+//!   in f32; design §5.4). The errors against the direct sum are the one-rank run's.
+//! - **Determinism.** For fixed input on every rank, a fixed rank count and fixed
+//!   settings, the output is bit-identical from evaluation to evaluation, from build to
+//!   build, and for every number of threads.
+//! - **Threads.** The `threads(n)` of [`FmmBuilder::threads`] are per rank: ranks × n stay
+//!   within the physical cores ([`threading`](crate::threading)), and every MPI call,
+//!   the moves included, is made on the calling thread.
+//! - **Errors.** `PointsNotOwned` (until Phase 5 T6) is gone; a redistribution that does
+//!   not fit MPI's `i32` counts is [`FmmError::Redistribution`], on every rank.
+//! - **The device** (Phase 5 T8) runs on any number of ranks: every rank opens the default
+//!   device of its backend, and the device operator mirrors the evaluator's exchanges
+//!   (the `device` module, "Several ranks"), the upward reduction and the replicated top
+//!   of Phase 5S T5 included since T6 (between the two, a device evaluation with a box to
+//!   reduce failed with [`FmmError::Device`]). Per evaluation it adds one all-reduce, after
+//!   the output's download, that agrees a device error of any rank; the rank that failed
+//!   returns [`FmmError::Device`], the others [`FmmError::OtherRank`], and from then on
+//!   the charge-length agreement carries the kept error. [`Fmm::exchange_sizes`] says
+//!   what the exchanges move on the rank.
+//!
+//! # Overlap (C5.2)
+//!
+//! With [`FmmBuilder::overlap`] (or [`Fmm::set_overlap`]; Phase 5 T9, off by default)
+//! `evaluate` runs the evaluator's overlapped stages: the source exchange travels behind
+//! P2M and the local M2M, the upward reduction posts its receives ahead and each level's
+//! sends as soon as that level is formed (Phase 5S T5), and the multipole exchange of
+//! every level, posted after the reduction and before the all-gather of the replicated
+//! top, travels behind the all-gather and the downward pass of the coarser levels, each
+//! level waited for just before the first call that reads it (`tetraleaf_plan::evaluator`,
+//! "Overlap"; docs/design/distributed-fmm.md §8). The exchanges are scoped point-to-point
+//! requests, progressed by a `test` after every level call on the calling thread; the
+//! all-gather of the top stays blocking.
+//! - **Output.** No level call moves, so the output is bit for bit the blocking path's,
+//!   for every rank count and number of threads (no reordering is offered, decision 9).
+//! - **Collectives.** The same per evaluation, except that the source and multipole
+//!   exchanges are point-to-point (no neighbourhood collective); every rank must use the
+//!   same setting.
+//! - **Times.** [`StageTimings`] keeps its stages, split as its documentation says, and
+//!   adds [`StageTimings::overlap`]: per exchange the time from post to completion, the
+//!   exposed wait and the `test` calls, the wait per level and the all-gather of the top.
+//!   [`StageTimings::reduction`] and [`StageTimings::replicated_top`] (Phase 5S T6) are
+//!   timed alike in both paths, from the events that bracket them.
+//! - **The device** runs the overlapped stages with the same events and transfers
+//!   (design §13, question 10), for correctness only: no device time is a scaling
+//!   figure (decision 3). With [`FmmBuilder::device_timestamps`] the first overlapped
+//!   stage is timed in the window of [`DeviceStage::UpwardLocal`] and the second (the
+//!   global M2M and the downward pass) in that of [`DeviceStage::Downward`];
+//!   [`DeviceStage::UpwardGlobal`] times zero.
+//!
+//! # The near rule (C6.9)
+//!
+//! With [`FmmBuilder::near_rule`] (Phase 6 T12; docs/design/optimisation.md §8a; on, from
+//! the cost model, by default since Phase 6 T11) the build turns the W and X pairs between two leaves whose
+//! fine leaf holds few points into near pairs, which P2P evaluates exactly, in place of
+//! M2P (the multipole of the fine leaf at the coarse leaf's targets) and P2L (a local of
+//! the fine leaf from the coarse leaf's sources).
+//! - **The rule.** A W pair converts where its source leaf holds fewer than N_W sources,
+//!   an X pair where its target leaf holds fewer than N_X targets: with
+//!   [`NearRuleChoice::CostModel`] N_W = α_M2P / α_P2P and N_X = α_P2L / α_P2P of the
+//!   FMM's [`CostModel`] ([`CostModel::near_crossovers`]: the points below which P2P costs
+//!   less, by the model; 107 and 35 at f64 p = 3 `Dense`, 421 and 184 at f64 p = 8
+//!   `Rotation` with Kathleen's constants), or named ([`NearRuleChoice::Crossovers`]). An
+//!   interior W box keeps its M2P, and the X entries of an interior box their P2L.
+//! - **The counts.** Step 4 counts the source and target points of every local leaf where
+//!   the points are (the one all-to-all-v that the second cut uses too), fetches the
+//!   source counts of the W rows' ghost leaves from their owners
+//!   (`tetraleaf_plan::near::LeafCounts::exchange`), and builds the plan again with the rule
+//!   (`tetraleaf_plan::plan::Plan::with_near_rule`). The second cut weighs that plan, the
+//!   converted pairs as P2P ([`cost`]); after a recut the counts and the plan with the rule
+//!   are made again for the new owners. The rule decides each pair from the leaf's count
+//!   alone, which is the same on every rank, so every rank makes the rows of one rank.
+//! - **Output.** A converted pair loses its truncation error, so the output is not that of
+//!   the rule off (not within 1e-12), and the error against the direct sum mostly falls;
+//!   where the truncation errors of different pairs cancel it can grow by a few per cent
+//!   (tetraleaf-validate/results/phase6-near.md). For
+//!   fixed settings it is deterministic, the same for every thread count and overlap
+//!   setting, and on P ranks the one-rank output of the same rule bit for bit: the near
+//!   rows keep their (level, key) order.
+//! - **Collectives.** Per plan with the rule, a ghost communicator's build with two
+//!   all-reduces and the two all-reduces of a `Plan::new`; the all-to-all-v of the counts
+//!   once more where the second cut does not run. Nothing per evaluation: the source
+//!   exchange also delivers the converted ghost leaves, and the multipole exchange no
+//!   longer moves the multipoles only a converted pair read.
+//! - **Report.** [`Fmm::near_rule`]: the setting, N_W and N_X, and the W and X pairs
+//!   between leaves of the rank with those converted. [`BuildTimings::plan`] includes
+//!   the counts and the plan with the rule. The device path runs the converted pairs with
+//!   the other near pairs (its P2P forms the frames between any two leaves).
+//!
+//! # Precision
+//!
+//! `T` is f64 or f32 (`Stored + SimdScalar + Equivalence`). Coordinates are always f64
+//! and are rounded to `T` once, as leaf-scaled values; tables are built in f64 and
+//! rounded. f32 is accurate to its floor at p ≤ 8 (design §4); a larger p is allowed but
+//! gains nothing.
+
+use std::f64::consts::PI;
+use std::fmt;
+use std::marker::PhantomData;
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use mpi::Threading;
+use mpi::collective::SystemOperation;
+use mpi::topology::SimpleCommunicator;
+#[cfg(feature = "gpu")]
+use mpi::traits::Root;
+use mpi::traits::{Communicator, CommunicatorCollectives, Equivalence, Group};
+use rayon::{ThreadPool, ThreadPoolBuilder};
+use tetraleaf_math::RealScalar;
+use tetraleaf_octree::constants::DEEPEST_LEVEL;
+use tetraleaf_octree::{Octree, OctreeOptions, PhysicalBox};
+pub use tetraleaf_plan::evaluator::OverlapTimes;
+use tetraleaf_plan::evaluator::{Evaluator, EvaluatorError};
+pub use tetraleaf_plan::exchange::{ExchangeTimes, MultipoleRouting, TREE_FAN_OUT, Traffic};
+use tetraleaf_plan::near::{LeafCounts, LeafPair, NearRule};
+use tetraleaf_plan::operator::{
+    FmmOperator, FmmSizes, HostData, L2l, L2p, M2l, M2m, M2p, P2l, P2m, P2p,
+};
+use tetraleaf_plan::plan::{Plan, PlanError};
+use tetraleaf_plan::redistribute::RedistributionError;
+use tetraleaf_plan::store::LeafStore;
+use tetraleaf_tables::cache::{Stored, TableKind};
+use tetraleaf_tables::{CacheOutcome, TableCache};
+use thiserror::Error;
+
+#[cfg(feature = "gpu")]
+use tetraleaf_kernels::{TimingWindow, WindowTime};
+
+use crate::cost::{self, CostModel, KindCounts};
+#[cfg(feature = "gpu")]
+use crate::device::{
+    self, DeviceCounters, DeviceDriver, DeviceOptions, DeviceOutput, DeviceReport, ViewsImage,
+};
+use crate::geometry::{Domain, GeometryError};
+use crate::operator::{Isa, LaplaceOperator, MulAdd, P2pChoice, SimdScalar};
+pub use crate::operator::{PlaneWaveSplit, SourceType};
+// Read by the device path and by the unit tests of the output pass.
+#[cfg_attr(not(feature = "gpu"), allow(unused_imports))]
+use crate::pipeline::interleave_output;
+use crate::pipeline::{
+    self, LeafRanges, OutputOrder, Points, StrengthLayout, agree, check_finite, gather_output,
+    load_source_charges, pack_charges, pack_sources, scale_moments, unpack_output,
+    unpack_output_many, write_leaf_strengths,
+};
+use crate::tables::{M2lStrategy, NodeContext, StrategyChoice, Tables};
+use crate::threading::{REQUIRED_MPI_THREADING, ThreadingReport};
+
+/// The largest degree p that [`FmmBuilder::build`] accepts: CONVENTIONS §3.9 covers M2L
+/// up to p = 20 in f64, and the plane-wave quadratures (`M2lStrategy::PlaneWave`,
+/// CONVENTIONS §3.14) reach the same degree.
+pub const MAX_DEGREE: usize = 20;
+
+/// The lowest degree at which the batched M2L fuses its multiply–adds by default
+/// ([`default_m2l_mul_add`]; Phase 6 T11).
+pub const FUSED_MUL_ADD_MIN_P: usize = 6;
+
+/// The multiply–add mode of the batched M2L when the builder names none
+/// ([`FmmBuilder::m2l_mul_add`]): [`MulAdd::Fused`] from p = [`FUSED_MUL_ADD_MIN_P`],
+/// [`MulAdd::Separate`] below (Phase 6 T11, decision 7 of docs/phase6/README.md). Measured
+/// on the three machines (tetraleaf-validate/results/phase6.md), the fused mode was 1.05–1.4×
+/// faster than the separate one inside the FMM at p ≥ 6 and tied at p = 3, except at f64
+/// p = 3 with 72 ranks on locust, where it was 1.08–1.5× slower.
+///
+/// ```
+/// use tetraleaf_exec::fmm::default_m2l_mul_add;
+/// use tetraleaf_exec::operator::MulAdd;
+///
+/// assert_eq!(default_m2l_mul_add(5), MulAdd::Separate);
+/// assert_eq!(default_m2l_mul_add(6), MulAdd::Fused);
+/// ```
+pub fn default_m2l_mul_add(p: usize) -> MulAdd {
+    if p >= FUSED_MUL_ADD_MIN_P {
+        MulAdd::Fused
+    } else {
+        MulAdd::Separate
+    }
+}
+
+// `PlaneWave` builds its tables at every degree the builder accepts.
+const _: () = assert!(MAX_DEGREE <= tetraleaf_tables::plane_wave::MAX_DEGREE);
+
+/// The default `max_level` of [`FmmBuilder`]: 16, the deepest level of a Morton key.
+pub const DEFAULT_MAX_LEVEL: usize = DEEPEST_LEVEL as usize;
+
+/// The least gain for which [`FmmBuilder::work_cut`] moves blocks (Phase 5S T7): the second
+/// cut is taken where it lowers the busiest rank's modelled cost of its blocks by at least
+/// 2 %, and the first cut stays otherwise (`Octree::repartition`'s `min_gain`). Signed off
+/// on 2026-10-13 (tetraleaf-validate/results/phase5s-t7.md §9, question 2): at 40–160 ranks with
+/// one thread per rank every measured second cut gained more, at 2–8 ranks most gained
+/// less than the cost of a second `Plan::new`.
+pub const WORK_CUT_MIN_GAIN: f64 = 0.02;
+
+/// The refinement target of Phases 3–6 T10, and since Phase 6 T11 the default of
+/// [`FmmBuilder::max_points_per_leaf`] at low p ([`default_max_points_per_leaf`]).
+pub const DEFAULT_MAX_POINTS_PER_LEAF: usize = 64;
+
+/// The refinement target when the builder names none ([`FmmBuilder::max_points_per_leaf`];
+/// Phase 6 T11, decision 7 of docs/phase6/README.md): by the rule of Phase 3S T7 (a size
+/// other than 64 only where the geometric mean of the evaluation times over the cube and
+/// the Plummer sphere, N and precision is at least 5 % lower, at errors no worse) applied
+/// on each backend (tetraleaf-validate/results/phase6.md):
+/// - on the host, 128 from p = 12 (6–21 % faster on the M3 Max, locust and Kathleen),
+///   64 below (at p = 6–8 128 gained 7–14 % on Kathleen but nothing on the NEON
+///   machines);
+/// - on Metal, 128 at p = 6 and 7 (15 % faster at p = 6) and 256 from p = 8 (30 % at
+///   p = 8), 64 below;
+/// - on CUDA and the CubeCL CPU runtime, 64 (Phase 4S T8's rule kept).
+///
+/// ```
+/// use tetraleaf_exec::fmm::{Backend, default_max_points_per_leaf};
+///
+/// assert_eq!(default_max_points_per_leaf(8, Backend::Host), 64);
+/// assert_eq!(default_max_points_per_leaf(12, Backend::Host), 128);
+/// assert_eq!(default_max_points_per_leaf(8, Backend::Metal), 256);
+/// ```
+pub fn default_max_points_per_leaf(p: usize, backend: Backend) -> usize {
+    match backend {
+        Backend::Host if p >= 12 => 128,
+        Backend::Metal if p >= 8 => 256,
+        Backend::Metal if p >= 6 => 128,
+        _ => DEFAULT_MAX_POINTS_PER_LEAF,
+    }
+}
+
+/// The default [`FmmBuilder::tuning_budget`]: 10 s (docs/design/device-path.md §10.4).
+pub const DEFAULT_TUNING_BUDGET: Duration = Duration::from_secs(10);
+
+/// The deepest level of a Morton key.
+const DEEPEST: usize = DEEPEST_LEVEL as usize;
+
+/// Where the operators of an FMM run (Phase 4; docs/design/device-path.md §3.3). Text
+/// form, for command lines: `host`, `cpu`, `metal`, `cuda`.
+///
+/// The enum exists without the `gpu` feature, so that a host-only build names a device
+/// backend and refuses it with [`SettingsError::BackendNotCompiled`] rather than failing
+/// to compile. The device path is the `device` module (feature `gpu`).
+///
+/// ```
+/// use tetraleaf_exec::fmm::Backend;
+///
+/// assert_eq!(Backend::default(), Backend::Host);
+/// assert_eq!("metal".parse(), Ok(Backend::Metal));
+/// assert_eq!(Backend::Cpu.to_string(), "cpu");
+/// assert!(Backend::Host.is_compiled());
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Backend {
+    /// The host path: [`LaplaceOperator`] on the calling thread or the `Fmm`'s pool.
+    #[default]
+    Host,
+    /// The CubeCL CPU runtime (feature `cpu`): f32 and f64, the correctness backend.
+    Cpu,
+    /// Metal, wgpu with the MSL compiler (feature `metal`): f32 only.
+    Metal,
+    /// CUDA (feature `cuda`): f32 and f64; type-checked in CI, run by hand on an H100
+    /// (Phase 4S).
+    Cuda,
+}
+
+impl Backend {
+    /// Every backend, in report order.
+    pub const ALL: [Self; 4] = [Self::Host, Self::Cpu, Self::Metal, Self::Cuda];
+
+    /// The text form: `host`, `cpu`, `metal` or `cuda`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::Cpu => "cpu",
+            Self::Metal => "metal",
+            Self::Cuda => "cuda",
+        }
+    }
+
+    /// True for every backend but [`Host`](Self::Host).
+    pub fn is_device(self) -> bool {
+        self != Self::Host
+    }
+
+    /// True if this build can run the backend: always for [`Host`](Self::Host), and for
+    /// a device backend if its cargo feature is enabled.
+    pub fn is_compiled(self) -> bool {
+        match self {
+            Self::Host => true,
+            Self::Cpu => cfg!(feature = "cpu"),
+            Self::Metal => cfg!(feature = "metal"),
+            Self::Cuda => cfg!(feature = "cuda"),
+        }
+    }
+}
+
+impl fmt::Display for Backend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// The layout of the device P2P kernel ([`FmmBuilder::device_p2p_layout`]; Phase 4 T6,
+/// docs/design/device-path.md §6.2): the parallel mapping of the near field onto a
+/// device, with the same formulation, order and results within the P2P contract in each.
+/// Every layout gives the same bits from evaluation to evaluation. Ignored by
+/// [`Backend::Host`].
+///
+/// The enum exists without the `gpu` feature, as [`Backend`] does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DeviceP2pLayout {
+    /// By backend: the CPU layout on the CPU runtime, the cube layout of 64 units on
+    /// Metal and CUDA.
+    #[default]
+    Auto,
+    /// One cube of this many units per target leaf, sources staged through shared
+    /// memory in tiles of as many sources (on the CPU runtime correctness only, at most
+    /// one unit per core).
+    Cube(u32),
+    /// One plane per target leaf and this many planes per cube, each plane staging its
+    /// own tile: for small leaves. Needs a device with one plane size.
+    Plane(u32),
+    /// Targets in vector lanes of the host's width, one unit per core, each a contiguous
+    /// range of target leaves: the layout of the CPU runtime, whose units per cube
+    /// `threads(n)` caps.
+    Cpu,
+}
+
+/// The layout of the device leaf operators P2M, L2P, P2L and M2P
+/// ([`FmmBuilder::device_leaf_layout`]; Phase 4 T7, docs/design/device-path.md §6.3): the
+/// parallel mapping of the boxes and target leaves of a level onto a device, with the same
+/// arithmetic and order, and so results within the leaf-operator bounds, in each. Every
+/// layout gives the same bits from evaluation to evaluation. Ignored by [`Backend::Host`].
+///
+/// The enum exists without the `gpu` feature, as [`Backend`] does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DeviceLeafLayout {
+    /// By backend: the CPU layout on the CPU runtime; on Metal and CUDA the cube layout of
+    /// 64 units with tiles of 32 points, fewer where the shared memory holds fewer at p.
+    #[default]
+    Auto,
+    /// One cube of `units` units per box (P2M, P2L: coefficient owners, the harmonics of
+    /// `tile` points at a time staged in shared memory) or per target leaf (L2P, M2P: one
+    /// unit per target point). On the CPU runtime correctness only, at most one unit per
+    /// core.
+    Cube {
+        /// Units per cube, at least 1.
+        units: u32,
+        /// Points per tile of P2M and P2L, from 1 to `units`.
+        tile: u32,
+    },
+    /// One unit per core, each a contiguous range of boxes or target leaves, no shared
+    /// memory: the layout of the CPU runtime, whose units per cube `threads(n)` caps.
+    Cpu,
+}
+
+/// The GEMM of the device translations M2M, L2L and dense M2L ([`FmmBuilder::device_gemm`];
+/// Phase 4 T8 and T9, docs/design/device-path.md §6.4, §6.5). Every choice adds each
+/// target's products in row order and gives the same bits from evaluation to evaluation.
+/// Ignored by [`Backend::Host`].
+///
+/// The enum exists without the `gpu` feature, as [`Backend`] does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DeviceGemm {
+    /// The default: for M2M and L2L the rule of the design, the library matmul (CMMA,
+    /// named explicitly) in f32 at p ≥ 8 on a GPU where it accepts the level's shape and
+    /// keeps f32 inputs, the hand-written kernel otherwise; for M2L the hand-written
+    /// kernel. Decided per level call at build and reported.
+    ///
+    /// M2L departs from the design's rule (decided after Phase 4 T9): its library GEMM
+    /// needs one shape per launch, so it pads each run of offsets to the run's widest
+    /// batch, and on the M3 Max only 44–66% of the padded columns were useful on the C3.2
+    /// cube and the Plummer sphere; there the hand-written kernel was faster on every
+    /// level the library took (for example 3.5 ms against 5.5 ms on the cube's level 4 at
+    /// p = 8). [`Library`](Self::Library) keeps the library M2L selectable.
+    #[default]
+    Auto,
+    /// The design's rule for every translation, M2L included: the library matmul in f32
+    /// at p ≥ 8 on a GPU where it accepts the level's shape and keeps f32 inputs, the
+    /// hand-written kernel otherwise.
+    Library,
+    /// The hand-written kernel everywhere, in the backend's layout.
+    HandWritten,
+    /// The shared-memory-tiled hand-written kernel everywhere (Phase 6 T7, C6.1), in the
+    /// backend's shared layout (`tetraleaf_kernels::translate::GemmLayout::shared_for`): the
+    /// same accumulation order, so the bits of [`HandWritten`](Self::HandWritten). Where
+    /// no step of it fits the device's shared memory, the backend's hand-written layout.
+    Shared,
+}
+
+/// How the device's hand-written GEMM of M2M, L2L and dense M2L gets its input columns
+/// ([`FmmBuilder::device_gather`]; Phase 6 T7, C6.1): a gather launch into a scratch the
+/// GEMM reads, or the GEMM reading the multipoles or locals itself through the batch's
+/// source indices. Both read the same values in the same order, so they give the same bits;
+/// the library GEMM always gathers. Ignored by [`Backend::Host`].
+///
+/// The enum exists without the `gpu` feature, as [`Backend`] does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DeviceGather {
+    /// The static rule by backend, precision and p, or the tuner's choice under
+    /// [`DeviceGemm::Auto`] with a tuning cache (`tune::static_gather`).
+    #[default]
+    Auto,
+    /// A gather launch per chunk (Phase 4's structure, device-path.md §6.4).
+    Separate,
+    /// The gather fused into the GEMM's loads: one launch fewer per chunk.
+    Fused,
+}
+
+/// How the device's reduction of M2M and dense M2L finds a chunk's entries
+/// ([`FmmBuilder::device_reduction`]; Phase 6 T7, C6.1). Both add the same products in the
+/// same order, so they give the same bits. Ignored by [`Backend::Host`].
+///
+/// The enum exists without the `gpu` feature, as [`Backend`] does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DeviceReduction {
+    /// Over the rows each chunk touches, from their first entry in it (listed at build):
+    /// every entry once per level call, whatever the chunks.
+    #[default]
+    ByChunk,
+    /// Over every row and its every entry once per chunk (Phase 4's reduction, kept for
+    /// measurement and as the trusted counterpart).
+    Walk,
+}
+
+/// How a device runs M2L under [`M2lStrategy::PlaneWave`]
+/// ([`FmmBuilder::device_plane_wave`]; Helmholtz CH7.5b, docs/helmholtz/tasks/CH7.5b.md):
+/// as `Dense`, with the dense tables the device path builds or loads (Phase 6 T13), or by
+/// merge and shift on the device (`tetraleaf_kernels::plane_wave`, CONVENTIONS §3.14), which
+/// approximates M2L as the host's `PlaneWave` does. Merge and shift is the default since
+/// Helmholtz CH7.5c (docs/helmholtz/tasks/CH7.5c.md, signed off 2026-11-06: M2L 0.15–0.38×
+/// the dense M2L's time on the H100, 0.40–0.51× on Metal at f32 p = 8 with its 1 GB budget;
+/// tetraleaf-validate/results/helmholtz-ch7-5c.md). Ignored by [`Backend::Host`], by every other
+/// strategy and with M2L on the host fallback. The device's [`M2lStrategy::Auto`] never
+/// resolves to `PlaneWave`, so only a named `PlaneWave` runs either.
+///
+/// The enum exists without the `gpu` feature, as [`Backend`] does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DevicePlaneWave {
+    /// "PlaneWave, run as dense on the device": the device's output under `PlaneWave` is
+    /// its output under `Dense`, bit for bit (the default until Helmholtz CH7.5c; the named
+    /// opt-out since).
+    Dense,
+    /// Merge and shift on the device (the default): per level call and chunk of whole
+    /// parents the four launches of `tetraleaf_kernels::plane_wave::m2l` (the `device` module
+    /// docs, "Plane-wave M2L on the device").
+    #[default]
+    Kernels,
+}
+
+/// The layout of the device's plane-wave launches under [`DevicePlaneWave::Kernels`]
+/// ([`FmmBuilder::device_plane_wave_layout`]; Helmholtz CH7.5c,
+/// docs/helmholtz/tasks/CH7.5c.md). Every layout runs each item's chain in the same order,
+/// so every layout gives the same bits. Ignored by [`Backend::Host`] and wherever
+/// [`DevicePlaneWave::Kernels`] does not apply.
+///
+/// The enum exists without the `gpu` feature, as [`Backend`] does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DevicePlaneWaveLayout {
+    /// By backend and p (Helmholtz CH7.5c, measured; `DevicePlaneWaveLayout::resolve`,
+    /// feature `gpu`): the CPU layout on the CPU runtime; on Metal one cube of
+    /// `tetraleaf_kernels::plane_wave::GPU_UNITS` (128) units per item; on CUDA 128 units to
+    /// p = 12 and 256 from p = 13.
+    #[default]
+    Auto,
+    /// One cube of `units` units per item, striding over its outputs, with shared memory
+    /// for the outgoing and local steps; refused at build where the device allows fewer
+    /// units per cube or has less shared memory than the layout needs at p. On the CPU
+    /// runtime correctness only.
+    Cube {
+        /// Units per cube, at least 1.
+        units: u32,
+    },
+}
+
+/// Where the output pass of an evaluation runs ([`FmmBuilder::output_pass`]; Phase 4S T9,
+/// decision 12): the pass that turns the leaf-ordered, leaf-scaled target output into φ
+/// and ∇φ in the caller's order, dividing by 4π r_t and 4π r_t² in f64 and rounding once
+/// to `T` (CONVENTIONS §3.1, §3.13, "Output"). Both passes give the same bits; the
+/// [module documentation](self#the-output-pass-phase-4s-t9) describes them.
+///
+/// The enum exists without the `gpu` feature, as [`Backend`] does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum OutputPass {
+    /// The default: on the device where the backend is a device with f64 arithmetic (the
+    /// CPU runtime, CUDA), on the host otherwise (the host path, Metal).
+    #[default]
+    Auto,
+    /// On the host, on every backend: the host pass, which a device backend runs on the
+    /// downloaded leaf-ordered output.
+    Host,
+    /// On the device: [`FmmBuilder::build`] refuses it on the host backend and on a device
+    /// without f64 arithmetic (Metal) with [`SettingsError::OutputPassUnsupported`].
+    Device,
+}
+
+/// The error of parsing a [`Backend`] from text it does not name.
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[error("`{text}` is not a backend; expected `host`, `cpu`, `metal` or `cuda`")]
+pub struct UnknownBackend {
+    /// The text that was parsed.
+    pub text: String,
+}
+
+/// Parses the [`Display`](fmt::Display) form, whether or not the backend is compiled in.
+impl FromStr for Backend {
+    type Err = UnknownBackend;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::ALL
+            .into_iter()
+            .find(|backend| backend.name() == s)
+            .ok_or_else(|| UnknownBackend { text: s.to_owned() })
+    }
+}
+
+/// One operator kind, for the placement of the device path and for reports
+/// (docs/design/device-path.md §7.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum OperatorKind {
+    /// P2M.
+    P2m,
+    /// M2M, both passes.
+    M2m,
+    /// M2L.
+    M2l,
+    /// P2L.
+    P2l,
+    /// L2L.
+    L2l,
+    /// L2P.
+    L2p,
+    /// M2P.
+    M2p,
+    /// P2P.
+    P2p,
+}
+
+impl OperatorKind {
+    /// Every kind, in the order of the operator interface.
+    pub const ALL: [Self; 8] = [
+        Self::P2m,
+        Self::M2m,
+        Self::M2l,
+        Self::P2l,
+        Self::L2l,
+        Self::L2p,
+        Self::M2p,
+        Self::P2p,
+    ];
+
+    /// The name: `P2M`, `M2M`, …
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::P2m => "P2M",
+            Self::M2m => "M2M",
+            Self::M2l => "M2L",
+            Self::P2l => "P2L",
+            Self::L2l => "L2L",
+            Self::L2p => "L2P",
+            Self::M2p => "M2P",
+            Self::P2p => "P2P",
+        }
+    }
+}
+
+impl fmt::Display for OperatorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// Where an operator kind runs ([`Fmm::placement`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Placement {
+    /// On the host: the host path, or the host fallback of a device backend.
+    Host,
+    /// On the device, by a kernel of `tetraleaf-kernels`.
+    Device,
+}
+
+impl fmt::Display for Placement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Host => "host",
+            Self::Device => "device",
+        })
+    }
+}
+
+/// A setting of [`FmmBuilder`] that [`FmmBuilder::build`] rejects.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum SettingsError {
+    /// The degree is larger than [`MAX_DEGREE`].
+    #[error("p = {p} exceeds {max}, the largest degree CONVENTIONS §3.9 covers for M2L", max = MAX_DEGREE)]
+    DegreeTooLarge {
+        /// The requested degree.
+        p: usize,
+    },
+    /// The maximum level is deeper than the deepest level of a Morton key.
+    #[error("max_level = {max_level} exceeds the deepest level {deepest}", deepest = DEEPEST)]
+    MaxLevelTooDeep {
+        /// The requested maximum level.
+        max_level: usize,
+    },
+    /// `max_points_per_leaf` is zero.
+    #[error("max_points_per_leaf must be at least 1")]
+    ZeroPointsPerLeaf,
+    /// `threads` is zero.
+    #[error("threads must be at least 1")]
+    ZeroThreads,
+    /// `vectors` is zero ([`FmmBuilder::vectors`]).
+    #[error("vectors must be at least 1")]
+    ZeroVectors,
+    /// Several charge vectors with dipole sources ([`FmmBuilder::vectors`],
+    /// [`FmmBuilder::sources`]; Phase 6 T8): dipoles carry one set of moments.
+    #[error("{sources} carry one set of strengths, not {vectors} vectors")]
+    SourcesWithVectors {
+        /// The sources requested.
+        sources: SourceType,
+        /// The vectors requested.
+        vectors: usize,
+    },
+    /// The P2P kernel is [`P2pChoice::Isa`] with an instruction set this machine cannot
+    /// run ([`Isa::is_available`]).
+    #[error("p2p_kernel: instruction set `{isa}` is not available on this machine")]
+    P2pIsaUnavailable {
+        /// The requested instruction set.
+        isa: Isa,
+    },
+    /// The backend's cargo feature is not enabled in this build ([`Backend::is_compiled`]).
+    #[error("backend {backend} is not compiled in (enable the `{backend}` feature)")]
+    BackendNotCompiled {
+        /// The requested backend.
+        backend: Backend,
+    },
+    /// The backend is compiled in, but no device came up (no adapter, Metal inside the
+    /// macOS sandbox, or Metal without the MSL compiler). The reason is not carried, so
+    /// the error stays `Copy`; `Backend::probe` (feature `gpu`) returns it.
+    #[error("no {backend} device could be opened")]
+    NoDevice {
+        /// The requested backend.
+        backend: Backend,
+    },
+    /// The device does no arithmetic in the FMM's precision (f64 on Metal).
+    #[error("the {backend} device does not support this precision")]
+    PrecisionUnsupported {
+        /// The requested backend.
+        backend: Backend,
+    },
+    /// The device buffers of the FMM do not fit in the memory the device reports as
+    /// available; nothing was allocated.
+    #[error("the FMM needs {needed} bytes on the device, {limit} bytes are available")]
+    DeviceMemory {
+        /// The bytes of every device buffer.
+        needed: u64,
+        /// The bytes available.
+        limit: u64,
+    },
+    /// [`KindTiming::Device`] on a backend that does not time on the device: the host,
+    /// and the CPU runtime, whose timing windows wait for it (Phase 4S T5).
+    #[error("kind_timings(Device) needs a device that times on itself; {backend} does not")]
+    KindTimingUnsupported {
+        /// The requested backend.
+        backend: Backend,
+    },
+    /// [`OutputPass::Device`] on a backend without a device that does f64 arithmetic: the
+    /// host, and Metal (Phase 4S T9).
+    #[error("output_pass(Device) needs a device with f64 arithmetic; {backend} has none")]
+    OutputPassUnsupported {
+        /// The requested backend.
+        backend: Backend,
+    },
+    /// [`NearRuleChoice::Crossovers`] with a crossover that is negative or NaN (Phase 6
+    /// T12).
+    #[error("near_rule: the crossovers must be non-negative numbers")]
+    NearCrossover,
+}
+
+/// Which W and X pairs between two leaves run as near pairs, by P2P (Phase 6 T12, C6.9;
+/// [The near rule](self#the-near-rule-c69), [`FmmBuilder::near_rule`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum NearRuleChoice {
+    /// No near rule (the default until Phase 6 T11): M2P and P2L for every W and X pair,
+    /// the plan of `Plan::new`.
+    Off,
+    /// The default since Phase 6 T11 (decision 7 of docs/phase6/README.md). The crossovers
+    /// of the FMM's [`CostModel`] ([`Fmm::cost_model`]): a W pair converts
+    /// where its source leaf holds fewer than N_W = α_M2P / α_P2P sources, an X pair where
+    /// its target leaf holds fewer than N_X = α_P2L / α_P2P targets
+    /// ([`CostModel::near_crossovers`]; docs/design/optimisation.md §8a.2).
+    #[default]
+    CostModel,
+    /// Named crossovers, for tests and sweeps: a W pair converts where its source leaf
+    /// holds fewer than `w` sources, an X pair where its target leaf holds fewer than `x`
+    /// targets. `f64::INFINITY` converts every such pair, 0 none.
+    Crossovers {
+        /// N_W, in source points.
+        w: f64,
+        /// N_X, in target points.
+        x: f64,
+    },
+}
+
+impl NearRuleChoice {
+    /// The crossovers [N_W, N_X] of the rule under `model`, or `None` when it is off.
+    pub fn crossovers(self, model: &CostModel) -> Option<[f64; 2]> {
+        match self {
+            Self::Off => None,
+            Self::CostModel => Some(model.near_crossovers()),
+            Self::Crossovers { w, x } => Some([w, x]),
+        }
+    }
+}
+
+impl fmt::Display for NearRuleChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Off => f.write_str("off"),
+            Self::CostModel => f.write_str("cost model"),
+            Self::Crossovers { w, x } => write!(f, "crossovers W {w}, X {x}"),
+        }
+    }
+}
+
+pub use tetraleaf_plan::near::NearPairs;
+
+/// The near rule of an [`Fmm`] and what it converted on this rank ([`Fmm::near_rule`];
+/// Phase 6 T12).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct NearRuleReport {
+    /// The setting ([`FmmBuilder::near_rule`]).
+    pub choice: NearRuleChoice,
+    /// The crossovers [N_W, N_X] the plan was built with, in points; `None` when off.
+    pub crossovers: Option<[f64; 2]>,
+    /// The W and X pairs between leaves of this rank's plan, and those converted (all
+    /// zero when off).
+    pub pairs: NearPairs,
+}
+
+/// Which of the two point sets a point belongs to, for error messages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointSet {
+    /// The sources.
+    Sources,
+    /// The targets.
+    Targets,
+}
+
+impl fmt::Display for PointSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Sources => "source",
+            Self::Targets => "target",
+        })
+    }
+}
+
+/// Why an [`Fmm`] cannot be built or evaluated.
+///
+/// See the [module documentation](self#build) for which errors every rank returns and
+/// which only the rank that found them.
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum FmmError {
+    /// A builder setting is out of range.
+    #[error("invalid settings: {0}")]
+    InvalidSettings(#[from] SettingsError),
+    /// The supplied domain is not a valid cubic domain.
+    #[error("invalid domain: {0}")]
+    InvalidDomain(#[from] GeometryError),
+    /// A point has a NaN or infinite coordinate.
+    #[error("{set} point {index} at {point:?} is not finite")]
+    NonFinitePoint {
+        /// The point set.
+        set: PointSet,
+        /// The point's position in the caller's slice.
+        index: usize,
+        /// The point.
+        point: [f64; 3],
+    },
+    /// A point does not lie strictly inside the domain.
+    #[error("{set} point {index} at {point:?} is not strictly inside the domain {domain:?}")]
+    PointOutsideDomain {
+        /// The point set.
+        set: PointSet,
+        /// The point's position in the caller's slice.
+        index: usize,
+        /// The point.
+        point: [f64; 3],
+        /// The corners `[xmin, ymin, zmin, xmax, ymax, zmax]` of the domain.
+        domain: [f64; 6],
+    },
+    /// No rank has a source or a target.
+    #[error("no rank has a source or a target point")]
+    NoPoints,
+    /// No domain is supplied and the points span no volume (they all coincide), or
+    /// their extent overflows, so `compute_global_bounding_box` cannot build one.
+    #[error("the points have extent {extent}, which is not positive and finite; supply a domain")]
+    DegenerateExtent {
+        /// The largest extent max_k (max xₖ − min xₖ) over all points of all ranks.
+        extent: f64,
+    },
+    /// The points could not be moved to the ranks that own their leaves (step 5): the
+    /// `Redistribution` of the sources or of the targets failed, on every rank alike
+    /// (the rank that found the defect returns it, the others
+    /// [`RedistributionError::OtherRank`]). From `Fmm` only
+    /// [`RedistributionError::Overflow`] can arise: a rank that sends or receives so many
+    /// points that their coordinates (three values each) or their output (up to four)
+    /// overflow MPI's `i32` counts, about 5 × 10⁸ points; it is agreed on every rank. Its
+    /// keys come from points strictly inside the domain, so they are valid, and its plan
+    /// is its octree's (Phase 5 T6, docs/design/distributed-fmm.md §4.6).
+    #[error("redistributing the points failed: {0}")]
+    Redistribution(#[source] RedistributionError),
+    /// The charge vector does not have one entry per source of this rank.
+    #[error("{actual} charges given for {expected} sources")]
+    ChargesLength {
+        /// The number of sources on this rank.
+        expected: usize,
+        /// The number of charges given.
+        actual: usize,
+    },
+    /// The evaluation does not pass the number of charge vectors the FMM was built for
+    /// ([`FmmBuilder::vectors`], Phase 6 T5): [`Fmm::evaluate`] passes one, and
+    /// [`Fmm::evaluate_many`] as many as its slice holds.
+    #[error("{actual} charge vectors given to an FMM built for {expected}")]
+    VectorCount {
+        /// The vectors the FMM was built for.
+        expected: usize,
+        /// The vectors given.
+        actual: usize,
+    },
+    /// The evaluation passes sources of another type than the FMM was built for
+    /// ([`FmmBuilder::sources`], Phase 6 T8): [`Fmm::evaluate`] and
+    /// [`Fmm::evaluate_many`] pass charges, [`Fmm::evaluate_sources`] what its
+    /// [`Sources`] holds (`None` for neither).
+    #[error("{actual:?} given to an FMM built for {expected}")]
+    SourceType {
+        /// The sources the FMM was built for.
+        expected: SourceType,
+        /// The sources given.
+        actual: Option<SourceType>,
+    },
+    /// The dipole moments do not have one entry per source of this rank (Phase 6 T8).
+    #[error("{actual} dipole moments given for {expected} sources")]
+    DipolesLength {
+        /// The number of sources on this rank.
+        expected: usize,
+        /// The number of moments given.
+        actual: usize,
+    },
+    /// The plan could not be built.
+    #[error("building the plan failed: {0}")]
+    Plan(#[source] PlanError),
+    /// The evaluator could not be built.
+    #[error("building the evaluator failed: {0}")]
+    Evaluator(#[source] EvaluatorError),
+    /// More than one thread is requested, but MPI provides a threading level below
+    /// `required` ([`Threading::Funneled`]); see [`threading`](crate::threading).
+    #[error(
+        "threads > 1 needs MPI at {required:?} or above, but it provides {provided:?}; \
+         initialise MPI with mpi::initialize_with_threading(Threading::Funneled)"
+    )]
+    MpiThreading {
+        /// The level more than one thread requires.
+        required: Threading,
+        /// The level MPI provides.
+        provided: Threading,
+    },
+    /// The thread pool could not be built.
+    #[error("building the thread pool failed: {0}")]
+    ThreadPool(String),
+    /// A device operation failed after the settings were accepted: an allocation or
+    /// upload at build, or a launch or transfer of an evaluation. An `Fmm` whose
+    /// evaluation failed returns it from every later evaluation.
+    #[error("device error: {0}")]
+    Device(String),
+    /// The input is invalid on another rank.
+    #[error("the input is invalid on another rank")]
+    OtherRank,
+}
+
+/// The settings of an FMM, and [`build`](Self::build).
+///
+/// | Setting | Default |
+/// | --- | --- |
+/// | degree p ([`new`](Self::new)) | none; 0 ≤ p ≤ [`MAX_DEGREE`] |
+/// | [`strategy`](Self::strategy) | [`M2lStrategy::Auto`]: on the host `Batched` at f64 p ≤ 6 and f32 p ≤ 7, `PlaneWave` above ([`M2lStrategy::resolve_on_node`]) |
+/// | [`gradients`](Self::gradients) | off |
+/// | [`vectors`](Self::vectors) | 1: one charge vector per evaluation |
+/// | [`sources`](Self::sources) | [`SourceType::Charges`]: point charges |
+/// | [`max_level`](Self::max_level) | [`DEFAULT_MAX_LEVEL`], 16 |
+/// | [`max_points_per_leaf`](Self::max_points_per_leaf) | [`default_max_points_per_leaf`] of p and the backend: on the host 64, 128 from p = 12 |
+/// | [`domain`](Self::domain) | `compute_global_bounding_box` of all points |
+/// | [`table_cache`](Self::table_cache) | none: every rank builds its tables |
+/// | [`threads`](Self::threads) | 1: no pool, the calling thread |
+/// | [`p2p_kernel`](Self::p2p_kernel) | [`P2pChoice::Auto`]: the kernel of `tetraleaf-simd` on the default ISA of this machine (`Isa::detect`) |
+/// | [`m2l_mul_add`](Self::m2l_mul_add) | [`default_m2l_mul_add`]: [`MulAdd::Fused`] from p = 6, [`MulAdd::Separate`] (`Batched` bit for bit `Dense`) below |
+/// | [`plane_wave_split`](Self::plane_wave_split) | [`PlaneWaveSplit::Auto`]: `PlaneWave`'s merge and shift by child where the split by parents leaves three quarters of the pool idle |
+/// | [`backend`](Self::backend) | [`Backend::Host`]: the host path |
+/// | [`host_fallback`](Self::host_fallback) | none |
+/// | [`synchronous_stages`](Self::synchronous_stages) | off |
+/// | [`device_timestamps`](Self::device_timestamps) | off |
+/// | [`kind_timings`](Self::kind_timings) | [`KindTiming::Off`] |
+/// | [`output_pass`](Self::output_pass) | [`OutputPass::Auto`]: on the device where it does f64 arithmetic |
+/// | [`device_p2p_layout`](Self::device_p2p_layout) | [`DeviceP2pLayout::Auto`]: by backend |
+/// | [`device_leaf_layout`](Self::device_leaf_layout) | [`DeviceLeafLayout::Auto`]: by backend |
+/// | [`device_gemm`](Self::device_gemm) | [`DeviceGemm::Auto`]: by precision, p and backend |
+/// | [`device_gather`](Self::device_gather) | [`DeviceGather::Auto`]: by backend, precision and p |
+/// | [`device_reduction`](Self::device_reduction) | [`DeviceReduction::ByChunk`] |
+/// | [`device_scratch_budget`](Self::device_scratch_budget) | 128 MB; 2 GB on CUDA |
+/// | [`device_plane_wave`](Self::device_plane_wave) | [`DevicePlaneWave::Kernels`]: `PlaneWave` by merge and shift on a device |
+/// | [`device_plane_wave_budget`](Self::device_plane_wave_budget) | 1 GB on Metal; the translation scratch budget elsewhere: 128 MB on the CPU runtime, 2 GB on CUDA |
+/// | [`device_plane_wave_layout`](Self::device_plane_wave_layout) | [`DevicePlaneWaveLayout::Auto`]: by backend and p |
+/// | [`tuning_cache`](Self::tuning_cache) | none: no tuning, the static rule |
+/// | [`tuning_budget`](Self::tuning_budget) | 10 s |
+/// | [`overlap`](Self::overlap) | off: the blocking exchanges |
+/// | [`work_cut`](Self::work_cut) | on: the blocks cut again by modelled cost on several ranks |
+/// | [`cost_model`](Self::cost_model) | [`CostModel::calibrated`] for the strategy, precision and p |
+/// | [`near_rule`](Self::near_rule) | [`NearRuleChoice::CostModel`]: W and X pairs below the cost model's crossovers by P2P |
+///
+/// For `T = f32`, p > 8 is accepted but lies beyond the useful range (design §4): the
+/// error is then at the f32 floor already.
+#[derive(Clone, Debug)]
+pub struct FmmBuilder<T> {
+    p: usize,
+    strategy: M2lStrategy,
+    gradients: bool,
+    vectors: usize,
+    sources: SourceType,
+    max_level: usize,
+    max_points_per_leaf: Option<usize>,
+    domain: Option<[f64; 6]>,
+    table_cache: Option<PathBuf>,
+    threads: usize,
+    p2p: P2pChoice,
+    m2l_mul_add: Option<MulAdd>,
+    plane_wave_split: PlaneWaveSplit,
+    backend: Backend,
+    host_fallback: Vec<OperatorKind>,
+    synchronous_stages: bool,
+    device_timestamps: bool,
+    kind_timing: KindTiming,
+    output_pass: OutputPass,
+    device_p2p_layout: DeviceP2pLayout,
+    device_leaf_layout: DeviceLeafLayout,
+    device_gemm: DeviceGemm,
+    device_gather: DeviceGather,
+    device_reduction: DeviceReduction,
+    device_scratch_budget: Option<u64>,
+    device_plane_wave: DevicePlaneWave,
+    device_plane_wave_budget: Option<u64>,
+    device_plane_wave_layout: DevicePlaneWaveLayout,
+    tuning_cache: Option<PathBuf>,
+    tuning_budget: Duration,
+    overlap: bool,
+    work_cut: bool,
+    cost_model: Option<CostModel>,
+    near_rule: NearRuleChoice,
+    multipole_routing: MultipoleRouting,
+    #[cfg(feature = "gpu")]
+    tuning_hook: crate::tune::TuningHook,
+    value: PhantomData<fn() -> T>,
+}
+
+impl<T> FmmBuilder<T> {
+    /// The settings for degree `p`, with every other setting at its default.
+    pub fn new(p: usize) -> Self {
+        Self {
+            p,
+            strategy: M2lStrategy::Auto,
+            gradients: false,
+            vectors: 1,
+            sources: SourceType::Charges,
+            max_level: DEFAULT_MAX_LEVEL,
+            max_points_per_leaf: None,
+            domain: None,
+            table_cache: None,
+            threads: 1,
+            p2p: P2pChoice::Auto,
+            m2l_mul_add: None,
+            plane_wave_split: PlaneWaveSplit::Auto,
+            backend: Backend::Host,
+            host_fallback: Vec::new(),
+            synchronous_stages: false,
+            device_timestamps: false,
+            kind_timing: KindTiming::Off,
+            output_pass: OutputPass::Auto,
+            device_p2p_layout: DeviceP2pLayout::Auto,
+            device_leaf_layout: DeviceLeafLayout::Auto,
+            device_gemm: DeviceGemm::Auto,
+            device_gather: DeviceGather::Auto,
+            device_reduction: DeviceReduction::ByChunk,
+            device_scratch_budget: None,
+            device_plane_wave: DevicePlaneWave::Kernels,
+            device_plane_wave_budget: None,
+            device_plane_wave_layout: DevicePlaneWaveLayout::Auto,
+            tuning_cache: None,
+            tuning_budget: DEFAULT_TUNING_BUDGET,
+            overlap: false,
+            work_cut: true,
+            cost_model: None,
+            near_rule: NearRuleChoice::CostModel,
+            multipole_routing: MultipoleRouting::default(),
+            #[cfg(feature = "gpu")]
+            tuning_hook: crate::tune::TuningHook::default(),
+            value: PhantomData,
+        }
+    }
+
+    /// Sets the M2L strategy, which also chooses the tables of M2M and L2L
+    /// ([`M2lStrategy`]). A named strategy is never overridden; under
+    /// [`M2lStrategy::Auto`] (the default) [`build`](Self::build) resolves it on the host
+    /// by the rule of [`M2lStrategy::resolve_on_node`] ([`Fmm::strategy`],
+    /// [`Fmm::threading`]).
+    pub fn strategy(mut self, strategy: M2lStrategy) -> Self {
+        self.strategy = strategy;
+        self
+    }
+
+    /// Requests the gradients ∇φ as well as the potentials.
+    pub fn gradients(mut self, gradients: bool) -> Self {
+        self.gradients = gradients;
+        self
+    }
+
+    /// Sets the number m of charge vectors of every evaluation, at least 1 (the default;
+    /// Phase 6 T5, C6.3; [Several charge vectors](self#several-charge-vectors-phase-6-t5)):
+    /// the FMM then carries m vectors at the same points through every stage, and is
+    /// evaluated by [`Fmm::evaluate_many`] with m vectors; [`Fmm::evaluate`] serves m = 1
+    /// only. Fixed at build, since it sizes the stores. Vector v of the output equals the
+    /// evaluation of an FMM built with one vector and the same settings on vector v, bit
+    /// for bit. Every rank must pass the same value.
+    pub fn vectors(mut self, vectors: usize) -> Self {
+        self.vectors = vectors;
+        self
+    }
+
+    /// Sets the sources of every evaluation (Phase 6 T8, C6.4; [Dipoles](self#dipoles-phase-6-t8);
+    /// docs/design/optimisation.md §7.1): [`SourceType::Charges`] (the default), point
+    /// dipoles, or both at every source point. It is fixed at build because it sets the
+    /// source chunks and so the exchanges. With dipoles, [`Fmm::evaluate_sources`] takes the
+    /// strengths, one set (with more than one vector [`build`](Self::build) returns
+    /// [`SettingsError::SourcesWithVectors`]).
+    pub fn sources(mut self, sources: SourceType) -> Self {
+        self.sources = sources;
+        self
+    }
+
+    /// Sets the deepest level a leaf may lie on, 0–16.
+    pub fn max_level(mut self, max_level: usize) -> Self {
+        self.max_level = max_level;
+        self
+    }
+
+    /// Sets the refinement target: a box with more points is refined unless it lies on
+    /// `max_level`, so leaves there may hold more. Passed to
+    /// `OctreeOptions::with_max_fine_keys`, which counts distinct finest-level keys:
+    /// a point that is a source and a target counts once, and so do points closer than
+    /// a level-16 box. Unset, [`default_max_points_per_leaf`] of p and the backend
+    /// (Phase 6 T11); [`Fmm::max_points_per_leaf`] reports the target used.
+    pub fn max_points_per_leaf(mut self, max_points_per_leaf: usize) -> Self {
+        self.max_points_per_leaf = Some(max_points_per_leaf);
+        self
+    }
+
+    /// Supplies the domain: a cube ([`Domain::new`]) that contains every point strictly.
+    /// Without it, the domain is `compute_global_bounding_box` of all points.
+    pub fn domain(mut self, domain: PhysicalBox) -> Self {
+        self.domain = Some(domain.coordinates());
+        self
+    }
+
+    /// Loads the tables from the cache directory `dir`, building and storing those
+    /// that are missing ([`Tables::load_or_build`]). Without it, no directory is used and
+    /// every rank builds its own tables.
+    ///
+    /// On several ranks one rank per node goes first (Phase 5N T4, decision 7 of
+    /// docs/phase5n/README.md; docs/design/node-m2l.md §5): the lowest rank of each node
+    /// loads the tables, building and storing those that are missing, while the others
+    /// wait at a barrier of the node's communicator (the one `split_shared` of `build`),
+    /// then load them. So a cold directory is filled once per node instead of every rank
+    /// building at once (at p = 8 on 40 ranks of a Kathleen node 0.84 s against 2.8 s for
+    /// every rank storing), and a warm one costs one load more on the first rank. The cache
+    /// itself, its atomic stores and its checks are those of `tetraleaf_tables::TableCache`.
+    pub fn table_cache(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.table_cache = Some(dir.into());
+        self
+    }
+
+    /// Sets the number of threads of the level calls, at least 1 (the default).
+    ///
+    /// With n > 1, [`build`](Self::build) creates a rayon pool of n threads that the
+    /// `Fmm` owns, and MPI must provide at least [`Threading::Funneled`]. The output is
+    /// bit-identical for every n. Choose n so that ranks × n stays within the physical
+    /// cores of a node ([`threading`](crate::threading)).
+    pub fn threads(mut self, threads: usize) -> Self {
+        self.threads = threads;
+        self
+    }
+
+    /// Sets the P2P kernel ([`P2pChoice`]; default [`P2pChoice::Auto`]).
+    ///
+    /// [`build`](Self::build) rejects [`P2pChoice::Isa`] with an ISA this machine cannot
+    /// run with [`SettingsError::P2pIsaUnavailable`]. The check is local, so on a
+    /// cluster with mixed CPUs one rank may fail it; like every input error it is
+    /// agreed by all ranks in step 1, and the others return [`FmmError::OtherRank`].
+    /// The choice changes the output only in the last bits (the accuracy of
+    /// [`P2pChoice`]); [`Fmm::p2p_kernel`] reports the kernel that runs.
+    pub fn p2p_kernel(mut self, choice: P2pChoice) -> Self {
+        self.p2p = choice;
+        self
+    }
+
+    /// Sets the multiply–add mode of the batched M2L ([`M2lStrategy::Batched`] on the
+    /// host; Phase 6 T2, docs/design/optimisation.md §2.3): [`MulAdd::Separate`] gives
+    /// every local the chain of `Dense`, so the output is `Dense`'s bit for bit;
+    /// [`MulAdd::Fused`] forms each step with one fma, 1.1–1.6× faster on the kernel and
+    /// within n u per element of `Dense` (n = (p + 1)²), deterministic and the same on
+    /// every thread count, rank count and ISA. Unset, [`default_m2l_mul_add`] of p (Phase
+    /// 6 T11): fused from p = [`FUSED_MUL_ADD_MIN_P`]. Every other strategy, and the
+    /// device, ignores it; [`Fmm::threading`] reports it.
+    pub fn m2l_mul_add(mut self, mul_add: MulAdd) -> Self {
+        self.m2l_mul_add = Some(mul_add);
+        self
+    }
+
+    /// Sets how the plane-wave M2L ([`M2lStrategy::PlaneWave`] on the host) splits merge
+    /// and shift over the pool (Helmholtz CH6.2i; [`LaplaceOperator::with_plane_wave_split`]):
+    /// [`PlaneWaveSplit::Auto`] (the default) by child on a level whose split by parents,
+    /// which never cuts below 64 boxes, leaves at least three quarters of the pool idle
+    /// (level 2 from 4 threads, level 3 from 32), by parents elsewhere. Every setting gives
+    /// the same output bit for bit; every other strategy, and the device, ignores it.
+    pub fn plane_wave_split(mut self, split: PlaneWaveSplit) -> Self {
+        self.plane_wave_split = split;
+        self
+    }
+
+    /// Sets where the operators run ([`Backend`]; default [`Backend::Host`], the host
+    /// path, which no other setting of a device backend changes).
+    ///
+    /// [`build`](Self::build) refuses a device backend that is not compiled in
+    /// ([`SettingsError::BackendNotCompiled`]), whose device cannot be opened
+    /// ([`SettingsError::NoDevice`]) or does not do arithmetic in `T`
+    /// ([`SettingsError::PrecisionUnsupported`], f64 on Metal), or whose buffers do not
+    /// fit in device memory ([`SettingsError::DeviceMemory`]). It runs on any number of
+    /// ranks, every rank opening the default device of the backend, which the ranks of a
+    /// node share (Phase 5 T8; the `device` module, "Several ranks"). With
+    /// [`Backend::Cpu`], `threads(n)` builds no rayon pool and caps the units per cube of
+    /// the CPU runtime instead, at most the node's cores over its ranks (the `device`
+    /// module, "Threads").
+    pub fn backend(mut self, backend: Backend) -> Self {
+        self.backend = backend;
+        self
+    }
+
+    /// Runs these operator kinds on the host fallback even with a device backend: a
+    /// test aid (requirement 8 of docs/phase4/README.md). From Phase 4 T10 every kind has
+    /// a device kernel under every strategy. Ignored by [`Backend::Host`].
+    pub fn host_fallback(mut self, kinds: impl IntoIterator<Item = OperatorKind>) -> Self {
+        self.host_fallback = kinds.into_iter().collect();
+        self
+    }
+
+    /// Sets the layout of the device P2P kernel ([`DeviceP2pLayout`]; default
+    /// [`DeviceP2pLayout::Auto`], by backend). [`build`](Self::build) returns
+    /// [`FmmError::Device`] if the device cannot run it (more units or shared memory than
+    /// it has, or a plane layout on a device whose plane size varies). Fixed at build and
+    /// reported by `Fmm::device_report` (feature `gpu`). Ignored by [`Backend::Host`] and
+    /// when P2P runs on the host fallback.
+    pub fn device_p2p_layout(mut self, layout: DeviceP2pLayout) -> Self {
+        self.device_p2p_layout = layout;
+        self
+    }
+
+    /// Sets the layout of the device leaf operators P2M, L2P, P2L and M2P
+    /// ([`DeviceLeafLayout`]; default [`DeviceLeafLayout::Auto`], by backend).
+    /// [`build`](Self::build) returns [`FmmError::Device`] if the device cannot run it at
+    /// the FMM's degree (more units or shared memory than it has). Fixed at build and
+    /// reported by `Fmm::device_report` (feature `gpu`). Ignored by [`Backend::Host`] and
+    /// when all four run on the host fallback.
+    pub fn device_leaf_layout(mut self, layout: DeviceLeafLayout) -> Self {
+        self.device_leaf_layout = layout;
+        self
+    }
+
+    /// Sets the GEMM of the device translations M2M, L2L and dense M2L ([`DeviceGemm`];
+    /// default [`DeviceGemm::Auto`]). Fixed at build and reported by `Fmm::device_report`
+    /// (feature `gpu`). Ignored by [`Backend::Host`] and when all three run on the host
+    /// fallback.
+    pub fn device_gemm(mut self, gemm: DeviceGemm) -> Self {
+        self.device_gemm = gemm;
+        self
+    }
+
+    /// Sets how the device's hand-written GEMM of M2M, L2L and dense M2L gets its input
+    /// columns ([`DeviceGather`]; default [`DeviceGather::Auto`]; Phase 6 T7). Every choice
+    /// gives the same bits. A gather named here holds for every level call, the tuner's
+    /// choices included. Fixed at build and reported by `Fmm::device_report` (feature
+    /// `gpu`). Ignored by [`Backend::Host`] and where the library GEMM runs.
+    pub fn device_gather(mut self, gather: DeviceGather) -> Self {
+        self.device_gather = gather;
+        self
+    }
+
+    /// Sets how the device's reduction of M2M and dense M2L finds a chunk's entries
+    /// ([`DeviceReduction`]; default [`DeviceReduction::ByChunk`]; Phase 6 T7). Both give
+    /// the same bits; [`DeviceReduction::Walk`] is Phase 4's reduction, for measurement.
+    /// Fixed at build and reported by `Fmm::device_report` (feature `gpu`). Ignored by
+    /// [`Backend::Host`].
+    pub fn device_reduction(mut self, reduction: DeviceReduction) -> Self {
+        self.device_reduction = reduction;
+        self
+    }
+
+    /// Sets the scratch budget of the device translations in bytes: the gathered inputs
+    /// and the products of one chunk of a level call together (default 128 MB,
+    /// docs/design/device-path.md §6.4; on CUDA 2 GB, at most an eighth of the device's
+    /// memory, measured in Phase 4S T7, `tetraleaf_kernels::translate::default_scratch_bytes`).
+    /// A level call whose batches need more runs in several chunks, with the same bits.
+    /// Allocated once at build, no larger than the widest chunk, and counted in the device
+    /// memory check. A budget named here holds for every level call whatever
+    /// [`vectors`](Self::vectors); the default is per vector (m times its bytes with m
+    /// vectors, on Metal at most eight times and on CUDA once since Phase 6 T7, at most an
+    /// eighth of the device's memory; Phase 6 T5). Ignored by [`Backend::Host`].
+    pub fn device_scratch_budget(mut self, bytes: u64) -> Self {
+        self.device_scratch_budget = Some(bytes);
+        self
+    }
+
+    /// Sets how a device runs M2L under [`M2lStrategy::PlaneWave`] ([`DevicePlaneWave`];
+    /// Helmholtz CH7.5b). The default since Helmholtz CH7.5c, [`DevicePlaneWave::Kernels`],
+    /// runs merge and shift on the device: its output approximates M2L as the host's
+    /// `PlaneWave` does, and agrees with the host's within the FMM bounds.
+    /// [`DevicePlaneWave::Dense`] runs it as `Dense`, "PlaneWave, run as dense on the
+    /// device", with `Dense`'s output bit for bit. Fixed at build and reported by `Fmm::device_report` (feature `gpu`).
+    /// Ignored by [`Backend::Host`], by every other strategy and with M2L on the host
+    /// fallback.
+    pub fn device_plane_wave(mut self, plane_wave: DevicePlaneWave) -> Self {
+        self.device_plane_wave = plane_wave;
+        self
+    }
+
+    /// Sets the budget in bytes of one chunk of a device plane-wave level call under
+    /// [`DevicePlaneWave::Kernels`]: the waves of its sources, its accumulators and its
+    /// incoming blocks, for all [`vectors`](Self::vectors) (default 1 GB on Metal, Helmholtz
+    /// CH7.5c, and elsewhere the device's translation scratch budget,
+    /// `tetraleaf_kernels::translate::default_scratch_bytes`: 128 MB on the CPU runtime, 2 GB on
+    /// CUDA, at most an eighth of the memory the device reports, never below 128 MB; Metal's
+    /// 1 GB likewise). A
+    /// level call runs in chunks of whole parents within it, at least one parent
+    /// each, with the same bits at every budget; the scratch is allocated once at build, no
+    /// larger than the widest chunk, and counted in the device memory check. Ignored where
+    /// [`device_plane_wave`](Self::device_plane_wave) does not apply.
+    pub fn device_plane_wave_budget(mut self, bytes: u64) -> Self {
+        self.device_plane_wave_budget = Some(bytes);
+        self
+    }
+
+    /// Sets the layout of the device's plane-wave launches under
+    /// [`DevicePlaneWave::Kernels`] ([`DevicePlaneWaveLayout`]; default
+    /// [`DevicePlaneWaveLayout::Auto`], by backend and p; Helmholtz CH7.5c). Every layout gives the
+    /// same bits; a layout the device cannot run is a device error at build. Reported by
+    /// `Fmm::device_report` (feature `gpu`). Ignored where
+    /// [`device_plane_wave`](Self::device_plane_wave) does not apply.
+    pub fn device_plane_wave_layout(mut self, layout: DevicePlaneWaveLayout) -> Self {
+        self.device_plane_wave_layout = layout;
+        self
+    }
+
+    /// With a device backend, synchronises with the device after the charge upload and
+    /// after every stage, so that [`StageTimings`] time each stage rather than its
+    /// enqueueing (docs/design/device-path.md §8.3). Seven more syncs per evaluation, and
+    /// the same output: for reports only, off by default. Ignored by [`Backend::Host`].
+    pub fn synchronous_stages(mut self, on: bool) -> Self {
+        self.synchronous_stages = on;
+        self
+    }
+
+    /// With a device backend that times on the device itself (Metal, CUDA; not the CPU
+    /// runtime, whose timing windows wait for it), times every stage with device work by
+    /// the device's timestamps: one timing window per stage, resolved after the
+    /// evaluation's one download, with no sync of its own ([`DeviceStageTimings`],
+    /// docs/design/device-path.md §8.3). Off by default: on Metal the windows of
+    /// neighbouring stages overlap, so the stage times are spans, not a breakdown of the
+    /// evaluation, and the windows add some enqueue time (the `device` module, "Stage
+    /// timing"). The output is the same either way. Ignored by [`Backend::Host`], on the
+    /// CPU runtime and with [`synchronous_stages`](Self::synchronous_stages).
+    pub fn device_timestamps(mut self, on: bool) -> Self {
+        self.device_timestamps = on;
+        self
+    }
+
+    /// Times every level call by operator kind ([`KindTiming`]; default
+    /// [`KindTiming::Off`]; Phase 4S T5), into [`StageTimings::kinds`]. For reports only:
+    /// the output is the same bit for bit in every mode, and only the syncs and windows
+    /// [`KindTiming`] documents are added.
+    ///
+    /// It composes with [`synchronous_stages`](Self::synchronous_stages) and
+    /// [`device_timestamps`](Self::device_timestamps) and implies neither: each adds its
+    /// own syncs or windows. [`build`](Self::build) refuses [`KindTiming::Device`] on a
+    /// backend that does not time on the device (the host and the CPU runtime) with
+    /// [`SettingsError::KindTimingUnsupported`], agreed by step 1's all-reduce.
+    pub fn kind_timings(mut self, mode: KindTiming) -> Self {
+        self.kind_timing = mode;
+        self
+    }
+
+    /// Sets where the output pass runs ([`OutputPass`]; default [`OutputPass::Auto`], on
+    /// the device where it does f64 arithmetic; Phase 4S T9, decision 12). The output is
+    /// the same bit for bit either way; [`Fmm::output_pass`] reports where it runs.
+    /// [`build`](Self::build) refuses [`OutputPass::Device`] on the host backend and on a
+    /// device without f64 arithmetic (Metal) with [`SettingsError::OutputPassUnsupported`],
+    /// agreed by step 1's all-reduce.
+    pub fn output_pass(mut self, pass: OutputPass) -> Self {
+        self.output_pass = pass;
+        self
+    }
+
+    /// With a device backend, tunes the device path's choices against the timings of this
+    /// device and keeps them in the directory `dir` (Phase 4 T12, C4.7;
+    /// docs/design/device-path.md §10): the M2L strategy under [`M2lStrategy::Auto`], the
+    /// GEMM of the M2M, L2L and dense M2L level calls under [`DeviceGemm::Auto`], and the
+    /// P2P layout under [`DeviceP2pLayout::Auto`]. Decisions the cache file of this
+    /// (backend, device, precision, p) holds are taken from it; the others are timed at
+    /// build, within [`tuning_budget`](Self::tuning_budget), and stored. Without it, no
+    /// directory is used and no tuning runs: the static rule applies (the `tune` module,
+    /// feature `gpu`). No default directory, no environment variable. Ignored by
+    /// [`Backend::Host`].
+    pub fn tuning_cache(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.tuning_cache = Some(dir.into());
+        self
+    }
+
+    /// Sets the time the tuner may spend in one build (default 10 s; Phase 4 T12): checked
+    /// before every candidate and between its timed batches, so that no candidate starts
+    /// past it. Decisions it leaves untuned take the static rule and are not stored.
+    /// Ignored without [`tuning_cache`](Self::tuning_cache).
+    pub fn tuning_budget(mut self, budget: Duration) -> Self {
+        self.tuning_budget = budget;
+        self
+    }
+
+    /// Overlaps the source and multipole exchanges with local work (Phase 5 T9, C5.2;
+    /// [Overlap](self#overlap-c52)): each evaluation runs the evaluator's overlapped
+    /// stages (`Evaluator::evaluate_overlapped`) instead of the six blocking ones. The
+    /// output is the same bit for bit; [`StageTimings::overlap`] reports the exposed waits.
+    /// Off by default. Every rank must pass the same setting. With a device backend the
+    /// device runs the overlapped stages with the same transfers (docs/design/
+    /// distributed-fmm.md §13, question 10), for correctness: it hides nothing there.
+    pub fn overlap(mut self, on: bool) -> Self {
+        self.overlap = on;
+        self
+    }
+
+    /// Cuts the coarse blocks among the ranks a second time, by the modelled cost of
+    /// their work (Phase 5S T7, S3; [Several ranks](self#several-ranks-c51),
+    /// docs/design/scale-out.md §6): on by default. Step 4 then counts the work of every
+    /// own block on the plan of the first cut (by points), weighs it with the
+    /// [`cost_model`](Self::cost_model) and cuts again (`Octree::repartition`) before any
+    /// point moves, where that lowers the busiest rank's modelled cost of its blocks by at
+    /// least [`WORK_CUT_MIN_GAIN`] (2 %; otherwise the cut by points stays,
+    /// [`Fmm::recut`]). The leaves, the plan's rows and the output stay the same bit for
+    /// bit; only which rank owns which blocks changes. Off, the blocks stay cut by points,
+    /// as before Phase 5S T7. On one rank it does nothing. Every rank must pass the same
+    /// setting.
+    pub fn work_cut(mut self, on: bool) -> Self {
+        self.work_cut = on;
+        self
+    }
+
+    /// The per-kind constants of the [`work_cut`](Self::work_cut) ([`CostModel`]). By
+    /// default [`CostModel::calibrated`] for the strategy, the precision and p, measured
+    /// on Kathleen; name others for another machine. Only the partition depends on them,
+    /// never the output. Every rank must pass the same model.
+    pub fn cost_model(mut self, model: CostModel) -> Self {
+        self.cost_model = Some(model);
+        self
+    }
+
+    /// The near rule (Phase 6 T12, C6.9; [The near rule](self#the-near-rule-c69)): W and X
+    /// pairs between two leaves whose fine leaf holds fewer points than a crossover run as
+    /// P2P, exactly, instead of M2P and P2L. By default since Phase 6 T11
+    /// [`NearRuleChoice::CostModel`], which takes the crossovers from the
+    /// [`cost_model`](Self::cost_model); [`NearRuleChoice::Off`] keeps M2P and P2L for
+    /// every pair. The output changes (the converted pairs lose
+    /// their truncation error); for fixed settings it is deterministic, the same for every
+    /// thread count and overlap setting, and on P ranks the one-rank output of the same
+    /// rule bit for bit. Every rank must pass the same setting.
+    pub fn near_rule(mut self, rule: NearRuleChoice) -> Self {
+        self.near_rule = rule;
+        self
+    }
+
+    /// How the multipole exchange moves each multipole to the ranks that read it (Phase 5S
+    /// T8s, S8; tetraleaf-validate/results/phase5s-t8s.md §1): by default
+    /// [`MultipoleRouting::Tree`] with [`TREE_FAN_OUT`], a box with more ranks reading it
+    /// sent along a tree of its readers so that no rank sends it to more than the fan-out
+    /// ranks, the first hops split across the nodes of the one `split_shared` of
+    /// [`build`](Self::build); [`MultipoleRouting::Direct`], from the owner to every
+    /// reader, is the oracle. The output is the same bit for bit; only the messages differ
+    /// ([`Fmm::exchange_traffic`]). Every rank must pass the same routing.
+    pub fn multipole_routing(mut self, routing: MultipoleRouting) -> Self {
+        self.multipole_routing = routing;
+        self
+    }
+
+    /// A test aid for the tuner (Phase 4 T12; feature `gpu`): `hook` adjusts measured
+    /// times and offers extra candidates, which go through registration like the others
+    /// (`tune::TuningHook`). Not for production runs.
+    #[cfg(feature = "gpu")]
+    pub fn tuning_hook(mut self, hook: crate::tune::TuningHook) -> Self {
+        self.tuning_hook = hook;
+        self
+    }
+
+    /// Checks the settings that do not depend on the input; whether this machine can
+    /// run the P2P kernel depends on the rank's CPU.
+    /// The refinement target: the named one, or [`default_max_points_per_leaf`].
+    fn leaf_points(&self) -> usize {
+        self.max_points_per_leaf
+            .unwrap_or_else(|| default_max_points_per_leaf(self.p, self.backend))
+    }
+
+    fn check_settings(&self) -> Result<(), SettingsError> {
+        if self.p > MAX_DEGREE {
+            return Err(SettingsError::DegreeTooLarge { p: self.p });
+        }
+        if self.max_level > DEEPEST {
+            return Err(SettingsError::MaxLevelTooDeep {
+                max_level: self.max_level,
+            });
+        }
+        if self.max_points_per_leaf == Some(0) {
+            return Err(SettingsError::ZeroPointsPerLeaf);
+        }
+        if self.threads == 0 {
+            return Err(SettingsError::ZeroThreads);
+        }
+        if self.vectors == 0 {
+            return Err(SettingsError::ZeroVectors);
+        }
+        if self.vectors > 1 && self.sources != SourceType::Charges {
+            return Err(SettingsError::SourcesWithVectors {
+                sources: self.sources,
+                vectors: self.vectors,
+            });
+        }
+        if let Err(error) = self.p2p.resolve() {
+            return Err(SettingsError::P2pIsaUnavailable { isa: error.isa });
+        }
+        if let NearRuleChoice::Crossovers { w, x } = self.near_rule
+            && !(w >= 0.0 && x >= 0.0)
+        {
+            return Err(SettingsError::NearCrossover);
+        }
+        Ok(())
+    }
+
+    /// The strengths per source an evaluation moves: m charges, or the values of one set
+    /// of the source type (1, 3 or 4; Phase 6 T8).
+    fn strengths(&self) -> usize {
+        match self.sources {
+            SourceType::Charges => self.vectors,
+            sources => sources.strengths(),
+        }
+    }
+
+    /// The rayon threads of the level calls: `threads`, but 1 with [`Backend::Cpu`],
+    /// which builds no pool (docs/design/device-path.md §11).
+    fn rayon_threads(&self) -> usize {
+        if self.backend == Backend::Cpu {
+            1
+        } else {
+            self.threads
+        }
+    }
+
+    /// With more than one rayon thread: checks that MPI provides `provided` ≥
+    /// [`REQUIRED_MPI_THREADING`] and builds the pool.
+    fn pool(&self, provided: Threading) -> Result<Option<Arc<ThreadPool>>, FmmError> {
+        if self.rayon_threads() == 1 {
+            return Ok(None);
+        }
+        if provided < REQUIRED_MPI_THREADING {
+            return Err(FmmError::MpiThreading {
+                required: REQUIRED_MPI_THREADING,
+                provided,
+            });
+        }
+        ThreadPoolBuilder::new()
+            .num_threads(self.threads)
+            .thread_name(|i| format!("tetraleaf-exec-{i}"))
+            .build()
+            .map(|pool| Some(Arc::new(pool)))
+            .map_err(|error| FmmError::ThreadPool(error.to_string()))
+    }
+}
+
+impl<T: Stored + SimdScalar + Equivalence + Default> FmmBuilder<T> {
+    /// Builds the FMM of `sources` and `targets`, in the caller's order; see the
+    /// [module documentation](self#build).
+    ///
+    /// The two sets may overlap or coincide. A rank may pass no points.
+    ///
+    /// # Collective operation
+    ///
+    /// Every rank of `comm` must call it, with the same settings. Its collectives are
+    /// those of the module documentation, then those of `Octree::new`, `Plan::new` and
+    /// `Evaluator::new`.
+    ///
+    /// # Errors
+    ///
+    /// Every [`FmmError`] but [`ChargesLength`](FmmError::ChargesLength); see the
+    /// module documentation for which ranks return which. With `threads` > 1,
+    /// [`FmmError::MpiThreading`] if MPI provides less than [`Threading::Funneled`].
+    pub fn build<'o, C: CommunicatorCollectives>(
+        &self,
+        sources: &[[f64; 3]],
+        targets: &[[f64; 3]],
+        comm: &'o C,
+    ) -> Result<Fmm<'o, T, C>, FmmError> {
+        let start = Instant::now();
+        // Step 1: settings, MPI threading and the pool, the supplied domain, finite
+        // points.
+        //
+        // The MPI level is the same on every rank in practice (one library, and every
+        // rank asks for the same level), and so are the settings, so the threading check
+        // needs no collective of its own; it rides on this step's agreement, which also
+        // covers a pool that fails to build on one rank. Every collective of the build
+        // and of `evaluate` runs on this thread; the pool's threads never call MPI.
+        //
+        // A device backend is opened here, so that a backend not compiled in, a device
+        // that does not come up and a precision it does not support are input errors of
+        // this rank, agreed by the same all-reduce (docs/design/device-path.md §5.2).
+        let provided = mpi::environment::threading_support();
+        let mut open_time = Duration::ZERO;
+        let local = self
+            .check_settings()
+            .map_err(FmmError::from)
+            .and_then(|()| {
+                let pool = self.pool(provided)?;
+                check_finite(sources, PointSet::Sources)?;
+                check_finite(targets, PointSet::Targets)?;
+                let supplied = self.domain.map(|c| Domain::new(&PhysicalBox::new(c)));
+                let supplied = supplied.transpose()?;
+                let start = Instant::now();
+                let device = open_device::<T>(self.backend, self.threads)?;
+                open_time = start.elapsed();
+                let on_device = device.as_ref().is_some_and(times_on_device);
+                check_kind_timing(self.kind_timing, self.backend, on_device)?;
+                let f64_device = device.as_ref().is_some_and(does_f64);
+                check_output_pass(self.output_pass, self.backend, f64_device)?;
+                Ok((pool, supplied, device))
+            });
+        let (pool, supplied, mut device) = agree(comm, local)?;
+        let mut threading = ThreadingReport::read(self.rayon_threads(), provided);
+        // The node (Phase 5N T4, docs/design/node-m2l.md §5): one split of the
+        // communicator by node, on every rank and every backend. Its size is the ranks per
+        // node of the threading report (agreed in step 7), and its barrier orders the table
+        // loading of step 7 with a cache. A device per rank (Phase 5 T8,
+        // docs/design/distributed-fmm.md §7.4): every rank of a device build opens the
+        // default device of the backend (above), and the ranks of a node share it; the
+        // same split places the rank there.
+        let node = comm.split_shared(comm.rank());
+        // The node of the multipole exchange's forwarding tree (Phase 5S T8s): the rank of the node's first rank
+        // in `comm`, from this split without communication.
+        let node_id =
+            node.group()
+                .translate_rank(0, &comm.group())
+                .expect("the node's ranks are ranks of the communicator") as usize;
+        let ranks = self.place_rank(comm, &node, device.as_mut());
+
+        // Step 2: are there points at all?
+        let local_points = (sources.len() + targets.len()) as u64;
+        let mut agreed = 0u64;
+        comm.all_reduce_into(&local_points, &mut agreed, SystemOperation::max());
+        if agreed == 0 {
+            return Err(FmmError::NoPoints);
+        }
+
+        // Step 3: the domain, and every point strictly inside it.
+        let (coordinates, domain) = pipeline::domain(sources, targets, supplied, comm)?;
+        let domain_time = start.elapsed();
+
+        // Step 4: the octree of all points, and its plan.
+        let start = Instant::now();
+        let options = OctreeOptions::new()
+            .with_max_level(self.max_level)
+            .with_max_fine_keys(self.leaf_points())
+            .with_ghost_children(true);
+        let (keys, octree) = pipeline::octree(&coordinates, &domain, options, comm);
+        let octree_time = start.elapsed();
+        let start = Instant::now();
+        let plan = Plan::new(&octree).map_err(FmmError::Plan)?;
+        let plan_time = start.elapsed();
+
+        // The near rule (Phase 6 T12, C6.9; docs/design/optimisation.md §8a): the points of
+        // every local leaf where they are, the W rows' ghost leaves' source counts, and the
+        // plan again with the rule, which turns the W and X pairs of fine leaves with few
+        // points into near pairs.
+        let start = Instant::now();
+        let cost_model = self.cost_model.unwrap_or_else(|| {
+            let strategy = self
+                .strategy
+                .choose(&NodeContext::new(self.p, size_of::<T>()))
+                .strategy();
+            CostModel::calibrated(strategy, size_of::<T>(), self.p)
+        });
+        let crossovers = self.near_rule.crossovers(&cost_model);
+        let (source_keys, target_keys) = keys.split_at(sources.len());
+        let (plan, counts) = match crossovers {
+            Some(crossovers) => {
+                let counts =
+                    cost::leaf_point_counts(&octree, &plan, source_keys, target_keys, comm);
+                let plan = near_plan(&octree, &plan, &counts, crossovers, comm)?;
+                (plan, Some(counts))
+            }
+            None => (plan, None),
+        };
+        let plan_time = plan_time + start.elapsed();
+
+        // The second cut (Phase 5S T7, S3; docs/design/scale-out.md §6.3): the work of every
+        // own block counted on this plan (with the near rule, the converted pairs as P2P),
+        // weighed by the cost model, the blocks cut again by it and the plan rebuilt, before
+        // any point moves. The leaves and every row stay; only the owners change.
+        let start = Instant::now();
+        let work_cut = self.work_cut && comm.size() > 1;
+        let (octree, plan, recut) = if work_cut {
+            let (sources, targets) = counts.unwrap_or_else(|| {
+                cost::leaf_point_counts(&octree, &plan, source_keys, target_keys, comm)
+            });
+            let weights =
+                cost::block_weights(&octree, &plan, (&sources, &targets), &cost_model, comm)
+                    .map_err(|error| FmmError::Evaluator(EvaluatorError::Exchange(error)))?;
+            let recut = octree.repartition(&weights, Some(WORK_CUT_MIN_GAIN));
+            if recut.partition_map() == octree.partition_map() {
+                // The cut by points stays (the same cut, or too little gain): so does the
+                // plan.
+                (recut, plan, false)
+            } else {
+                drop(plan);
+                let plan = Plan::new(&recut).map_err(FmmError::Plan)?;
+                let plan = match crossovers {
+                    Some(crossovers) => {
+                        let counts =
+                            cost::leaf_point_counts(&recut, &plan, source_keys, target_keys, comm);
+                        near_plan(&recut, &plan, &counts, crossovers, comm)?
+                    }
+                    None => plan,
+                };
+                (recut, plan, true)
+            }
+        } else {
+            (octree, plan, false)
+        };
+        let cut_time = start.elapsed();
+
+        // Step 5: every point to the rank that owns its leaf (Phase 5 T6,
+        // docs/design/distributed-fmm.md §4.4): one redistribution for the sources and one
+        // for the targets, routed by the keys of step 4, and the f64 coordinates forwarded
+        // into the received order, which is leaf order. Each `new` agrees its own errors,
+        // so every rank returns here alike.
+        let start = Instant::now();
+        let near_rule = NearRuleReport {
+            choice: self.near_rule,
+            crossovers,
+            pairs: plan.near_pairs(),
+        };
+        // Three coordinates per point move now, and on every evaluation m charges per
+        // source and up to 4 m output values per target. `max_per_item` is the same on
+        // every rank, so is this outcome.
+        let output_values = self.vectors * if self.gradients { 4 } else { 1 };
+        let per_item = output_values.max(3).max(self.strengths());
+        // Step 6: the points of every local leaf, its radius, and the output order.
+        let (points, owned) = Points::route(
+            &octree,
+            plan.index(),
+            (&keys, sources.len()),
+            &coordinates,
+            &domain,
+            per_item,
+        )?;
+        let redistribute_time = start.elapsed();
+
+        // Step 7: tables, operator, evaluator. One all-reduce agrees the largest number of
+        // sources in a leaf and the largest number of ranks per node (reported).
+        let start = Instant::now();
+        let local_max = [
+            points
+                .source_leaves
+                .counts
+                .iter()
+                .copied()
+                .max()
+                .unwrap_or(0),
+            node.size() as usize,
+        ];
+        let mut agreed = [0usize; 2];
+        comm.all_reduce_into(&local_max[..], &mut agreed[..], SystemOperation::max());
+        let [max_leaf_points, ranks_per_node] = agreed;
+        // With a device backend, the tuner (Phase 4 T12) and the M2L strategy: under
+        // `Auto` with M2L on the device, the cached, tuned or static choice of the device
+        // path, for which the tables are built; on several ranks with a tuning cache rank
+        // 0's, broadcast (Phase 5 T8).
+        let tuning_start = Instant::now();
+        let (strategy, tuner) = self.device_strategy(device.as_mut(), &plan, comm);
+        let tuning_time = tuning_start.elapsed();
+        let start = start + tuning_time;
+        // The strategy: a named one; under `Auto` the device path's (above), or the host
+        // rule (`M2lStrategy::resolve_on_node`).
+        let node_context = NodeContext::new(self.p, size_of::<T>());
+        let choice = match (self.strategy, strategy) {
+            (M2lStrategy::Auto, M2lStrategy::Auto) => M2lStrategy::Auto.choose(&node_context),
+            (M2lStrategy::Auto, device) => StrategyChoice::Device(device),
+            (named, _) => StrategyChoice::Named(named),
+        };
+        let strategy = choice.strategy();
+        threading.ranks_per_node = ranks_per_node;
+        threading.m2l = Some(choice);
+        // With a cache, one rank per node first (decision 7 of docs/phase5n/README.md): the
+        // node's lowest rank loads, building and storing what is missing, the others load
+        // after the node's barrier, which every rank of the node enters.
+        let (tables, cache_outcomes) = match &self.table_cache {
+            Some(dir) => {
+                let cache = TableCache::new(dir);
+                let first =
+                    (node.rank() == 0).then(|| Tables::load_or_build(self.p, strategy, &cache));
+                node.barrier();
+                first.unwrap_or_else(|| Tables::load_or_build(self.p, strategy, &cache))
+            }
+            None => (Tables::build(self.p, strategy), Vec::new()),
+        };
+        drop(node);
+        let tables_time = start.elapsed();
+        let start = Instant::now();
+        // Under `PlaneWave` the waves of one frame of the largest level (Phase 6 T13).
+        let level_boxes = (0..plan.index().nlevels())
+            .map(|level| plan.index().len(level))
+            .max()
+            .unwrap_or(0);
+        let mut operator = LaplaceOperator::new(tables, self.gradients, max_leaf_points)
+            .with_p2p(self.p2p)
+            .expect("step 1 checked that this machine runs the P2P kernel")
+            .with_m2l_mul_add(
+                self.m2l_mul_add
+                    .unwrap_or_else(|| default_m2l_mul_add(self.p)),
+            )
+            .with_vectors(self.vectors)
+            .with_sources(self.sources)
+            .with_plane_wave_boxes(level_boxes)
+            .with_plane_wave_split(self.plane_wave_split);
+        threading.m2l_kernel = operator
+            .m2l_kernel()
+            .map(|kernel| (kernel.isa(), kernel.mul_add()));
+        threading.wave_kernel = operator.wave_kernel().map(|kernel| kernel.isa());
+        if let Some(pool) = pool {
+            operator = operator.with_pool(pool);
+        }
+        // The evaluator is built with the host engine; a device engine replaces it below,
+        // once the evaluator's exchanges know the ghost leaves and the slots they move.
+        let operator = ExecOperator::new(Engine::Host(operator), self.kind_timing, false);
+        let mut evaluator = Evaluator::with_routing(
+            plan,
+            comm,
+            operator,
+            &points.source_leaves.counts,
+            &points.target_leaves.counts,
+            self.multipole_routing,
+            node_id,
+        )
+        .map_err(FmmError::Evaluator)?;
+        let evaluator_time = start.elapsed();
+
+        // Step 8: the leaf-scaled coordinates, once, from the forwarded coordinates in
+        // leaf order (CONVENTIONS §3.13).
+        let start = Instant::now();
+        points.load_coordinates(&owned, &mut evaluator, &domain);
+        drop(owned);
+        let load_time = start.elapsed();
+
+        // With a device backend (Phase 5 T8, docs/design/distributed-fmm.md §7.1): the
+        // device operator, built from the evaluator's source counts (the ghost leaves'
+        // included) and exchanges, swapped in for the host engine (the sizes are the same),
+        // and the points uploaded. A failure on any rank is agreed by one all-reduce, so
+        // that every rank returns here alike.
+        let start = Instant::now();
+        let mut device_time = open_time + tuning_time;
+        // Without the `gpu` feature `OpenedDevice` has no value, so this branch never runs
+        // and rustc (from 1.100) reports the arguments after `device` as unreachable.
+        #[cfg_attr(not(feature = "gpu"), allow(unreachable_code))]
+        if let Some(device) = device {
+            let attached = self.attach_device(
+                &mut evaluator,
+                device,
+                &points.target_leaves.counts,
+                &points.outputs,
+                tuner,
+                ranks,
+            );
+            agree(comm, attached)?;
+        }
+        device_time += start.elapsed();
+
+        // The host's source store feeds the host path and host-fallback calls of the kinds
+        // that read sources; with those on the device, the charges go to the device alone
+        // (Phase 4S T9), but for the local leaves the source exchange sends, whose charges
+        // the exchange reads from the host store (Phase 5 T8).
+        let engine = &evaluator.operator().engine;
+        let host_sources = !engine.is_device()
+            || [OperatorKind::P2m, OperatorKind::P2l, OperatorKind::P2p]
+                .into_iter()
+                .any(|kind| engine.placement(kind) == Placement::Host);
+        let sent_leaves = if host_sources {
+            Vec::new()
+        } else {
+            let mut leaves = evaluator.source_exchange().send_leaves().to_vec();
+            leaves.sort_unstable();
+            leaves.dedup();
+            leaves
+        };
+
+        // The values per target the output pass forms and the backward move returns: φ,
+        // or φ and ∇φ, of every vector (`output_values` above).
+        let (vectors, strengths) = (self.vectors, self.strengths());
+        Ok(Fmm {
+            octree,
+            evaluator,
+            domain,
+            strategy,
+            backend: self.backend,
+            max_points_per_leaf: self.leaf_points(),
+            work_cut,
+            recut,
+            cost_model,
+            near_rule,
+            synchronous_stages: self.synchronous_stages && self.backend.is_device(),
+            overlap: self.overlap,
+            host_sources,
+            sent_leaves,
+            device_error: None,
+            vectors,
+            source_type: self.sources,
+            strengths,
+            packed: Vec::new(),
+            charges: vec![T::zero(); strengths * points.sources.nreceived()],
+            received_output: vec![T::zero(); output_values * points.targets.nreceived()],
+            returned_output: vec![T::zero(); output_values * points.targets.nsent()],
+            points,
+            max_leaf_points,
+            cache_outcomes,
+            threading,
+            build_timings: BuildTimings {
+                domain: domain_time.saturating_sub(open_time),
+                octree: octree_time,
+                plan: plan_time,
+                cut: cut_time,
+                redistribute: redistribute_time,
+                tables: tables_time,
+                evaluator: evaluator_time,
+                load: load_time,
+                device: device_time,
+            },
+        })
+    }
+
+    /// With a device backend (feature `gpu`): where this rank sits among the ranks and on
+    /// its node (Phase 5 T8, docs/design/distributed-fmm.md §7.4), from `node`, the one
+    /// `split_shared` of `comm`; on the CPU runtime it caps the units per cube of `device`
+    /// at `threads(n)` and at the node's cores over its ranks. Nothing on the host.
+    #[cfg(feature = "gpu")]
+    fn place_rank<C: CommunicatorCollectives>(
+        &self,
+        comm: &C,
+        node: &SimpleCommunicator,
+        device: Option<&mut OpenedDevice>,
+    ) -> device::RankPlacement {
+        let Some(device) = device else {
+            return device::RankPlacement::default();
+        };
+        let placement = device::RankPlacement {
+            rank: comm.rank() as usize,
+            ranks: comm.size() as usize,
+            local_rank: node.rank() as usize,
+            local_ranks: node.size() as usize,
+            cores: std::thread::available_parallelism().map_or(1, usize::from),
+            threads: self.threads,
+            follows_rank0: self.tuning_cache.is_some() && comm.size() > 1 && comm.rank() != 0,
+        };
+        device.limit_units(u32::try_from(placement.cpu_units()).unwrap_or(u32::MAX));
+        placement
+    }
+
+    /// Without the `gpu` feature no device is opened.
+    #[cfg(not(feature = "gpu"))]
+    fn place_rank<C: CommunicatorCollectives>(
+        &self,
+        comm: &C,
+        node: &SimpleCommunicator,
+        device: Option<&mut OpenedDevice>,
+    ) -> RankPlacement {
+        let _ = (comm, node);
+        if let Some(never) = device {
+            match *never {}
+        }
+        RankPlacement
+    }
+
+    /// Replaces the host engine of `evaluator` by the device operator around its host
+    /// operator (Phase 5 T8, docs/design/distributed-fmm.md §7.1): built on `device` from
+    /// the evaluator's source counts (every leaf of the numbering, the ghost leaves'
+    /// included), the index lists of its exchanges and `target_counts`, and loaded with the
+    /// points of the evaluator's stores. Device work only, no collective.
+    ///
+    /// # Errors
+    ///
+    /// As [`DeviceOperator::new`](crate::device::DeviceOperator::new) and `load_points`;
+    /// the evaluator is left with a placeholder engine, to be dropped.
+    #[cfg(feature = "gpu")]
+    fn attach_device<C: CommunicatorCollectives>(
+        &self,
+        evaluator: &mut FmmEvaluator<'_, C, T>,
+        device: OpenedDevice,
+        target_counts: &[usize],
+        outputs: &OutputOrder,
+        tuner: Option<Tuner>,
+        ranks: device::RankPlacement,
+    ) -> Result<(), FmmError> {
+        let options = DeviceOptions {
+            host_fallback: self.host_fallback.clone(),
+            table_cache: self.table_cache.clone(),
+            p2p_layout: self.device_p2p_layout,
+            leaf_layout: self.device_leaf_layout,
+            gemm: self.device_gemm,
+            gather: self.device_gather,
+            reduction: self.device_reduction,
+            scratch_budget: self.device_scratch_budget,
+            plane_wave: self.device_plane_wave,
+            plane_wave_budget: self.device_plane_wave_budget,
+            plane_wave_layout: self.device_plane_wave_layout,
+            stage_timing: if self.synchronous_stages {
+                device::StageTiming::Synchronous
+            } else if self.device_timestamps {
+                device::StageTiming::DeviceTimestamps
+            } else {
+                device::StageTiming::Enqueue
+            },
+            output_pass: self.output_pass,
+            ranks,
+        };
+        let tuner = tuner.expect("a device build has a tuner");
+        let on_device = device.times_on_device();
+        let caller = device::CallerOrder {
+            points: &outputs.points,
+            leaves: &outputs.leaves,
+            scales: outputs.scales.as_flattened(),
+        };
+        // The host operator moves into the device operator; until the swap the evaluator
+        // holds a placeholder of degree 0, never called.
+        let engine = std::mem::replace(
+            &mut evaluator.operator_mut().engine,
+            Engine::Host(detached_operator()),
+        );
+        let Engine::Host(host) = engine else {
+            unreachable!("the evaluator is built with the host engine")
+        };
+        let lists = device::ExchangeLists::new(
+            evaluator.reduction_exchange(),
+            evaluator.multipole_exchange(),
+            evaluator.top_exchange(),
+        );
+        let counts = (evaluator.source_exchange().leaf_counts(), target_counts);
+        let driver = device::driver(
+            host,
+            device,
+            evaluator.plan(),
+            counts,
+            &lists,
+            caller,
+            &options,
+            tuner,
+        )?;
+        *evaluator.operator_mut() =
+            ExecOperator::new(Engine::Device(driver), self.kind_timing, on_device);
+        // The device's copy of the points, from copies of the stores: the store accessors
+        // and `operator_mut` cannot borrow the evaluator at once (device-path.md §4.3). The
+        // source store holds every leaf of the numbering; its ghost tail is zero until the
+        // first source exchange.
+        let stores = (
+            evaluator.source_store().clone(),
+            evaluator.target_input_store().clone(),
+        );
+        evaluator
+            .operator_mut()
+            .engine
+            .load_points(&stores.0, &stores.1)
+    }
+
+    /// Without the `gpu` feature no device is opened.
+    #[cfg(not(feature = "gpu"))]
+    fn attach_device<C: CommunicatorCollectives>(
+        &self,
+        evaluator: &mut FmmEvaluator<'_, C, T>,
+        device: OpenedDevice,
+        target_counts: &[usize],
+        outputs: &OutputOrder,
+        tuner: Option<Tuner>,
+        ranks: RankPlacement,
+    ) -> Result<(), FmmError> {
+        let _ = (evaluator, target_counts, outputs, tuner, ranks);
+        match device {}
+    }
+
+    /// With a device: the tuner of the build (Phase 4 T12) and the M2L strategy to build
+    /// the tables for: the builder's, or under `Auto` with M2L on the device the device
+    /// path's (cached, tuned, or the static rule; `tune::static_strategy`). On the host,
+    /// or with M2L on the host fallback, the builder's strategy, which the tables resolve
+    /// by the host rule.
+    ///
+    /// On several ranks with a tuning cache (Phase 5 T8, docs/design/distributed-fmm.md
+    /// §7.6) rank 0 alone tunes, reads and writes the cache, and broadcasts its strategy
+    /// (one broadcast, on every rank); the other ranks take it, and the static rule for
+    /// the GEMMs and the P2P layout, so that two runs with the same cache give the same
+    /// bits on every rank and no rank times while another tunes on the shared device.
+    #[cfg(feature = "gpu")]
+    fn device_strategy<C: CommunicatorCollectives>(
+        &self,
+        device: Option<&mut OpenedDevice>,
+        plan: &Plan,
+        comm: &C,
+    ) -> (M2lStrategy, Option<Tuner>) {
+        let Some(device) = device else {
+            return (self.strategy, None);
+        };
+        let key = crate::tune::TuningKey::new(
+            device.info(),
+            device::precision_of::<T>(),
+            self.p,
+            self.gradients,
+        );
+        let shared = self.tuning_cache.is_some() && comm.size() > 1;
+        let follower = shared && comm.rank() != 0;
+        let mut tuner = Tuner::new(
+            key,
+            self.tuning_cache.as_deref().filter(|_| !follower),
+            self.tuning_budget,
+            self.tuning_hook.clone(),
+        );
+        let tuned =
+            self.strategy == M2lStrategy::Auto && !self.host_fallback.contains(&OperatorKind::M2l);
+        let mut strategy = if tuned && !follower {
+            device::tune_strategy::<T>(
+                &mut tuner,
+                device,
+                plan,
+                self.p,
+                self.table_cache.as_deref(),
+                self.device_scratch_budget,
+            )
+        } else {
+            self.strategy
+        };
+        if shared {
+            let mut code = strategy_code(strategy);
+            comm.process_at_rank(0).broadcast_into(&mut code);
+            strategy = strategy_from_code(code);
+        }
+        (strategy, Some(tuner))
+    }
+
+    /// Without the `gpu` feature: the builder's strategy, no tuner.
+    #[cfg(not(feature = "gpu"))]
+    fn device_strategy<C: CommunicatorCollectives>(
+        &self,
+        device: Option<&mut OpenedDevice>,
+        plan: &Plan,
+        comm: &C,
+    ) -> (M2lStrategy, Option<Tuner>) {
+        let _ = (device, plan, comm);
+        (self.strategy, None)
+    }
+}
+
+/// The M2L strategy as one byte, for the broadcast of rank 0's tuned strategy.
+#[cfg(feature = "gpu")]
+fn strategy_code(strategy: M2lStrategy) -> u8 {
+    match strategy {
+        M2lStrategy::Dense => 0,
+        M2lStrategy::Classes => 1,
+        M2lStrategy::Rotation => 2,
+        M2lStrategy::Auto => 3,
+        M2lStrategy::Batched => 4,
+        M2lStrategy::PlaneWave => 5,
+    }
+}
+
+/// The M2L strategy of [`strategy_code`].
+#[cfg(feature = "gpu")]
+fn strategy_from_code(code: u8) -> M2lStrategy {
+    match code {
+        0 => M2lStrategy::Dense,
+        1 => M2lStrategy::Classes,
+        2 => M2lStrategy::Rotation,
+        4 => M2lStrategy::Batched,
+        5 => M2lStrategy::PlaneWave,
+        _ => M2lStrategy::Auto,
+    }
+}
+
+/// The operator the evaluator holds while its host operator moves into the device
+/// operator ([`FmmBuilder::attach_device`]): degree 0, built in microseconds, never
+/// called.
+#[cfg(feature = "gpu")]
+fn detached_operator<T: SimdScalar + Stored>() -> LaplaceOperator<T> {
+    LaplaceOperator::new(Tables::build(0, M2lStrategy::Dense), false, 1)
+}
+
+/// Where a rank sits, without the `gpu` feature: no device, so nothing to say.
+#[cfg(not(feature = "gpu"))]
+#[derive(Clone, Copy, Debug)]
+struct RankPlacement;
+
+/// The tuner of a device build (feature `gpu`); without it, no value.
+#[cfg(feature = "gpu")]
+type Tuner = crate::tune::Tuner;
+#[cfg(not(feature = "gpu"))]
+type Tuner = std::convert::Infallible;
+
+/// An opened device: `tetraleaf_kernels::Device` with the `gpu` feature; without it no
+/// device can be opened, and the type has no value.
+#[cfg(feature = "gpu")]
+type OpenedDevice = tetraleaf_kernels::Device;
+#[cfg(not(feature = "gpu"))]
+type OpenedDevice = std::convert::Infallible;
+
+/// Opens the device of `backend` at step 1 of the build; `None` for the host.
+#[cfg(feature = "gpu")]
+fn open_device<T: Stored>(
+    backend: Backend,
+    threads: usize,
+) -> Result<Option<OpenedDevice>, SettingsError> {
+    device::open_device::<T>(backend, threads)
+}
+
+/// Refuses [`KindTiming::Device`] on `backend` unless its device times on itself
+/// (`on_device`).
+fn check_kind_timing(
+    mode: KindTiming,
+    backend: Backend,
+    on_device: bool,
+) -> Result<(), SettingsError> {
+    if mode == KindTiming::Device && !on_device {
+        return Err(SettingsError::KindTimingUnsupported { backend });
+    }
+    Ok(())
+}
+
+/// Refuses [`OutputPass::Device`] on `backend` unless its device does f64 arithmetic
+/// (`f64_device`).
+fn check_output_pass(
+    pass: OutputPass,
+    backend: Backend,
+    f64_device: bool,
+) -> Result<(), SettingsError> {
+    if pass == OutputPass::Device && !f64_device {
+        return Err(SettingsError::OutputPassUnsupported { backend });
+    }
+    Ok(())
+}
+
+/// Whether `device` does f64 arithmetic (CUDA, the CPU runtime), for the output pass on the
+/// device ([`OutputPass`]).
+#[cfg(feature = "gpu")]
+fn does_f64(device: &OpenedDevice) -> bool {
+    device.supports(tetraleaf_kernels::Precision::F64)
+}
+
+/// Without the `gpu` feature no device is opened.
+#[cfg(not(feature = "gpu"))]
+fn does_f64(device: &OpenedDevice) -> bool {
+    match *device {}
+}
+
+/// Whether `device` times on itself (`tetraleaf_kernels::Device::times_on_device`: Metal,
+/// CUDA), for [`KindTiming::Device`].
+#[cfg(feature = "gpu")]
+fn times_on_device(device: &OpenedDevice) -> bool {
+    device.times_on_device()
+}
+
+/// Without the `gpu` feature no device is opened.
+#[cfg(not(feature = "gpu"))]
+fn times_on_device(device: &OpenedDevice) -> bool {
+    match *device {}
+}
+
+/// Without the `gpu` feature only the host runs: every device backend is not compiled
+/// in.
+#[cfg(not(feature = "gpu"))]
+#[expect(
+    clippy::extra_unused_type_parameters,
+    reason = "the signature of the `gpu` build, which checks T's precision"
+)]
+fn open_device<T: Stored>(
+    backend: Backend,
+    _threads: usize,
+) -> Result<Option<OpenedDevice>, SettingsError> {
+    match backend {
+        Backend::Host => Ok(None),
+        _ => Err(SettingsError::BackendNotCompiled { backend }),
+    }
+}
+
+/// The evaluator of an [`Fmm`], which owns its plan.
+type FmmEvaluator<'o, C, T> = Evaluator<'o, C, ExecOperator<T>, Plan>;
+
+/// Where the level calls of the evaluator run: [`LaplaceOperator`] on the host path, or
+/// the device operator (feature `gpu`), which wraps one for its host fallback
+/// (docs/design/device-path.md §3.3). Without `gpu` the enum has the host variant only.
+#[cfg_attr(
+    feature = "gpu",
+    expect(
+        clippy::large_enum_variant,
+        reason = "one per Fmm; boxing the host operator would add an indirection to every \
+                  level call of the host path"
+    )
+)]
+enum Engine<T: SimdScalar + Stored + Equivalence + Default> {
+    Host(LaplaceOperator<T>),
+    #[cfg(feature = "gpu")]
+    Device(Box<dyn DeviceDriver<T>>),
+}
+
+impl<T: SimdScalar + Stored + Equivalence + Default> Engine<T> {
+    /// The host operator, or the device operator's fallback operator.
+    fn host(&self) -> &LaplaceOperator<T> {
+        match self {
+            Self::Host(operator) => operator,
+            #[cfg(feature = "gpu")]
+            Self::Device(driver) => driver.host(),
+        }
+    }
+
+    /// The host operator, mutably.
+    fn host_mut(&mut self) -> &mut LaplaceOperator<T> {
+        match self {
+            Self::Host(operator) => operator,
+            #[cfg(feature = "gpu")]
+            Self::Device(driver) => driver.host_mut(),
+        }
+    }
+
+    /// True for the device operator.
+    fn is_device(&self) -> bool {
+        !matches!(self, Self::Host(_))
+    }
+
+    /// Uploads the points to the device; nothing on the host.
+    #[cfg(feature = "gpu")]
+    fn load_points(
+        &mut self,
+        sources: &LeafStore<T>,
+        target_input: &LeafStore<T>,
+    ) -> Result<(), FmmError> {
+        match self {
+            Self::Host(_) => Ok(()),
+            Self::Device(driver) => driver.load_points(sources, target_input),
+        }
+    }
+
+    /// Waits for the device; nothing on the host.
+    fn sync(&mut self) {
+        match self {
+            Self::Host(_) => {}
+            #[cfg(feature = "gpu")]
+            Self::Device(driver) => driver.sync(),
+        }
+    }
+
+    /// Opens the timing window of a stage on the device, if it times stages; nothing on
+    /// the host.
+    fn open_stage(&mut self) {
+        match self {
+            Self::Host(_) => {}
+            #[cfg(feature = "gpu")]
+            Self::Device(driver) => driver.open_stage(),
+        }
+    }
+
+    /// Closes the timing window of `stage`; nothing on the host.
+    fn close_stage(&mut self, stage: DeviceStage) {
+        match self {
+            Self::Host(_) => {
+                let _ = stage;
+            }
+            #[cfg(feature = "gpu")]
+            Self::Device(driver) => driver.close_stage(stage),
+        }
+    }
+
+    /// Where `kind` runs: on the host for the host path, as the device report says for a
+    /// device.
+    fn placement(&self, kind: OperatorKind) -> Placement {
+        match self {
+            Self::Host(_) => {
+                let _ = kind;
+                Placement::Host
+            }
+            #[cfg(feature = "gpu")]
+            Self::Device(driver) => driver.report().placement(kind),
+        }
+    }
+}
+
+/// The operator of the evaluator: the [`Engine`] that runs the level calls, and the
+/// per-kind timer of [`FmmBuilder::kind_timings`] around them (Phase 4S T5). Every level
+/// call passes through the [`FmmOperator`] implementation below, the one place where it
+/// is timed; with [`KindTiming::Off`] it only checks the mode and delegates. The same
+/// place times the upward reduction and the replicated top from the host-data events
+/// that bracket them ([`EventClock`]; Phase 5S T6).
+struct ExecOperator<T: SimdScalar + Stored + Equivalence + Default> {
+    engine: Engine<T>,
+    kinds: KindRecorder,
+    clock: EventClock,
+}
+
+/// The times of the evaluator's top-tree movements in one evaluation (Phase 5S T6;
+/// [`StageTimings::reduction`], [`StageTimings::replicated_top`]), read from the host
+/// clock at the host-data events that bracket them: per reduction level from the arrival
+/// of `SendReduction` to the return of `ReceivedReduction`, and from the return of
+/// `SendMultipoles` to the arrival of `ReceivedTop` (the all-gather of the top in the
+/// blocking path), with the `ReceivedTop` event. Reset at `Reset`.
+#[derive(Clone, Copy, Debug, Default)]
+struct EventClock {
+    /// When the current reduction level's `SendReduction` arrived.
+    reduction_start: Option<Instant>,
+    /// When `SendMultipoles` returned.
+    top_start: Option<Instant>,
+    /// The reduction levels so far, events included.
+    reduction: Duration,
+    /// From the return of `SendMultipoles` to the arrival of `ReceivedTop`.
+    top_gather: Duration,
+    /// The `ReceivedTop` event (on a device, the upload and scatter of the top).
+    top_event: Duration,
+}
+
+/// The host-data events an [`EventClock`] records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ClockedEvent {
+    Reset,
+    SendReduction,
+    ReceivedReduction,
+    SendMultipoles,
+    ReceivedTop,
+    Other,
+}
+
+impl ClockedEvent {
+    fn of<T>(event: &HostData<'_, T>) -> Self {
+        match event {
+            HostData::Reset => Self::Reset,
+            HostData::SendReduction { .. } => Self::SendReduction,
+            HostData::ReceivedReduction { .. } => Self::ReceivedReduction,
+            HostData::SendMultipoles { .. } => Self::SendMultipoles,
+            HostData::ReceivedTop { .. } => Self::ReceivedTop,
+            HostData::SendSources { .. }
+            | HostData::ReceivedSources { .. }
+            | HostData::ReceivedMultipoles { .. } => Self::Other,
+        }
+    }
+}
+
+impl EventClock {
+    /// Records `event`, which arrived at `arrived` and has just returned.
+    fn record(&mut self, event: ClockedEvent, arrived: Instant) {
+        match event {
+            ClockedEvent::Reset => *self = Self::default(),
+            ClockedEvent::SendReduction => self.reduction_start = Some(arrived),
+            ClockedEvent::ReceivedReduction => {
+                if let Some(start) = self.reduction_start.take() {
+                    self.reduction += start.elapsed();
+                }
+            }
+            ClockedEvent::SendMultipoles => self.top_start = Some(Instant::now()),
+            ClockedEvent::ReceivedTop => {
+                if let Some(start) = self.top_start.take() {
+                    self.top_gather += arrived.saturating_duration_since(start);
+                }
+                self.top_event += arrived.elapsed();
+            }
+            ClockedEvent::Other => {}
+        }
+    }
+}
+
+impl<T: SimdScalar + Stored + Equivalence + Default> ExecOperator<T> {
+    /// The operator of `engine`, timing its level calls by `mode`; `on_device` if its
+    /// device times on itself.
+    fn new(engine: Engine<T>, mode: KindTiming, on_device: bool) -> Self {
+        let placement = OperatorKind::ALL.map(|kind| engine.placement(kind));
+        Self {
+            engine,
+            kinds: KindRecorder::new(mode, placement, on_device),
+            clock: EventClock::default(),
+        }
+    }
+
+    /// Starts the timer of a level call of `kind` with a pair: a timing window for a
+    /// device kind with [`KindTiming::Device`], the host clock otherwise.
+    fn start_call(&mut self, kind: OperatorKind) -> CallClock {
+        match &mut self.engine {
+            #[cfg(feature = "gpu")]
+            Engine::Device(driver)
+                if self.kinds.timings.mode == KindTiming::Device
+                    && self.kinds.timings.get(kind).placement == Placement::Device =>
+            {
+                CallClock::Window(driver.open_call_window())
+            }
+            _ => {
+                let _ = kind;
+                CallClock::Host(Instant::now())
+            }
+        }
+    }
+
+    /// Stops the timer of the level call of `kind` on `level` and adds its time: with
+    /// [`KindTiming::Synchronous`] after a sync of the device (nothing on the host); a
+    /// window is closed and resolved after the evaluation's download.
+    fn end_call(&mut self, kind: OperatorKind, level: usize, clock: CallClock) {
+        match clock {
+            CallClock::Host(start) => {
+                if self.kinds.timings.mode == KindTiming::Synchronous {
+                    self.engine.sync();
+                }
+                self.kinds.add(kind, level, start.elapsed());
+            }
+            #[cfg(feature = "gpu")]
+            CallClock::Window(window) => {
+                let Engine::Device(driver) = &mut self.engine else {
+                    unreachable!("windows are opened on a device")
+                };
+                let time = window.and_then(|window| driver.close_call_window(window));
+                self.kinds.add(kind, level, Duration::ZERO);
+                if let Some(time) = time {
+                    self.kinds.windows.push((kind, level, time));
+                }
+            }
+        }
+    }
+}
+
+/// The timer of one level call ([`ExecOperator::start_call`]).
+enum CallClock {
+    /// The host clock at the start of the call.
+    Host(Instant),
+    /// The timing window of a device call; `None` after a device failure, which
+    /// `read_output` returns.
+    #[cfg(feature = "gpu")]
+    Window(Option<TimingWindow>),
+}
+
+/// The per-kind times of the current evaluation ([`FmmBuilder::kind_timings`]).
+struct KindRecorder {
+    timings: KindTimings,
+    /// Whether the device times on itself, for [`KindTiming::Device`].
+    on_device: bool,
+    /// With [`KindTiming::Device`]: the windows of this evaluation's device calls, with
+    /// their kind and level, resolved after its download.
+    #[cfg(feature = "gpu")]
+    windows: Vec<(OperatorKind, usize, WindowTime)>,
+}
+
+impl KindRecorder {
+    /// The recorder of `mode`, with the placement of every kind in
+    /// [`OperatorKind::ALL`] order.
+    fn new(mode: KindTiming, placement: [Placement; 8], on_device: bool) -> Self {
+        Self {
+            on_device,
+            timings: KindTimings {
+                mode,
+                kinds: placement.map(|placement| KindTime {
+                    placement,
+                    calls: 0,
+                    levels: [Duration::ZERO; MAX_LEVELS],
+                }),
+            },
+            #[cfg(feature = "gpu")]
+            windows: Vec::new(),
+        }
+    }
+
+    /// Clears the times of the last evaluation.
+    fn begin(&mut self) {
+        for kind in &mut self.timings.kinds {
+            kind.calls = 0;
+            kind.levels = [Duration::ZERO; MAX_LEVELS];
+        }
+        #[cfg(feature = "gpu")]
+        self.windows.clear();
+    }
+
+    /// The times of the evaluation; `None` with [`KindTiming::Off`].
+    fn timings(&self) -> Option<KindTimings> {
+        (self.timings.mode != KindTiming::Off).then_some(self.timings)
+    }
+
+    /// Counts a call of `kind` on `level` and adds `time` to it.
+    fn add(&mut self, kind: OperatorKind, level: usize, time: Duration) {
+        let entry = &mut self.timings.kinds[kind as usize];
+        entry.calls += 1;
+        entry.levels[level] += time;
+    }
+
+    /// With a device, after the evaluation's download: adds the times of the windows to
+    /// their calls. False if a window was not timed on the device (it waited for the
+    /// stream), so that its times are not the device's.
+    #[cfg(feature = "gpu")]
+    fn resolve_windows(&mut self) -> bool {
+        let mut on_device = true;
+        for (kind, level, time) in self.windows.drain(..) {
+            on_device &= time.on_device();
+            self.timings.kinds[kind as usize].levels[level] += time.resolve().unwrap_or_default();
+        }
+        on_device
+    }
+}
+
+/// Delegates to the engine's host operator.
+impl<T: SimdScalar + Stored + Equivalence + Default> FmmSizes for ExecOperator<T> {
+    type Value = T;
+
+    fn multipole_size(&self, level: usize) -> usize {
+        self.engine.host().multipole_size(level)
+    }
+
+    fn local_size(&self, level: usize) -> usize {
+        self.engine.host().local_size(level)
+    }
+
+    fn source_point_size(&self) -> usize {
+        self.engine.host().source_point_size()
+    }
+
+    fn target_input_point_size(&self) -> usize {
+        self.engine.host().target_input_point_size()
+    }
+
+    fn target_output_point_size(&self) -> usize {
+        self.engine.host().target_output_point_size()
+    }
+}
+
+/// A batch of the operator interface, for the per-kind timer: its kind, and whether its
+/// view has a pair (a call with an empty view does nothing and is not timed).
+trait LevelCall {
+    /// The operator kind of the call.
+    const KIND: OperatorKind;
+
+    /// True if the call's view has an entry.
+    fn has_pairs(&self) -> bool;
+}
+
+/// Implements [`LevelCall`] for each batch, with its kind and its view.
+macro_rules! level_call {
+    ($($batch:ident: $kind:ident, $view:ident);* $(;)?) => {
+        $(
+            impl<T> LevelCall for $batch<'_, T> {
+                const KIND: OperatorKind = OperatorKind::$kind;
+
+                fn has_pairs(&self) -> bool {
+                    !self.$view.is_empty()
+                }
+            }
+        )*
+    };
+}
+
+level_call!(
+    P2m: P2m, leaves;
+    M2m: M2m, children;
+    M2l: M2l, pairs;
+    P2l: P2l, x;
+    L2l: L2l, parents;
+    L2p: L2p, boxes;
+    M2p: M2p, w;
+    P2p: P2p, near;
+);
+
+/// Calls the engine's method of every level call; with a [`KindTiming`] other than `Off`,
+/// a call with a pair runs between [`ExecOperator::start_call`] and
+/// [`ExecOperator::end_call`].
+macro_rules! delegate {
+    ($($kind:ident: $batch:ident),* $(,)?) => {
+        impl<T: SimdScalar + Stored + Equivalence + Default> FmmOperator for ExecOperator<T> {
+            $(
+                fn $kind(&mut self, batch: $batch<'_, T>) {
+                    let timed = (self.kinds.timings.mode != KindTiming::Off
+                        && batch.has_pairs())
+                    .then(|| {
+                        let kind = <$batch<'_, T> as LevelCall>::KIND;
+                        (kind, batch.level, self.start_call(kind))
+                    });
+                    match &mut self.engine {
+                        Engine::Host(operator) => operator.$kind(batch),
+                        #[cfg(feature = "gpu")]
+                        Engine::Device(driver) => driver.$kind(batch),
+                    }
+                    if let Some((kind, level, clock)) = timed {
+                        self.end_call(kind, level, clock);
+                    }
+                }
+            )*
+
+            /// The evaluator's data movements, to the engine: nothing on the host path; the
+            /// device operator mirrors them (Phase 5 T8). The [`EventClock`] reads the
+            /// host clock around them (Phase 5S T6).
+            fn host_data(&mut self, event: HostData<'_, T>) {
+                let (clocked, arrived) = (ClockedEvent::of(&event), Instant::now());
+                match &mut self.engine {
+                    Engine::Host(operator) => operator.host_data(event),
+                    #[cfg(feature = "gpu")]
+                    Engine::Device(driver) => driver.host_data(event),
+                }
+                self.clock.record(clocked, arrived);
+            }
+        }
+    };
+}
+
+delegate!(p2m: P2m, m2m: M2m, m2l: M2l, p2l: P2l, l2l: L2l, l2p: L2p, m2p: M2p, p2p: P2p);
+
+/// Returns `local` on this rank if every rank's `local` is `Ok`, and otherwise an error
+/// on every rank: this rank's own, or [`FmmError::OtherRank`]. One all-reduce.
+/// The plan of `octree` with the near rule of the crossovers [N_W, N_X] (Phase 6 T12,
+/// C6.9): a W pair between leaves converts where its source leaf holds fewer than N_W
+/// sources, an X pair where its target leaf holds fewer than N_X targets. The counts are
+/// `counts`, the source and target points of the local leaves of `plan` (the plan of
+/// `octree` without the rule), and the W rows' ghost leaves' from their owners.
+///
+/// # Collective operation
+///
+/// `LeafCounts::exchange` and `Plan::with_near_rule`; every rank must enter.
+fn near_plan<C: CommunicatorCollectives>(
+    octree: &Octree<'_, C>,
+    plan: &Plan,
+    (sources, targets): &(Vec<usize>, Vec<usize>),
+    [w, x]: [f64; 2],
+    comm: &C,
+) -> Result<Plan, FmmError> {
+    let counts = LeafCounts::exchange(plan, comm, sources, targets)
+        .map_err(|error| FmmError::Evaluator(EvaluatorError::Exchange(error)))?;
+    let predicate = |pair: LeafPair| match pair {
+        LeafPair::W { sources, .. } => (sources as f64) < w,
+        LeafPair::X { targets, .. } => (targets as f64) < x,
+    };
+    Plan::with_near_rule(octree, &NearRule::new(&counts, &predicate)).map_err(FmmError::Plan)
+}
+
+/// The wall time of each step of [`FmmBuilder::build`] on this rank, for reports only.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BuildTimings {
+    /// Steps 1–3: validation and the domain.
+    pub domain: Duration,
+    /// `Octree::new`, with the keys of the points.
+    pub octree: Duration,
+    /// `Plan::new`; with the near rule (Phase 6 T12, [`FmmBuilder::near_rule`]) also the
+    /// points per leaf, the W rows' ghost leaves' source counts and the plan with the rule
+    /// (collective).
+    pub plan: Duration,
+    /// The second cut (Phase 5S T7, [`FmmBuilder::work_cut`]): the points per leaf and
+    /// the ghost leaves' source counts (collective), the work per block, the
+    /// repartition of the octree (collective) and the second `Plan::new` (with the near
+    /// rule, its counts and the plan with the rule again); zero without it.
+    pub cut: Duration,
+    /// Steps 5 and 6 (Phase 5 T6): the two redistributions of the points to the ranks
+    /// that own their leaves (sources and targets: `Redistribution::new` and the forward
+    /// of the coordinates, collective, with the wait for other ranks), the radii of the
+    /// local leaves and the output order.
+    pub redistribute: Duration,
+    /// Building or loading the tables.
+    pub tables: Duration,
+    /// The operator and `Evaluator::new` (stores and exchanges: since Phase 5S T5 the
+    /// upward reduction's per level and the replicated top's, with the all-reduce and
+    /// all-gathers that choose R; no part of its own).
+    pub evaluator: Duration,
+    /// Step 8: the leaf-scaled coordinates.
+    pub load: Duration,
+    /// With a device backend: opening the device, the tuning (Phase 4 T12; with
+    /// [`FmmBuilder::tuning_cache`]), the device operator (its tables and uploads) and the
+    /// upload of the points; zero on the host.
+    pub device: Duration,
+}
+
+impl BuildTimings {
+    /// The sum of all steps.
+    pub fn total(&self) -> Duration {
+        self.domain
+            + self.octree
+            + self.plan
+            + self.cut
+            + self.redistribute
+            + self.tables
+            + self.evaluator
+            + self.load
+            + self.device
+    }
+}
+
+/// The wall time of each stage of one [`Fmm::evaluate`] on this rank, for reports only.
+///
+/// The six evaluator stages are those of `tetraleaf_plan::evaluator`; the collective ones
+/// include the time spent waiting for other ranks.
+///
+/// With a device backend each stage is timed on the host as it is called, which
+/// measures the time to *enqueue* its launches, not their run time: the device's work
+/// shows in [`output`](Self::output), which contains the evaluation's one waiting
+/// download (docs/design/device-path.md §8.3). Two ways to time the device's work:
+/// - [`device`](Self::device): with [`FmmBuilder::device_timestamps`], where the device
+///   times on itself (Metal, CUDA), the span of each stage on the device, from one timing
+///   window per stage, without a sync;
+/// - [`FmmBuilder::synchronous_stages`] waits for the device after every stage, so that
+///   each stage is timed whole on the host, at the cost of a sync per stage (the only
+///   way on the CPU runtime).
+///
+/// Host-fallback calls wait for the device themselves (their downloads).
+///
+/// With [`FmmBuilder::kind_timings`] (Phase 4S T5), [`kinds`](Self::kinds) holds the time
+/// of every level call by operator kind and level ([`KindTimings`]), and
+/// [`remainder`](Self::remainder) what the stages spent outside the level calls.
+///
+/// With [`FmmBuilder::overlap`] (Phase 5 T9) the evaluator runs two overlapped stages in
+/// place of stages 1–5, and the five fields are their parts, so that the two paths compare
+/// and [`total`](Self::total) is still the wall time: [`upward_local`](Self::upward_local),
+/// [`upward_global`](Self::upward_global) and [`downward`](Self::downward) the same work as
+/// in the blocking path (level calls, the reduction, the all-gather of the replicated top
+/// and their events), and
+/// [`exchange_sources`](Self::exchange_sources) and
+/// [`exchange_multipoles`](Self::exchange_multipoles) the rest of each overlapped stage:
+/// packing, posting, the `test` calls, the waits, unpacking and the exchanges' events.
+/// [`overlap`](Self::overlap) has the times of the exchanges themselves: from post to
+/// completion, the exposed wait and the `test` calls, the wait per level and the
+/// all-gather of the top ([`OverlapTimes`], docs/design/distributed-fmm.md §8.6).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct StageTimings {
+    /// Moving the charges to the ranks that own their sources, into leaf order: the
+    /// forward of the sources' `Redistribution` (every rank: point to point along its
+    /// routes since Phase 5S T8, one all-to-all-v before, with the wait for other ranks;
+    /// Phase 5 T6, docs/design/distributed-fmm.md §4.4).
+    pub forward_charges: Duration,
+    /// Writing the charges, in leaf order, into the host's source chunks (on a device only
+    /// with P2M, P2L or P2P on the host fallback), on the `Fmm`'s pool when it has one
+    /// (Phase 4S T9); with a device backend also zeroing the device stores and uploading
+    /// and scattering the charges.
+    pub load: Duration,
+    /// Stage 1: the source exchange (collective). With overlap, the time of the first
+    /// overlapped stage outside the level calls of stage 2.
+    pub exchange_sources: Duration,
+    /// Stage 2: P2M and the local M2M. With overlap, their level calls.
+    pub upward_local: Duration,
+    /// Stage 3: the upward reduction and the global M2M of the owned `Global` boxes, then
+    /// the all-gather of the replicated top (collective; Phase 5S T5). With overlap, the
+    /// same, inside the second overlapped stage. [`reduction`](Self::reduction) and
+    /// [`replicated_top`](Self::replicated_top) are parts of it.
+    pub upward_global: Duration,
+    /// The part of [`upward_global`](Self::upward_global) spent in the upward reduction
+    /// (Phase 5S T6; docs/design/scale-out.md §4.2): summed over the reduction levels,
+    /// from the level's `SendReduction` event to the end of its `ReceivedReduction`, so
+    /// the events (on a device the gather and download of the multipoles sent and the
+    /// upload and scatter of the children received), the exchange of the level and the
+    /// wait for other ranks; with overlap the posting of the level's sends and the wait
+    /// for it. Zero on one rank, where no level is a reduction level. Not added to
+    /// [`total`](Self::total).
+    pub reduction: Duration,
+    /// The part of [`upward_global`](Self::upward_global) spent on the replicated top
+    /// (Phase 5S T6; docs/design/scale-out.md §4.3): its all-gather (collective, with the
+    /// wait for other ranks; with overlap [`OverlapTimes::top_gather`]) and the
+    /// `ReceivedTop` event (on a device the upload and scatter of the top). Not added to
+    /// [`total`](Self::total).
+    pub replicated_top: Duration,
+    /// Stage 4: the multipole exchange (collective). With overlap, the time of the second
+    /// overlapped stage outside stages 3 and 5.
+    pub exchange_multipoles: Duration,
+    /// Stage 5: L2L, M2L and P2L. With overlap, their level calls.
+    pub downward: Duration,
+    /// Stage 6: L2P, M2P and P2P.
+    pub evaluate_leaves: Duration,
+    /// The output pass: scaling the target output of the targets this rank owns, in leaf
+    /// order, on the host or on the device ([`OutputPass`]; Phase 4S T9), and with a device
+    /// backend downloading it ([`download`](Self::download)).
+    pub output: Duration,
+    /// Moving the output back to the ranks and the order the caller passed the targets in:
+    /// the backward of the targets' `Redistribution` (every rank: point to point along
+    /// its routes, with the wait for other ranks) and the copy into the [`Output`] (Phase 5 T6,
+    /// docs/design/distributed-fmm.md §4.4).
+    pub backward_output: Duration,
+    /// With a device backend: the part of [`output`](Self::output) spent in
+    /// `read_output`, the evaluation's one download and its sync, by the host clock
+    /// (Phase 4S T9). It is the evaluation's one wait for the device, so in a default
+    /// evaluation it also holds the device work still queued. Zero on the host.
+    /// `output` less `download` is the host's part of the output pass.
+    pub download: Duration,
+    /// With a device backend that times on the device: the device time of each stage
+    /// with device work ([`FmmBuilder::device_timestamps`]); `None` otherwise.
+    pub device: Option<DeviceStageTimings>,
+    /// The time of every level call by operator kind and level
+    /// ([`FmmBuilder::kind_timings`], [`KindTiming`]); `None` with [`KindTiming::Off`],
+    /// and with [`KindTiming::Device`] for an evaluation in which a window was not timed
+    /// on the device.
+    pub kinds: Option<KindTimings>,
+    /// With [`FmmBuilder::overlap`], the times of the overlapped exchanges
+    /// ([`OverlapTimes`]: per exchange from post to completion, the exposed wait and the
+    /// `test` calls; the wait per level; the all-gather of the top); `None` in a blocking
+    /// evaluation.
+    pub overlap: Option<OverlapTimes>,
+}
+
+impl StageTimings {
+    /// The sum of all stages.
+    pub fn total(&self) -> Duration {
+        self.forward_charges
+            + self.load
+            + self.exchange_sources
+            + self.upward_local
+            + self.upward_global
+            + self.exchange_multipoles
+            + self.downward
+            + self.evaluate_leaves
+            + self.output
+            + self.backward_output
+    }
+
+    /// [`total`](Self::total) less [`KindTimings::total`], at least zero: the time outside
+    /// the level calls (moving and loading the charges, the exchanges, the download, the
+    /// scaling and the move of the output, and on a device the enqueueing between calls).
+    /// `None` without [`kinds`](Self::kinds). With [`KindTiming::Device`] it subtracts device time from
+    /// host time, so it is the host's time beyond the device work, not a stage.
+    pub fn remainder(&self) -> Option<Duration> {
+        self.kinds
+            .map(|kinds| self.total().saturating_sub(kinds.total()))
+    }
+}
+
+/// How [`Fmm::evaluate`] times its level calls by operator kind
+/// ([`FmmBuilder::kind_timings`], [`StageTimings::kinds`]; Phase 4S T5), for reports only.
+///
+/// Every level call passes through one place, the operator of the evaluator, which in a
+/// mode other than `Off` times each call whose view has an entry and adds its time to its
+/// kind and level ([`KindTimings`]); a call with an empty view does nothing, and is neither
+/// timed nor counted. An evaluation makes at most 148 such calls (eight kinds, levels 0 to
+/// 16, M2M in two passes): 14 on the uniform level-4 tree of the C3.2 gate, 3–119 on the
+/// trees of `tests/mpi_exec.rs`. In every mode the output is the same bit for bit: no
+/// call or launch moves, and no kind changes where it runs.
+///
+/// The modes compose with [`FmmBuilder::synchronous_stages`] and
+/// [`FmmBuilder::device_timestamps`]: each adds its own syncs or windows, and none implies
+/// another.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum KindTiming {
+    /// No timing: the default. The evaluation adds no timer, sync or window; each level
+    /// call checks the mode and is delegated.
+    #[default]
+    Off,
+    /// Every call timed by the host clock on the calling thread, one `Instant::now` pair
+    /// per call, the only cost on the host path. There the call is synchronous already
+    /// (with threads, the rayon pool joins before it returns), so its time is its whole
+    /// run; on the C3.2 tree at p = 6 and one thread the kinds add up to 0.9999 of the
+    /// stages that call them.
+    ///
+    /// On a device backend `Fmm` syncs the device after every call (on the device or the
+    /// host fallback), and once after the charge upload so that the first call starts on
+    /// an idle device: one sync per call plus one per evaluation, besides the evaluation's
+    /// own (and those of `synchronous_stages`, if set). A call's time is then the wall
+    /// time of its device work, its enqueueing and one sync; the sum over the kinds
+    /// exceeds what an evaluation without the syncs spends by about the sync cost times
+    /// the calls. Report-only, never the default; on the CPU runtime the only mode, and on
+    /// Metal the one whose kinds are a breakdown.
+    Synchronous,
+    /// Every call of a kind on the device timed by the device itself: one timing window
+    /// per call (`tetraleaf_kernels::Device::open_window`), with no sync, read after the
+    /// evaluation's download. Device time only: no launch, enqueue or sync time. A kind on
+    /// the host fallback is timed by the host clock, and so includes the wait of its first
+    /// download for the device work queued before it.
+    ///
+    /// Only where the device times on itself (Metal with timestamp queries, CUDA by
+    /// events): [`FmmBuilder::build`] refuses it on the host and on the CPU runtime with
+    /// [`SettingsError::KindTimingUnsupported`]. Each window flushes the queued work on
+    /// Metal, which adds enqueue time to the evaluation.
+    ///
+    /// **Not a breakdown on Metal.** There the windows of neighbouring calls overlap and
+    /// misattribute the device's time between calls (Phase 4S T5, the M3 Max, f32, the
+    /// uniform cube at N = 10⁵, p = 8): M2L 0.25 ms against 6.15 ms with `Synchronous`
+    /// and L2P 4.67 ms against 0.37 ms (medians of ten); in every evaluation the call
+    /// windows of some stage added up to more than that stage's own window, and their sum
+    /// ranged from 0.71 to 1.59 of the evaluation's wall time. Use `Synchronous` there.
+    ///
+    /// **A breakdown on CUDA** (one stream, events in order; Phase 4S T5, locust's H100,
+    /// the same cube in f32 and f64): the call windows of every stage added up to less
+    /// than its own window in every evaluation (f32 downward 1.64 ms of calls in a 1.65 ms
+    /// span), and per kind they lie at or below the `Synchronous` times, which carry a sync
+    /// each (f32 M2L 1.48 ms against 1.56 ms, P2P 0.31 against 0.33 ms; medians of ten).
+    Device,
+}
+
+impl fmt::Display for KindTiming {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Off => "off",
+            Self::Synchronous => "synchronous, a sync after each call on a device",
+            Self::Device => "device timestamps, one window per device call",
+        })
+    }
+}
+
+/// The most levels of a tree: levels 0 to 16, the deepest level of a Morton key.
+pub const MAX_LEVELS: usize = DEEPEST + 1;
+
+/// The level calls of one operator kind in one [`Fmm::evaluate`] ([`KindTimings`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct KindTime {
+    /// Where the kind ran ([`Fmm::placement`]); with [`KindTiming::Device`], a kind on
+    /// the device has device times, one on the host host times.
+    pub placement: Placement,
+    /// The level calls with an entry in their view; for M2M both passes.
+    pub calls: usize,
+    /// The time of each level's calls, by level (of the targets; of the parents for M2M,
+    /// of the children for L2L); zero for a level without a call.
+    pub levels: [Duration; MAX_LEVELS],
+}
+
+impl KindTime {
+    /// The time over every level.
+    pub fn total(&self) -> Duration {
+        self.levels.iter().sum()
+    }
+}
+
+/// The time of every level call of one [`Fmm::evaluate`] by operator kind and level
+/// ([`FmmBuilder::kind_timings`], Phase 4S T5), for reports only. What a time measures is
+/// the mode's ([`KindTiming`]); a kind without a call has zero calls and zero time.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct KindTimings {
+    /// The mode that measured the times; never [`KindTiming::Off`].
+    pub mode: KindTiming,
+    /// By kind, in [`OperatorKind::ALL`] order.
+    kinds: [KindTime; 8],
+}
+
+impl KindTimings {
+    /// The calls of `kind`.
+    pub fn get(&self, kind: OperatorKind) -> &KindTime {
+        &self.kinds[kind as usize]
+    }
+
+    /// Every kind with its calls, in [`OperatorKind::ALL`] order.
+    pub fn iter(&self) -> impl Iterator<Item = (OperatorKind, &KindTime)> {
+        OperatorKind::ALL.into_iter().zip(&self.kinds)
+    }
+
+    /// The sum over every kind.
+    pub fn total(&self) -> Duration {
+        self.kinds.iter().map(KindTime::total).sum()
+    }
+}
+
+/// A stage of [`Fmm::evaluate`] that runs device work, timed by one timing window
+/// ([`DeviceStageTimings`]). The exchanges have no window: on one rank they move nothing,
+/// on several the device's part of them is a few transfers and launches (Phase 5 T8),
+/// and the download of the multipoles sent falls in [`UpwardGlobal`](Self::UpwardGlobal).
+/// With
+/// [`FmmBuilder::overlap`] the first overlapped stage falls in
+/// [`UpwardLocal`](Self::UpwardLocal) and the second in [`Downward`](Self::Downward),
+/// which then spans the global M2M too ([Overlap](self#overlap-c52)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DeviceStage {
+    /// Zeroing the device stores (at the evaluator's `reset`), uploading and scattering
+    /// the charges.
+    Load,
+    /// Stage 2: P2M and the local M2M.
+    UpwardLocal,
+    /// Stage 3: the global M2M.
+    UpwardGlobal,
+    /// Stage 5: L2L, M2L and P2L.
+    Downward,
+    /// Stage 6: L2P, M2P and P2P.
+    EvaluateLeaves,
+}
+
+impl DeviceStage {
+    /// Every stage, in evaluation order.
+    pub const ALL: [Self; 5] = [
+        Self::Load,
+        Self::UpwardLocal,
+        Self::UpwardGlobal,
+        Self::Downward,
+        Self::EvaluateLeaves,
+    ];
+}
+
+/// The device time of each [`DeviceStage`] of one [`Fmm::evaluate`], from the device's
+/// own timestamps, for reports only (docs/design/device-path.md §8.3): one timing window
+/// per stage, opened before its first launch and closed after its last, with no sync;
+/// the times are read after the evaluation's one download. A window spans the device
+/// work of its stage from the start of its first pass to the end of its last; the device
+/// may run passes of neighbouring stages concurrently (Metal does), so the spans can
+/// overlap and their sum can exceed the evaluation's wall time. A stage without device
+/// work times zero.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DeviceStageTimings {
+    /// [`DeviceStage::Load`].
+    pub load: Duration,
+    /// [`DeviceStage::UpwardLocal`].
+    pub upward_local: Duration,
+    /// [`DeviceStage::UpwardGlobal`].
+    pub upward_global: Duration,
+    /// [`DeviceStage::Downward`].
+    pub downward: Duration,
+    /// [`DeviceStage::EvaluateLeaves`].
+    pub evaluate_leaves: Duration,
+}
+
+impl DeviceStageTimings {
+    /// The time of `stage`.
+    pub fn get(&self, stage: DeviceStage) -> Duration {
+        match stage {
+            DeviceStage::Load => self.load,
+            DeviceStage::UpwardLocal => self.upward_local,
+            DeviceStage::UpwardGlobal => self.upward_global,
+            DeviceStage::Downward => self.downward,
+            DeviceStage::EvaluateLeaves => self.evaluate_leaves,
+        }
+    }
+
+    /// Sets the time of `stage`.
+    pub fn set(&mut self, stage: DeviceStage, time: Duration) {
+        *match stage {
+            DeviceStage::Load => &mut self.load,
+            DeviceStage::UpwardLocal => &mut self.upward_local,
+            DeviceStage::UpwardGlobal => &mut self.upward_global,
+            DeviceStage::Downward => &mut self.downward,
+            DeviceStage::EvaluateLeaves => &mut self.evaluate_leaves,
+        } = time;
+    }
+
+    /// The sum of all stages.
+    pub fn total(&self) -> Duration {
+        DeviceStage::ALL.iter().map(|&stage| self.get(stage)).sum()
+    }
+}
+
+/// The result of one [`Fmm::evaluate`] or [`Fmm::evaluate_into`], in the caller's target
+/// order on this rank.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Output<T> {
+    /// φ(xᵢ) = Σⱼ qⱼ / (4π |xᵢ − yⱼ|) at every target.
+    pub potential: Vec<T>,
+    /// ∇φ(xᵢ) at every target, if the FMM was built with gradients.
+    pub gradient: Option<Vec<[T; 3]>>,
+    /// The wall time of each stage.
+    pub timings: StageTimings,
+}
+
+/// The result of one [`Fmm::evaluate_many`] or [`Fmm::evaluate_many_into`] (Phase 6 T5,
+/// C6.3): the m vectors' potentials and gradients in the caller's target order on this
+/// rank, vector after vector. Vector v equals the [`Output`] of [`Fmm::evaluate`] on
+/// vector v's charges with an FMM of one vector, bit for bit.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OutputMany<T> {
+    /// The number of vectors m.
+    pub vectors: usize,
+    /// φ of every vector at every target: vector v's at `potential[v N .. (v + 1) N]` for
+    /// N targets ([`potential_of`](Self::potential_of)).
+    pub potential: Vec<T>,
+    /// ∇φ likewise, if the FMM was built with gradients ([`gradient_of`](Self::gradient_of)).
+    pub gradient: Option<Vec<[T; 3]>>,
+    /// The wall time of each stage, for all the vectors together.
+    pub timings: StageTimings,
+}
+
+impl<T> OutputMany<T> {
+    /// The number of targets N.
+    pub fn ntargets(&self) -> usize {
+        self.potential.len().checked_div(self.vectors).unwrap_or(0)
+    }
+
+    /// The potentials of vector `v`.
+    ///
+    /// # Panics
+    ///
+    /// If `v` is not below [`vectors`](Self::vectors).
+    pub fn potential_of(&self, v: usize) -> &[T] {
+        assert!(v < self.vectors, "vector {v} of {}", self.vectors);
+        let n = self.ntargets();
+        &self.potential[v * n..(v + 1) * n]
+    }
+
+    /// The gradients of vector `v`, if the FMM was built with gradients.
+    ///
+    /// # Panics
+    ///
+    /// If `v` is not below [`vectors`](Self::vectors).
+    pub fn gradient_of(&self, v: usize) -> Option<&[[T; 3]]> {
+        assert!(v < self.vectors, "vector {v} of {}", self.vectors);
+        let n = self.ntargets();
+        self.gradient.as_ref().map(|g| &g[v * n..(v + 1) * n])
+    }
+}
+
+/// The number of entries of each interaction list over all levels, on this rank.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ListSizes {
+    /// U-list pairs: the near list without each leaf itself.
+    pub u: usize,
+    /// V-list pairs (M2L).
+    pub v: usize,
+    /// W-list pairs (M2P).
+    pub w: usize,
+    /// X-list pairs (P2L).
+    pub x: usize,
+}
+
+/// What the evaluator's exchanges move on this rank per evaluation, in points and boxes
+/// ([`Fmm::exchange_sizes`], Phase 5 T8; docs/design/distributed-fmm.md §7.2): the sizes
+/// behind the device path's transfers on several ranks. Every count is zero on one rank.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExchangeSizes {
+    /// The source points of the ghost leaves, which the source exchange receives (G_s).
+    pub ghost_sources: usize,
+    /// The source points of the local leaves it sends, a leaf sent to two ranks twice.
+    pub sent_sources: usize,
+    /// The local leaves it sends, each once: the leaves whose charges a device
+    /// evaluation writes into the host store.
+    pub sent_leaves: usize,
+    /// Per level, the boxes the upward reduction of the level sends to the owners of their
+    /// parents (S^red_l; Phase 5S T6, docs/design/scale-out.md §4.5): own blocks and owned
+    /// `Global` boxes, each to one rank; zero on the levels that are not reduction levels.
+    pub sent_reduction: Vec<usize>,
+    /// Per level, the children of this rank's owned `Global` boxes that the upward
+    /// reduction of the level receives (R^red_l; Phase 5S T6).
+    pub received_reduction: Vec<usize>,
+    /// This rank's boxes of the replicated top, which its all-gather sends (B_o; Phase 5S
+    /// T5, before it the coarse blocks of the coarse gather); none on one rank.
+    pub sent_top: usize,
+    /// The other ranks' boxes of the replicated top that the all-gather writes on this
+    /// rank (B_r): those it holds but neither computes nor receives through the upward
+    /// reduction.
+    pub received_top: usize,
+    /// Per level, the boxes the multipole exchange sends (S_l), a box sent to two ranks
+    /// twice.
+    pub sent_boxes: Vec<usize>,
+    /// Per level, the ghost boxes it receives (R_l).
+    pub received_boxes: Vec<usize>,
+}
+
+/// What the evaluator's exchanges send and receive on this rank per evaluation, in
+/// messages and values ([`Fmm::exchange_traffic`], Phase 5 T9): the input to an estimate
+/// of the exchanges at a network's bandwidth and latency (docs/design/distributed-fmm.md
+/// §8.2). A value is `size_of::<T>()` bytes. Every count is zero on one rank.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExchangeTraffic {
+    /// The source exchange: one message per neighbour with values, four values per point.
+    pub sources: Traffic,
+    /// The upward reduction of each level (Phase 5S T5; docs/design/scale-out.md §4.2):
+    /// one message per neighbour with values; zero on the levels that are not reduction
+    /// levels (level 0 and those below the deepest coarse block).
+    pub reduction: Vec<Traffic>,
+    /// The multipole exchange of each level: one message per neighbour with values.
+    pub multipoles: Vec<Traffic>,
+    /// The ranks the multipole exchange receives from, over every level, each once,
+    /// ascending.
+    pub multipole_neighbours: Vec<usize>,
+    /// Per level, the ranks the multipole exchange of the level sends a message to, at any
+    /// stage, ascending (Phase 5S T5; under the forwarding tree a rank may get one message
+    /// per stage, which [`multipoles`](Self::multipoles) counts).
+    pub multipole_destinations: Vec<Vec<usize>>,
+    /// The most ranks the multipole exchange sends one box's multipole to, on any level
+    /// and at any stage (Phase 5S T5): below the replicated top, a top-tree box goes to
+    /// fewer ranks than [`top_threshold`](Self::top_threshold), a box inside a block has no
+    /// such bound; under the forwarding tree (Phase 5S T8s) at most its fan-out.
+    pub multipole_fan_out: usize,
+    /// The stages of the multipole exchange this rank takes part in, the most over the
+    /// levels (Phase 5S T8s): 1 under the direct exchange, 1 + the last stage of its
+    /// messages under the forwarding tree; 0 without any message.
+    pub multipole_depth: usize,
+    /// The chunks this rank forwards over every level: copies of multipoles it received
+    /// and resends along the forwarding tree (Phase 5S T8s); 0 under the direct exchange.
+    pub multipole_forwarded: usize,
+    /// The readers a top-tree box needs to be in the replicated top
+    /// (`tetraleaf_plan::exchange::TopExchange::threshold`; Phase 5S T5), the same on every
+    /// rank.
+    pub top_threshold: usize,
+    /// The values of this rank's boxes of the replicated top, which its all-gather sends
+    /// to every other rank (Phase 5S T5; docs/design/scale-out.md §4.3); none on one rank.
+    pub top_sent: usize,
+    /// The values of the other ranks' boxes of the replicated top, which the all-gather
+    /// delivers to this rank, whether or not it holds them.
+    pub top_received: usize,
+}
+
+/// A built FMM; see the [module documentation](self).
+///
+/// It owns the octree (which borrows the communicator for `'o`), the plan, the
+/// operator with its tables and, with more than one thread, its thread pool, and the
+/// evaluator with its stores, in which the leaf-scaled points stay loaded between
+/// evaluations.
+/// The strengths of one evaluation of [`Fmm::evaluate_sources`] (Phase 6 T8, C6.4;
+/// docs/design/optimisation.md §7.1), in the caller's source order: the charges, the
+/// dipole moments, or both, as the FMM's [`SourceType`] fixed at build. A moment d at y
+/// gives the potential d · (x − y) / |x − y|³ (CONVENTIONS §3.7, "Dipole sources").
+///
+/// ```
+/// use tetraleaf_exec::fmm::{SourceType, Sources};
+///
+/// let (q, d) = ([1.0, -0.5], [[0.0, 0.0, 1.0], [0.5, 0.0, 0.0]]);
+/// assert_eq!(Sources::charges(&q).source_type(), Some(SourceType::Charges));
+/// assert_eq!(Sources::dipoles(&d).source_type(), Some(SourceType::Dipoles));
+/// let both = Sources::charges_and_dipoles(&q, &d);
+/// assert_eq!(both.source_type(), Some(SourceType::ChargesAndDipoles));
+/// assert_eq!(Sources::<f64>::default().source_type(), None);
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Sources<'a, T> {
+    /// The charges, one per source, if the sources have charges.
+    pub charges: Option<&'a [T]>,
+    /// The dipole moments, one triple per source, if the sources have dipoles.
+    pub dipoles: Option<&'a [[T; 3]]>,
+}
+
+impl<'a, T> Sources<'a, T> {
+    /// Charges only.
+    pub fn charges(charges: &'a [T]) -> Self {
+        Self {
+            charges: Some(charges),
+            dipoles: None,
+        }
+    }
+
+    /// Dipole moments only.
+    pub fn dipoles(dipoles: &'a [[T; 3]]) -> Self {
+        Self {
+            charges: None,
+            dipoles: Some(dipoles),
+        }
+    }
+
+    /// A charge and a moment per source.
+    pub fn charges_and_dipoles(charges: &'a [T], dipoles: &'a [[T; 3]]) -> Self {
+        Self {
+            charges: Some(charges),
+            dipoles: Some(dipoles),
+        }
+    }
+
+    /// The source type these strengths are for, or `None` if they hold neither.
+    pub fn source_type(&self) -> Option<SourceType> {
+        match (self.charges.is_some(), self.dipoles.is_some()) {
+            (true, false) => Some(SourceType::Charges),
+            (false, true) => Some(SourceType::Dipoles),
+            (true, true) => Some(SourceType::ChargesAndDipoles),
+            (false, false) => None,
+        }
+    }
+}
+
+pub struct Fmm<'o, T, C = SimpleCommunicator>
+where
+    T: Stored + SimdScalar + Equivalence + Default,
+    C: CommunicatorCollectives,
+{
+    octree: Octree<'o, C>,
+    evaluator: FmmEvaluator<'o, C, T>,
+    domain: Domain,
+    strategy: M2lStrategy,
+    backend: Backend,
+    /// The refinement target of the octree.
+    max_points_per_leaf: usize,
+    /// Whether the blocks were cut a second time, by modelled cost (Phase 5S T7).
+    work_cut: bool,
+    /// Whether that second cut moved blocks.
+    recut: bool,
+    /// The constants of the modelled cost.
+    cost_model: CostModel,
+    /// The near rule and what it converted (Phase 6 T12).
+    near_rule: NearRuleReport,
+    /// With a device backend: sync after every stage.
+    synchronous_stages: bool,
+    /// Run the overlapped stages (Phase 5 T9).
+    overlap: bool,
+    /// Whether an evaluation writes the charges into the host's source store: on the host
+    /// path, and on a device with P2M, P2L or P2P on the host fallback (Phase 4S T9).
+    host_sources: bool,
+    /// Otherwise the local leaves the source exchange sends, ascending, whose charges an
+    /// evaluation writes into the host's source store for it (Phase 5 T8); none on one
+    /// rank.
+    sent_leaves: Vec<u32>,
+    /// The failure of a device evaluation, returned by every later evaluation.
+    device_error: Option<String>,
+    /// The charge vectors of every evaluation (Phase 6 T5).
+    vectors: usize,
+    /// The sources of every evaluation (Phase 6 T8).
+    source_type: SourceType,
+    /// The strengths per source the forward move carries: m charges, or 1, 3 or 4 values
+    /// of the source type (Phase 6 T8).
+    strengths: usize,
+    /// With several vectors, the caller's charges packed point-major (m per source in the
+    /// caller's order) for the forward move; with charges and dipoles their four values
+    /// per source; allocated by the first evaluation that needs it.
+    packed: Vec<T>,
+    /// The routes of the sources and targets (Phase 5 T6), the owned points of every
+    /// local leaf, r_t of every local leaf (also for the test oracle,
+    /// [`Fmm::reference_output`]) and the output order (Helmholtz CH3.1b: the point
+    /// pipeline's).
+    points: Points,
+    /// The charges of the owned sources in leaf order, m per source (or the source type's
+    /// strengths), as the forward move leaves them on the host path (reused by every
+    /// evaluation).
+    charges: Vec<T>,
+    /// The output pass's values, o m per owned target in leaf order, for the backward move.
+    received_output: Vec<T>,
+    /// The backward move's values, o m per target in the caller's order.
+    returned_output: Vec<T>,
+    max_leaf_points: usize,
+    cache_outcomes: Vec<(TableKind, CacheOutcome)>,
+    threading: ThreadingReport,
+    build_timings: BuildTimings,
+}
+
+impl<'o, T, C> Fmm<'o, T, C>
+where
+    T: Stored + SimdScalar + Equivalence + Default,
+    C: CommunicatorCollectives,
+{
+    /// Evaluates the potentials, and the gradients if built with them, of the charges
+    /// `charges` at every target; see the [module documentation](self#evaluation).
+    ///
+    /// `charges[i]` is the charge of source i of [`FmmBuilder::build`], on this rank.
+    /// Allocates the output: [`evaluate_into`](Self::evaluate_into) a fresh [`Output`],
+    /// with the same bits. For an FMM built with several charge vectors
+    /// ([`FmmBuilder::vectors`]) use [`evaluate_many`](Self::evaluate_many).
+    ///
+    /// # Collective operation
+    ///
+    /// Every rank must call it: one all-reduce, then the collectives of the evaluator's
+    /// stages; with a device backend on several ranks one more all-reduce after the
+    /// output's download, which agrees the device errors (Phase 5 T8).
+    ///
+    /// # Errors
+    ///
+    /// [`FmmError::ChargesLength`] on a rank whose `charges` does not have one entry per
+    /// source, [`FmmError::VectorCount`] on an FMM built with more than one vector,
+    /// [`FmmError::SourceType`] on one built for dipoles ([`FmmBuilder::sources`]; use
+    /// [`evaluate_sources`](Self::evaluate_sources)), and [`FmmError::OtherRank`] on the
+    /// others; nothing is evaluated. With a device backend,
+    /// [`FmmError::Device`] if a device operation of this or an earlier evaluation failed
+    /// on this rank, and [`FmmError::OtherRank`] on the other ranks.
+    pub fn evaluate(&mut self, charges: &[T]) -> Result<Output<T>, FmmError> {
+        let mut output = Output {
+            potential: Vec::new(),
+            gradient: None,
+            timings: StageTimings::default(),
+        };
+        self.evaluate_into(charges, &mut output)?;
+        Ok(output)
+    }
+
+    /// [`evaluate`](Self::evaluate) into `output`, whose buffers are reused (Phase 4S T9,
+    /// decision 11): the same bits, without allocating the output where its buffers have
+    /// the capacity.
+    ///
+    /// `output` may hold anything: [`potential`](Output::potential) is rewritten to one
+    /// value per target, [`gradient`](Output::gradient) to one per target if the FMM was
+    /// built with gradients (its buffer reused if present, allocated if absent) and to
+    /// `None` otherwise, and [`timings`](Output::timings) to this evaluation's. A buffer of
+    /// the wrong length is resized, never refused; every element is written once, with no
+    /// zero fill first. On an error `output` is left as it was.
+    ///
+    /// # Collective operation
+    ///
+    /// As [`evaluate`](Self::evaluate).
+    ///
+    /// # Errors
+    ///
+    /// As [`evaluate`](Self::evaluate), agreed on every rank alike.
+    pub fn evaluate_into(&mut self, charges: &[T], output: &mut Output<T>) -> Result<(), FmmError> {
+        // A kept device error rides on the agreement of the charge length (Phase 5 T8,
+        // decision 12): the rank that failed returns it, the others `OtherRank`, before any
+        // other collective of the evaluation. So does a vector count other than the
+        // build's (Phase 6 T5).
+        let local = self.check_charges(1, [charges.len()]);
+        agree(self.evaluator.comm(), local)?;
+        let gradients = self.gradients();
+        output.timings = self.run(charges, Duration::ZERO, |values, pool| {
+            unpack_output(values, gradients, pool, output);
+        })?;
+        Ok(())
+    }
+
+    /// Evaluates the potentials, and the gradients if built with them, of the m charge
+    /// vectors `charges` at every target (Phase 6 T5, C6.3; [Several charge
+    /// vectors](self#several-charge-vectors-phase-6-t5)): `charges[v][i]` is the charge of
+    /// source i of [`FmmBuilder::build`] in vector v, on this rank, for the m =
+    /// [`FmmBuilder::vectors`] of the build. Vector v of the [`OutputMany`] equals
+    /// [`evaluate`](Self::evaluate) of `charges[v]` on an FMM built with one vector and the
+    /// same settings, bit for bit; with m = 1 it is `evaluate`. Allocates the output:
+    /// [`evaluate_many_into`](Self::evaluate_many_into) a fresh [`OutputMany`], with the
+    /// same bits.
+    ///
+    /// # Collective operation
+    ///
+    /// As [`evaluate`](Self::evaluate): every rank must call it, with m vectors.
+    ///
+    /// # Errors
+    ///
+    /// [`FmmError::VectorCount`] on a rank that does not pass m vectors,
+    /// [`FmmError::ChargesLength`] on one with a vector that does not have one entry per
+    /// source, [`FmmError::SourceType`] on an FMM built for dipoles,
+    /// [`FmmError::OtherRank`] on the others; nothing is evaluated. The device
+    /// errors of [`evaluate`](Self::evaluate).
+    pub fn evaluate_many(&mut self, charges: &[&[T]]) -> Result<OutputMany<T>, FmmError> {
+        let mut output = OutputMany {
+            vectors: 0,
+            potential: Vec::new(),
+            gradient: None,
+            timings: StageTimings::default(),
+        };
+        self.evaluate_many_into(charges, &mut output)?;
+        Ok(output)
+    }
+
+    /// [`evaluate_many`](Self::evaluate_many) into `output`, whose buffers are reused, as
+    /// [`evaluate_into`](Self::evaluate_into) reuses an [`Output`]: the same bits; every
+    /// buffer rewritten to the m vectors' values (resized if needed), the timings to this
+    /// evaluation's, and on an error `output` left as it was.
+    ///
+    /// # Collective operation
+    ///
+    /// As [`evaluate`](Self::evaluate).
+    ///
+    /// # Errors
+    ///
+    /// As [`evaluate_many`](Self::evaluate_many), agreed on every rank alike.
+    pub fn evaluate_many_into(
+        &mut self,
+        charges: &[&[T]],
+        output: &mut OutputMany<T>,
+    ) -> Result<(), FmmError> {
+        let local = self.check_charges(charges.len(), charges.iter().map(|c| c.len()));
+        agree(self.evaluator.comm(), local)?;
+        let (m, gradients) = (self.vectors, self.gradients());
+        let pool = self.evaluator.operator().engine.host().pool().cloned();
+        // The caller's vectors packed point-major for the forward move, which then moves m
+        // values per source (with one vector the caller's slice itself). Timed with the
+        // forward.
+        let start = Instant::now();
+        let mut packed = std::mem::take(&mut self.packed);
+        if m > 1 {
+            pack_charges(charges, pool.as_deref(), &mut packed);
+        }
+        let pack = start.elapsed();
+        let input = if m > 1 { &packed[..] } else { charges[0] };
+        let result = self.run(input, pack, |values, pool| {
+            let buffers = (&mut output.potential, &mut output.gradient);
+            unpack_output_many(values, (gradients, m), pool, buffers);
+        });
+        self.packed = packed;
+        output.timings = result?;
+        output.vectors = m;
+        Ok(())
+    }
+
+    /// Evaluates the potentials, and the gradients if built with them, of the sources
+    /// `sources` at every target (Phase 6 T8, C6.4; [Dipoles](self#dipoles-phase-6-t8)):
+    /// charges, dipole moments or both, as [`FmmBuilder::sources`] fixed at build, each in
+    /// the caller's source order on this rank (`charges[i]`, `dipoles[i]` of source i of
+    /// [`FmmBuilder::build`]). For an FMM built for charges, `Sources::charges(c)` gives
+    /// [`evaluate`](Self::evaluate)`(c)` bit for bit. Allocates the output:
+    /// [`evaluate_sources_into`](Self::evaluate_sources_into) a fresh [`Output`], with the
+    /// same bits.
+    ///
+    /// # Collective operation
+    ///
+    /// As [`evaluate`](Self::evaluate).
+    ///
+    /// # Errors
+    ///
+    /// [`FmmError::SourceType`] on a rank whose `sources` does not hold exactly the
+    /// strengths of the build's source type, [`FmmError::ChargesLength`] or
+    /// [`FmmError::DipolesLength`] on one whose slices do not have one entry per source,
+    /// [`FmmError::OtherRank`] on the others; nothing is evaluated. The device errors of
+    /// [`evaluate`](Self::evaluate).
+    pub fn evaluate_sources(&mut self, sources: &Sources<'_, T>) -> Result<Output<T>, FmmError> {
+        let mut output = Output {
+            potential: Vec::new(),
+            gradient: None,
+            timings: StageTimings::default(),
+        };
+        self.evaluate_sources_into(sources, &mut output)?;
+        Ok(output)
+    }
+
+    /// [`evaluate_sources`](Self::evaluate_sources) into `output`, whose buffers are
+    /// reused as [`evaluate_into`](Self::evaluate_into) reuses them: the same bits.
+    ///
+    /// # Collective operation
+    ///
+    /// As [`evaluate`](Self::evaluate).
+    ///
+    /// # Errors
+    ///
+    /// As [`evaluate_sources`](Self::evaluate_sources), agreed on every rank alike.
+    pub fn evaluate_sources_into(
+        &mut self,
+        sources: &Sources<'_, T>,
+        output: &mut Output<T>,
+    ) -> Result<(), FmmError> {
+        let local = self.check_sources(sources);
+        agree(self.evaluator.comm(), local)?;
+        let gradients = self.gradients();
+        let pool = self.evaluator.operator().engine.host().pool().cloned();
+        // The strengths point-major for the forward move: the charges or the moments as
+        // they are, both packed four per source (timed with the forward).
+        let start = Instant::now();
+        let mut packed = std::mem::take(&mut self.packed);
+        let input: &[T] = match (sources.charges, sources.dipoles) {
+            (Some(charges), None) => charges,
+            (None, Some(dipoles)) => dipoles.as_flattened(),
+            (Some(charges), Some(dipoles)) => {
+                pack_sources(charges, dipoles, pool.as_deref(), &mut packed);
+                &packed
+            }
+            (None, None) => unreachable!("`check_sources` refuses no strengths"),
+        };
+        let pack = start.elapsed();
+        let result = self.run(input, pack, |values, pool| {
+            unpack_output(values, gradients, pool, output);
+        });
+        self.packed = packed;
+        output.timings = result?;
+        Ok(())
+    }
+
+    /// The local outcome of [`evaluate_sources`](Self::evaluate_sources)'s input check,
+    /// which the caller agrees on every rank: a kept device error, strengths other than
+    /// the build's source type ([`FmmError::SourceType`]), or a slice whose length is not
+    /// this rank's number of sources.
+    fn check_sources(&self, sources: &Sources<'_, T>) -> Result<(), FmmError> {
+        let expected = self.points.sources.nsent();
+        if let Some(reason) = &self.device_error {
+            return Err(FmmError::Device(reason.clone()));
+        }
+        let actual = sources.source_type();
+        if actual != Some(self.source_type) {
+            return Err(FmmError::SourceType {
+                expected: self.source_type,
+                actual,
+            });
+        }
+        if let Some(charges) = sources.charges
+            && charges.len() != expected
+        {
+            return Err(FmmError::ChargesLength {
+                expected,
+                actual: charges.len(),
+            });
+        }
+        if let Some(dipoles) = sources.dipoles
+            && dipoles.len() != expected
+        {
+            return Err(FmmError::DipolesLength {
+                expected,
+                actual: dipoles.len(),
+            });
+        }
+        Ok(())
+    }
+
+    /// The local outcome of an evaluation's input check, which the caller agrees on every
+    /// rank: a kept device error, an FMM built for other sources than charges
+    /// ([`FmmError::SourceType`]), `vectors` other than the build's
+    /// ([`FmmError::VectorCount`]), or a vector whose length (of `lengths`) is not this
+    /// rank's number of sources ([`FmmError::ChargesLength`]).
+    fn check_charges(
+        &self,
+        vectors: usize,
+        lengths: impl IntoIterator<Item = usize>,
+    ) -> Result<(), FmmError> {
+        let expected = self.points.sources.nsent();
+        if let Some(reason) = &self.device_error {
+            Err(FmmError::Device(reason.clone()))
+        } else if self.source_type != SourceType::Charges {
+            Err(FmmError::SourceType {
+                expected: self.source_type,
+                actual: Some(SourceType::Charges),
+            })
+        } else if vectors != self.vectors {
+            Err(FmmError::VectorCount {
+                expected: self.vectors,
+                actual: vectors,
+            })
+        } else if let Some(actual) = lengths.into_iter().find(|&len| len != expected) {
+            Err(FmmError::ChargesLength { expected, actual })
+        } else {
+            Ok(())
+        }
+    }
+
+    /// One evaluation of the checked charges `charges` (m per source, point-major, in the
+    /// caller's order; the caller agreed the input): the forward move, the charge load,
+    /// the stages, the output pass and the backward move into the returned values (o m per
+    /// target in the caller's order), which `unpack` copies into the caller's output on
+    /// the pool. `pack` is the time the caller spent packing the charges, part of
+    /// [`StageTimings::forward_charges`].
+    fn run(
+        &mut self,
+        charges: &[T],
+        pack: Duration,
+        unpack: impl FnOnce(&[T], Option<&ThreadPool>),
+    ) -> Result<StageTimings, FmmError> {
+        // The pool of the charge load and the output pass: the operator's, unless it runs
+        // serially (Phase 4S T9).
+        let pool = self.evaluator.operator().engine.host().pool().cloned();
+        let mut timings = StageTimings::default();
+        // The charges to the ranks that own their sources, in leaf order (Phase 5 T6): on
+        // the host path into the reused buffer, on a device into a fresh one that the
+        // upload takes over without a copy (Phase 4S T11).
+        // w strengths per source: the m charges, or one set of the source type's (Phase 6
+        // T8); the output carries m vectors.
+        let (start, m, w) = (Instant::now(), self.vectors, self.strengths);
+        let mut upload = if self.evaluator.operator().engine.is_device() {
+            Some(self.points.sources.forward(charges, w))
+        } else {
+            self.points
+                .sources
+                .forward_into(charges, w, &mut self.charges);
+            None
+        };
+        timings.forward_charges = pack + start.elapsed();
+        let start = Instant::now();
+        // Dipole moments are scaled into units of their leaf (CONVENTIONS §3.13, "Source
+        // chunks"); charges are copied as they are.
+        let moments = (self.source_type != SourceType::Charges).then(|| StrengthLayout {
+            sources: self.source_type,
+            radii: &self.points.radii,
+        });
+        if self.host_sources {
+            load_source_charges(
+                self.evaluator.local_sources_mut(),
+                &self.points.source_leaves,
+                upload.as_deref().unwrap_or(&self.charges),
+                (w, moments),
+                pool.as_deref(),
+            );
+        }
+        if let Some(upload) = &mut upload {
+            // The device takes the strengths with the moments scaled as the host's chunks
+            // hold them (Phase 6 T8d), and the leaves the source exchange sends take them
+            // from the host store, which the exchange reads (Phase 5 T8,
+            // docs/design/distributed-fmm.md §7.1).
+            if let Some(layout) = moments {
+                scale_moments(upload, &self.points.source_leaves, layout, pool.as_deref());
+            }
+            for &j in &self.sent_leaves {
+                let points = self.points.source_leaves.range(j as usize);
+                let chunk = self.evaluator.sources_mut(j as usize);
+                write_leaf_strengths(
+                    &mut chunk[3 * points.len()..],
+                    &upload[w * points.start..w * points.end],
+                    w,
+                    moments.map(|layout| (layout.sources, None)),
+                );
+            }
+        }
+        timings.load = start.elapsed();
+
+        let sync = self.synchronous_stages;
+        let evaluator = &mut self.evaluator;
+        evaluator.reset();
+        evaluator.operator_mut().kinds.begin();
+        #[cfg(feature = "gpu")]
+        if let ExecOperator {
+            engine: Engine::Device(driver),
+            kinds,
+            ..
+        } = evaluator.operator_mut()
+        {
+            // With synchronous kind timings, the first level call starts on an idle
+            // device: its own sync, beside that of `synchronous_stages` (each documents it).
+            let sync_kinds = kinds.timings.mode == KindTiming::Synchronous;
+            let upload = upload.expect("a device evaluation forwards into a fresh buffer");
+            timings.load += timed(|| {
+                driver.begin_evaluation(upload);
+                if sync {
+                    driver.sync();
+                }
+                if sync_kinds {
+                    driver.sync();
+                }
+            });
+        }
+        // A stage with device work runs in a timing window (`device_timestamps`); the
+        // exchanges have none.
+        let mut stage = |device: Option<DeviceStage>,
+                         run: &mut dyn FnMut(&mut FmmEvaluator<'o, C, T>)| {
+            timed(|| {
+                if device.is_some() {
+                    evaluator.operator_mut().engine.open_stage();
+                }
+                run(evaluator);
+                if let Some(device) = device {
+                    evaluator.operator_mut().engine.close_stage(device);
+                }
+                if sync {
+                    evaluator.operator_mut().engine.sync();
+                }
+            })
+        };
+        if self.overlap {
+            // The overlapped stages (Phase 5 T9): each part named after the blocking stage
+            // it replaces, the exchanges' parts being what the stage spent outside the
+            // level calls (`OverlapTimes`).
+            let near = stage(Some(DeviceStage::UpwardLocal), &mut |e| {
+                e.exchange_sources_and_upward_local();
+            });
+            let mut overlap = OverlapTimes::default();
+            let far = stage(Some(DeviceStage::Downward), &mut |e| {
+                e.far_field();
+                overlap = e.overlap_times();
+            });
+            timings.upward_local = overlap.upward_local;
+            timings.exchange_sources = near.saturating_sub(overlap.upward_local);
+            timings.upward_global = overlap.upward_global;
+            timings.downward = overlap.downward;
+            timings.exchange_multipoles =
+                far.saturating_sub(overlap.upward_global + overlap.downward);
+            timings.overlap = Some(overlap);
+        } else {
+            timings.exchange_sources = stage(None, &mut |e| e.exchange_sources());
+            timings.upward_local = stage(Some(DeviceStage::UpwardLocal), &mut |e| e.upward_local());
+            timings.upward_global = stage(Some(DeviceStage::UpwardGlobal), &mut |e| {
+                e.upward_global();
+            });
+            timings.exchange_multipoles = stage(None, &mut |e| e.exchange_multipoles());
+            timings.downward = stage(Some(DeviceStage::Downward), &mut |e| e.downward());
+        }
+        timings.evaluate_leaves = stage(Some(DeviceStage::EvaluateLeaves), &mut |e| {
+            e.evaluate_leaves();
+        });
+
+        // The reduction and the replicated top, from the events (Phase 5S T6); with overlap
+        // the multipole exchange is posted between `SendMultipoles` and the all-gather, so
+        // the all-gather's own time is the evaluator's.
+        let clock = self.evaluator.operator().clock;
+        timings.reduction = clock.reduction;
+        timings.replicated_top = clock.top_event
+            + timings
+                .overlap
+                .map_or(clock.top_gather, |overlap| overlap.top_gather);
+
+        // The output pass, on the rank that owns each target, in leaf order.
+        let start = Instant::now();
+        let gradients = self.gradients();
+        let ExecOperator { engine, kinds, .. } = self.evaluator.operator_mut();
+        match engine {
+            Engine::Host(_) => {
+                timings.kinds = kinds.timings();
+                let store = self.evaluator.target_output_store();
+                gather_output(
+                    store.as_slice(),
+                    store.point_offsets(),
+                    &self.points.outputs,
+                    (gradients, m),
+                    pool.as_deref(),
+                    &mut self.received_output,
+                );
+            }
+            #[cfg(feature = "gpu")]
+            Engine::Device(driver) => {
+                let failed = match timed_value(|| driver.read_output(), &mut timings.download) {
+                    Ok(DeviceOutput::LeafOrder { values, offsets }) => {
+                        gather_output(
+                            &values,
+                            offsets,
+                            &self.points.outputs,
+                            (gradients, m),
+                            pool.as_deref(),
+                            &mut self.received_output,
+                        );
+                        None
+                    }
+                    Ok(DeviceOutput::CallerOrder(values)) => {
+                        interleave_output(
+                            &values,
+                            (gradients, m),
+                            pool.as_deref(),
+                            &mut self.received_output,
+                        );
+                        None
+                    }
+                    Err(error) => Some(error.to_string()),
+                };
+                timings.device = driver.stage_timings();
+                // The call windows, read after the download, like the stage windows.
+                let on_device = kinds.resolve_windows();
+                timings.kinds = kinds.timings().filter(|_| on_device);
+                // A device error of any rank, at any sync of the evaluation (the
+                // mid-evaluation download on several ranks included), is agreed before the
+                // backward move: one all-reduce with a device on several ranks (Phase 5 T8,
+                // decision 12; design §7.5). Every rank finished the stages, so none waits.
+                let comm = self.evaluator.comm();
+                let ok = if comm.size() > 1 {
+                    let mut ok = false;
+                    comm.all_reduce_into(
+                        &failed.is_none(),
+                        &mut ok,
+                        SystemOperation::logical_and(),
+                    );
+                    ok
+                } else {
+                    failed.is_none()
+                };
+                if let Some(reason) = failed {
+                    self.device_error = Some(reason.clone());
+                    return Err(FmmError::Device(reason));
+                }
+                if !ok {
+                    return Err(FmmError::OtherRank);
+                }
+            }
+        }
+        timings.output = start.elapsed();
+
+        // The output back to the caller's ranks and order (Phase 5 T6).
+        let start = Instant::now();
+        let o = m * if gradients { 4 } else { 1 };
+        self.points
+            .targets
+            .backward_into(&self.received_output, o, &mut self.returned_output);
+        unpack(&self.returned_output, pool.as_deref());
+        timings.backward_output = start.elapsed();
+        Ok(timings)
+    }
+
+    /// Returns the octree.
+    pub fn octree(&self) -> &Octree<'o, C> {
+        &self.octree
+    }
+
+    /// Returns the plan: the box index and the interaction lists.
+    pub fn plan(&self) -> &Plan {
+        self.evaluator.plan()
+    }
+
+    /// Returns the operator: the host operator, or with a device backend the operator
+    /// of its host fallback.
+    pub fn operator(&self) -> &LaplaceOperator<T> {
+        self.evaluator.operator().engine.host()
+    }
+
+    /// Returns the backend the operators run on ([`FmmBuilder::backend`]).
+    pub fn backend(&self) -> Backend {
+        self.backend
+    }
+
+    /// Returns the refinement target the octree was built with
+    /// ([`FmmBuilder::max_points_per_leaf`], or [`default_max_points_per_leaf`]).
+    pub fn max_points_per_leaf(&self) -> usize {
+        self.max_points_per_leaf
+    }
+
+    /// Returns where `kind` runs: on the host for [`Backend::Host`]; with a device
+    /// backend as its device report says (from Phase 4 T10 every kind runs on the device
+    /// unless [`FmmBuilder::host_fallback`] names it).
+    pub fn placement(&self, kind: OperatorKind) -> Placement {
+        self.evaluator.operator().engine.placement(kind)
+    }
+
+    /// Returns the domain.
+    pub fn domain(&self) -> &Domain {
+        &self.domain
+    }
+
+    /// Returns the expansion degree p.
+    pub fn p(&self) -> usize {
+        self.operator().p()
+    }
+
+    /// Returns whether the coarse blocks were cut a second time, by modelled cost
+    /// ([`FmmBuilder::work_cut`], Phase 5S T7): on several ranks with the setting on.
+    pub fn work_cut(&self) -> bool {
+        self.work_cut
+    }
+
+    /// Returns whether the second cut moved blocks between the ranks: it ran
+    /// ([`work_cut`](Self::work_cut)) and its cut differed from the cut by points by a
+    /// gain of at least [`WORK_CUT_MIN_GAIN`].
+    pub fn recut(&self) -> bool {
+        self.recut
+    }
+
+    /// Returns the constants of the modelled cost ([`FmmBuilder::cost_model`]), those the
+    /// second cut weighed the blocks with when it ran.
+    pub fn cost_model(&self) -> CostModel {
+        self.cost_model
+    }
+
+    /// Returns the near rule ([`FmmBuilder::near_rule`], Phase 6 T12): the setting, its
+    /// crossovers [N_W, N_X] and the W and X pairs between leaves of this rank's plan with
+    /// those it converted to near pairs.
+    pub fn near_rule(&self) -> NearRuleReport {
+        self.near_rule
+    }
+
+    /// Returns this rank's work by operator kind on its plan ([`KindCounts`], the units of
+    /// the [`cost`] module, M2L in the unit of [`cost_model`](Self::cost_model)), from the
+    /// plan's views and the points of the leaves (the
+    /// ghost leaves' from the source exchange), without communication. For reports: with
+    /// [`cost_model`](Self::cost_model) it gives the modelled cost of the rank
+    /// ([`CostModel::cost`]), and with [`KindTiming::Synchronous`] the constants of a
+    /// machine (scale-out.md §6.1).
+    pub fn kind_counts(&self) -> KindCounts {
+        cost::work_counts_in(
+            self.evaluator.plan(),
+            self.octree.coarse_tree_leafs(),
+            self.evaluator.source_exchange().leaf_counts(),
+            &self.points.target_leaves.counts,
+            self.cost_model.m2l_unit(),
+        )
+        .total()
+    }
+
+    /// Returns the resolved strategy, never [`M2lStrategy::Auto`], for which the tables
+    /// were built: a named strategy; on the host `Auto` by the rule of
+    /// [`M2lStrategy::resolve_on_node`] (p and the precision), the same on every rank;
+    /// with a device backend and M2L on the device, `Auto` by the device path's choice (Phase 4 T12: from the tuning cache, tuned at build, or the
+    /// static rule of the `tune` module, feature `gpu`). [`Fmm::threading`] gives the
+    /// reason ([`ThreadingReport::m2l`]).
+    pub fn strategy(&self) -> M2lStrategy {
+        self.strategy
+    }
+
+    /// Returns whether the output holds gradients.
+    pub fn gradients(&self) -> bool {
+        self.operator().gradients()
+    }
+
+    /// Returns the sources of every evaluation ([`FmmBuilder::sources`]; Phase 6 T8).
+    pub fn source_type(&self) -> SourceType {
+        self.source_type
+    }
+
+    /// Returns the number of charge vectors of every evaluation ([`FmmBuilder::vectors`]).
+    pub fn vectors(&self) -> usize {
+        self.vectors
+    }
+
+    /// Returns the P2P kernel as it runs: [`P2pChoice::Reference`], or
+    /// [`P2pChoice::Isa`] with the ISA of the kernel, for [`P2pChoice::Auto`] the one
+    /// it picked on this machine. For reports, next to [`threading`](Self::threading).
+    pub fn p2p_kernel(&self) -> P2pChoice {
+        self.operator().p2p_kernel()
+    }
+
+    /// Returns the number of sources this rank passed to [`FmmBuilder::build`], the length
+    /// of its charge vector.
+    pub fn nsources(&self) -> usize {
+        self.points.sources.nsent()
+    }
+
+    /// Returns the number of targets this rank passed to [`FmmBuilder::build`], the length
+    /// of its output.
+    pub fn ntargets(&self) -> usize {
+        self.points.targets.nsent()
+    }
+
+    /// Returns the number of sources and of targets this rank owns: those in its local
+    /// leaves, wherever the caller passed them (Phase 5 T6). On one rank,
+    /// ([`nsources`](Self::nsources), [`ntargets`](Self::ntargets)).
+    pub fn owned_points(&self) -> (usize, usize) {
+        (
+            self.points.sources.nreceived(),
+            self.points.targets.nreceived(),
+        )
+    }
+
+    /// Returns the number of levels, the global maximum level plus one.
+    pub fn nlevels(&self) -> usize {
+        self.plan().nlevels()
+    }
+
+    /// Returns the number of local leaves, on every level.
+    pub fn nleaves(&self) -> usize {
+        self.points.radii.len()
+    }
+
+    /// Returns the number of sources in each local leaf, in leaf order
+    /// (`tetraleaf_plan::index::LeafNumbering`): the sources this rank owns, from every rank.
+    pub fn source_counts(&self) -> &[usize] {
+        &self.points.source_leaves.counts
+    }
+
+    /// Returns the number of targets in each local leaf, in leaf order: the targets this
+    /// rank owns, from every rank.
+    pub fn target_counts(&self) -> &[usize] {
+        &self.points.target_leaves.counts
+    }
+
+    /// Returns the largest number of sources in a leaf, over all ranks.
+    pub fn max_leaf_points(&self) -> usize {
+        self.max_leaf_points
+    }
+
+    /// Returns the number of pairs in each interaction list on this rank, over all
+    /// levels.
+    pub fn list_sizes(&self) -> ListSizes {
+        self.plan()
+            .levels()
+            .iter()
+            .fold(ListSizes::default(), |sizes, lists| ListSizes {
+                u: sizes.u + lists.near().len() - lists.near().nrows(),
+                v: sizes.v + lists.v().len(),
+                w: sizes.w + lists.w().len(),
+                x: sizes.x + lists.x().len(),
+            })
+    }
+
+    /// Returns what the evaluator's exchanges move on this rank per evaluation
+    /// ([`ExchangeSizes`], Phase 5 T8), from their index lists.
+    pub fn exchange_sizes(&self) -> ExchangeSizes {
+        let sources = self.evaluator.source_exchange();
+        let multipoles = self.evaluator.multipole_exchange();
+        let top = self.evaluator.top_exchange();
+        let reduction = self.evaluator.reduction_exchange();
+        let mut sent_leaves = sources.send_leaves().to_vec();
+        sent_leaves.sort_unstable();
+        sent_leaves.dedup();
+        let nlevels = multipoles.nlevels();
+        let reduction_level = |boxes: &dyn Fn(usize) -> usize| -> Vec<usize> {
+            (0..nlevels)
+                .map(|l| {
+                    if reduction.levels().contains(&l) {
+                        boxes(l)
+                    } else {
+                        0
+                    }
+                })
+                .collect()
+        };
+        ExchangeSizes {
+            ghost_sources: sources.ghost_counts().iter().sum(),
+            sent_sources: sources
+                .send_leaves()
+                .iter()
+                .map(|&j| sources.leaf_counts()[j as usize])
+                .sum(),
+            sent_leaves: sent_leaves.len(),
+            sent_reduction: reduction_level(&|l| reduction.send_boxes(l).len()),
+            received_reduction: reduction_level(&|l| reduction.receive_boxes(l).len()),
+            sent_top: top.sent_keys().len(),
+            received_top: top.received_keys().len(),
+            sent_boxes: (0..nlevels)
+                .map(|l| multipoles.send_boxes(l).len())
+                .collect(),
+            received_boxes: (0..nlevels)
+                .map(|l| multipoles.receive_boxes(l).len())
+                .collect(),
+        }
+    }
+
+    /// Returns what the evaluator's exchanges send and receive on this rank per
+    /// evaluation, in messages and values ([`ExchangeTraffic`], Phase 5 T9), from their
+    /// index lists and counts.
+    pub fn exchange_traffic(&self) -> ExchangeTraffic {
+        let multipoles = self.evaluator.multipole_exchange();
+        let reduction = self.evaluator.reduction_exchange();
+        let top = self.evaluator.top_exchange();
+        let top_sent: usize = top.sent_keys().map(|r| top.chunk(r).len()).sum();
+        let mut neighbours: Vec<usize> = (0..multipoles.nlevels())
+            .flat_map(|l| multipoles.sources(l))
+            .collect();
+        neighbours.sort_unstable();
+        neighbours.dedup();
+        let levels = 0..multipoles.nlevels();
+        let destinations = levels.clone().map(|l| multipoles.destinations(l)).collect();
+        let fan_out = levels
+            .clone()
+            .map(|l| multipoles.fan_out(l))
+            .max()
+            .unwrap_or(0);
+        let depth = levels
+            .clone()
+            .map(|l| multipoles.depth(l))
+            .max()
+            .unwrap_or(0);
+        let forwarded = levels.map(|l| multipoles.forwarded(l)).sum();
+        ExchangeTraffic {
+            sources: self.evaluator.source_exchange().traffic(),
+            reduction: (0..multipoles.nlevels())
+                .map(|l| {
+                    if reduction.levels().contains(&l) {
+                        reduction.traffic(l)
+                    } else {
+                        Traffic::default()
+                    }
+                })
+                .collect(),
+            multipoles: (0..multipoles.nlevels())
+                .map(|l| multipoles.traffic(l))
+                .collect(),
+            multipole_neighbours: neighbours,
+            multipole_destinations: destinations,
+            multipole_fan_out: fan_out,
+            multipole_depth: depth,
+            multipole_forwarded: forwarded,
+            top_threshold: top.threshold(),
+            top_sent,
+            top_received: top.gathered().len() - top_sent,
+        }
+    }
+
+    /// Returns what the table cache did for each table family, in the order of
+    /// [`Tables::kinds`]; empty without a cache.
+    pub fn cache_outcomes(&self) -> &[(TableKind, CacheOutcome)] {
+        &self.cache_outcomes
+    }
+
+    /// Returns the wall time of each step of the build.
+    pub fn build_timings(&self) -> BuildTimings {
+        self.build_timings
+    }
+
+    /// Returns the threading report: the rayon threads, the MPI threading level and the
+    /// BLAS thread variables as `build` read them ([`threading`](crate::threading)), and
+    /// the ranks per node with the M2L strategy's reason (Phase 5N T4).
+    pub fn threading(&self) -> &ThreadingReport {
+        &self.threading
+    }
+
+    /// Sets how the next evaluations time their level calls by operator kind
+    /// ([`FmmBuilder::kind_timings`], [`KindTiming`]; Phase 4S T5): the same build, for
+    /// comparisons and for timing the evaluation and its kinds in separate evaluations
+    /// without a second build. The output is the same bit for bit in every mode. Local:
+    /// no collective.
+    ///
+    /// # Errors
+    ///
+    /// [`SettingsError::KindTimingUnsupported`] for [`KindTiming::Device`] where the
+    /// device does not time on itself (the host, the CPU runtime); the mode is unchanged.
+    pub fn set_kind_timings(&mut self, mode: KindTiming) -> Result<(), SettingsError> {
+        let kinds = &mut self.evaluator.operator_mut().kinds;
+        check_kind_timing(mode, self.backend, kinds.on_device)?;
+        kinds.timings.mode = mode;
+        Ok(())
+    }
+
+    /// How the multipole exchange routes the multipoles ([`FmmBuilder::multipole_routing`]).
+    pub fn multipole_routing(&self) -> MultipoleRouting {
+        self.evaluator.multipole_exchange().routing()
+    }
+
+    /// Whether evaluations overlap the exchanges with local work ([`FmmBuilder::overlap`]).
+    pub fn overlap(&self) -> bool {
+        self.overlap
+    }
+
+    /// Sets whether the next evaluations overlap the exchanges with local work
+    /// ([`FmmBuilder::overlap`]), on the same build: the output is the same bit for bit.
+    /// Every rank must set the same value before its next evaluation.
+    pub fn set_overlap(&mut self, on: bool) {
+        self.overlap = on;
+    }
+
+    /// Sets the multiply–add mode of the batched M2L for the next evaluations
+    /// ([`FmmBuilder::m2l_mul_add`]), on the same build, and in the threading report.
+    /// Nothing changes under another strategy. Every rank must set the same mode before
+    /// its next evaluation.
+    pub fn set_m2l_mul_add(&mut self, mul_add: MulAdd) {
+        let host = self.evaluator.operator_mut().engine.host_mut();
+        host.set_m2l_mul_add(mul_add);
+        self.threading.m2l_kernel = host
+            .m2l_kernel()
+            .map(|kernel| (kernel.isa(), kernel.mul_add()));
+    }
+
+    /// How the plane-wave M2L splits merge and shift over the pool
+    /// ([`FmmBuilder::plane_wave_split`]).
+    pub fn plane_wave_split(&self) -> PlaneWaveSplit {
+        self.evaluator.operator().engine.host().plane_wave_split()
+    }
+
+    /// Sets the split of [`FmmBuilder::plane_wave_split`] for the next evaluations, on the
+    /// same build: the output is the same bit for bit. Every rank may set its own.
+    pub fn set_plane_wave_split(&mut self, split: PlaneWaveSplit) {
+        self.evaluator
+            .operator_mut()
+            .engine
+            .host_mut()
+            .set_plane_wave_split(split);
+    }
+
+    /// The (vector, frame) passes of the host's plane-wave level calls whose merge and
+    /// shift ran by child since the build (Helmholtz CH6.2i); for the tests.
+    #[doc(hidden)]
+    pub fn plane_wave_by_child(&self) -> usize {
+        self.evaluator
+            .operator()
+            .engine
+            .host()
+            .plane_wave_by_child()
+    }
+
+    /// With `serial`, runs the next evaluations on the calling thread even if the FMM
+    /// has a pool ([`LaplaceOperator::set_serial`]): the serial path of the same build,
+    /// for comparisons and timings. The output is the same bit for bit.
+    pub fn set_serial(&mut self, serial: bool) {
+        self.evaluator
+            .operator_mut()
+            .engine
+            .host_mut()
+            .set_serial(serial);
+    }
+
+    /// The multipoles and locals of the last evaluation, in the `LevelBuffers` layout of
+    /// `tetraleaf-plan` (level after level, (p + 1)² values per box, m (p + 1)² with m charge
+    /// vectors, the vectors one after the other), for tests and reports: copies of the
+    /// evaluator's stores on the host path; with a device backend, downloaded from the
+    /// device (two downloads, counted toward the evaluation's device counters until the
+    /// next evaluation). The values are unscaled (CONVENTIONS §3.7).
+    ///
+    /// # Errors
+    ///
+    /// [`FmmError::Device`] if a download fails.
+    pub fn expansions(&mut self) -> Result<(Vec<T>, Vec<T>), FmmError> {
+        match &mut self.evaluator.operator_mut().engine {
+            Engine::Host(_) => Ok((
+                self.evaluator.multipoles().as_slice().to_vec(),
+                self.evaluator.locals().as_slice().to_vec(),
+            )),
+            #[cfg(feature = "gpu")]
+            Engine::Device(driver) => driver
+                .download_expansions()
+                .map_err(|error| FmmError::Device(error.to_string())),
+        }
+    }
+
+    /// Returns where the output pass runs ([`FmmBuilder::output_pass`], Phase 4S T9): on
+    /// the host for [`Backend::Host`]; with a device backend as its device report says
+    /// (by default on the device where it does f64 arithmetic, the CPU runtime and CUDA,
+    /// and on the host on Metal).
+    pub fn output_pass(&self) -> Placement {
+        match &self.evaluator.operator().engine {
+            Engine::Host(_) => Placement::Host,
+            #[cfg(feature = "gpu")]
+            Engine::Device(driver) => driver.report().output_pass,
+        }
+    }
+
+    /// The test oracle of the output pass (Phase 4S T9), for tests only: φ and ∇φ of the
+    /// last evaluation by the pass before T9, one serial loop over the leaves that divides
+    /// each value of the leaf-ordered target output by 4π r_t or 4π r_t² in f64 and
+    /// scatters it into the received order of the owned targets, then moved to the caller's
+    /// ranks and order by the targets' `Redistribution`, φ and ∇φ in separate moves (Phase
+    /// 5 T6). On the host it reads the evaluator's target output; with a device backend it
+    /// downloads the device's (one download, counted toward the evaluation's device
+    /// counters until the next evaluation). The output of [`evaluate`](Self::evaluate)
+    /// equals it bit for bit, on every backend and with either [`OutputPass`]. Before the
+    /// first evaluation it holds zeros. Its timings are zero. With several charge vectors
+    /// it is [`reference_output_many`](Self::reference_output_many)'s.
+    ///
+    /// # Collective operation
+    ///
+    /// Every rank must call it: the backward of the targets' `Redistribution`, point to
+    /// point along its routes (twice with gradients, per vector); with a device backend
+    /// first one all-reduce, which agrees the download.
+    ///
+    /// # Errors
+    ///
+    /// [`FmmError::Device`] if the download fails, on that rank, and
+    /// [`FmmError::OtherRank`] on the others.
+    ///
+    /// # Panics
+    ///
+    /// If the FMM was built with more than one charge vector.
+    #[doc(hidden)]
+    pub fn reference_output(&mut self) -> Result<Output<T>, FmmError> {
+        assert_eq!(self.vectors, 1, "an FMM of one charge vector");
+        let output = self.reference_output_many()?;
+        Ok(Output {
+            potential: output.potential,
+            gradient: output.gradient,
+            timings: StageTimings::default(),
+        })
+    }
+
+    /// [`reference_output`](Self::reference_output) of every charge vector (Phase 6 T5),
+    /// for tests only: the pass before T9 vector by vector, each vector's φ and ∇φ moved
+    /// back in their own moves. The output of [`evaluate_many`](Self::evaluate_many)
+    /// equals it bit for bit.
+    ///
+    /// # Collective operation
+    ///
+    /// As [`reference_output`](Self::reference_output).
+    ///
+    /// # Errors
+    ///
+    /// As [`reference_output`](Self::reference_output).
+    #[doc(hidden)]
+    pub fn reference_output_many(&mut self) -> Result<OutputMany<T>, FmmError> {
+        let (gradients, m) = (self.gradients(), self.vectors);
+        let vectors = match &mut self.evaluator.operator_mut().engine {
+            Engine::Host(_) => scaled_output(
+                self.evaluator.target_output_store(),
+                &self.points.target_leaves,
+                &self.points.radii,
+                (gradients, m),
+            ),
+            #[cfg(feature = "gpu")]
+            Engine::Device(driver) => {
+                let store = driver
+                    .download_target_output()
+                    .map_err(|error| FmmError::Device(error.to_string()));
+                let store = agree(self.evaluator.comm(), store)?;
+                scaled_output(
+                    &store,
+                    &self.points.target_leaves,
+                    &self.points.radii,
+                    (gradients, m),
+                )
+            }
+        };
+        let mut output = OutputMany {
+            vectors: m,
+            potential: Vec::new(),
+            gradient: gradients.then(Vec::new),
+            timings: StageTimings::default(),
+        };
+        for (potential, gradient) in vectors {
+            output
+                .potential
+                .extend(self.points.targets.backward(&potential, 1));
+            if let (Some(all), Some(gradient)) = (output.gradient.as_mut(), gradient) {
+                let flat = self.points.targets.backward(gradient.as_flattened(), 3);
+                all.extend_from_slice(flat.as_chunks::<3>().0);
+            }
+        }
+        Ok(output)
+    }
+}
+
+/// The device path's reports (feature `gpu`).
+#[cfg(feature = "gpu")]
+impl<'o, T, C> Fmm<'o, T, C>
+where
+    T: Stored + SimdScalar + Equivalence + Default,
+    C: CommunicatorCollectives,
+{
+    /// With a device backend: the device, the placement of every operator kind, the
+    /// tables on the device and the memory ([`DeviceReport`]); `None` on the host.
+    pub fn device_report(&self) -> Option<&DeviceReport> {
+        match &self.evaluator.operator().engine {
+            Engine::Device(driver) => Some(driver.report()),
+            Engine::Host(_) => None,
+        }
+    }
+
+    /// With a device backend: the transfers, launches and syncs of the build and of the
+    /// last evaluation ([`DeviceCounters`]); `None` on the host.
+    pub fn device_counters(&self) -> Option<DeviceCounters> {
+        match &self.evaluator.operator().engine {
+            Engine::Device(driver) => Some(driver.counters()),
+            Engine::Host(_) => None,
+        }
+    }
+
+    /// A test hook (Phase 5 T8, decision 12): with a device backend, the next evaluation
+    /// fails on this rank with a device error at its mid-evaluation sync (the download of
+    /// the sent multipoles, `HostData::SendMultipoles`), which every rank then agrees:
+    /// this rank returns [`FmmError::Device`], the others [`FmmError::OtherRank`], from that
+    /// evaluation on. Nothing on the host.
+    #[doc(hidden)]
+    pub fn inject_device_error(&mut self) {
+        if let Engine::Device(driver) = &mut self.evaluator.operator_mut().engine {
+            driver.inject_error();
+        }
+    }
+
+    /// With a device backend: downloads every plan view, the geometry and the index
+    /// arrays from the device, for tests and reports ([`ViewsImage`]); `None` on the
+    /// host. Its transfers count toward the evaluation counters until the next
+    /// evaluation.
+    ///
+    /// # Errors
+    ///
+    /// [`FmmError::Device`] if a download fails.
+    pub fn download_device_views(&mut self) -> Option<Result<ViewsImage, FmmError>> {
+        match &mut self.evaluator.operator_mut().engine {
+            Engine::Device(driver) => Some(
+                driver
+                    .download_views()
+                    .map_err(|error| FmmError::Device(error.to_string())),
+            ),
+            Engine::Host(_) => None,
+        }
+    }
+}
+
+/// One vector's φ and, with gradients, ∇φ of every owned target ([`scaled_output`]).
+type VectorOutput<T> = (Vec<T>, Option<Vec<[T; 3]>>);
+
+/// The target output `store`, scaled (CONVENTIONS §3.13, "Output") and in the received
+/// order of the owned targets `targets` (since Phase 5 T6; the caller's order before),
+/// with r_t of every local leaf in `radii`, for each of the m charge vectors (Phase 6 T5;
+/// the store's layout of CONVENTIONS §3.13, "Several charge vectors"): the output pass
+/// before Phase 4S T9, one serial loop over the leaves into zeroed vectors, kept as the
+/// test oracle of [`gather_output`] and [`interleave_output`] ([`Fmm::reference_output`]).
+fn scaled_output<T: SimdScalar + Default>(
+    store: &LeafStore<T>,
+    targets: &LeafRanges,
+    radii: &[f64],
+    (gradients, m): (bool, usize),
+) -> Vec<VectorOutput<T>> {
+    let ntargets = targets.len();
+    (0..m)
+        .map(|v| {
+            let mut potential = vec![T::zero(); ntargets];
+            let mut gradient = gradients.then(|| vec![[T::zero(); 3]; ntargets]);
+            for (j, &r) in radii.iter().enumerate() {
+                let points = targets.range(j);
+                let n = points.len();
+                let (phi_hat, g_hat) = store.chunk(j).split_at(m * n);
+                let (phi_hat, g_hat) = (&phi_hat[v * n..(v + 1) * n], g_hat);
+                let (phi_scale, g_scale) = (4.0 * PI * r, 4.0 * PI * r * r);
+                for (&phi, i) in phi_hat.iter().zip(points.clone()) {
+                    potential[i] = T::from_f64(RealScalar::to_f64(phi) / phi_scale);
+                }
+                if let Some(gradient) = gradient.as_mut() {
+                    let g_hat = &g_hat.as_chunks::<3>().0[v * n..(v + 1) * n];
+                    for (g, i) in g_hat.iter().zip(points) {
+                        gradient[i] = g.map(|gk| T::from_f64(RealScalar::to_f64(gk) / g_scale));
+                    }
+                }
+            }
+            (potential, gradient)
+        })
+        .collect()
+}
+
+/// Runs `stage` and returns its wall time.
+fn timed(stage: impl FnOnce()) -> Duration {
+    let start = Instant::now();
+    stage();
+    start.elapsed()
+}
+
+/// Runs `f`, stores its wall time in `time` and returns its value.
+#[cfg(feature = "gpu")]
+fn timed_value<R>(f: impl FnOnce() -> R, time: &mut Duration) -> R {
+    let start = Instant::now();
+    let value = f();
+    *time = start.elapsed();
+    value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// SplitMix64, for test data.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        }
+
+        fn below(&mut self, n: usize) -> usize {
+            (self.next() % n as u64) as usize
+        }
+
+        /// Uniform in [−1, 1).
+        fn value(&mut self) -> f64 {
+            (self.next() >> 11) as f64 / (1u64 << 52) as f64 - 1.0
+        }
+    }
+
+    /// The points of `n` points in `nleaves` local leaves, in leaf order: random leaves,
+    /// leaf 1 empty.
+    fn random_ranges(rng: &mut Rng, n: usize, nleaves: usize) -> LeafRanges {
+        let mut counts = vec![0; nleaves];
+        for _ in 0..n {
+            let j = rng.below(nleaves - 1);
+            counts[if j >= 1 { j + 1 } else { j }] += 1;
+        }
+        LeafRanges::new(&counts)
+    }
+
+    /// No pool for one thread, a pool of `threads` otherwise.
+    fn pool(threads: usize) -> Option<ThreadPool> {
+        (threads > 1).then(|| {
+            ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap()
+        })
+    }
+
+    fn bits<T: SimdScalar>(values: &[T]) -> Vec<u64> {
+        values
+            .iter()
+            .map(|&v| RealScalar::to_f64(v).to_bits())
+            .collect()
+    }
+
+    /// The charge load (Phase 4S T9; the charges in leaf order since Phase 5 T6; m vectors
+    /// since Phase 6 T5) at one and four threads, against a serial loop over the points,
+    /// bit for bit: the charges of the host's source store, the coordinates untouched.
+    /// 20,000 sources in 700 leaves, so that the load splits below [`LOAD_GRAIN`]; one and
+    /// three vectors.
+    #[test]
+    fn the_charge_load_is_bit_identical_at_any_thread_count() {
+        let mut rng = Rng(1);
+        let (n, nleaves) = (20_000, 700);
+        let sources = random_ranges(&mut rng, n, nleaves);
+        for m in [1, 3] {
+            let charges: Vec<f64> = (0..m * n).map(|_| rng.value()).collect();
+            let mut store = LeafStore::<f64>::new(&sources.counts, 3 + m);
+            for x in store.as_mut_slice() {
+                *x = rng.value();
+            }
+            // Point by point: vector v of point k of leaf j has the charge of owned source
+            // offsets[j] + k, point-major.
+            let mut want = store.clone();
+            let mut range = want.range_mut(0..nleaves);
+            for (j, chunk) in range.chunks_mut().enumerate() {
+                let count = sources.counts[j];
+                for k in 0..count {
+                    for v in 0..m {
+                        chunk[3 * count + m * k + v] = charges[m * (sources.offsets[j] + k) + v];
+                    }
+                }
+            }
+            for threads in [1, 4] {
+                let pool = pool(threads);
+                let mut got = store.clone();
+                load_source_charges(
+                    got.range_mut(0..nleaves),
+                    &sources,
+                    &charges,
+                    (m, None),
+                    pool.as_ref(),
+                );
+                assert_eq!(
+                    bits(got.as_slice()),
+                    bits(want.as_slice()),
+                    "{threads} threads, {m} vectors: the source store"
+                );
+            }
+        }
+    }
+
+    /// The packing of several charge vectors (Phase 6 T5) at one and four threads:
+    /// `packed[i m + v] = charges[v][i]`, into a buffer of another length.
+    #[test]
+    fn the_charges_are_packed_point_major() {
+        let mut rng = Rng(3);
+        let (m, n) = (5, 3001);
+        let vectors: Vec<Vec<f32>> = (0..m)
+            .map(|_| (0..n).map(|_| rng.value() as f32).collect())
+            .collect();
+        let charges: Vec<&[f32]> = vectors.iter().map(Vec::as_slice).collect();
+        for threads in [1, 4] {
+            let pool = pool(threads);
+            let mut packed = vec![0.0; 7];
+            pack_charges(&charges, pool.as_ref(), &mut packed);
+            assert_eq!(packed.len(), m * n);
+            for i in 0..n {
+                for v in 0..m {
+                    assert_eq!(packed[i * m + v].to_bits(), vectors[v][i].to_bits());
+                }
+            }
+        }
+    }
+
+    /// The output passes (Phase 4S T9) against the pass before T9 ([`scaled_output`]), bit
+    /// for bit, in the received order of the owned targets and its layout for the backward
+    /// move (Phase 5 T6): the host pass ([`gather_output`]) at one and four threads, and
+    /// the device pass's values interleaved ([`interleave_output`]); and the unpack after
+    /// the backward move ([`unpack_output`], [`unpack_output_many`]) into a fresh output
+    /// and into one of the wrong size and gradients; f32 and f64, gradients off and on,
+    /// one and three charge vectors (Phase 6 T5).
+    #[test]
+    fn the_output_passes_are_the_pass_before_t9_bit_for_bit() {
+        output_passes::<f64>();
+        output_passes::<f32>();
+    }
+
+    fn output_passes<T: SimdScalar + Default>() {
+        let mut rng = Rng(2);
+        let (n, nleaves) = (20_000, 700);
+        let targets = random_ranges(&mut rng, n, nleaves);
+        // Radii of levels 0 to 16 of domains of any size.
+        let radii: Vec<f64> = (0..nleaves)
+            .map(|_| (1.5 + rng.value()) * 2f64.powi(-(rng.below(17) as i32)))
+            .collect();
+        let order = OutputOrder::new(&targets, &radii);
+        for (gradients, m) in [(false, 1), (true, 1), (false, 3), (true, 3)] {
+            let o = if gradients { 4 } else { 1 };
+            let mut store = LeafStore::<T>::new(&targets.counts, o * m);
+            for x in store.as_mut_slice() {
+                *x = T::from_f64(rng.value());
+            }
+            let vectors = scaled_output(&store, &targets, &radii, (gradients, m));
+            // The pass before T9 in the layout of the backward move: o m values per target.
+            let mut reference = Vec::with_capacity(o * m * n);
+            for i in 0..n {
+                for (potential, gradient) in &vectors {
+                    reference.push(potential[i]);
+                    if let Some(gradient) = gradient {
+                        reference.extend(gradient[i]);
+                    }
+                }
+            }
+            // The device pass's values: per vector φ, then ∇φ, in the received order.
+            let mut device = Vec::new();
+            for (potential, gradient) in &vectors {
+                device.extend_from_slice(potential);
+                device.extend(gradient.iter().flatten().flatten());
+            }
+            let want_bits = |potential: &[T], gradient: &Option<Vec<[T; 3]>>| {
+                assert_eq!(gradient.is_some(), gradients);
+                let mut values = bits(potential);
+                if let Some(gradient) = gradient {
+                    values.extend(bits(gradient.as_flattened()));
+                }
+                values
+            };
+            // The output vector after vector.
+            let mut want_potential = Vec::new();
+            let mut want_gradient = gradients.then(Vec::new);
+            for (potential, gradient) in &vectors {
+                want_potential.extend_from_slice(potential);
+                if let (Some(all), Some(gradient)) = (want_gradient.as_mut(), gradient) {
+                    all.extend_from_slice(gradient);
+                }
+            }
+            let want = want_bits(&want_potential, &want_gradient);
+            for threads in [1, 4] {
+                let pool = pool(threads);
+                let what = format!("{threads} threads, gradients {gradients}, {m} vectors");
+                let mut values = vec![T::zero(); o * m * n];
+                let (data, offsets) = (store.as_slice(), store.point_offsets());
+                gather_output(
+                    data,
+                    offsets,
+                    &order,
+                    (gradients, m),
+                    pool.as_ref(),
+                    &mut values,
+                );
+                assert_eq!(bits(&values), bits(&reference), "{what}: the host pass");
+                let mut interleaved = vec![T::zero(); o * m * n];
+                interleave_output(&device, (gradients, m), pool.as_ref(), &mut interleaved);
+                assert_eq!(
+                    bits(&interleaved),
+                    bits(&reference),
+                    "{what}: the device pass"
+                );
+                if m == 1 {
+                    let mut fresh = Output {
+                        potential: Vec::new(),
+                        gradient: None,
+                        timings: StageTimings::default(),
+                    };
+                    unpack_output(&reference, gradients, pool.as_ref(), &mut fresh);
+                    assert_eq!(
+                        want_bits(&fresh.potential, &fresh.gradient),
+                        want,
+                        "{what}: the unpack"
+                    );
+                    let mut wrong = Output {
+                        potential: vec![T::zero(); 3],
+                        gradient: (!gradients).then(|| vec![[T::zero(); 3]; 5]),
+                        timings: StageTimings::default(),
+                    };
+                    unpack_output(&reference, gradients, pool.as_ref(), &mut wrong);
+                    assert_eq!(
+                        want_bits(&wrong.potential, &wrong.gradient),
+                        want,
+                        "{what}: the unpack into a resized output"
+                    );
+                }
+                let mut fresh = OutputMany {
+                    vectors: m,
+                    potential: Vec::new(),
+                    gradient: None,
+                    timings: StageTimings::default(),
+                };
+                let buffers = (&mut fresh.potential, &mut fresh.gradient);
+                unpack_output_many(&reference, (gradients, m), pool.as_ref(), buffers);
+                assert_eq!(
+                    want_bits(&fresh.potential, &fresh.gradient),
+                    want,
+                    "{what}: the unpack of several vectors"
+                );
+                let mut wrong = OutputMany {
+                    vectors: m,
+                    potential: vec![T::zero(); 3],
+                    gradient: (!gradients).then(|| vec![[T::zero(); 3]; 5]),
+                    timings: StageTimings::default(),
+                };
+                let buffers = (&mut wrong.potential, &mut wrong.gradient);
+                unpack_output_many(&reference, (gradients, m), pool.as_ref(), buffers);
+                assert_eq!(
+                    want_bits(&wrong.potential, &wrong.gradient),
+                    want,
+                    "{what}: the unpack of several vectors into a resized output"
+                );
+            }
+        }
+    }
+}

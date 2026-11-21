@@ -1,7 +1,7 @@
 # tools/fftw: the FFTW of each machine
 
 `probe.sh` (Helmholtz CHR.4) shows which FFTW RLST's `fftw_system` feature finds on a
-machine and whether RLST's own FFTW tests pass against it. nd-fmm's optional `fftw`
+machine and whether RLST's own FFTW tests pass against it. tetraleaf's optional `fftw`
 feature (CHR.3, CH4.6) links that FFTW; the default build links none (proposal §6.7).
 Each machine's result is recorded in its `machine.md`.
 

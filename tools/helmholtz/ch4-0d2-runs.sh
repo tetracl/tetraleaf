@@ -3,7 +3,7 @@
 # between leaves as near pairs (docs/helmholtz/tasks/CH4.0d2.md, "Machine runs"), from the
 # repository root after the example was built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch4-0d2-runs.sh <out-dir> <stage…>
 #
 # Every launch runs `helmholtz_accuracy` with `--m2l rotation,auto-pw` (Rotation, all-RCR,

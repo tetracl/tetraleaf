@@ -1,12 +1,12 @@
-//! The degree up to which N Dⁿ N⁻¹ from `nd_fmm_math::rotation::blocks` stays accurate,
+//! The degree up to which N Dⁿ N⁻¹ from `tetraleaf_math::rotation::blocks` stays accurate,
 //! measured against the Gumerov–Duraiswami blocks (which tests/accuracy.rs checks against
 //! the arbitrary-precision reference to n = 1000). Prints Markdown for SPIKE_REPORT.md.
 //!
-//! `cargo run -p nd-fmm-spike-rotation-blocks --release --example sweep`
+//! `cargo run -p tetraleaf-spike-rotation-blocks --release --example sweep`
 
-use nd_fmm_math::rotation::{block_range, euler_zyz};
-use nd_fmm_spike_rotation_blocks::conjugated::conjugated_blocks;
-use nd_fmm_spike_rotation_blocks::gd::euler_blocks;
+use tetraleaf_math::rotation::{block_range, euler_zyz};
+use tetraleaf_spike_rotation_blocks::conjugated::conjugated_blocks;
+use tetraleaf_spike_rotation_blocks::gd::euler_blocks;
 
 const P: usize = 600;
 const THRESHOLDS: [f64; 6] = [1e-14, 1e-12, 1e-10, 1e-8, 1e-6, 1e-2];

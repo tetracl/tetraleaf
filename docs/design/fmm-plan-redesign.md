@@ -1,4 +1,4 @@
-# nd-fmm-plan redesign: box index, batched operators, variable leaf data
+# tetraleaf-plan redesign: box index, batched operators, variable leaf data
 
 As of 2026-10-01. Phase 3 / T1. Status: **signed off** on 2026-10-01 by Timo Betcke, with
 every recommendation accepted. The decisions are recorded in Section 12. This document is
@@ -8,8 +8,8 @@ redistribution and the overlap as built), and the index FMM of §1.6 and §11 wa
 in Phase 5 T2. The signed-off text is otherwise unchanged; the distributed design is
 [distributed-fmm.md](distributed-fmm.md).
 
-This document designs the replacement of `nd-fmm-plan` (`fmm-plan/`). It answers the
-ten requirements of `docs/phase3/README.md` ("Requirements on the new nd-fmm-plan") and
+This document designs the replacement of `tetraleaf-plan` (`tetraleaf-plan/`). It answers the
+ten requirements of `docs/phase3/README.md` ("Requirements on the new tetraleaf-plan") and
 follows its "Design decisions for this phase". T4–T7 implement it, in that order, beside
 the old code. Companion documents: `docs/design/laplace-fmm-plan.md` (§5, §6.4–§6.6,
 §9) and `docs/design/workspace-structure.md` (§1.1, §4). `docs/CONVENTIONS.md` wins on
@@ -50,7 +50,7 @@ includes the 316-row `V_LIST_DIRECTIONS` table (about 318 of its 506 code lines)
 | **Total** | 2951 | 2129 | 22 unit + 1 integration, no doctests |
 
 Baseline on this branch: `cargo fmt -- --check` clean; `RUST_MIN_STACK=8388608 cargo
-test -p nd-fmm-plan` passes 22 unit tests and the integration test (one rank).
+test -p tetraleaf-plan` passes 22 unit tests and the integration test (one rank).
 
 ### 1.2 `interaction_manager.rs`
 
@@ -78,7 +78,7 @@ non-ghost key with `oracle_lists` over the gathered global tree.
 
 **Keep.** The per-key rule (the loop body of `from_key_types`), which the oracle has
 checked on every scenario; `is_adjacent`; `V_LIST_DIRECTIONS` at its current path
-(CONVENTIONS §3.12 and nd-fmm-exec cite it); both oracles and every test tree; the
+(CONVENTIONS §3.12 and tetraleaf-exec cite it); both oracles and every test tree; the
 statement of what the rule relies on (completeness, 26-direction 2:1 balance, the
 same-level halo, the ghost-children layer).
 
@@ -201,7 +201,7 @@ collective pass/fail agreement, the compute-graph documentation.
 tests and the example `test_index_fmm`) was removed in Phase 5 T2 (PR #78;
 docs/phase5/README.md, decision 5). Its checks moved: the call order, the groupings and
 every list pair once to the recording operator of `tests/mpi_regressions.rs`, and the
-values of the distributed passes to the Laplace FMM of `nd-fmm-exec` against the one-rank
+values of the distributed passes to the Laplace FMM of `tetraleaf-exec` against the one-rank
 `Fmm` and the direct sum (distributed-fmm.md §1.3).
 
 ### 1.7 `tests/mpi_regressions.rs` and the example
@@ -318,9 +318,9 @@ tree and plan independently and map results across rebuilds by key.
 ### 3.5 Coarse blocks
 
 The global upward pass (Section 7.3) writes the multipoles of every rank's coarse
-blocks into this rank's level buffers. With the ghost-children layer, `nd-octree`
+blocks into this rank's level buffers. With the ghost-children layer, `tetraleaf-octree`
 advertises every coarse block to every rank (`generate_all_keys`, private module
-`octree/src/octree/implementation.rs`: "it advertises every local coarse block to all
+`tetraleaf-octree/src/octree/implementation.rs`: "it advertises every local coarse block to all
 ranks"), so every block, and hence every child of every `Global` box, has a box index
 on every rank. The plan checks this at construction. The public docs of
 `OctreeOptions::with_ghost_children` do not state it; Section 12, question 6 proposes
@@ -330,7 +330,7 @@ that they do.
 > another rank's blocks any more. A rank holds its locally essential set H, and decision 6
 > ("every coarse block held") is replaced by the held-key check: every key a list, the halo
 > or a parent-child step names is held, checked by `Plan::new` and failing on every rank
-> (fmm-plan/CLAUDE.md, "The interaction lists"). `OctreeOptions::with_ghost_children` stays,
+> (tetraleaf-plan/CLAUDE.md, "The interaction lists"). `OctreeOptions::with_ghost_children` stays,
 > without block replication.
 
 ### 3.6 Construction and validation
@@ -897,7 +897,7 @@ ranges, so the gathered buffer is in global key order.
 ## 9. Redistribution (designed here, implemented in C5.1)
 
 Moves per-item payloads to the ranks that own their leaves, collectively, and results
-back. In `nd-fmm-plan`, because it needs only the octree and the leaf numbering.
+back. In `tetraleaf-plan`, because it needs only the octree and the leaf numbering.
 
 ```rust
 /// Routing of items (points) to the ranks that own their leaves, and back.
@@ -941,7 +941,7 @@ impl Redistribution {
   if it has no items.
 
 *Outcome (Phase 5 T5, PR #82; distributed-fmm.md §4 and §15).* Built as designed, in
-`nd_fmm_plan::redistribute`, with the refinements of the distributed design: (key,
+`tetraleaf_plan::redistribute`, with the refinements of the distributed design: (key,
 position) on the wire (12 B per item), `nsent`, `nreceived`, `counts`, `origins`,
 `max_per_item` agreed at `new`, `forward_into` and `backward_into`, and a payload of the
 wrong length that takes part and then panics. Within a leaf the items are ordered by
@@ -1013,14 +1013,14 @@ noise.
 
 ### 11.1 Tasks and modules
 
-T4–T6 add the new modules under `nd_fmm_plan::v2`; T7 moves them to the crate root.
+T4–T6 add the new modules under `tetraleaf_plan::v2`; T7 moves them to the crate root.
 
 | Task | New modules (`v2::…`, final path after T7) | Old code |
 | --- | --- | --- |
 | T4 | `index` (`BoxIndex`, leaf numbering), `lists` (`VList`, `Children`, `Parents`, `Csr`, per-level views), `plan` (`Plan`, `PlanError`) | per-key rule moved to a private `key_lists`, called by `from_key_types` (no public change) |
 | T5 | `store` (`LevelBuffers`, `LeafStore`, slice types), `exchange` (`SourceExchange`, `MultipoleExchange`, `CoarseExchange`) | unchanged |
 | T6 | `operator` (`FmmSizes`, `FmmOperator`, `PairOperator`, `PerPair`, batch types), `evaluator` (`Evaluator`), `index_fmm` (`IndexFmm` on `PairOperator`, a batched test variant, the variable-count check) | unchanged; the reference |
-| T7 | `v2` contents moved to `nd_fmm_plan::{index, lists, plan, store, exchange, operator, evaluator, index_fmm}` | removed: `fmm` (`FmmOperator`, `FmmEvaluator`, `LevelData`, `IndexFmm`, `run_index_fmm`), `ghost_communicator`, `InteractionManager`; kept: `interaction_manager::V_LIST_DIRECTIONS` and the private rule |
+| T7 | `v2` contents moved to `tetraleaf_plan::{index, lists, plan, store, exchange, operator, evaluator, index_fmm}` | removed: `fmm` (`FmmOperator`, `FmmEvaluator`, `LevelData`, `IndexFmm`, `run_index_fmm`), `ghost_communicator`, `InteractionManager`; kept: `interaction_manager::V_LIST_DIRECTIONS` and the private rule |
 | C5.1 | `redistribute` (`Redistribution`) | – |
 
 CONVENTIONS §3.12 defines the offset "as `InteractionManager::v_list_by_direction`
@@ -1105,8 +1105,8 @@ expensive; it is left as it is.
 | 2 | One `Value` type or several | One (§5.3) |
 | 3 | Trait shape | Batched `FmmOperator` only, with the `PairOperator` trait and the `PerPair` wrapper (§6.3); no finer per-offset calls |
 | 4 | List logic reused or rewritten | Reused: move the per-key rule into a private function shared by old and new code; translate keys to indices at build time (§4.1) |
-| 5 | Move nd-fmm-plan to `[workspace.dependencies]`/`[workspace.package]`, fix licence form, `homepage`, `repository` | Yes, in T7 |
-| 6 | Changes to nd-octree | None needed. Separately, document in `OctreeOptions::with_ghost_children` (public) that every coarse block is then held on every rank, which the global pass relies on, and add a test there. Phase 3 workaround: `Plan::new` checks it and fails on every rank if it ever breaks |
+| 5 | Move tetraleaf-plan to `[workspace.dependencies]`/`[workspace.package]`, fix licence form, `homepage`, `repository` | Yes, in T7 |
+| 6 | Changes to tetraleaf-octree | None needed. Separately, document in `OctreeOptions::with_ghost_children` (public) that every coarse block is then held on every rank, which the global pass relies on, and add a test there. Phase 3 workaround: `Plan::new` checks it and fails on every rank if it ever breaks |
 | 7 | Redistribution in Phase 3 instead of C5.1 | No: Phase 3 gates on one rank; the API (§9) keeps `Fmm`'s interface stable. If multi-rank Laplace is wanted early, it is a small task after T6 |
 | 8 | CONVENTIONS §3.12 cites `InteractionManager::v_list_by_direction`, which T7 removes | Reword in T7 to cite the new V-list view; no change to the convention |
 
@@ -1127,8 +1127,8 @@ as written:
 | 2 | One `Value` type | T5, T6 |
 | 3 | Batched `FmmOperator` only, with `PairOperator` and the `PerPair` wrapper; no finer per-offset calls | T6 |
 | 4 | Per-key list rule reused, moved into a private function shared by old and new code | T4 |
-| 5 | nd-fmm-plan moves to `[workspace.dependencies]` and `[workspace.package]`; licence form, `homepage` and `repository` fixed | T7 |
-| 6 | No nd-octree change inside the Phase 3 tasks; `Plan::new` checks that every coarse block is held. Also approved, as a separate decision: document in `OctreeOptions::with_ghost_children` (public docs) that with the layer every coarse block is held on every rank, and add an nd-octree test for it | T4 (check); a separate nd-octree PR (docs and test) |
+| 5 | tetraleaf-plan moves to `[workspace.dependencies]` and `[workspace.package]`; licence form, `homepage` and `repository` fixed | T7 |
+| 6 | No tetraleaf-octree change inside the Phase 3 tasks; `Plan::new` checks that every coarse block is held. Also approved, as a separate decision: document in `OctreeOptions::with_ghost_children` (public docs) that with the layer every coarse block is held on every rank, and add an tetraleaf-octree test for it | T4 (check); a separate tetraleaf-octree PR (docs and test) |
 | 7 | Redistribution stays in C5.1, with the API of §9 | C5.1 |
 | 8 | CONVENTIONS §3.12's reference to `InteractionManager::v_list_by_direction` is reworded to the new V-list view; the convention is unchanged | T7 |
 

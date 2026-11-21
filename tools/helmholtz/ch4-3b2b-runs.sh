@@ -3,7 +3,7 @@
 # the levels the time rule decides after the plan, and the defaults' errors at 10⁻⁶
 # (docs/helmholtz/tasks/CH4.3b2b.md, "Machine runs"), from the repository root after
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch4-3b2b-runs.sh <out-dir> <stage…>
 #
 # Every launch runs `helmholtz_accuracy` on one rank with every core (Kathleen 1 × 40), with

@@ -1,9 +1,9 @@
 //! The calibration sweep of CH0.7 (docs/helmholtz/tasks/CH0.7.md, "The sweep").
 //!
 //! ```text
-//! cargo run -p nd-fmm-spike-truncation --release --example sweep -- c1 [kind] [ka...]
-//! cargo run -p nd-fmm-spike-truncation --release --example sweep -- multi [kind] [ka...]
-//! cargo run -p nd-fmm-spike-truncation --release --example sweep -- summary
+//! cargo run -p tetraleaf-spike-truncation --release --example sweep -- c1 [kind] [ka...]
+//! cargo run -p tetraleaf-spike-truncation --release --example sweep -- multi [kind] [ka...]
+//! cargo run -p tetraleaf-spike-truncation --release --example sweep -- summary
 //! ```
 //!
 //! `c1` calibrates p₁(k a, ε, kind) on the one-level chain: every p in a range on the 54
@@ -14,12 +14,12 @@
 //! Rows are appended to `results/c1.csv` and `results/multi.csv`; a (kind, k a) already
 //! there is skipped, so a run can be resumed. `summary` writes `results/summary.md`.
 
-use nd_fmm_spike_truncation::calibrate::{
+use tetraleaf_spike_truncation::calibrate::{
     Chain, Config, Record, formula_p, run, smallest_passing, worst,
 };
-use nd_fmm_spike_truncation::chain::{Kind, Setup};
-use nd_fmm_spike_truncation::geometry::{Placement, near_offsets, offsets};
-use nd_fmm_spike_truncation::real::Dd;
+use tetraleaf_spike_truncation::chain::{Kind, Setup};
+use tetraleaf_spike_truncation::geometry::{Placement, near_offsets, offsets};
+use tetraleaf_spike_truncation::real::Dd;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::io::Write as _;

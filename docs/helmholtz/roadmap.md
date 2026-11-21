@@ -129,28 +129,28 @@ The proposal's Section 12, plus D0. A decision is recorded here when the user ta
 
 ## HR: RLST's FFTW interface and its adoption
 
-**Gate:** nd-fmm on RLST 0.12 with Laplace unchanged; the FFTW of every machine recorded;
+**Gate:** tetraleaf on RLST 0.12 with Laplace unchanged; the FFTW of every machine recorded;
 the optional FFTW wrapper of the φ step behind its feature.
 
 - [x] **CHR.1 RLST's FFTW rework.** Done in RLST 0.11.0 (2026-10-25) and 0.12.0
   (2026-10-26).
-- [x] **CHR.2 Move to RLST 0.12.** Report: `fmm-validate/results/helmholtz-chr-2.md`. The workspace pin and `octree/Cargo.toml`'s own pin to
+- [x] **CHR.2 Move to RLST 0.12.** Report: `tetraleaf-validate/results/helmholtz-chr-2.md`. The workspace pin and `tetraleaf-octree/Cargo.toml`'s own pin to
   0.12.0 together; green-kernels' `[patch]` left on 0.10.2 (it uses `rlst::simd`, removed in
-  0.12); `CLAUDE.md`, `fmm-plan/CLAUDE.md` and `docs/design/workspace-structure.md` updated.
+  0.12); `CLAUDE.md`, `tetraleaf-plan/CLAUDE.md` and `docs/design/workspace-structure.md` updated.
   *Done when:* the default members build, lint, test and document; the MPI tests and the
   weekly examples pass; `cargo check --workspace --all-targets` builds the spikes;
   `cargo tree -e normal` lists no fftw-sys; a cargo-deny licence check of the default set is
   in CI; CI's and locust's `cmake` installs checked; `cargo upgrades` no longer reports
   `rlst`; Laplace bit for bit and its benchmarks within noise (D9). Fallback: stay on 0.10.2.
   *Needs:* D9. *Machines:* locust, Kathleen.
-- [x] **CHR.4 FFTW on the machines.** Report: `fmm-validate/results/helmholtz-chr-4.md`;
+- [x] **CHR.4 FFTW on the machines.** Report: `tetraleaf-validate/results/helmholtz-chr-4.md`;
   the probe `tools/fftw/probe.sh`. *Done when:* `pkg-config --modversion fftw3 fftw3f`
   and `rlst::fftw::version()` recorded for the M3 Max, locust (spack's FFTW, not the RPM's
   3.3.8), Kathleen and CI, in `tools/*/machine.md`; RLST 0.12's own
   `cargo test --features fftw_system` passes on each, `fftw_determinism` included.
   Fallback: a machine without FFTW in both precisions uses the product. *Needs:* –.
   *Machines:* locust, Kathleen.
-- [ ] **CHR.3 FFTW wrapper of the φ step.** In `nd-fmm-exec` behind
+- [ ] **CHR.3 FFTW wrapper of the φ step.** In `tetraleaf-exec` behind
   `fftw = ["rlst/fftw_system"]`: one plan per (level, N_φ), interleaved per-box scratch,
   `Rigor::Estimate`, fingerprints all-gathered at build. *Done when:* against the product to
   round-off; a box's bits the same across batch positions, batch sizes and thread counts;
@@ -168,7 +168,7 @@ D7, D10, D11, D12) put to the user.
   `spikes/rotation-blocks/SPIKE_REPORT.md`. The Gumerov–Duraiswami (2014) recursion
   in the orthonormal real basis. *Done when:* orthogonal and in agreement with an
   arbitrary-precision reference to p = 1000; in agreement with N-conjugated
-  `nd_fmm_math::rotation::blocks` at p ≤ 30; the degree up to which conjugation stays
+  `tetraleaf_math::rotation::blocks` at p ≤ 30; the degree up to which conjugation stays
   accurate; the relation of the β and π − β blocks; time per block set. *Needs:* –.
 - [x] **CH0.2 S2: coaxial coefficients.** Report: `spikes/coaxial/SPIKE_REPORT.md`.
   (S|R), (S|S), (R|R) by recursion. *Done when:*
@@ -182,7 +182,7 @@ D7, D10, D11, D12) put to the user.
   *Needs:* –.
 - [x] **CH0.8a S8: workload census, first pass.** Report:
   `spikes/census/SPIKE_REPORT.md`. Trees of W1–W4 over the kD sweep from
-  `nd-octree` with a prototype maximum leaf width (c_leaf 0.25 to 2), p from the formula; no
+  `tetraleaf-octree` with a prototype maximum leaf width (c_leaf 0.25 to 2), p from the formula; no
   FMM is run. *Done when:* per level the occupied boxes, U, V (by distance class), W and X
   sizes, p_l, regime and per-class choice, the memory model of §7 and the operation counts;
   c_leaf proposed (D11); no high-frequency leaf; the workloads proposed (D12); batch sizes
@@ -228,7 +228,7 @@ D7, D10, D11, D12) put to the user.
 
 ## H1: Conventions, math, reference
 
-**Gate:** CONVENTIONS §3.15 signed off; `nd-fmm-math` and `nd-fmm-ref` carry the Helmholtz
+**Gate:** CONVENTIONS §3.15 signed off; `tetraleaf-math` and `tetraleaf-ref` carry the Helmholtz
 family, checked against FMM3D's fixtures.
 
 Its ticked lines were condensed at H1.G (2026-11-19, as at H6.G); each task's full line is in
@@ -236,38 +236,38 @@ its record or report and its progress entry (`docs/helmholtz/progress.md`), and 
 history (`git show 8475009:docs/helmholtz/roadmap.md`).
 
 - [x] **CH1.4 FMM3D convention check and fixtures.** Report:
-  `fmm-validate/results/helmholtz-ch1-4.md`; fixtures `fmm-ref/fixtures/helmholtz_fmm3d.json`.
+  `tetraleaf-validate/results/helmholtz-ch1-4.md`; fixtures `tetraleaf-ref/fixtures/helmholtz_fmm3d.json`.
   FMM3D computes the draft's q e^{ikr}/(4πr) for real, complex and imaginary k (one of 16
   candidates, to 2.6e-16); R12: `hfmm3d` reliable for imaginary zk at κD ≤ 30 and eps ≥ 10⁻⁶.
   Signed off 2026-10-28, "1–3 as recommended" (CH2.5 limited to where FMM3D met its eps).
 - [x] **CH1.1 CONVENTIONS §3.15.** Record: `docs/helmholtz/tasks/CH1.1.md`. §3.15 and
   `CONVENTION_VERSION = 3`, `tools/fixtures/check_3_15.py` (101 checks); 4πik on M2L, M2P and
   P2L, the stored coefficients with e^{∓β_l}. Signed off 2026-10-29 with D2 and D5.
-- CH1.2 `nd-fmm-math`: harmonics, radial functions, rotation blocks. Split on 2026-10-29 into
+- CH1.2 `tetraleaf-math`: harmonics, radial functions, rotation blocks. Split on 2026-10-29 into
   CH1.2a–c, one per spike (S1, S3, S2).
 - [x] **CH1.2a Orthonormal harmonics and rotation blocks.** Record: `docs/helmholtz/tasks/CH1.2a.md`.
-  `nd_fmm_math::orthonormal`; against mpmath to n = 1000 (5.7e-14), blocks orthogonal to
+  `tetraleaf_math::orthonormal`; against mpmath to n = 1000 (5.7e-14), blocks orthogonal to
   4.3e-14.
 - [x] **CH1.2b Radial functions and scaling.** Record: `docs/helmholtz/tasks/CH1.2b.md`.
-  `nd_fmm_math::radial` and `Complex` (`num-complex`, signed off 2026-10-30); against mpmath on
+  `tetraleaf_math::radial` and `Complex` (`num-complex`, signed off 2026-10-30); against mpmath on
   every operator's range (7.1e-14), Yukawa's relations bit for bit.
 - [x] **CH1.2c Coaxial coefficients.** Record: `docs/helmholtz/tasks/CH1.2c.md`; report
-  `fmm-validate/results/helmholtz-ch1-2c.md`. `nd_fmm_math::coaxial`, recursion and projection by
+  `tetraleaf-validate/results/helmholtz-ch1-2c.md`. `tetraleaf_math::coaxial`, recursion and projection by
   §3.15's rule; one shift table for M2M and L2L (signed off 2026-10-30, "1 and 2 as
   recommended").
-- CH1.3 `nd-fmm-ref`: oracle, reference operators, translations, the diagonal form. Split on
+- CH1.3 `tetraleaf-ref`: oracle, reference operators, translations, the diagonal form. Split on
   2026-10-30 into CH1.3a–d; CH1.3d deferred after CH0.6 and split on 2026-11-19 into CH1.3d1–d2.
 - [x] **CH1.3a Direct-sum oracle.** Record: `docs/helmholtz/tasks/CH1.3a.md`.
-  `nd_fmm_ref::helmholtz::p2p`; FMM3D's fixtures to 9.9e-16, k → 0 within §9's tolerances,
+  `tetraleaf_ref::helmholtz::p2p`; FMM3D's fixtures to 9.9e-16, k → 0 within §9's tolerances,
   Yukawa two ways bit for bit.
 - [x] **CH1.3b Leaf operators.** Record: `docs/helmholtz/tasks/CH1.3b.md`.
-  `nd_fmm_ref::helmholtz::{leaf, Level, Workspace}` in §3.15's stored form; series at
+  `tetraleaf_ref::helmholtz::{leaf, Level, Workspace}` in §3.15's stored form; series at
   round-off, k → 0 within 0.54 of the bound, finite at Im(k) a = 1000.
 - [x] **CH1.3c Translations.** Record: `docs/helmholtz/tasks/CH1.3c.md`.
-  `nd_fmm_ref::helmholtz::{rcr, direct}`; RCR against direct 8.4e-15 over the 316 offsets,
+  `tetraleaf_ref::helmholtz::{rcr, direct}`; RCR against direct 8.4e-15 over the 316 offsets,
   Yukawa two ways 9.5e-15; the damping finding went to CH2.3 at H1.G.
-- [x] **CH1.3d1 The diagonal form in nd-fmm-ref.** Record: `docs/helmholtz/tasks/CH1.3d1.md`.
-  `nd_fmm_ref::helmholtz::diagonal`, against RCR within 2E on the 34 classes (k a 2.83–54,
+- [x] **CH1.3d1 The diagonal form in tetraleaf-ref.** Record: `docs/helmholtz/tasks/CH1.3d1.md`.
+  `tetraleaf_ref::helmholtz::diagonal`, against RCR within 2E on the 34 classes (k a 2.83–54,
   p 7–82). "≤ 2E" and the split signed off 2026-11-19 on #228.
 - [x] **CH1.3d2 CONVENTIONS §3.15 revised.** Record: `docs/helmholtz/tasks/CH1.3d2.md`.
   `CONVENTION_VERSION` 4: "Signatures", "Level units", "Exponential M2L" exempt, Fₖ, §3.9's M2L
@@ -283,26 +283,26 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
 **Gate:** CH2.5, Yukawa against FMM3D (or skipped with its reason).
 
 - [x] **CH2.0 Laplace's real host drivers made generic over the kernel.** Report:
-  `fmm-validate/results/helmholtz-ch2-0.md`; the drivers `nd-fmm-exec/src/driver.rs`. Dense, Classes,
+  `tetraleaf-validate/results/helmholtz-ch2-0.md`; the drivers `tetraleaf-exec/src/driver.rs`. Dense, Classes,
   Rotation, Batched (§6.2). *Done when:* constraint 1 of §2: no new dispatch below the level
   call, layouts and tables unchanged, Laplace bit for bit, its benchmarks within noise on the
   three machines; the PR states how p reaches Laplace's inner loops. Else dropped, and Yukawa
   gets copies. *Needs:* CH1.3a–c, CHR.2, D9. *Machines:* locust, Kathleen.
-- CH2.4 Yukawa P2P in `nd-fmm-simd`. On a loop skeleton shared with Laplace if
+- CH2.4 Yukawa P2P in `tetraleaf-simd`. On a loop skeleton shared with Laplace if
   constraint 1 holds. *Done when:* an accuracy contract like simd-p2p.md's; cost per pair
   against Laplace; Laplace's P2P bit for bit and at least 90 % of the spike (C3S.4).
   *Needs:* CH1.2. *Machines:* locust, Kathleen. Split on 2026-10-31 into two sub-tasks,
   as Phase 3S split the inverse square root (T4) from the kernel (T5) (the user, "Split
   a/b"); CH2.4 is done when both are:
-- [x] **CH2.4a The vectorised exponential.** Report: `fmm-validate/results/helmholtz-ch2-4a.md`;
-  design `docs/design/simd-p2p.md` §4.9. `nd_fmm_simd::exp` (`exp_slice`), the vector
+- [x] **CH2.4a The vectorised exponential.** Report: `tetraleaf-validate/results/helmholtz-ch2-4a.md`;
+  design `docs/design/simd-p2p.md` §4.9. `tetraleaf_simd::exp` (`exp_slice`), the vector
   layer's `max` and `scale_pow2`, and `arch::exp` (Cody–Waite reduction and a polynomial), for
   x ≤ 0, f32 and f64, every ISA. *Done when:* within 4 u_T relative on [x_min, 0] (normal
   results), f32 exhaustively and f64 on 10⁷ samples against double-double, on every ISA a
   machine offers; below x_min the value at x_min; position and length invariance;
   no call in the inner loop; the existing entry points' inner loops unchanged instruction
   for instruction. *Needs:* CH1.2. *Machines:* Kathleen (AVX-512, the contract).
-- [x] **CH2.4b Yukawa P2P on a shared skeleton.** Report: `fmm-validate/results/helmholtz-ch2-4b.md`;
+- [x] **CH2.4b Yukawa P2P on a shared skeleton.** Report: `tetraleaf-validate/results/helmholtz-ch2-4b.md`;
   design `docs/design/simd-p2p.md` §4.10. `P2pKernel::evaluate_yukawa`; the P2P
   loop skeleton generic over the pair arithmetic, Laplace's the first. *Done when:*
   CH2.4's: an accuracy contract like simd-p2p.md's (§4.9 onwards) on every ISA; cost per
@@ -344,11 +344,11 @@ report and its progress entry (`docs/helmholtz/progress.md`), and in this file's
 
 - CH3.0 Builder: the leaf rule and complex densities. Split on 2026-10-31 into CH3.0a–c (the
   user, "Split a/b/c, proceed").
-- [x] **CH3.0a nd-octree's maximum leaf width.** Record: `docs/helmholtz/tasks/CH3.0a.md`.
+- [x] **CH3.0a tetraleaf-octree's maximum leaf width.** Record: `docs/helmholtz/tasks/CH3.0a.md`.
   `OctreeOptions::with_min_leaf_level`, default none; Laplace's outputs byte for byte (the
   user: "Bytes only, no D9").
 - [x] **CH3.0b The Helmholtz builder's leaf rule.** Record: `docs/helmholtz/tasks/CH3.0b.md`.
-  No leaf wider than c_leaf λ on W1–W4 over D1's range; W1–W4 in `nd-fmm-validate`.
+  No leaf wider than c_leaf λ on W1–W4 over D1's range; W1–W4 in `tetraleaf-validate`.
 - [x] **CH3.0c Complex densities.** Record: `docs/helmholtz/tasks/CH3.0c.md`. Complex charges
   in, split potentials and gradients out, one complex expansion per vector.
 - [x] **CH3.5 The shared drivers extended to complex expansions.** Record:
@@ -358,37 +358,37 @@ report and its progress entry (`docs/helmholtz/progress.md`), and in this file's
   "a/b/c").
 - [x] **CH3.1a The Helmholtz operator.** Record: `docs/helmholtz/tasks/CH3.1a.md`.
   `HelmholtzOperator` on the shared drivers, real and complex k and charges, every body
-  against `nd_fmm_ref::helmholtz`; Yukawa refused.
+  against `tetraleaf_ref::helmholtz`; Yukawa refused.
 - [x] **CH3.1b The Helmholtz FMM.** Record: `docs/helmholtz/tasks/CH3.1b.md`. The point
   pipeline shared with `Fmm` (`src/pipeline.rs`); bit for bit across threads and ranks;
   Laplace bit for bit, minimal D9 on the M6 (the user).
-- [x] **CH3.1c The acceptance runs.** Report: `fmm-validate/results/helmholtz-ch3-1c.md`.
+- [x] **CH3.1c The acceptance runs.** Report: `tetraleaf-validate/results/helmholtz-ch3-1c.md`.
   `helmholtz_accuracy`; 61 cases within ε, deterministic.
 - CH3.2 Dense, Classes and Batched where the node budget allows. Split on 2026-11-02 into
   CH3.2a–c; CH3.2d added at CH3.2c's sign-off.
-- [x] **CH3.2a Dense.** Report: `fmm-validate/results/helmholtz-ch3-2a.md`. Rotation to
+- [x] **CH3.2a Dense.** Report: `tetraleaf-validate/results/helmholtz-ch3-2a.md`. Rotation to
   rounding, per pair faster only to p ≈ 6; opt-in.
-- [x] **CH3.2b Classes.** Report: `fmm-validate/results/helmholtz-ch3-2b.md`. Dense to
+- [x] **CH3.2b Classes.** Report: `tetraleaf-validate/results/helmholtz-ch3-2b.md`. Dense to
   rounding, tables about 18× smaller, faster than Rotation per pair only to p = 4; opt-in.
 - [x] **CH3.2c Batched, and the measurements per p.** Report:
-  `fmm-validate/results/helmholtz-ch3-2c.md`. Its own block (the user: "Own Helmholtz block",
+  `tetraleaf-validate/results/helmholtz-ch3-2c.md`. Its own block (the user: "Own Helmholtz block",
   "Split planes, 2n²"); fused, ahead of Rotation per pair to p ≈ 10 (M6, locust), 15 (Kathleen).
-- [x] **CH3.2d The M2L rule per level.** Report: `fmm-validate/results/helmholtz-ch3-2d.md`.
+- [x] **CH3.2d The M2L rule per level.** Report: `tetraleaf-validate/results/helmholtz-ch3-2d.md`.
   `HelmholtzM2l::Auto` by degree and machine class, the builder's default (signed off
   2026-11-02); best on 34 of 36 rows, one miss at 1.106 (CH4.0).
 - [x] **CH3.3 Calibration of p_l over (k a_l, ε).** Report:
-  `fmm-validate/results/helmholtz-ch3-3.md`. `DegreeRule::CALIBRATED` the default (the user:
+  `tetraleaf-validate/results/helmholtz-ch3-3.md`. `DegreeRule::CALIBRATED` the default (the user:
   "Calibrate, new default", "Both branches", "ε/2, verify ≤ ε"); S7 an upper bound.
 - CH3.4 Helmholtz P2P, real and complex k. Split on 2026-11-01 into CH3.4a–c.
 - [x] **CH3.4a The vectorised sine and cosine.** Record: `docs/helmholtz/tasks/CH3.4a.md`.
-  `nd_fmm_simd::sincos`, within 4 u_T for |θ| ≤ 2¹⁰ on every ISA.
+  `tetraleaf_simd::sincos`, within 4 u_T for |θ| ≤ 2¹⁰ on every ISA.
 - [x] **CH3.4b Helmholtz P2P on the skeleton.** Report:
-  `fmm-validate/results/helmholtz-ch3-4b.md`. `evaluate_helmholtz`, contract (32 + 12|k|r) u_T;
+  `tetraleaf-validate/results/helmholtz-ch3-4b.md`. `evaluate_helmholtz`, contract (32 + 12|k|r) u_T;
   Laplace instruction for instruction, D9 on Kathleen within noise.
 - [x] **CH3.4c The Helmholtz operator's P2P.** Record: `docs/helmholtz/tasks/CH3.4c.md`.
   The operator's P2P on the vectorised kernel, the reference kept as the trusted path.
 - [x] **CH3.6 Gate: RCR on every level against FMM3D.** Report:
-  `fmm-validate/results/helmholtz-ch3-6.md`. Ours within ε on all 57 case × ε points (largest
+  `tetraleaf-validate/results/helmholtz-ch3-6.md`. Ours within ε on all 57 case × ε points (largest
   0.63 ε), Kathleen jobs 617649–617651.
 - [x] **H3.G Gate.** `/milestone-gate H3`. Report: `docs/helmholtz/gates/H3.md`. Closed
   2026-11-02 (the user, "i agree with the recommendations"): D6 signed off (H6 first); the
@@ -411,53 +411,53 @@ task's full line is in its record or report and its progress entry
   iprec 1–3 with NIST's notice, our α counts by a Bessel bound to the corner; the kernel within
   1.50× and the chain within 1.18× the stated error on every domain.
 - [x] **CH6.1b The generator.** Record: `docs/helmholtz/tasks/CH6.1b.md`.
-  `nd_fmm_ref::helmholtz::plane_wave::generate`, the trusted path, bit for bit S4's.
+  `tetraleaf_ref::helmholtz::plane_wave::generate`, the trusted path, bit for bit S4's.
 - [x] **CH6.1c The pair chain.** Record: `docs/helmholtz/tasks/CH6.1c.md`. CONVENTIONS §3.15
   "Exponential M2L" (signed off 2026-11-03, as written); within 0.76× the stated error of RCR
   at resolving degrees.
 - [x] **CH6.1d Merge and shift in the FMM.** Record: `docs/helmholtz/tasks/CH6.1d.md`.
   `HelmholtzM2l::PlaneWave` (opt-in); its pair path to 2.0e-16; deterministic, rank-invariant.
 - [x] **CH6.1e The quadrature per level, measured.** Report:
-  `fmm-validate/results/helmholtz-ch6-1e.md`. iprec 2 at ε ≥ 10⁻⁶, within 1.070× Rotation's
+  `tetraleaf-validate/results/helmholtz-ch6-1e.md`. iprec 2 at ε ≥ 10⁻⁶, within 1.070× Rotation's
   on 87 cases; signed off 2026-11-03 ("1–4 as recommended").
 - [x] **CH6.1f The degree-matched quadrature on the pair chain.** Report:
-  `fmm-validate/results/helmholtz-ch6-1f.md`. The resolving degree recommended (candidate 4);
+  `tetraleaf-validate/results/helmholtz-ch6-1f.md`. The resolving degree recommended (candidate 4);
   signed off 2026-11-09 ("1–3 as recommended").
 - [x] **CH6.1g The quadrature below 10⁻⁶ in the FMM.** Report:
-  `fmm-validate/results/helmholtz-ch6-1g.md`. iprec 3 at max(p_l, 28) and max(p_l, 32); errors
+  `tetraleaf-validate/results/helmholtz-ch6-1g.md`. iprec 3 at max(p_l, 28) and max(p_l, 32); errors
   0.002–0.80× Rotation's on 26 cases; signed off 2026-11-11 (D8 amended; CH6.1h added).
 - [x] **CH6.1h The resolving degree on the M2L alone.** Report:
-  `fmm-validate/results/helmholtz-ch6-1h.md`. `PlaneWaveRaise::Rule` (`M2l` at 10⁻⁷, `Leaves`
+  `tetraleaf-validate/results/helmholtz-ch6-1h.md`. `PlaneWaveRaise::Rule` (`M2l` at 10⁻⁷, `Leaves`
   at 10⁻⁸); evaluation 0.43–0.83× and 0.31–0.71× Rotation's; D8 lifted at 10⁻⁷ (2026-11-11).
 - CH6.2 Measured against Rotation, the table strategies and `hfmm3d`'s exponential M2L; D8
   proposed. Split from 2026-11-03 to 2026-11-08 into CH6.2a–h; CH6.2i added by CH6.2f's
   question 2.
-- [x] **CH6.2a The waves buffer bounded.** Report: `fmm-validate/results/helmholtz-ch6-2a.md`.
+- [x] **CH6.2a The waves buffer bounded.** Report: `tetraleaf-validate/results/helmholtz-ch6-2a.md`.
   Chunks of whole parents under a node budget, 8 GiB by default (signed off 2026-11-04);
   bit for bit at every bound.
-- [x] **CH6.2b The M2L timed per level.** Report: `fmm-validate/results/helmholtz-ch6-2b.md`.
+- [x] **CH6.2b The M2L timed per level.** Report: `tetraleaf-validate/results/helmholtz-ch6-2b.md`.
   The M6 and locust: at 10⁻⁶ the exponential M2L the fastest on almost every level below the
   coarsest.
-- [x] **CH6.2c CH6.2b's Kathleen runs.** Report: `fmm-validate/results/helmholtz-ch6-2b.md`
+- [x] **CH6.2c CH6.2b's Kathleen runs.** Report: `tetraleaf-validate/results/helmholtz-ch6-2b.md`
   (§2, §4, §5). 0.24–0.61× Rotation's M2L at 10⁻⁶; level 2 slow at 1 × 40 (CH6.2f).
 - [x] **CH6.2d Beside FMM3D's exponential M2L.** Report:
-  `fmm-validate/results/helmholtz-ch6-2d.md`. Per level FMM3D's over ours 0.44/0.89/1.11 at
+  `tetraleaf-validate/results/helmholtz-ch6-2d.md`. Per level FMM3D's over ours 0.44/0.89/1.11 at
   10⁻⁶ on Kathleen; W1 at kD = 500 22.4 s, our evaluation with the build apart
   (not reported at 10⁻⁶; 10.6–14.8 s on this case at 10⁻⁷ and 10⁻⁸, H6 §8), against 61.6 and
   43.2 s for FMM3D's whole call (review 2026-11-12, B1).
-- [x] **CH6.2e The counts' corner.** Report: `fmm-validate/results/helmholtz-ch6-2e.md`. The FMM
+- [x] **CH6.2e The counts' corner.** Report: `tetraleaf-validate/results/helmholtz-ch6-2e.md`. The FMM
   held at reach 4.5; its adoption signed off 2026-11-07 and withdrawn by CH6.2g.
-- [x] **CH6.2g The counts' reach adopted.** Report: `fmm-validate/results/helmholtz-ch6-2g.md`.
+- [x] **CH6.2g The counts' reach adopted.** Report: `tetraleaf-validate/results/helmholtz-ch6-2g.md`.
   **Not adopted**: the worst pair at reach 4.5 errs up to 2·10⁴× the stated error; the corner
   kept (the user: "Keep the corner (Recommended)").
 - [x] **CH6.2f The coarse levels' merge and shift.** Report:
-  `fmm-validate/results/helmholtz-ch6-2f.md`. `PlaneWaveSplit::Auto`, by child where parents
+  `tetraleaf-validate/results/helmholtz-ch6-2f.md`. `PlaneWaveSplit::Auto`, by child where parents
   leave threads idle; levels 2–3 0.38–0.88× Rotation's; signed off 2026-11-08.
 - [x] **CH6.2h D8: the exponential M2L's level rule.** Report:
-  `fmm-validate/results/helmholtz-ch6-2h.md`. D8 signed off 2026-11-08 ("1–5 as
+  `tetraleaf-validate/results/helmholtz-ch6-2h.md`. D8 signed off 2026-11-08 ("1–5 as
   recommended"): `Auto`'s default; the M2L 0.03–0.70× the previous `Auto`'s at 10⁻⁶.
 - [x] **CH6.2i Laplace's plane-wave M2L on the coarse levels.** Report:
-  `fmm-validate/results/helmholtz-ch6-2i.md`. The split by child in Laplace's level call, bit
+  `tetraleaf-validate/results/helmholtz-ch6-2i.md`. The split by child in Laplace's level call, bit
   for bit, D9 on three machines; signed off 2026-11-09 ("ok, 1–3 as recommended").
 - [x] **H6.G Gate.** `/milestone-gate H6`. Report: `docs/helmholtz/gates/H6.md`. Closed
   2026-11-12 (the user: "Run first, then close (Recommended)", then all as recommended): the
@@ -470,7 +470,7 @@ task's full line is in its record or report and its progress entry
 **Gate:** CH4.4 and CH4.5, the kD sweep and host performance against FMM3D.
 
 - [x] **CH4.0 The M2L rule's sparse-level term.** Report:
-  `fmm-validate/results/helmholtz-ch4-0.md`. `Auto` batches a level only where m̂, its
+  `tetraleaf-validate/results/helmholtz-ch4-0.md`. `Auto` batches a level only where m̂, its
   columns per table read from the global tree, reaches m* of the machine class (agreed over
   the ranks); Batched's blocks split by the threads (no bit changes); the dense budget per node
   (8 GiB). CH3.2d's sweeps within 1.049 of the per-level best on the three machines (its miss
@@ -478,7 +478,7 @@ task's full line is in its record or report and its progress entry
   64–5,000 boxes still behind Rotation (CH4.0f). Signed off (the user, 2026-11-12, on #211): the node budget 8 GiB, a few
   ranks per node with threads the advice (CH8.0 added); done with its residual left to CH4.0f,
   off the priority list; proposal §6.4 amended. *Needs:* CH3.2d.
-- [x] **CH4.0b The worst-box concentration.** Report: `fmm-validate/results/helmholtz-ch4-0b.md`.
+- [x] **CH4.0b The worst-box concentration.** Report: `tetraleaf-validate/results/helmholtz-ch4-0b.md`.
   The cause is placement: a level's error at targets near a box corner is 19–45× its RMS
   within one half-width, mostly on the coarsest plateau level; W1's six tangent points are box
   vertices on every level, and boxes clipped at a corner elsewhere; not a list, the boundary or
@@ -488,7 +488,7 @@ task's full line is in its record or report and its progress entry
   tolerance and the box measure a gate bound of 100 ε (proposal §9.1 amended); the gates keep
   the random charges (D12), CH4.0c, CH4.3 and CH4.4 verify on the smooth densities too. *Needs:* CH3.6.
 - [x] **CH4.0c The degree rule beyond its measured range.** Report:
-  `fmm-validate/results/helmholtz-ch4-0c.md`. Within ε, no correction: W1 at kD = 1000 (levels 2
+  `tetraleaf-validate/results/helmholtz-ch4-0c.md`. Within ε, no correction: W1 at kD = 1000 (levels 2
   and 3 at x = 216 and 108) at 10⁻⁸ to 10⁻³, all-RCR and the default, the random charges, the
   plane wave's trace and the constant density, at most 0.83 ε; raising level 2 or 3 moves the
   error at 10⁻⁸ by under 1 %. §9 item 8: the under-resolved W3 (N = 10⁶) within ε at kD = 200 and
@@ -513,8 +513,8 @@ task's full line is in its record or report and its progress entry
   measured. Split on 2026-11-13 into CH4.0d1–d3 (the user: "d1/d2/d3 (Recommended)"): the
   empty boxes first, then the V pairs of few points, then the sweep on the trees they leave.
 - [x] **CH4.0d1 Empty boxes left out of the lists.** Report:
-  `fmm-validate/results/helmholtz-ch4-0d1.md`; record `docs/helmholtz/tasks/CH4.0d1.md`.
-  `Plan::with_rules` with `PlanRules::empty_boxes` (`nd_fmm_plan::empty`): a box whose subtree
+  `tetraleaf-validate/results/helmholtz-ch4-0d1.md`; record `docs/helmholtz/tasks/CH4.0d1.md`.
+  `Plan::with_rules` with `PlanRules::empty_boxes` (`tetraleaf_plan::empty`): a box whose subtree
   holds no target loses its V, X, W and L2L rows, one without sources leaves the V, W and M2M
   rows naming it; every box, `Global` boxes too, by whole-subtree counts (the user,
   2026-11-13: "Global counts (Recommended)", so that P ranks leave out what one rank does);
@@ -524,14 +524,14 @@ task's full line is in its record or report and its progress entry
   CH4.0d1b). `Plan::new` and Laplace unchanged (plan build within spread on Kathleen).
   Signed off (the user, 2026-11-13, on #216: "Please sign off both questions as recommended"): (1) the rule on by default; (2) CH4.0d1b next, before CH4.0d2.
 - [x] **CH4.0d1b The empty-box rule's build cost.** Report:
-  `fmm-validate/results/helmholtz-ch4-0d1b.md`; record `docs/helmholtz/tasks/CH4.0d1b.md`. The
+  `tetraleaf-validate/results/helmholtz-ch4-0d1b.md`; record `docs/helmholtz/tasks/CH4.0d1b.md`. The
   plan built once on the octree's index (`BoxIndex::of_octree`, `Plan::with_rules_on`,
   `Redistribution::with_index`; the counts of every held ghost box), the design approved by
   the user on 2026-11-13 ("Approve (Recommended)"). The build with the rule 1.00–1.03× the rule
   off's on W3 at N = 4·10⁶, 0.80–0.82 on the under-resolved W3 at kD = 500 (Kathleen, 1 × 40);
   every checksum CH4.0d1's; `plan_build_cost` within `main`'s spread. *Needs:* CH4.0d1.
 - [x] **CH4.0d2 V pairs between leaves of few points as near pairs.** Report:
-  `fmm-validate/results/helmholtz-ch4-0d2.md`; record `docs/helmholtz/tasks/CH4.0d2.md`. Opt-in
+  `tetraleaf-validate/results/helmholtz-ch4-0d2.md`; record `docs/helmholtz/tasks/CH4.0d2.md`. Opt-in
   `NearRule::with_v_pairs` and `HelmholtzFmmBuilder::near_v` (`VNear::{Off, Crossover,
   CostModel}`, per-class `VCosts`); on levels with waves decided per (parent, source) (the user,
   2026-11-13: "Group per (parent, source) (Recommended)"; per pair it counted sources twice).
@@ -539,7 +539,7 @@ task's full line is in its record or report and its progress entry
   evaluation under Rotation 0.52–0.94 (median by ε), under the default 0.85–1.05. Left off by
   default, its default decided with CH4.0d3's leaf size (the user, 2026-11-13, on the PR's
   question 1: "I agree with your recommendation"). *Needs:* CH4.0d1.
-- [x] **CH4.0d3 The leaf size and c_leaf.** Report: `fmm-validate/results/helmholtz-ch4-0d3.md`;
+- [x] **CH4.0d3 The leaf size and c_leaf.** Report: `tetraleaf-validate/results/helmholtz-ch4-0d3.md`;
   record `docs/helmholtz/tasks/CH4.0d3.md`. W and X pairs as near pairs added (the user,
   2026-11-14: "Add W/X rule here (Recommended)"; `near_wx`, `WxCosts` per class) and c_leaf 1
   and 2 swept ("Yes, sweep 1 and 2 (Recommended)"). Proposed defaults, built in the PR: the
@@ -549,7 +549,7 @@ task's full line is in its record or report and its progress entry
   within ε; 4 × 10 = 1 × 40. *Sign-off:* the four defaults as built (the PR's questions 1–4;
   the user on #219, 2026-11-14: "I agree with the recommendation"); D11 amended.
 - [x] **CH4.0e The comparison under the default, and H4's expected gain.** Report:
-  `fmm-validate/results/helmholtz-ch4-0e.md`; record `docs/helmholtz/tasks/CH4.0e.md`. CH3.6's
+  `tetraleaf-validate/results/helmholtz-ch4-0e.md`; record `docs/helmholtz/tasks/CH4.0e.md`. CH3.6's
   matrix under the defaults beside `hfmm3d` on Kathleen and locust, each at its best split: ours
   0.69–0.93× `fastker` at matched accuracy on Kathleen, 0.27–0.38× on locust (geometric means;
   against FMM3D's faster variant 0.47–0.54× on locust, where `fastker` is anomalously slow;
@@ -570,7 +570,7 @@ task's full line is in its record or report and its progress entry
   the pair chain bit for bit at every split and thread count; on CH6.2h's matrix at 1 × 40 and
   1 × 72 the levels of 64–5,000 boxes within 1.10 of Rotation's level time or Rotation's, the
   evaluation within 1.10 of the per-level best. It needs a row-slice entry point of
-  `nd_fmm_simd::MatrixKernel` (Laplace's crate: constraint 1, bit for bit and D9 on the three
+  `tetraleaf_simd::MatrixKernel` (Laplace's crate: constraint 1, bit for bit and D9 on the three
   machines). *Needs:* CH4.0. *Machines:* Kathleen, locust (the M6 with the user's go-ahead).
 - [ ] **CH4.0g Empty boxes in Laplace's trees.** Added on 2026-11-13 at CH4.0c (the user, on
   #214: "Yes. Please."). Laplace's leaves come from the points alone, so an empty leaf is the
@@ -589,15 +589,15 @@ task's full line is in its record or report and its progress entry
   *Needs:* CH4.0d1 (the rule). *Machines:* Kathleen, locust (the M6 with the user's go-ahead
   for timings). *Sign-off:* Laplace's default.
 - [x] **CH4.0h The Helmholtz build by part, and parallel.** Report:
-  `fmm-validate/results/helmholtz-ch4-0h.md`; record `docs/helmholtz/tasks/CH4.0h.md`. The build
+  `tetraleaf-validate/results/helmholtz-ch4-0h.md`; record `docs/helmholtz/tasks/CH4.0h.md`. The build
   timed by part; the operator's tables built once (no second RCR set at 10⁻⁸, no f64 set of
   every level for Batched), M2L blocks on RCR levels alone, every table and the scratch sets in
-  parts on the pool (`nd_fmm_tables::parts`), bit for bit: W1 at kD = 500 at the best split
+  parts on the pool (`tetraleaf_tables::parts`), bit for bit: W1 at kD = 500 at the best split
   0.15–0.23 of one core, at one rank per node 0.44–0.66 (the shared steps, CH4.0k); every
   checksum CH4.0e's. *Sign-off:* the PR's questions 1–3 as recommended (the user on #221,
   2026-11-16: "Please sign off questions as recommended."): the acceptance met at the node's best split;
-  CH4.0j on the list beside CH4.0i, CH4.0k off it; `nd-fmm-tables`' rule amended.
-- [x] **CH4.0i The coarse RCR levels.** Report: `fmm-validate/results/helmholtz-ch4-0i.md`;
+  CH4.0j on the list beside CH4.0i, CH4.0k off it; `tetraleaf-tables`' rule amended.
+- [x] **CH4.0i The coarse RCR levels.** Report: `tetraleaf-validate/results/helmholtz-ch4-0i.md`;
   record `docs/helmholtz/tasks/CH4.0i.md`. The Rotation M2L by pairs (`RcrSplit`: each pair's
   contribution in class order, then each row's adds in order, `main`'s bits at every split and
   rank count), `Auto` by degree (p ≥ 48; p ≥ 30 with few targets): level 2 of W1 at kD = 500
@@ -620,9 +620,9 @@ task's full line is in its record or report and its progress entry
   (CH4.0i's question 3, the user, 2026-11-16, on #222): H4's diagonal form takes these levels'
   passing classes.
 - [x] **CH4.0j The exponential M2L's tables within a level in parts.** Report:
-  `fmm-validate/results/helmholtz-ch4-0j.md`; record `docs/helmholtz/tasks/CH4.0j.md`. Each
+  `tetraleaf-validate/results/helmholtz-ch4-0j.md`; record `docs/helmholtz/tasks/CH4.0j.md`. Each
   node's quadrature counts, each node's level values and each frame's blocks, each shift table
-  a part (`nd-fmm-tables`), the tables `main`'s bits: their build part 0.05–0.29 of CH4.0h's on
+  a part (`tetraleaf-tables`), the tables `main`'s bits: their build part 0.05–0.29 of CH4.0h's on
   locust 1 × 72, 0.08–0.42 on Kathleen 1 × 40; the build of CH3.6's cases under 1 s at most half
   on 8 of 51 and 12 of 43 case-ε pairs, the rest above half without any plane-wave tables (the
   shared steps, Batched's matrices) or near that floor. *Sign-off:* the PR's questions 1–2 as
@@ -632,7 +632,7 @@ task's full line is in its record or report and its progress entry
   §6): the plan with its rules (`Plan::with_rules_on`), the routes (`Points::route`) and the
   octree run serially in each rank: 2.0–2.4 s of W1 at kD = 500's build at one rank per node,
   2.8–3.8 s of W3 at kD = 100's (4·10⁶ points); several ranks split them by points. Time them
-  by part, then thread what pays. Laplace's paths (`nd-fmm-plan`, `pipeline.rs`, `nd-octree`):
+  by part, then thread what pays. Laplace's paths (`tetraleaf-plan`, `pipeline.rs`, `tetraleaf-octree`):
   constraint 1, its outputs bit for bit, D9's benchmarks on the M6, locust and Kathleen.
   Since CH4.0j also most of the build of CH3.6's cases under 1 s at one rank per node (the plan
   5–66 ms, the routes 13–24 ms, the octree 5–19 ms; CH4.0j's report §4).
@@ -640,8 +640,8 @@ task's full line is in its record or report and its progress entry
   output bit for bit; Laplace's builds no slower (D9). *Needs:* CH4.0h. *Machines:* Kathleen,
   locust (the M6 with the user's go-ahead). *Sign-off:* the Laplace change.
 - [x] **CH4.1a The product conversions, measured.** Report:
-  `fmm-validate/results/helmholtz-ch4-1a.md`; record `docs/helmholtz/tasks/CH4.1a.md` (the first
-  half of CH4.1, split 2026-11-19). `nd_fmm_tables::helmholtz::diagonal::Conversions`: S → F and
+  `tetraleaf-validate/results/helmholtz-ch4-1a.md`; record `docs/helmholtz/tasks/CH4.1a.md` (the first
+  half of CH4.1, split 2026-11-19). `tetraleaf_tables::helmholtz::diagonal::Conversions`: S → F and
   F → R by parity and the azimuths' ×4, 10P³ real multiply-adds per conversion (§6.7: 68P³), the
   reference to rounding, a box's bits in every batch. Per box 1–3 RCR pairs; W1 at kD = 500's
   levels 2 and 3 modelled at 0.06–0.10 and 0.16–0.20 of RCR on one core (A5: 0.43); an FFT
@@ -649,8 +649,8 @@ task's full line is in its record or report and its progress entry
   2026-11-19: "Q1-3 as recommended. Merge when green"): H4 goes on with the product, the FFT track stays item 11; the
   acceptance met as read; proposal §6.7 amended.
 - [x] **CH4.1b The signature buffers and the level's scratch.** Report:
-  `fmm-validate/results/helmholtz-ch4-1b.md`; record `docs/helmholtz/tasks/CH4.1b.md` (the second
-  half of CH4.1). `nd_fmm_tables::helmholtz::diagonal::level`: `Signatures` (each box on a 64-byte
+  `tetraleaf-validate/results/helmholtz-ch4-1b.md`; record `docs/helmholtz/tasks/CH4.1b.md` (the second
+  half of CH4.1). `tetraleaf_tables::helmholtz::diagonal::level`: `Signatures` (each box on a 64-byte
   line), `m2l_level` (sources kept, targets by chunks, every chunk size bit for bit), `scratch_shape`
   under `DEFAULT_SIGNATURE_NODE_BUDGET` (8 GiB per node); C5 (`signed_permutation`) and C7
   (`SignatureWorkspace`). W1 at kD = 500 peaks at 4.4 GB with RCR everywhere, 5.8 GB under the
@@ -663,14 +663,14 @@ task's full line is in its record or report and its progress entry
   the RCR pairs added after F → R. Split on 2026-11-19 into CH4.2a (the tables and the pair)
   and CH4.2b (the operator), by the size rule of `/next-task`.
 - [x] **CH4.2a The transfer functions per (level, class) and the pair.** Record
-  `docs/helmholtz/tasks/CH4.2a.md`. `nd_fmm_tables::helmholtz::diagonal::DiagonalM2l`: W = RCR's
+  `docs/helmholtz/tasks/CH4.2a.md`. `tetraleaf_tables::helmholtz::diagonal::DiagonalM2l`: W = RCR's
   factor × ref's T̂ per stored class, each offset through its sample map, the pair one complex
   multiply-add per sample; against RCR within 2E on every case CI runs (≤ 0.77 E) and to k a 32,
   at E's floor (k a 54–216) by the projection or a regression limit (review M11's test in ref);
   the RCR pairs after F → R bit for bit at every chunk size. *Sign-off:* the PR's questions 1–2
   (the user on #237, 2026-11-19: "Yes to both questions"): the acceptance as read, with the
   reading at E's floor; W stored with RCR's factor folded in.
-- CH4.2b The diagonal M2L in the operator. `nd-fmm-exec`: the high-frequency levels' M2L by
+- CH4.2b The diagonal M2L in the operator. `tetraleaf-exec`: the high-frequency levels' M2L by
   CH4.2a's tables, opt-in (the default unchanged until CH4.3), the classes by the bound
   E ≤ θ ε with S6's constants and RCR on the rest. *Done when:* the FMM against the direct sum
   on W1 within RCR's errors (1.1×); every output bit for bit at every thread count, chunk size
@@ -686,7 +686,7 @@ task's full line is in its record or report and its progress entry
   threads, chunk widths and ranks bit for bit. *Sign-off:* the PR's question 1 (the user on
   #238, 2026-11-20: "Yes to Q1"): the whole-level fallback built here, from CH4.3's Also.
 - [x] **CH4.2b2 The diagonal M2L on W1, measured.** Report:
-  `fmm-validate/results/helmholtz-ch4-2b2.md`; record `docs/helmholtz/tasks/CH4.2b2.md`. W1 at
+  `tetraleaf-validate/results/helmholtz-ch4-2b2.md`; record `docs/helmholtz/tasks/CH4.2b2.md`. W1 at
   kD = 500 (10⁻⁶, 10⁻⁸) and 1000 (10⁻⁶), 1 × 40 Kathleen and 1 × 72 locust: errors 1.000×
   Rotation's; the diagonal levels 0.08–0.46× RCR's M2L (0.95–1.02× on mixed levels), the
   evaluation 1.5–2.9× faster than Rotation's; the conversions 24–49 % of the call; the transfer
@@ -708,7 +708,7 @@ task's full line is in its record or report and its progress entry
   class at p = 41–245; both builds by ring, the direct build CH4.2a's bits. *Sign-off:* the
   PR's question 1 as recommended (the user on #240, 2026-11-20: "Sign off Q1 as recommended").
 - [x] **CH4.2c2 The interpolated build in the operator, and W1's tables timed.** Report:
-  `fmm-validate/results/helmholtz-ch4-2c2.md`; record `docs/helmholtz/tasks/CH4.2c2.md`.
+  `tetraleaf-validate/results/helmholtz-ch4-2c2.md`; record `docs/helmholtz/tasks/CH4.2c2.md`.
   `TransferBuild` a setting of the operator and builder (`with_diagonal_build`,
   `diagonal_build`), the rule by its constants (C_T = 0.23 interpolated), the harness's
   `--diagonal-build`. W1 at kD = 500 and 1000 (Kathleen 1 × 40 and 40 × 1): errors 1.000×
@@ -718,7 +718,7 @@ task's full line is in its record or report and its progress entry
   (`DEFAULT_DIAGONAL_BUILD`; proposal §5.4 amended); the acceptance as read.
 - [ ] **CH4.2d Dispatched kernels for the diagonal pair and the conversions.** (Added at
   CH4.2b2, its question 3, signed off 2026-11-20; off the list, reconsidered at CH4.5.) *Done when:*
-  the pair and the conversions' column kernel on `nd-fmm-simd`'s ISAs, bit for bit or within
+  the pair and the conversions' column kernel on `tetraleaf-simd`'s ISAs, bit for bit or within
   rounding of the scalar path as the crate's rules say (constraint 1); the diagonal levels'
   call timed against CH4.2b2's (pairs 50–80 %, conversions 24–49 % of its thread time).
   *Needs:* CH4.2b2. *Machines:* Kathleen, locust.
@@ -728,7 +728,7 @@ task's full line is in its record or report and its progress entry
   of `/next-task` (the Alsos below are each one study with its own machine runs); every Also of
   the task as it stood is on one of them.
 - [x] **CH4.3a The bound's constants in the full FMM.** Report:
-  `fmm-validate/results/helmholtz-ch4-3a.md`; record `docs/helmholtz/tasks/CH4.3a.md`. C_T (0.15
+  `tetraleaf-validate/results/helmholtz-ch4-3a.md`; record `docs/helmholtz/tasks/CH4.3a.md`. C_T (0.15
   direct, 0.23 interpolated) and θ = 1/2 hold in the FMM: every case 1.000–1.007× Rotation's errors
   on W1 (kD = 100–1000), W3 (N = 10⁶, kD = 200, 500), 10⁻³–10⁻⁸, the smooth densities and damped
   W1; margin 16 at 10⁻⁸, none needed at ε ≥ 10⁻⁶; per pair within 2E on the FMM's levels but at
@@ -754,7 +754,7 @@ task's full line is in its record or report and its progress entry
   rule, opt-in, and its cost model) and CH4.3b2 (the default), by the size rule of `/next-task` (a
   cost model and a rule in the operator, plus measurements on two machines).
 - [x] **CH4.3b1 The time rule per level, built and calibrated.** Report:
-  `fmm-validate/results/helmholtz-ch4-3b1.md`; record `docs/helmholtz/tasks/CH4.3b1.md`.
+  `tetraleaf-validate/results/helmholtz-ch4-3b1.md`; record `docs/helmholtz/tasks/CH4.3b1.md`.
   `HelmholtzDiagonal::Auto` (opt-in): a level's bound classes where `DiagonalCosts` (per machine
   class, fitted on Kathleen and locust; a diagonal pair 0.08–0.52× RCR's at every p, so the
   choice is per level) puts the form below RCR or, after the plan, below Auto's waves (per box,
@@ -775,7 +775,7 @@ task's full line is in its record or report and its progress entry
   (a rule change, an error study and the default with runs at 1 × N and N × 1 on two machines);
   every Also of CH4.3b2 is on one of them.
 - [x] **CH4.3b2a The time rule at matched accuracy.** Report:
-  `fmm-validate/results/helmholtz-ch4-3b2a.md`; record `docs/helmholtz/tasks/CH4.3b2a.md`. Under
+  `tetraleaf-validate/results/helmholtz-ch4-3b2a.md`; record `docs/helmholtz/tasks/CH4.3b2a.md`. Under
   `HelmholtzDiagonal::Auto` a level with waves keeps its resolving degree p_w, and keeps the waves
   unless the form beats them at p_w, then runs the cheaper of the form and RCR (`wave_level_choice`;
   RCR never against the waves alone: a rule of three lost 0.47 s, gained 0.11 s). W1 and W3 at
@@ -783,14 +783,14 @@ task's full line is in its record or report and its progress entry
   choices within 1.05× on 81/83 and 82/92 levels; evaluation 0.38–1.12× and 0.43–0.99×.
   *Sign-off:* the report's questions 1–4: signed off 2026-11-21 by the user on #244, "Accept 1-4 as recommended": 1, the acceptance as read; 2, the order as built (the waves unless the form beats them, then the cheaper of the form and RCR); 3, the sparse level closed here and carried to CH4.3b2b; 4, W3 at kD = 200 on Kathleen an Also on CH4.3b2c.
 - [x] **CH4.3b2b The V rule on the form's levels, and the defaults' errors at 10⁻⁶.** Report:
-  `fmm-validate/results/helmholtz-ch4-3b2b.md`; record `docs/helmholtz/tasks/CH4.3b2b.md`. The
+  `tetraleaf-validate/results/helmholtz-ch4-3b2b.md`; record `docs/helmholtz/tasks/CH4.3b2b.md`. The
   defaults' excess over Rotation's errors is the V rule's plan (0.966–1.024× with the rule off;
   Rotation's plan converts 1.6–9.2× as many pairs); `VAfterPlan` (opt-in) decides the crossovers
   again after the plan: on the levels taken from the waves within the spread (justified as it is),
   on raised levels with waves 0.09–0.75 s gained per case (the Also's level among them).
   *Sign-off:* the report's questions 1–4: signed off 2026-11-21 by the user on #245, "Q1-4 as recommended": 1, the explanation as read, nothing changes; 2, the levels taken from the waves justified as they are, `VAfterPlan` opt-in (a measurement tool and CH4.3b2d's trusted path); 3, the follow-up CH4.3b2d before CH4.3b2c; 4, unraised levels with waves not adopted, no task.
 - [x] **CH4.3b2d The waves' V crossover on raised levels, in one plan.** Report:
-  `fmm-validate/results/helmholtz-ch4-3b2d.md`; record `docs/helmholtz/tasks/CH4.3b2d.md`.
+  `tetraleaf-validate/results/helmholtz-ch4-3b2d.md`; record `docs/helmholtz/tasks/CH4.3b2d.md`.
   `VRaisedPrice::PerBox`: on a raised level the waves' cost per box over the V entries per leaf the
   per-pair price leaves, counted before the plan, one plan; the trusted measure's
   (`VAfterPlan::RaisedLevels`) output bit for bit on 36 of 40 runs (W1, W3 at 10⁻⁷, 10⁻⁸, both
@@ -817,7 +817,7 @@ task's full line is in its record or report and its progress entry
   size rule of `/next-task`: two independent studies, pairs on the M6 and a calibration on
   Kathleen) into CH4.3c1 and CH4.3c2.
 - [x] **CH4.3c1 C₀ at large degrees, against a double-double reference.** Report:
-  `fmm-validate/results/helmholtz-ch4-3c1.md`; record `docs/helmholtz/tasks/CH4.3c1.md`. C₀ = 200
+  `tetraleaf-validate/results/helmholtz-ch4-3c1.md`; record `docs/helmholtz/tasks/CH4.3c1.md`. C₀ = 200
   confirmed against the diagonal chain in double-double (`ExtendedM2l`): at E's floor the form
   errs 25–149 u over k a 27–216, p 36–251, every class within 0.94 E, both builds; M12's excess
   was the f64 references' rounding (RCR 290–3,345 u). FMM evidence CH4.3a's (no decision moves).
@@ -901,16 +901,16 @@ task's full line is in its record or report and its progress entry
   a box's waves, the merge lists per parent, the shifts to the children), built first on
   Laplace, whose host strategy exists (Phase 6 T13, `M2lStrategy::PlaneWave`) and which on
   a device ran as `Dense` until CH7.5c ("PlaneWave, run as dense on the device",
-  `fmm-exec/src/device.rs`); CH7.5d reuses them. The task T13's brief left for afterwards
+  `tetraleaf-exec/src/device.rs`); CH7.5d reuses them. The task T13's brief left for afterwards
   (docs/phase6/T13-plane-wave-m2l.md, "Afterwards"): T10 modelled it at 2.4–20× T7's dense
   M2L stage on the H100, larger at high p (`spikes/plane-wave/SPIKE_REPORT.md` §3), with the
   irregular merge lists the open device question. Split on 2026-11-05 (the user, "a/b/c,
   Helmholtz → d"; constraint 1 agreed: new kernels, the device's `PlaneWave` opt-in until
   CH7.5c's sign-off) into:
 - [x] **CH7.5a The plane-wave kernels.** Record: `docs/helmholtz/tasks/CH7.5a.md`; tests
-  `fmm-kernels/tests/kernels/translate/plane_wave.rs`. `nd-fmm-kernels` only (with read-only
-  accessors of `nd_fmm_tables::PlaneWaveTables`), module `plane_wave`: the
-  steps of `nd_fmm_tables::plane_wave` (CONVENTIONS §3.14) as kernels, one launch per step
+  `tetraleaf-kernels/tests/kernels/translate/plane_wave.rs`. `tetraleaf-kernels` only (with read-only
+  accessors of `tetraleaf_tables::PlaneWaveTables`), module `plane_wave`: the
+  steps of `tetraleaf_tables::plane_wave` (CONVENTIONS §3.14) as kernels, one launch per step
   and level call (the outgoing waves per box and frame, the merge per parent and
   accumulator over a merge list built on the host, the gather with the child shifts, the
   local with the rotation back), the tables uploaded once from plain arrays, explicit `fma`
@@ -918,22 +918,22 @@ task's full line is in its record or report and its progress entry
   order and within a stated bound of the table function it restates, f32 and f64 on the
   CubeCL CPU runtime (CI), f32 on Metal (the M6, by hand), both on CUDA (locust, by hand),
   every layout; a level call over a full and an adaptive level against
-  `PlaneWaveTables::m2l` per pair to rounding and against `nd_fmm_ref::direct::m2l` on
+  `PlaneWaveTables::m2l` per pair to rounding and against `tetraleaf_ref::direct::m2l` on
   levels 2, 9 and 16 within T13's quadrature bound (p ≤ 20 f64 in an ignored sweep); two
-  launches bit for bit. No `nd-fmm-exec` change. *Needs:* Phase 6 T13 (merged).
+  launches bit for bit. No `tetraleaf-exec` change. *Needs:* Phase 6 T13 (merged).
   *Machines:* locust, the M6 (Metal).
 - [x] **CH7.5b The device's `PlaneWave`.** Record: `docs/helmholtz/tasks/CH7.5b.md`;
   `fmm::DevicePlaneWave`, `FmmBuilder::{device_plane_wave, device_plane_wave_budget}`,
   `device::PlaneWaveReport`, `PlaneWaveScratch::covering`; tests
   `device_common::check_plane_waves`, `tests/mpi_exec.rs` (`check_plane_wave`), the gate in
-  `tests/device_fmm.rs`. "The CubeCL CPU runtime in CI" met by hand for `nd-fmm-exec` (no
+  `tests/device_fmm.rs`. "The CubeCL CPU runtime in CI" met by hand for `tetraleaf-exec` (no
   CI job builds it with `cpu`; the kernels' tests run in CI): signed off 2026-11-05 as
-  recommended. `nd-fmm-exec`'s device path runs M2L under
+  recommended. `tetraleaf-exec`'s device path runs M2L under
   `PlaneWave` on CH7.5a's kernels when a builder setting names it (otherwise "PlaneWave,
   run as dense on the device", as before): the merge lists from the V views at build, the
   waves buffer bounded by chunks of parents within the device's scratch budget, the
   launches in the formula of `tests/device_common`; the lists built in the order of CH7.5a's
-  test (`Lists::new` in `fmm-kernels/tests/kernels/translate/plane_wave.rs`, the order of
+  test (`Lists::new` in `tetraleaf-kernels/tests/kernels/translate/plane_wave.rs`, the order of
   `src/operator_plane_wave.rs`), several vectors as columns, each chunk's buffers within
   the kernels' 32-bit index range (CH7.5a). *Done when:* `PlaneWave` on the device
   (CUDA f32 and f64, Metal f32, the CubeCL CPU runtime in CI) within 1.1× `Dense`'s errors
@@ -944,7 +944,7 @@ task's full line is in its record or report and its progress entry
   defaults bit for bit, the device `Auto` unchanged. *Needs:* CH7.5a. *Machines:* locust,
   the M6 (Metal).
 - [x] **CH7.5c Measured, and adopted or dropped.** Record: `docs/helmholtz/tasks/CH7.5c.md`;
-  report `fmm-validate/results/helmholtz-ch7-5c.md`; `fmm::DevicePlaneWaveLayout`,
+  report `tetraleaf-validate/results/helmholtz-ch7-5c.md`; `fmm::DevicePlaneWaveLayout`,
   `FmmBuilder::device_plane_wave_layout`, `device::{default_plane_wave_budget,
   CUDA_PLANE_WAVE_WIDE_UNITS, CUDA_PLANE_WAVE_WIDE_FROM, METAL_PLANE_WAVE_BUDGET}`,
   `layout_sweep --part planewave`. Adopted (signed off 2026-11-06: "sign off all three
@@ -952,7 +952,7 @@ task's full line is in its record or report and its progress entry
   device (`Dense` the named opt-out), cubes of 128 units on Metal and on CUDA to p = 12 and
   of 256 on CUDA from p = 13, Metal's plane-wave budget 1 GB, the kernels kept; the device
   `Auto` unchanged (CH7.5e); D9 by the device executables and gates on the CPU runtime,
-  Metal and CUDA and one ABBA run of `nd-fmm-bench --backend cuda` against `main`.
+  Metal and CUDA and one ABBA run of `tetraleaf-bench --backend cuda` against `main`.
   The device M2L stage and the evaluation
   under CH7.5b's setting against T7's dense M2L at f64 p = 8, 12, 18 on locust's H100 (f32
   p = 8 on the M6's Metal), with the kernels' layouts measured (CH7.5a's `GPU_UNITS` = 128
@@ -979,7 +979,7 @@ task's full line is in its record or report and its progress entry
   changes the `tracel-llvm` bundle, 23.1.0-3 to 23.1.0-4), a parked idle device server
   (#1806, launch latency), a CUDA PTX placeholder fix (#1691), loop conditions in their own
   scope (#1788) and the plane matmul's planes per cube floored at one (cubek #784).
-  *Done when:* the pins and `Cargo.lock` moved, with the `nd-fmm-kernels` checks of root
+  *Done when:* the pins and `Cargo.lock` moved, with the `tetraleaf-kernels` checks of root
   `CLAUDE.md` passing on the CPU runtime and Metal (the M6) and CUDA (locust); every
   device test and gate passing, any changed bit identity explained; Laplace's device
   benchmarks and CH7.5c's merge and shift times within noise of `main` (D9) on the M6's
@@ -1049,7 +1049,7 @@ task's full line is in its record or report and its progress entry
   later, separate task"), added at the H1 gate (G2; the user, 2026-11-19, on #230: "Add CH9.0"). Dipoles
   (Burton–Miller, double-layer operators) through the source-type interface of Laplace's C6.4
   (Phase 6 T8, T8d). *Done when:* CONVENTIONS §3.15's dipole convention (a version bump,
-  proposed in the PR first); the dipole direct sum and leaf operators in `nd-fmm-ref` against
+  proposed in the PR first); the dipole direct sum and leaf operators in `tetraleaf-ref` against
   the direct sum and k → 0 against Laplace's dipoles; the host FMM's dipole source type within
   ε on W1 and W3 for real, complex and imaginary k; FMM3D's dipoles as a check where it meets
   its eps. Split into lettered sub-tasks before it starts. *Needs:* H3.G, CH1.3c.
@@ -1058,7 +1058,7 @@ task's full line is in its record or report and its progress entry
   last optimisation: H4 to H8 closed and every default signed off (D7, D8, the device
   `Auto`). Our FMM with its defaults beside `hfmm3d` (the `default` and `fastker` builds,
   and CH6.2d's patched `timed` builds for the breakdown) on one node of the M6, locust and
-  Kathleen, as Laplace's T9 (`fmm-validate/results/phase6-fmm3d.md`) and CH4.5, in depth:
+  Kathleen, as Laplace's T9 (`tetraleaf-validate/results/phase6-fmm3d.md`) and CH4.5, in depth:
   - accuracy: for each of our tolerances (10⁻³ to 10⁻⁸, D1) FMM3D at the same requested ε
     and at the eps of the closest error (matched accuracy); both against the same sampled
     direct sum, with the full-target crosscheck and the worst box;
@@ -1101,7 +1101,7 @@ item is removed only where the task names it.
   "Keep all, none archived (Recommended)", "One spikes workspace (Recommended)").
 - [x] **CHA.2 `unsafe` enforced.** Review C1. Record: `docs/helmholtz/tasks/CHA.2.md`.
   `[lints.rust] unsafe_code` in each `Cargo.toml` (every target): `forbid` in seven crates,
-  nd-octree included, `deny` in nd-fmm-plan, whose one exception (the example's counting
+  tetraleaf-octree included, `deny` in tetraleaf-plan, whose one exception (the example's counting
   allocator) is allowed in its file, named in root CLAUDE.md. `points_to_morton` made safe (1–2 ms
   per 10⁷ points). Signed off 2026-11-19 (the user: at the plan "[lints.rust] per crate
   (Recommended)", "M6, now (Recommended)", "Skip D9 runs (Recommended)"; on #225 "Please go ahead
@@ -1114,7 +1114,7 @@ item is removed only where the task names it.
   "Skip D9 runs").
 - [ ] **CHA.4 A test-support crate.** Review T1, C3. A small crate without workspace
   dependencies (the generator, the point sets, the error norms, the machine facts) that
-  every crate may dev-depend on and nd-fmm-bench depends on in place of nd-fmm-validate
+  every crate may dev-depend on and tetraleaf-bench depends on in place of tetraleaf-validate
   where that is all it needs. *Done when:* the copies of the generator (41 at the first review,
   52 files at the second, review 2026-11-19) and the copies of
   `relative_l2` (eleven), `plummer` and `cube` replaced where the draws stay the same (checked per
@@ -1151,26 +1151,26 @@ item is removed only where the task names it.
   (`VCosts`, `WxCosts`) beside `cost.rs`, and its copies of `agree`, `Calls` and `delegate!`;
   `kind_times`' literal indices replaced by an operator kind. Split into lettered sub-tasks
   before it starts. *Machines:* locust, Kathleen.
-- [ ] **CHA.8 The large files of nd-fmm-exec split.** Review C2, K4, T2, U2. `device.rs`
+- [ ] **CHA.8 The large files of tetraleaf-exec split.** Review C2, K4, T2, U2. `device.rs`
   into modules and `DeviceOperator::new` into staged constructors; `fmm.rs`'s option enums
   and report types into submodules; `tests/mpi_exec.rs` into `tests/mpi_exec/main.rs` with
-  one module per scenario, and the same for `fmm-exec/tests/helmholtz_fmm.rs` and
-  `fmm-plan/tests/mpi_regressions.rs` (review 2026-11-19, T2). Moves only. *Done when:* bit for bit; within D9 with the
+  one module per scenario, and the same for `tetraleaf-exec/tests/helmholtz_fmm.rs` and
+  `tetraleaf-plan/tests/mpi_regressions.rs` (review 2026-11-19, T2). Moves only. *Done when:* bit for bit; within D9 with the
   placement checked (`-align-loops=64` where a time moves); one PR per file.
   *Machines:* locust, Kathleen.
 - [ ] **CHA.9 Documentation of what is, not of how it came.** Review K1, L4. *Done when:*
   the rustdoc of public items says what the item does and why its default is what it is,
   the history in `progress.md` and the phase documents; each crate CLAUDE.md cut to its
-  rules and checks (the time rule of `fmm-exec/CLAUDE.md` restated to what holds);
+  rules and checks (the time rule of `tetraleaf-exec/CLAUDE.md` restated to what holds);
   `docs/design/workspace-structure.md` has the Helmholtz modules; the crate descriptions
-  and `fmm-exec/src/lib.rs` name Helmholtz; `laplace-fmm-plan.md` §2.5's 0.76ᵖ named as
-  the M2L's ratio (M10). Also (review 2026-11-19, C4): `fmm-ref/CLAUDE.md` and
-  `fmm-exec/CLAUDE.md` record as a decision that the host FMM's leaf operators call
-  `nd-fmm-ref`'s per point (no second trusted path there; a change to the oracle moves the
+  and `tetraleaf-exec/src/lib.rs` name Helmholtz; `laplace-fmm-plan.md` §2.5's 0.76ᵖ named as
+  the M2L's ratio (M10). Also (review 2026-11-19, C4): `tetraleaf-ref/CLAUDE.md` and
+  `tetraleaf-exec/CLAUDE.md` record as a decision that the host FMM's leaf operators call
+  `tetraleaf-ref`'s per point (no second trusted path there; a change to the oracle moves the
   FMM's times). Comments and documents only, one crate per PR.
 - [ ] **CHA.10 Housekeeping.** Review K2, U3. *Done when:* the one-off scripts of
   `tools/helmholtz/` and the task-named cases of `tools/scaling/run.sh` are apart from the
-  living tools, each report's reproduction line still valid; `octree/Cargo.toml` takes its
+  living tools, each report's reproduction line still valid; `tetraleaf-octree/Cargo.toml` takes its
   versions from `[workspace.dependencies]` (the migration the root CLAUDE.md leaves open;
   *Sign-off*) and points at the GitHub repository; its unused features removed if no
   example or test names them (`battleship` is empty). Also (review 2026-11-19, K2, K5): a
@@ -1184,7 +1184,7 @@ item is removed only where the task names it.
   named precisions with the V rule run where a level lies outside the quadrature's tables, which
   panicked on `main` (#233's question 1; the user, 2026-11-19: "Accept as recommended"). H4's
   diagonal-form choice per level goes in the same place.
-- [ ] **CHA.12 One entry-point macro set in nd-fmm-simd.** Review 2026-11-19, L5. The eleven
+- [ ] **CHA.12 One entry-point macro set in tetraleaf-simd.** Review 2026-11-19, L5. The eleven
   macros that `arch/avx2.rs`, `avx512.rs` and `neon.rs` each define after their `Simd` impls
   (about 670 lines each, about 140 differing) once in `arch/mod.rs`, taking the token, the
   `target_feature` literal and the block constants. *Done when:* every kernel bit for bit on

@@ -1,5 +1,22 @@
 # FMM workspace structure: crates, boundaries and conventions
 
+**The tetraleaf rename (2026-11-21).** The project was renamed tetraleaf and moved from
+github.com/tbetcke/fmm to github.com/tetracl/tetraleaf (a GitHub transfer; the old URLs
+redirect). Every crate was renamed, package, library and directory alike:
+
+| before | after |
+| --- | --- |
+| directory `fmm-<name>/`, package `nd-fmm-<name>`, library `nd_fmm_<name>` | directory `tetraleaf-<name>/`, package `tetraleaf-<name>`, library `tetraleaf_<name>` |
+| directory `octree/`, package `nd-octree`, library `nd_octree` | directory `tetraleaf-octree/`, package `tetraleaf-octree`, library `tetraleaf_octree` |
+| spike packages `nd-fmm-spike-<name>` | `tetraleaf-spike-<name>` |
+
+for `<name>` in math, ref, tables, plan, exec, simd, kernels, bench and validate. The live
+files (code, manifests, CI, tools, skills, the CLAUDE.md files, CONVENTIONS.md, the roadmap
+and the other design documents) carry the new names. The records keep the old ones, and their
+paths: this document below this note, the progress log, the task plans, gate reports and
+reviews, the phase briefs, the spike reports and every `results/` file. Read `fmm-exec/src/…`
+there as `tetraleaf-exec/src/…`. No convention, behaviour or result changed.
+
 As of 2026-09-29; revised the same day after reading the `octree` and `fmm-plan` sources.
 Revised at the end of Phase 3 (2026-10-02; Sections 1.1, 3, 3.1, 4 and 6): `nd-fmm-plan`
 is rewritten around a batched operator interface, and `nd-fmm-exec` and the Phase 3

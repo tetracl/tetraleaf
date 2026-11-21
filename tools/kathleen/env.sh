@@ -85,7 +85,7 @@ export RUST_MIN_STACK=8388608
 # MPI_Alltoallv left one rank's block from rank 0 at zero, or garbage, in every run, with
 # the psm2 and the ofi MTL and every alltoallv algorithm; over TCP, through shared memory
 # and with TIDs off it passed (Phase 5S T0, jobs 241946, 242295, 242474;
-# fmm-validate/results/phase5n-kathleen.md, "Phase 5S, T0"). With TIDs off, large
+# tetraleaf-validate/results/phase5n-kathleen.md, "Phase 5S, T0"). With TIDs off, large
 # messages go through PSM2's other paths. Every rank inherits it: mpirun's daemons start
 # through srun with this environment.
 export PSM2_TID=0
@@ -94,7 +94,7 @@ export PSM2_TID=0
 # packets in about half the phases, every rank sending to every other at once, and each
 # loss stalled the receiving rank by about 160 ms. With 10:40:2 the same losses cost about
 # 10 ms (Phase 5S T8, jobs 604021 and 604022;
-# fmm-validate/results/phase5s-t8.md §9.3).
+# tetraleaf-validate/results/phase5s-t8.md §9.3).
 export PSM2_ERRCHK_TIMEOUT=10:40:2
 
 # Prepends a directory to a colon-separated variable, once.

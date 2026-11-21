@@ -2,7 +2,7 @@
 //! "Outputs").
 //!
 //! ```text
-//! cargo run -p nd-fmm-spike-diagonal --release --example summary -- \
+//! cargo run -p tetraleaf-spike-diagonal --release --example summary -- \
 //!     results/runs-0.csv results/runs-1.csv ... > results/summary.md
 //! ```
 //!
@@ -14,8 +14,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use nd_fmm_spike_diagonal::classes::classes;
-use nd_fmm_spike_diagonal::rules::{EPSILONS, S7Table, calibrated, formula};
+use tetraleaf_spike_diagonal::classes::classes;
+use tetraleaf_spike_diagonal::rules::{EPSILONS, S7Table, calibrated, formula};
 
 const U64: f64 = 1.1102230246251565e-16;
 const U32: f64 = 5.960464477539063e-8;
@@ -100,7 +100,7 @@ fn interior_shares() -> Vec<f64> {
                     if o.iter().all(|x| x.abs() <= 1) {
                         continue;
                     }
-                    let (rep, _) = nd_fmm_spike_diagonal::classes::class_of(o);
+                    let (rep, _) = tetraleaf_spike_diagonal::classes::class_of(o);
                     count[cs.iter().position(|k| k.rep == rep).unwrap()] += 1;
                 }
             }

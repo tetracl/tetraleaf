@@ -1,5 +1,5 @@
 #!/bin/bash -l
-# tools/kathleen/jobs/scaling.sbatch: one nd-fmm-validate `scaling` launch across the
+# tools/kathleen/jobs/scaling.sbatch: one tetraleaf-validate `scaling` launch across the
 # job's nodes, 2 ranks per node x 20 threads (one rank per socket), the N = 10^6 cube,
 # f64, p = 3, with the one-rank reference and 8 error vectors (Phase 5N T1). Two nodes,
 # `test`, unless the submission says otherwise (the ranks follow the node count; Phase 5S
@@ -20,5 +20,5 @@
 
 cd "$SLURM_SUBMIT_DIR" && . tools/kathleen/jobs/lib.sh
 
-step build 'cargo build --release -p nd-fmm-validate --example scaling'
+step build 'cargo build --release -p tetraleaf-validate --example scaling'
 step scaling "timeout 1800 mpirun -n $((2 * SLURM_JOB_NUM_NODES)) --map-by ppr:1:socket:PE=20 --bind-to core --report-bindings target/release/examples/scaling --dist cube --n 1000000 --precision f64 --p 3 --threads 20 --overlap both --errors 8 --reference --evals 2"

@@ -1,0 +1,86 @@
+[features]
+# Treat warnings as a build error.
+strict = []
+battleship = []
+
+[package]
+name = "tetraleaf-octree"
+version = "0.1.1-dev"
+edition = "2024"
+authors = [
+    "Srinath Kailasa <srinathkailasa@gmail.com>, Timo Betcke <timo.betcke@gmail.com>",
+]
+description = "A library to create Octrees"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/tetracl/tetraleaf"
+repository = "https://github.com/tetracl/tetraleaf"
+readme = "README.md"
+keywords = ["numerics"]
+categories = ["mathematics", "science"]
+
+[lib]
+name = "tetraleaf_octree"
+crate-type = ["lib"]
+
+[dependencies]
+itertools = "0.15.*"
+# RLST 0.8 uses rand 0.10 traits in its parallel-sort API.
+rand = "0.10"
+rand_chacha = "0.10"
+mpi = { version = "0.8.2", features = ["derive", "user-operations"] }
+rlst = { version = "0.12.0", features = ["mpi"] }
+
+
+[dev-dependencies]
+
+[build-dependencies]
+
+# No `unsafe` in any target of this crate (root CLAUDE.md, "Working rules"; Helmholtz CHA.2).
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+wildcard_imports = "forbid"
+
+[[example]]
+name = "test_mpi_complete_tree"
+
+[package.metadata.example.test_mpi_complete_tree.templated-examples]
+command = "mpirun -n {{NPROCESSES}}"
+
+[[example]]
+name = "test_mpi_global_bounding_box"
+
+[package.metadata.example.test_mpi_global_bounding_box.templated-examples]
+command = "mpirun -n {{NPROCESSES}}"
+
+[[example]]
+name = "test_mpi_leaf_lookup"
+
+[package.metadata.example.test_mpi_leaf_lookup.templated-examples]
+command = "mpirun -n {{NPROCESSES}}"
+
+
+[[example]]
+name = "test_mpi_vtk"
+
+[package.metadata.example.test_mpi_vtk.templated-examples]
+command = "mpirun -n {{NPROCESSES}}"
+
+[[example]]
+name = "test_mpi_construction_edge_cases"
+
+[package.metadata.example.test_mpi_construction_edge_cases.templated-examples]
+command = "mpirun -n {{NPROCESSES}}"
+
+[[example]]
+name = "test_mpi_weighted_partition"
+
+[package.metadata.example.test_mpi_weighted_partition.templated-examples]
+command = "mpirun -n {{NPROCESSES}}"
+
+[[example]]
+name = "test_mpi_locally_essential"
+
+[package.metadata.example.test_mpi_locally_essential.templated-examples]
+command = "mpirun -n {{NPROCESSES}}"

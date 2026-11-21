@@ -32,7 +32,7 @@ diagonal pair over RCR's at p = 8 … 245 (the per-class crossover). `check` pri
 with the form and level, the options measured, the rule's choice in the run and the refit
 model's from the measured counts; `summary` per launch the errors and evaluation of each
 setting over the same setting's without the form. No timing is
-asserted; the numbers go into fmm-validate/results/helmholtz-ch4-3b1.md.
+asserted; the numbers go into tetraleaf-validate/results/helmholtz-ch4-3b1.md.
 """
 
 import pathlib

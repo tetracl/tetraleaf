@@ -14,7 +14,7 @@
 
 use std::hint::black_box;
 
-use nd_fmm_math::RealScalar;
+use tetraleaf_math::RealScalar;
 use std::time::Instant;
 
 use crate::machine::{ASSUMED_GHZ, median_time_per_call};

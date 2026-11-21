@@ -3,7 +3,7 @@
 # c_leaf (docs/helmholtz/tasks/CH4.0d3.md, "Machine runs"), from the repository root after
 # the example was built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch4-0d3-runs.sh <out-dir> <stage…>
 #
 # Every launch runs `helmholtz_accuracy` under the library's default M2L (`--m2l auto-pw`,

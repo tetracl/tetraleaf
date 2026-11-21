@@ -3,7 +3,7 @@
 # (docs/helmholtz/tasks/CH6.2f.md, "Machine runs"), from the repository root after the
 # example was built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch6-2f-runs.sh <out-dir> <stage…>
 #
 # Stage `coarse`: W1 and W3 at kD = 100 and W1 at kD = 500, ε = 1e-3 and 1e-6, at each split

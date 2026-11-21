@@ -1,0 +1,6117 @@
+//! The device path (Phase 4, C4.1; feature `gpu`): [`DeviceOperator`], the Laplace
+//! operator with its data on a device of `tetraleaf-kernels`, and what an
+//! [`Fmm`](crate::fmm::Fmm) reports about it ([`DeviceReport`], [`DeviceCounters`]).
+//! The design is docs/design/device-path.md, signed off on 2026-10-03; its sections are
+//! cited as §x.
+//!
+//! # Backends
+//!
+//! [`Backend`] chooses where the operators run: [`Backend::Host`] (the default, the host
+//! path of [`operator`](crate::operator)), or a device of `tetraleaf-kernels`, a run-time
+//! value, never a type parameter (§3.2):
+//!
+//! | Backend | Feature | Precisions | Runs here |
+//! | --- | --- | --- | --- |
+//! | [`Cpu`](Backend::Cpu) | `cpu` | f32, f64 | the CubeCL CPU runtime: the correctness backend |
+//! | [`Metal`](Backend::Metal) | `metal` | f32 | wgpu with the MSL compiler, outside the macOS sandbox |
+//! | [`Cuda`](Backend::Cuda) | `cuda` | f32, f64 | LLVM to NVPTX; type-checked in CI, run by hand on an H100 (Phase 4S) |
+//!
+//! Each feature enables `gpu`. A backend that is not compiled in, a device that cannot be
+//! opened and a precision the device does not do arithmetic in (f64 on Metal) are
+//! refused by [`FmmBuilder::build`](crate::fmm::FmmBuilder::build) with a
+//! [`SettingsError`], agreed on every rank by step 1's
+//! existing all-reduce of input errors. [`Backend::probe`] opens a device and returns
+//! why it is unavailable, which the `Copy` error cannot carry. A device backend runs on
+//! any number of ranks ([Several ranks](#several-ranks-phase-5-t8)).
+//!
+//! # Residency (§4.1, §4.3 option (a))
+//!
+//! Everything is allocated on the device at build, so no evaluation allocates there:
+//!
+//! | Data | On the device | Uploaded | Downloaded |
+//! | --- | --- | --- | --- |
+//! | multipoles, locals | one buffer each, the `LevelBuffers` layout, ghost boxes included | never (zeroed by a kernel), but on several ranks the received ghost multipoles and those of the replicated top, packed | never, but by host-fallback calls and on several ranks the sent multipoles, packed |
+//! | source store | the `LeafStore` layout of CONVENTIONS §3.13, every leaf of the numbering (the ghost leaves last) | coordinates once at build; the charges (with dipoles the strengths, Phase 6 T8d) every evaluation, scattered into their slots; on several ranks the ghost tail every evaluation | never |
+//! | target input | the `LeafStore` layout | once at build | never |
+//! | target output | the `LeafStore` layout | never (zeroed) | once per evaluation (without the output pass on the device), and by host-fallback calls |
+//! | output order (Phase 4S T9) | with the output pass on the device: every target's point in leaf order and leaf, the leaves' offsets (u32) and scales (f64), [`OutputOrder`] | once at build | never |
+//! | caller-ordered output (Phase 4S T9) | with the output pass on the device: φ, then ∇φ, of every target in the caller's order, o N_t values | never (written by `gather_output`) | once per evaluation, instead of the target output |
+//! | plan views | one index buffer per array ([`DeviceViews`]) | once at build | never |
+//! | geometry | box and leaf indices ([`BoxCoordinates`], [`LeafCoordinates`]) | once at build | never |
+//! | tables | the dense octant tables of M2M and L2L; the dense M2L tables under `Dense`, expanded from the classes under `Classes` (§6.8); the M2L family of the rotation tables under `Rotation` (T10); for a family whose level calls may take the library GEMM, also its library copy (matrices at 256-byte aligned strides) | once at build | never |
+//! | translation plans (T8, T9, T10) | per M2M, L2L and dense M2L level call on the device: the tile schedule of the hand-written GEMM, or the padded gather indices of the library GEMM; per rotation M2L level call, its rows with a pair | once at build | never |
+//! | translation scratch (T8, T9) | the gathered inputs and products of the widest chunk, shared by every level call | never (allocated at build) | never |
+//! | exchange buffers (Phase 5 T8) | on several ranks: the packed sent multipoles, the packed received boxes of the replicated top, one level's packed received ghost multipoles, one reduction level's packed sent multipoles and received children (Phase 5S T6), and their columns (u32) | the columns once at build; the received values every evaluation | the sent values every evaluation |
+//!
+//! Before allocating, [`DeviceOperator::new`] sums the bytes of every buffer and refuses a
+//! configuration that does not fit in the memory the device reports as available
+//! ([`SettingsError::DeviceMemory`]), because CubeCL panics when an allocation fails
+//! (§4.6).
+//!
+//! The `Evaluator` keeps its host stores. It tells the operator of every data movement
+//! outside the operator calls through `FmmOperator::host_data` (`tetraleaf_plan::operator::
+//! HostData`, Phase 5 T7), and the device mirrors each one. On one rank the only one that
+//! moves data is `reset`'s zeroing (§4.2), at whose `HostData::Reset` the device zeroes
+//! its stores; [`begin_evaluation`](DeviceOperator::begin_evaluation) then uploads the
+//! charges and scatters them into the source store. The exchanges move nothing on one
+//! rank; on several the device mirrors them too ([Several
+//! ranks](#several-ranks-phase-5-t8)). The points are uploaded once per build by
+//! [`load_points`](DeviceOperator::load_points), from copies of the evaluator's source
+//! store and target input that `build` takes after its step 8.
+//! [`read_output`](DeviceOperator::read_output) downloads the target output once, or with
+//! the output pass on the device (Phase 4S T9, [`OutputPass`]) first makes φ and ∇φ in the
+//! caller's order on the device (`tetraleaf_kernels::movement::gather_output`, one launch) and
+//! downloads those instead: as many values, so the transfers below do not change. Since
+//! Phase 4S T11 the download is read in place in CubeCL's host memory
+//! ([`DeviceOutput`], [`OutputValues`], `Device::download_view`): the operator keeps no
+//! host copy of the target output, only a mirror for host-fallback calls of L2P, M2P and
+//! P2P ([`DeviceReport::host_mirror_bytes`]); and the charges are uploaded from the
+//! caller's buffer without a copy (`Device::write_owned`).
+//!
+//! **Per evaluation**, with every kind on the device (T11): one upload of N_s s bytes
+//! (the charges), one download of o N_t s bytes (the target output) and one sync (the
+//! download), for N_s sources, N_t targets, s bytes per value and o = 1, or 4 with
+//! gradients; on several ranks the exchanges' transfers and one more sync, and one per
+//! level of the upward reduction at which the rank sends (Phase 5S T6; [Several
+//! ranks](#several-ranks-phase-5-t8)). Host-fallback calls add their own transfers (next
+//! section).
+//!
+//! # Host fallback (§7)
+//!
+//! Every operator kind can run on the host ([`OperatorKind`], [`Placement`]); a kind
+//! runs there if [`FmmBuilder::host_fallback`](crate::fmm::FmmBuilder::host_fallback)
+//! names it. **From T10, every kind has a device kernel under every strategy** (next
+//! sections), so a kind runs on the host only by request. A host-fallback level call
+//!
+//! 1. downloads its device inputs and its output region into host mirrors (exact
+//!    copies);
+//! 2. builds the same batch with the call's own level, index and views, the mirrors for
+//!    multipoles, locals and target output, and the evaluator's own slices for sources
+//!    and target input (which `Fmm` keeps current on the host);
+//! 3. runs the wrapped [`LaplaceOperator`]'s own method, so the bodies are those of the
+//!    host path, serially or on the `Fmm`'s pool;
+//! 4. uploads its output region.
+//!
+//! | Kind (level l) | Downloaded before | Uploaded after |
+//! | --- | --- | --- |
+//! | P2M | multipoles of l | multipoles of l |
+//! | M2M (either pass) | multipoles of l and l + 1 (one range) | multipoles of l |
+//! | M2L | multipoles of l, locals of l | locals of l |
+//! | P2L | locals of l | locals of l |
+//! | L2L | locals of l − 1 and l (one range) | locals of l |
+//! | L2P | locals of l, the level's target output | the level's target output |
+//! | M2P | multipoles of l + 1, the level's target output | the level's target output |
+//! | P2P | the level's target output | the level's target output |
+//!
+//! A call whose view has no entry, or a leaf call whose leaves have no target, adds
+//! nothing and moves nothing. Every download is one sync. With every kind on the host
+//! the device path's output equals the host path's bit for bit (§7.3): the device stores
+//! start from the same +0.0, every transfer is a copy, and the same operator, built as
+//! `build` builds the host operator, runs on the same data in the same order.
+//!
+//! # P2P on the device (T6)
+//!
+//! P2P runs on the device by default: one launch of `tetraleaf_kernels::p2p::p2p` per level
+//! whose near view has an entry and whose leaves have a target, from the level's near view,
+//! the leaf indices, the point offsets and the device stores, adding into the device target
+//! output. It moves no data, so the P2P rows of the table above vanish from an evaluation's
+//! transfers; L2P and M2P before it on the same level (on the device, or on the host
+//! fallback, which uploads its output region first) add to the target output before P2P
+//! does (the order of `evaluate_leaves`, all on one stream). The layout is fixed at
+//! build ([`DeviceReport::p2p_layout`]): by default the CPU layout on the CPU runtime, whose
+//! units per cube `threads(n)` caps, and the cube layout of 64 units on Metal and CUDA
+//! (device-path.md §6.2). The kernel follows CONVENTIONS §3.13, "Device kernels", and adds
+//! each target's sources in the order of the host path, so its output agrees with the host
+//! P2P within the device P2P contract (docs/phase4/README.md, "Accuracy measures"), not bit
+//! for bit; `host_fallback` with [`OperatorKind::P2p`] restores the host P2P.
+//!
+//! # The leaf operators on the device (T7)
+//!
+//! P2M, P2L, L2P and M2P run on the device by default: one launch of
+//! `tetraleaf_kernels::leaf::{p2m, p2l, l2p, m2p}` per level whose view has an entry (and,
+//! for L2P and M2P, whose leaves have a target), from the level's view, the box and leaf
+//! indices, the point offsets and the device stores, adding into the device multipoles
+//! (P2M), locals (P2L) or target output (L2P, M2P). They move no data, so their rows of
+//! the table above vanish from an evaluation's transfers. The order of every target is
+//! the host path's (the plan's rows, points in point order), the frames are formed on the
+//! device from the integer indices, and the harmonics by the recursion of `tetraleaf-math`
+//! (CONVENTIONS §3.5, §3.13), so the output agrees with the host path within the FMM
+//! bounds, not bit for bit (contraction, device-path.md §9.2). The layout is fixed at
+//! build ([`DeviceReport::leaf_layout`]): by default the CPU layout on the CPU runtime,
+//! whose units per cube `threads(n)` caps, and the cube layout of 64 units with tiles of
+//! 32 points on Metal and CUDA (device-path.md §6.3;
+//! [`FmmBuilder::device_leaf_layout`](crate::fmm::FmmBuilder::device_leaf_layout)).
+//! `host_fallback` with any of the four kinds restores its host operator.
+//!
+//! # M2M and L2L on the device (T8)
+//!
+//! M2M (both passes) and L2L run on the device by default, for every strategy: the
+//! grouped translation of `tetraleaf_kernels::translate` with the dense octant tables (built
+//! here under `Rotation`, through `table_cache` when given), per level call a gather of
+//! the view's input columns in batch order, one grouped GEMM over the level's octants and
+//! a reduction per parent in row order (M2M) or a scatter-add (L2L, one parent per child):
+//! three launches per chunk, with no transfer (device-path.md §6.4). The plans (chunks,
+//! tile schedules) are built and uploaded at build, one per level and view, and the
+//! scratch is allocated once, sized by the widest chunk under the scratch budget
+//! ([`FmmBuilder::device_scratch_budget`](crate::fmm::FmmBuilder::device_scratch_budget),
+//! default 128 MB, 2 GB on CUDA); the chunks do not change the bits. The GEMM is fixed per level call at
+//! build ([`DeviceReport::translations`]): the hand-written kernel in the backend's layout
+//! ([`DeviceReport::gemm_layout`]), or, under
+//! [`DeviceGemm::Auto`] and [`DeviceGemm::Library`] in f32 at p ≥ 8 on a GPU, the library
+//! matmul (CMMA, named explicitly) where a probe at build accepts the level's shape and
+//! its element types keep f32 (the input-precision guard). The hand-written GEMM sums each
+//! product in a fixed order with explicit fmas and adds it into the output once, so the
+//! device and the host (`MatrixSet::apply`, which adds each product into the output)
+//! differ by rounding: the output agrees with the host path within the FMM bounds, not
+//! bit for bit; under `Rotation` the host's M2M and L2L are rotations, the device's dense.
+//! `host_fallback` with [`OperatorKind::M2m`] or [`OperatorKind::L2l`] restores the host
+//! operator.
+//!
+//! # Dense M2L on the device (T9)
+//!
+//! M2L runs on the device by default under `Dense` and `Classes`: per level the same
+//! grouped translation with the level's V view, grouped by the 316 offsets in index
+//! order, and the dense M2L tables (`M2lTables`, through `table_cache` when given; under
+//! `Classes` the 316 matrices of `M2lClasses::expand`, uploaded once and dropped on the
+//! host, which keeps its class tables for the fallback; [`DeviceReport::strategy_name`]
+//! says "Classes, run as dense on the device"; §6.8). Per chunk of offsets within the
+//! scratch budget: a gather of the source multipoles in batch order, one grouped GEMM and
+//! a reduction that adds each box's products into its local in row order, so each box
+//! meets its offsets in index order; three launches per chunk, no transfer. The GEMM is
+//! fixed per level at build ([`DeviceReport::translations`]): by default
+//! ([`DeviceGemm::Auto`]) the hand-written kernel at every p and precision, because the
+//! library's padding made it slower on every FMM level measured (see [`DeviceGemm`]);
+//! under [`DeviceGemm::Library`], in f32 at p ≥ 8 on a GPU, the library matmul (CMMA,
+//! named explicitly) where every chunk shape passes a probe and the input-precision
+//! guard, padded per chunk to its widest offset batch
+//! ([`TranslationReport::gemm_columns`]), and the hand-written kernel otherwise. The output
+//! agrees with the host path within the FMM bounds, not bit for bit (the GEMM adds each
+//! product into the local once, the host each term). Under `Rotation` M2L runs the rotation
+//! kernel (next section); `host_fallback` with [`OperatorKind::M2l`] restores the host
+//! operator under every strategy.
+//!
+//! # The fused gather, the reduction by chunk and the shared-memory GEMM (Phase 6 T7)
+//!
+//! The grouped level calls of M2M, L2L and dense M2L take three settings of
+//! `tetraleaf_kernels::translate` (C6.1; its module docs), none of which changes a bit of the
+//! output: the gather ([`FmmBuilder::device_gather`](crate::fmm::FmmBuilder::device_gather):
+//! separate, or fused into the hand-written GEMM's loads, two launches per chunk instead of
+//! three and no gathered scratch: its chunks fill the budget with products alone, twice as
+//! wide, and the scratch holds gathered columns only for the plans that gather), the
+//! reduction ([`FmmBuilder::device_reduction`](crate::fmm::FmmBuilder::device_reduction):
+//! by chunk, the default, which visits each row's entries once per level call, or Phase 4's
+//! walk of every row once per chunk) and the shared-memory GEMM (`DeviceGemm::Shared`).
+//! Under [`DeviceGemm::Auto`] the static rule takes the layout and the gather by backend,
+//! precision and p (`tune::static_layout`, `tune::static_gather`), and the tuner offers the
+//! shared-memory layout and the other gather as candidates; a gather the builder names holds
+//! for every level call. [`TranslationReport`] gives each call's gather and reduction, and
+//! [`TranslationReport::launches`] its launches. `tests/device_common` checks every variant
+//! against the hand-written device evaluation bit for bit in every device scenario.
+//!
+//! The 316 dense tables take 316 (p + 1)⁴ values on the device, in MB (10⁶ bytes); the
+//! library copy, uploaded only where the library may run (f32, p ≥ 8, a GPU, under
+//! [`DeviceGemm::Library`]), as much
+//! again (each matrix padded to 256 bytes):
+//!
+//! | p | 3 | 8 | 12 | 16 | 18 | 20 |
+//! | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+//! | f32 | 0.32 | 8.29 | 36.1 | 106 | 165 | 246 |
+//! | f64 | 0.65 | 16.6 | 72.2 | 211 | 329 | 492 |
+//!
+//! # Rotation M2L on the device (T10)
+//!
+//! Under `Rotation` M2L runs on the device by default: one launch of
+//! `tetraleaf_kernels::rotation::m2l` per level whose V view has a pair, from the level's V
+//! view and the M2L family of the host's `RotationTables`, uploaded once in its own storage
+//! (the accessors of `ShiftTables` concatenated, the geometry of each offset as four `u32`;
+//! `tetraleaf-tables` unchanged), adding into the device locals. Each box's row is one cube
+//! of the cube layout (or a unit's share of the CPU layout), which walks the row in offset
+//! order and repeats `ShiftTables::apply` step for step for each pair (z-rotation,
+//! y-blocks, coaxial step, y-blocks back, z-rotation back; the coaxial step alone on the z
+//! axis), with an explicit fma per multiply–add and the last step added into the box's
+//! accumulator, which started from the local as L2L left it (device-path.md §6.6). It
+//! moves no data. Its rows are uploaded at build; the layout is fixed at build
+//! ([`DeviceReport::rotation_layout`]): the CPU layout on the CPU runtime, whose units per
+//! cube `threads(n)` caps, and a cube of (p + 1)² units rounded up to the plane size on
+//! Metal and CUDA. M2M and L2L stay the dense octant GEMMs (previous sections), whose
+//! tables are built or loaded here under `Rotation`. The host rounds every product before
+//! adding it and the kernel fuses them, so the output agrees with the host path within the
+//! FMM bounds, not bit for bit. The tables take 94 B + 64 p + 15 C values with
+//! B = (p + 1)(2p + 1)(2p + 3)/3 and C = (p + 1)(p + 2)(2p + 3)/6, and 5,056 bytes of
+//! geometry, in MB:
+//!
+//! | p | 3 | 8 | 12 | 16 | 18 | 20 |
+//! | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+//! | f32 | 0.04 | 0.39 | 1.16 | 2.58 | 3.59 | 4.85 |
+//! | f64 | 0.07 | 0.77 | 2.31 | 5.15 | 7.18 | 9.69 |
+//!
+//! # Plane-wave M2L on the device (Helmholtz CH7.5b)
+//!
+//! Under `PlaneWave` M2L runs merge and shift on the device ("PlaneWave, merge and shift on
+//! the device"; docs/helmholtz/tasks/CH7.5b.md), the kernels of `tetraleaf_kernels::plane_wave`
+//! (CONVENTIONS §3.14; Helmholtz CH7.5a), the default since Helmholtz CH7.5c measured it
+//! (tetraleaf-validate/results/helmholtz-ch7-5c.md; signed off 2026-11-06). With
+//! [`FmmBuilder::device_plane_wave`](crate::fmm::FmmBuilder::device_plane_wave)`(`[`DevicePlaneWave::Dense`]`)`
+//! it runs as `Dense` instead ("PlaneWave, run as dense on the device", Phase 6 T13: the
+//! dense tables, built or loaded here, and the output of `Dense` bit for bit). The device's
+//! `Auto` never resolves to `PlaneWave`. Merge and shift:
+//!
+//! - **tables**: the host operator's `PlaneWaveTables` (its λ nodes, powers, cos and sin,
+//!   frame rotations, source and child shifts) uploaded once, as they are; no dense M2L
+//!   tables;
+//! - **lists**, built at build from each level's V view in the host's order
+//!   (`src/operator_plane_wave.rs`): the parents in index order (consecutive boxes of one
+//!   parent key), each with its computed children (those with a V row), its sources by
+//!   slot from their rows, per direction (`Direction::ALL`) every accumulator whose mask
+//!   meets the computed children over its slots present in ascending order, and per
+//!   computed child with any accumulator an incoming block (its accumulators in order,
+//!   then its child shift) and a local item (its six incoming blocks), the frames added
+//!   0, 1, 2 into the local as L2L left it;
+//! - **chunks**: a level call runs in chunks of whole parents whose scratch (six wave
+//!   blocks per distinct source, the accumulators and the incoming blocks, 2H values each,
+//!   for all m vectors) fits
+//!   [`device_plane_wave_budget`](crate::fmm::FmmBuilder::device_plane_wave_budget)
+//!   (default [`default_plane_wave_budget`]: 1 GB on Metal, the translation scratch budget
+//!   elsewhere; Helmholtz CH7.5c), at least one
+//!   parent each; the m vectors are columns, the chunk's lists repeated per vector on the
+//!   columns b m + v; four launches per chunk (`outgoing`, `merge`, `gather`, `local`), no
+//!   transfer; one scratch for the widest chunk, allocated at build and counted in the
+//!   memory check with the tables and lists;
+//! - **layout**: [`DevicePlaneWaveLayout::resolve`], the CPU layout on the CPU runtime
+//!   (units capped by `threads(n)`), a cube of 128 units on Metal and on CUDA to p = 12 and
+//!   of 256 units on CUDA from p = 13 (Helmholtz CH7.5c, measured), unless
+//!   [`FmmBuilder::device_plane_wave_layout`](crate::fmm::FmmBuilder::device_plane_wave_layout)
+//!   names a cube (Helmholtz CH7.5c; every layout the same bits)
+//!   ([`DeviceReport::plane_wave_layout`]); the calls in [`DeviceReport::plane_waves`].
+//!
+//! Every accumulator, incoming block and local has one owner and sums in a fixed order
+//! that depends on the geometry and the V rows of its computed children alone, so the
+//! output is the same at every budget, from evaluation to evaluation and build to build,
+//! and on P ranks the one-rank device output's bit for bit wherever the other kinds are
+//! (with them on the host fallback: `tests/mpi_exec.rs`). The kernels fuse each product
+//! into its sum where the host rounds products apart, so the output agrees with the host's
+//! `PlaneWave` within the FMM bounds, not bit for bit (CH7.5a: each step bit for bit a host
+//! `mul_add` replica). `host_fallback` with [`OperatorKind::M2l`] runs the host's
+//! `PlaneWave`.
+//!
+//! # Transfer accounting
+//!
+//! The operator counts every upload and download (calls and bytes), every launch, every
+//! sync and every timing window, of the build and of the last evaluation
+//! ([`DeviceCounters`]), and splits the transfers by the data they move ([`DataKind`],
+//! [`Traffic`]).
+//!
+//! # The device FMM (T11): scheduling, syncs and stage timing (§8)
+//!
+//! **By default every operator kind runs on the device**, under every strategy, and
+//! [`DeviceReport::placement`] says so; [`host_fallback`](crate::fmm::FmmBuilder::host_fallback)
+//! stays as a test aid. The data stay on the device for the whole evaluation, and an
+//! evaluation moves the design's minimum: the charges up (one upload of N_s s bytes) and
+//! the output down (one download of o N_t s bytes), nothing else.
+//!
+//! Every level call queues its launches on the one stream and returns: no launch waits
+//! for another, and **an evaluation syncs once**, at the download of the output, where
+//! launch errors also surface (§8.2). The top levels stay on the device, since a host
+//! call there would cost a sync (§6.7). The launches per evaluation (§8.1), with c the
+//! offset chunks of a dense M2L level call (one with the default scratch budget, unless
+//! a level's V batches exceed it):
+//!
+//! | Stage | Launches |
+//! | --- | --- |
+//! | `reset`, `begin_evaluation` | 3 zero kernels at `HostData::Reset` (multipoles, locals, target output; none for an empty store) and the charge scatter |
+//! | the exchanges, several ranks (Phase 5 T8) | per reduction level (Phase 5S T6) the gather of the multipoles the upward reduction sends (if the rank sends at the level) and the scatter of the children it receives (if it receives); the gather of the sent multipoles (if the rank sends), the scatter of the received boxes of the replicated top (if any), the scatter of each level's received ghost multipoles (per level with a ghost box) |
+//! | upward, local pass | per level: P2M 1; M2M 3 per chunk (gather, GEMM, reduction; 2 with the fused gather, Phase 6 T7) |
+//! | upward, global pass | per level the M2M of the owned `Global` boxes (Phase 5S T5): 3 per chunk (2 fused); on one rank the root's: 3 (2 fused), none if the root is a leaf |
+//! | downward | per level: L2L 3 per chunk (gather, GEMM, scatter-add; 2 fused); M2L 3 c (dense; 2 c fused) or 1 (rotation); P2L 1 |
+//! | leaves | per level: L2P 1, M2P 1, P2P 1 |
+//! | `read_output` | with the output pass on the device (Phase 4S T9): the gather, if there is a target |
+//!
+//! A level call whose view has no entry launches nothing. The level calls of dense M2L
+//! are not merged into one GEMM over every level (§6.7 allows it): it would save at most
+//! two launches per level with a V list, which T11 measured as a negligible share of an
+//! evaluation. On Metal and CUDA neither uploads nor launches wait; on the CPU runtime
+//! the stream drains before a host write and before every launch with shared memory
+//! (F10), which costs time but no extra sync of the operator and changes no value.
+//!
+//! **Stage timing** ([`StageTiming`], [`DeviceReport::stage_timing`]): `Fmm` times every
+//! stage on the host, which on a device measures the enqueueing of its launches (the
+//! default, [`StageTiming::Enqueue`]); [`synchronous_stages`](crate::fmm::FmmBuilder::synchronous_stages)
+//! times them whole on every backend, at a sync per stage. With
+//! [`device_timestamps`](crate::fmm::FmmBuilder::device_timestamps), where the device
+//! times on itself (Metal with timestamp queries, CUDA by events;
+//! `tetraleaf_kernels::Device::times_on_device`), each stage with device work also runs in a
+//! timing window ([`open_stage`](DeviceOperator::open_stage),
+//! [`close_stage`](DeviceOperator::close_stage); five per evaluation, one per
+//! [`DeviceStage`]), which submits the queued work without waiting for it; the windows
+//! are read after the download, and `Fmm` returns their times in
+//! [`StageTimings::device`](crate::fmm::StageTimings::device). They add no sync, launch
+//! nothing and change no bit (tested on Metal), but they are opt-in: on Metal the device
+//! runs independent passes of neighbouring stages concurrently, so the windows overlap
+//! and their sum exceeds the evaluation's wall time (T11 measured 11.9 ms of stage spans
+//! in a 7.3 ms evaluation), adjacent windows sometimes report the same span, and the
+//! flushes double the enqueue time (about 0.3–0.6 ms). A stage's time is its span on the
+//! device, not its share of the evaluation. A window the device did not time itself (it
+//! waited: a wgpu stream that found the device's timestamp queries spent) turns the
+//! windows off for the later evaluations of the operator. The CPU runtime drains its
+//! stream at both ends of a window, so there no window is opened.
+//!
+//! **Kind timing** (Phase 4S T5, [`KindTiming`](crate::fmm::KindTiming)): `Fmm` times
+//! every level call with an entry in its view around the operator's method, which does not
+//! change. With `Synchronous` it calls [`sync`](DeviceOperator::sync) after each such call
+//! (on the device or the host fallback) and once after
+//! [`begin_evaluation`](DeviceOperator::begin_evaluation); with `Device`, where the device
+//! times on itself, it brackets each call of a device kind with
+//! [`open_call_window`](DeviceOperator::open_call_window) and
+//! [`close_call_window`](DeviceOperator::close_call_window), one window per call and no
+//! sync, and resolves the windows after [`read_output`](DeviceOperator::read_output). Both
+//! are counted in [`DeviceCounters::evaluation`] (syncs, windows). On Metal the call
+//! windows overlap and misattribute time between calls, so they are not a breakdown
+//! there; on CUDA they do not overlap (`KindTiming::Device`).
+//!
+//! # Autotune (T12, C4.7; [`crate::tune`])
+//!
+//! Every grouped level call keeps the GEMM choice it was built with (the GEMM, the layout
+//! of its operands and the chunk budget; [`TranslationReport`]), and the P2P layout is one
+//! choice: under `DeviceGemm::Auto` and `DeviceP2pLayout::Auto` each is the choice of its
+//! decision, one per (kind, pair bucket) and one per points-per-leaf bucket. At build the
+//! operator takes them from the decisions taken earlier in the build (the M2L GEMM timed
+//! with the strategy), from the tuning cache, or by the static rule, and builds every plan
+//! with its choice. With a tuning cache that lacks a decision, the operator provides for
+//! every candidate (the library copies of the tables where the library applies, the
+//! scratch of its padded layout), times the candidates at the end of
+//! [`new`](DeviceOperator::new) (the GEMMs, on its own buffers, each on the largest level
+//! call of its bucket) and in [`load_points`](DeviceOperator::load_points) (P2P, after the
+//! points are uploaded), rebuilds the plans whose choice changed, and releases what no
+//! chosen plan needs; the report's tables, scratch and memory follow. The M2L strategy
+//! itself is decided before the operator exists (`tune_strategy`), since it decides
+//! the tables. Every decision, with where its choice came from and its candidates' times,
+//! is in [`DeviceReport::tuning`]. Tuning launches belong to the build counters; an
+//! evaluation zeroes every buffer the tuning wrote, so the output does not depend on it.
+//!
+//! # Determinism (requirement 6)
+//!
+//! Every launch and transfer is issued from the thread that calls the operator, so they
+//! run in order on one CubeCL stream; host-fallback calls are bit-identical for every
+//! thread count. The launch sequence, the chunks, the tile schedules, the layouts and the
+//! GEMM of every level call are fixed at build from the plan, the device and the choices
+//! of the build (static rule, cache or tuning, T12), so for a fixed tree, backend, device,
+//! build and choices the output is bit-identical from evaluation to evaluation, and from
+//! build to build of the same input with the same choices (tested on every
+//! `tests/mpi_exec.rs` scenario, and for builds from one tuning cache in
+//! `tests/device_tune.rs`). Timing windows change nothing.
+//!
+//! # Differences from the host path (§9.2)
+//!
+//! With every kind on the device the output agrees with the host path's within the FMM
+//! bounds of docs/phase4/README.md (relative L2 1e-12 in f64, 1e-5 in f32, φ and ∇φ),
+//! not bit for bit: the device GEMMs add each product into the output once, in their own
+//! order, the rotation and leaf kernels fuse multiply–adds, and P2P follows the device
+//! formulation of CONVENTIONS §3.13, "Device kernels". The errors against the direct sum
+//! are those of the host path (`tests/device_fmm.rs`, the C4.8 gate). Under `Rotation`
+//! the host translates M2M and L2L by rotation and the device by the dense octant
+//! tables; `Classes` runs as dense on the device.
+//!
+//! # Errors (§12)
+//!
+//! A failed upload or allocation at build is
+//! [`FmmError::Device`], agreed on every rank by `build`'s one all-reduce after the
+//! device operator's build (Phase 5 T8). During an evaluation the operator
+//! keeps the first failure, skips its remaining device work (the evaluator's stages
+//! still run to the end), and [`read_output`](DeviceOperator::read_output) returns it;
+//! `Fmm::evaluate` then returns `FmmError::Device`, and so does every later evaluation.
+//! On several ranks a failure can surface at a mid-evaluation download of sent
+//! multipoles (the reduction's or the exchanges'), after which the rank sends the host
+//! store's zeros and its neighbours
+//! compute wrong values without knowing: `Fmm::evaluate` agrees every rank's outcome by
+//! one all-reduce after the output's download, before the backward move, so the rank that
+//! failed returns `FmmError::Device` and the others `FmmError::OtherRank`; from then on
+//! the kept error rides on the agreement of the charge length (docs/design/
+//! distributed-fmm.md §7.5, decision 12). No rank blocks in an exchange while another has
+//! failed: every rank runs the stages to the end. [`inject_error`](DeviceOperator::inject_error)
+//! (doc-hidden, `Fmm::inject_device_error`) is the test hook. A violated invariant (a
+//! malformed view, an exchange list naming a box the plan does not hold) panics, as on the
+//! host path.
+//!
+//! # Threads (§11)
+//!
+//! With [`Backend::Cpu`] no rayon pool is built: `threads(n)` caps the units per cube of
+//! the CPU runtime's launches at n ([`tetraleaf_kernels::Device::limit_units`]), and at the
+//! node's cores over its ranks where that is smaller (Phase 5 T8, [`RankPlacement::cpu_units`];
+//! the report says so), so the rank keeps at most n of CubeCL's workers busy in them (the
+//! movement kernels and the CPU layouts of P2P, the leaf operators and the GEMM), and
+//! host-fallback kinds run serially. Kernels with shared memory
+//! or barriers (the GPU layouts of P2P, if chosen there) keep their own cube size on the
+//! CPU runtime. With Metal or CUDA the pool of `threads(n)` is built as on the
+//! host path and serves only host-fallback kinds; a fallback call waits for the device
+//! (its download) before its body runs on the pool, and every launch is issued from the
+//! calling thread, so the pool is idle whenever device work runs. Worker threads never
+//! launch and never call MPI.
+//!
+//! # Several charge vectors (Phase 6 T5)
+//!
+//! With `FmmBuilder::vectors` m > 1 (C6.3; docs/design/optimisation.md §4) the device holds
+//! m columns of (p + 1)² values per box, 3 + m values per source and m or 4 m per target,
+//! the layouts of the host (CONVENTIONS §3.13, "Several charge vectors"), and every kernel
+//! gives each vector the one-vector operations, so vector v of the output is the one-vector
+//! device `Fmm`'s on vector v, bit for bit, where the choices of the build are the same
+//! (on the CPU runtime and CUDA always; on Metal the library GEMM, whose acceptance depends
+//! on the shape, may take one m and not another):
+//!
+//! - **the grouped translations and rotation M2L** run on views with m columns per box
+//!   (`Columns`: box b's vector v is column b m + v; row t m + v has the entries of row t
+//!   with sources s m + v; each batch's pairs (t, s) become (t m + v, s m + v)), so the
+//!   GEMM's columns grow by m, each column meeting its sources in the plan's row order, and
+//!   no kernel changes. The GEMM decisions are keyed by the plan's pairs, so a tuning
+//!   cache gives an FMM of any m the same choices; the chunks are sized by the m columns,
+//!   and unless the builder names a budget a choice's budget is per vector (m times its
+//!   bytes, at most an eighth of the device's memory; `vector_settings`), since Phase 4's
+//!   reduction of `Accumulate::Rows` walked every entry of a row once per chunk and m
+//!   times the chunks cost m² (measured on Metal); with the reduction by chunk (Phase 6
+//!   T7) a smaller budget costs only the chunks' own work, so on Metal the budget adds up
+//!   at most [`METAL_BUDGET_VECTORS`] vectors' worth and on CUDA one vector's; the M2L
+//!   strategy is tuned on one vector's shapes;
+//! - **P2M, P2L, L2P, M2P and P2P** launch once per level call as before, the cubes of the
+//!   vectors along z (`SourceInputs::vectors`, `TargetInputs::vectors`,
+//!   `P2pInputs::vectors`): the cube at z = v runs the one-vector kernel on vector v's
+//!   charges or expansions and outputs (the harmonics and distances formed per vector);
+//! - **the charges** are uploaded once, m per source (`strength_slots` with m), and the
+//!   output downloaded once, o m per target; with the output pass on the device
+//!   `gather_output` makes the m vectors' outputs one after the other;
+//! - **the exchanges** gather and scatter one column of m (p + 1)² values per box, the
+//!   ghost tail (3 + m) values per point.
+//!
+//! **Per evaluation**: the transfers of the formulas below with m times the bytes of the
+//! charges, the output, the ghost tail and the multipoles moved, and the same launches and
+//! syncs (`tests/device_common::expected_evaluation`, extended; docs/design/device-path.md
+//! §14). [`DeviceReport::vectors`] names m, [`TranslationReport::pairs`] counts m pairs per
+//! pair of the plan.
+//!
+//! # Dipoles (Phase 6 T8, T8d)
+//!
+//! With dipole sources (`FmmBuilder::sources`, C6.4; docs/design/optimisation.md §7.4,
+//! §7.5) P2M, P2L and P2P, the kinds that read the source chunks, run the dipole kernels of
+//! `tetraleaf-kernels` (Phase 6 T8d; `SourceKind`, the host's `SourceType`): P2P
+//! `tetraleaf_kernels::p2p` with the moments' terms after each source leaf's charges, P2M and
+//! P2L `tetraleaf_kernels::leaf` with the gradient ladders (CONVENTIONS §3.13, "Device
+//! kernels", "Dipoles"). Phase 6 T8 ran them on the host fallback; T8 measured it at
+//! 55–97 % of a device evaluation on Metal (`tetraleaf-validate/results/phase6-dipoles.md`).
+//!
+//! - **The source store** holds the chunk layout of 6 or 7 values per point with the
+//!   strengths: [`begin_evaluation`](DeviceOperator::begin_evaluation) uploads w = 3 or 4
+//!   values per local source (its charge, if any, then its moment in units of its leaf, as
+//!   the host's charge load scales it: `Fmm` scales the forwarded moments on the host before
+//!   the upload) and scatters them by the strength slots ([`DeviceViews::charge_slots`]):
+//!   one upload of w N_s s bytes and one launch, as for charges with w = m.
+//! - **Placement**: every kind on the device by default; `host_fallback` keeps a kind on the
+//!   host, and with every kind there the output is the host path's bit for bit (the device
+//!   still takes the strengths, as it takes the charges).
+//! - **Layouts**: the P2P layout under `DeviceP2pLayout::Auto` is the static rule with
+//!   dipoles, never a tuned or cached one (the tuning cache's P2P decisions are the charge
+//!   kernel's); a named layout is checked for the dipole tile (6 values per source,
+//!   `P2pLayout::check_sources`).
+//! - **Several ranks**: unchanged; the ghost tail carries 6 or 7 values per point.
+//!
+//! # Several ranks (Phase 5 T8)
+//!
+//! docs/design/distributed-fmm.md §7, signed off on 2026-10-08. A device backend runs on
+//! any number of ranks, and every check of the device path holds there against the host
+//! path on the same ranks: every kind on the host fallback bit for bit, the default
+//! placement within the FMM bounds.
+//!
+//! **Residency.** The device stores have the plan's layouts, ghost slots included: the
+//! multipoles and locals of every held box (the ghost boxes and the other ranks' boxes of
+//! the replicated top too), and the source store of every leaf of the numbering, the ghost leaves
+//! last, with their owners' counts, which `Fmm::build` takes from the evaluator's source
+//! exchange; the device operator is therefore built after the evaluator and swapped in
+//! for its host operator. The ghost data never stage through a host copy of a device
+//! store (C5.2): the packed buffers are the exchanges' own, and the host holds them only
+//! between a transfer and MPI.
+//!
+//! **The exchanges on the device.** At each `HostData` event of the evaluator
+//! ([`ExchangeLists`], the index lists the build copies from the exchanges; G_s ghost
+//! source points, S^red_l and R^red_l the boxes the upward reduction of level l sends and
+//! receives (Phase 5S T6; docs/design/scale-out.md §4.5), B_o and B_r this rank's boxes
+//! of the replicated top and the other ranks' that this rank holds (Phase 5S T5; before it
+//! the coarse blocks of the coarse gather), S_l and R_l the boxes sent and received on
+//! level l, n_c = (p + 1)²):
+//!
+//! | Event | On the device | Transfers |
+//! | --- | --- | --- |
+//! | `Reset` | the three zero kernels | none |
+//! | `SendSources` | nothing: `Fmm` writes the charges of the sent leaves into the host's source chunks, where the exchange reads them (the coordinates are there from the build) | none |
+//! | `ReceivedSources` | one upload of the host's ghost tail (coordinates and charges) into the device's | 4 G_s s up |
+//! | `SendMultipoles` | one `gather_columns` of this rank's boxes of the top and every level's sent boxes into a packed buffer, one download, and the host writes each column into its slot of the host store | (B_o + Σ_l S_l) n_c s down, 1 sync |
+//! | `ReceivedTop` | one upload of the other ranks' boxes of the top it holds (packed on the host from the gathered buffer) and one `scatter_columns` into the multipoles | B_r n_c s up |
+//! | `SendReduction(l)` | one `gather_columns` of the level's sent boxes (own blocks and the owned `Global` boxes the global M2M of the level formed on the device) into a packed buffer, one download, and the host writes each column into its slot of the host store | S^red_l n_c s down, 1 sync |
+//! | `ReceivedReduction(l)` | one upload of the level's receive buffer and one `scatter_columns` into the multipoles, before the global M2M that reads them | R^red_l n_c s up |
+//! | `ReceivedMultipoles(l)` | one upload of the level's receive buffer and one `scatter_columns` into the multipoles | R_l n_c s up |
+//!
+//! A call with nothing to move does nothing. **Per evaluation**, with every kind on the
+//! device: up N_s s + 4 G_s s + Σ_l R^red_l n_c s + B_r n_c s + Σ_l R_l n_c s in one call
+//! for the charges, one if G_s > 0, one per reduction level with R^red_l > 0, one if
+//! B_r > 0 and one per level with R_l > 0; down o N_t s + Σ_l S^red_l n_c s + (B_o + Σ_l
+//! S_l) n_c s in one call for the output, one per reduction level with S^red_l > 0 and
+//! one if anything else is sent; so **1 + [anything sent] + r_s syncs, at most 2 + r_s**,
+//! r_s the reduction levels at which the rank sends (scale-out.md §4.5: Phase 5's two
+//! syncs become 2 + r_s, because the multipoles a level sends are formed on the device by
+//! the global M2M of that level and must reach the host before that level's exchange,
+//! which comes before the next level's M2M; at most 7 levels measured, T5); one gather
+//! launch per download of sent multipoles and one scatter per upload of received ones
+//! (design §7.2). On one rank every list is empty, and an evaluation is Phase 4's minimum:
+//! the charges up, the output down, one sync. [`DeviceCounters`] count the exchanges'
+//! transfers by [`DataKind`] (`GhostSources`, `SentReduction`, `ReceivedReduction`,
+//! `SentMultipoles`, `TopMultipoles`, `ReceivedMultipoles`; the received multipoles per
+//! level in [`DeviceCounters::received_levels`], the reduction's in
+//! [`DeviceCounters::reduction_levels`]); `tests/device_common` checks them against
+//! `Fmm::exchange_sizes` on every scenario and rank count. The scatters assign (`tetraleaf_kernels::movement::scatter_columns`): a
+//! scatter-add into zeroed slots would turn a received −0.0 into +0.0, and so break the
+//! bit identity of the host fallback.
+//!
+//! **Memory** added per rank, allocated at build, nothing per evaluation: the packed sent
+//! multipoles (B_o + Σ S_l) n_c s, the replicated top's receive buffer B_r n_c s, one receive buffer
+//! of max_l R_l n_c s reused level after level (one stream orders each upload after the
+//! scatter that read the buffer before it), the upward reduction's (Phase 5S T6) send
+//! buffer of max_l S^red_l n_c s (each level's download waits for its gather) and receive
+//! buffer of max_l R^red_l n_c s, reused level after level likewise, and the columns
+//! (u32), in [`DeviceReport::exchange_bytes`]; the ghost slots of the stores in
+//! [`DeviceReport::ghost_bytes`]. Both are counted in the memory check before anything is
+//! allocated.
+//!
+//! **A device per rank** (design §7.4). `Fmm::build` splits the communicator by node once
+//! (`split_shared`) and records the rank's place ([`RankPlacement`],
+//! [`DeviceReport::ranks`]). `tetraleaf_kernels::Device::open` takes no index, and both
+//! machines of the phase have one GPU: every rank opens the default device of its
+//! backend. On the CPU runtime the ranks of a node share its cores: the units per cube are
+//! `threads(n)`, capped at the cores over the node's ranks (GPU-shaped layouts chosen by
+//! the builder keep their own cube size). With Metal every rank opens the one GPU; with
+//! CUDA every rank opens the one H100 in its own process, time-sliced (no MPS), compiling
+//! the kernels once per process. Ranks sharing a device are a correctness check only, never
+//! timed as scaling (docs/phase5/README.md, decision 3).
+//!
+//! **Tuning** (design §7.6). Tuned choices can change bits, and ranks tuning alone on a
+//! shared device would time each other's work. With a tuning cache on several ranks, rank
+//! 0 alone tunes, reads and writes the cache, and broadcasts its M2L strategy before the
+//! tables are built (one broadcast per build); every other rank takes it, with the static
+//! rule for the GEMMs and the P2P layout, and touches no cache file
+//! ([`RankPlacement::follows_rank0`]). Every rank so resolves the same strategy, and two
+//! runs with the same cache give the same bits on every rank. Without a cache every rank
+//! takes the static rule, as on one rank.
+//!
+//! **Errors**: one all-reduce per evaluation agrees a device error of any rank
+//! ([Errors](#errors-12)).
+//!
+//! # Example
+//!
+//! The FMM of the crate example on the CPU runtime, which with every kind on the host
+//! fallback gives the host path's output bit for bit:
+//!
+//! ```no_run
+//! use tetraleaf_exec::fmm::{Backend, FmmBuilder};
+//!
+//! let universe = mpi::initialize().expect("MPI initialises once");
+//! let comm = universe.world();
+//! let points: Vec<[f64; 3]> = (0..10_000)
+//!     .map(|i| {
+//!         let t = i as f64;
+//!         [(0.37 * t).sin(), (0.71 * t).cos(), (0.13 * t).sin()]
+//!     })
+//!     .collect();
+//! let charges = vec![1.0; points.len()];
+//!
+//! let builder = FmmBuilder::<f64>::new(6).gradients(true);
+//! let mut host = builder.build(&points, &points, &comm).unwrap();
+//! let mut device = builder
+//!     .clone()
+//!     .backend(Backend::Cpu)
+//!     .build(&points, &points, &comm)
+//!     .expect("the CPU runtime is compiled in");
+//! assert_eq!(host.evaluate(&charges).unwrap(), device.evaluate(&charges).unwrap());
+//! let report = device.device_report().expect("a device backend");
+//! let counters = device.device_counters().expect("a device backend");
+//! println!("{report}\nlast evaluation: {:?}", counters.evaluation);
+//! ```
+
+use std::any::Any;
+use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::ops::{Deref, Range};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+use mpi::traits::Equivalence;
+use tetraleaf_kernels::leaf::{LeafLayout, SourceInputs, TargetInputs};
+use tetraleaf_kernels::movement::{
+    OutputOrder, gather_columns, gather_output, scatter_columns, scatter_values, zero,
+};
+use tetraleaf_kernels::p2p::{P2pInputs, P2pLayout};
+pub use tetraleaf_kernels::plane_wave::PlaneWaveLayout;
+use tetraleaf_kernels::plane_wave::{
+    CHILDREN as PLANE_CHILDREN, DIRECTIONS, LambdaNode, NO_BLOCK, PlaneWaveArrays, PlaneWaveLists,
+    PlaneWavePlan, PlaneWaveScratch, PlaneWaveTables as DevicePlaneWaves,
+};
+pub use tetraleaf_kernels::rotation::RotationLayout;
+use tetraleaf_kernels::rotation::{
+    Alignment as DeviceAlignment, RotationArrays, RotationPlan, RotationTables as DeviceRotation,
+    Shift as DeviceShift,
+};
+use tetraleaf_kernels::translate::{
+    Accumulate, DEFAULT_SCRATCH_BYTES, GroupedPlan, Operands, Orientation, PlanSettings, PlanSize,
+    Tables, TranslationScratch, default_scratch_bytes, grouped,
+};
+pub use tetraleaf_kernels::translate::{Gather, Gemm, GemmLayout, Reduction};
+use tetraleaf_kernels::view::{
+    BoxCoordinates, GroupedArrays, GroupedView, IndexView, LeafCoordinates, PointOffsets,
+};
+pub use tetraleaf_kernels::view::{CsrImage, GroupedImage};
+use tetraleaf_kernels::{
+    BackendKind, Device, DeviceBuffer, DeviceElement, DeviceFloat, DeviceSlice, DeviceSliceMut,
+    HostValues, IndexBuffer, KernelError, SourceKind, TimingWindow, WindowTime,
+};
+pub use tetraleaf_kernels::{Counters, DeviceInfo};
+use tetraleaf_octree::morton;
+use tetraleaf_plan::exchange::{MultipoleExchange, ReductionExchange, TopExchange};
+use tetraleaf_plan::index::BoxIndex;
+use tetraleaf_plan::lists::{Csr, GroupedCsr, VList};
+use tetraleaf_plan::operator::{
+    FmmOperator, FmmSizes, HostData, L2l, L2p, M2l, M2m, M2p, P2l, P2m, P2p, UpwardPass,
+};
+use tetraleaf_plan::plan::Plan;
+use tetraleaf_plan::store::{LeafStore, LevelBuffers};
+use tetraleaf_tables::cache::{Stored, TableKind};
+use tetraleaf_tables::geometry::m2l_offsets;
+use tetraleaf_tables::plane_wave::Direction;
+use tetraleaf_tables::plane_wave::geometry::{SLOTS, slot_of};
+use tetraleaf_tables::rotation::{Alignment, Operator as RotationOperator, ShiftTables};
+use tetraleaf_tables::{
+    CacheOutcome, L2lTables, M2lTables, M2mTables, MatrixSet,
+    PlaneWaveTables as HostPlaneWaveTables, RotationTables as HostRotationTables, TableCache,
+};
+
+use crate::fmm::{
+    Backend, DeviceGather, DeviceGemm, DeviceLeafLayout, DeviceP2pLayout, DevicePlaneWave,
+    DevicePlaneWaveLayout, DeviceReduction, DeviceStage, DeviceStageTimings, FmmError, MAX_LEVELS,
+    OperatorKind, OutputPass, Placement, SettingsError,
+};
+use crate::operator::{LaplaceOperator, SimdScalar, SourceType};
+use crate::tables::M2lStrategy;
+use crate::tune::{
+    Candidate, Decision, GemmChoice, GemmKind, MIN_TUNED_PAIRS, Rejection, Tuner, TuningReport,
+    bucket, gemm_candidates, library_applies, p2p_candidates, static_gemm, static_p2p,
+    static_strategy, time_launches,
+};
+
+/// The precisions of the device operator, f32 and f64: the bounds of the host operator
+/// and of the table cache, and a float type of `tetraleaf-kernels`.
+pub trait DeviceScalar: DeviceFloat + SimdScalar + Stored + Equivalence + Default {}
+
+impl<T: DeviceFloat + SimdScalar + Stored + Equivalence + Default> DeviceScalar for T {}
+
+impl Backend {
+    /// Opens the device of this backend and returns what it reports, or why it cannot be
+    /// opened: the reason [`SettingsError::NoDevice`] cannot carry (§3.3, §12). The
+    /// device is closed again; a build opens its own.
+    ///
+    /// # Errors
+    ///
+    /// The message of `tetraleaf_kernels::KernelError`: the backend is not compiled in, or
+    /// no device came up. For [`Backend::Host`], that it opens no device.
+    pub fn probe(self) -> Result<DeviceInfo, String> {
+        match self.kind() {
+            None => Err("the host backend opens no device".to_owned()),
+            Some(kind) => Device::open(kind)
+                .map(|device| device.info().clone())
+                .map_err(|error| error.to_string()),
+        }
+    }
+
+    /// The backend of `tetraleaf-kernels`, `None` for [`Backend::Host`].
+    pub(crate) fn kind(self) -> Option<BackendKind> {
+        match self {
+            Self::Host => None,
+            Self::Cpu => Some(BackendKind::Cpu),
+            Self::Metal => Some(BackendKind::Metal),
+            Self::Cuda => Some(BackendKind::Cuda),
+        }
+    }
+}
+
+/// Opens the device of `backend` for values of `T` at step 1 of `build`, with the CPU
+/// runtime's units capped at `threads`; `None` for the host.
+pub(crate) fn open_device<T: Stored>(
+    backend: Backend,
+    threads: usize,
+) -> Result<Option<Device>, SettingsError> {
+    let Some(kind) = backend.kind() else {
+        return Ok(None);
+    };
+    let mut device = Device::open(kind).map_err(|error| match error {
+        KernelError::NotCompiled { .. } => SettingsError::BackendNotCompiled { backend },
+        _ => SettingsError::NoDevice { backend },
+    })?;
+    let precision = match T::PRECISION {
+        tetraleaf_tables::cache::Precision::F32 => tetraleaf_kernels::Precision::F32,
+        tetraleaf_tables::cache::Precision::F64 => tetraleaf_kernels::Precision::F64,
+    };
+    if !device.supports(precision) {
+        return Err(SettingsError::PrecisionUnsupported { backend });
+    }
+    device.limit_units(u32::try_from(threads).unwrap_or(u32::MAX));
+    Ok(Some(device))
+}
+
+/// The kinds of data the device operator moves, for the transfer accounting
+/// ([`DeviceCounters`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DataKind {
+    /// The leaf-scaled source coordinates (with zero charges) and target positions:
+    /// once per build.
+    Points,
+    /// The plan views, the point offsets of the leaf stores, the charge slots, the plans
+    /// of the device translations (T8, T9) and, with the output pass on the device, the
+    /// output order (Phase 4S T9: every target's point and leaf, the leaves' offsets and
+    /// scales): once per build.
+    Indices,
+    /// The box and leaf indices: once per build.
+    Geometry,
+    /// The translation tables: once per build.
+    Tables,
+    /// The charges (with dipoles the strengths, Phase 6 T8d): once per evaluation.
+    Charges,
+    /// The target output: once per evaluation.
+    Output,
+    /// The ghost tail of the source store, which the source exchange received (Phase 5
+    /// T8): one upload per evaluation on a rank with ghost leaves.
+    GhostSources,
+    /// The multipoles the upward reduction sends to the owners of their parents, packed
+    /// (Phase 5S T6): one download per reduction level at which the rank sends
+    /// ([`DeviceCounters::reduction_levels`]).
+    SentReduction,
+    /// The children the upward reduction received, packed (Phase 5S T6): one upload per
+    /// reduction level at which the rank receives ([`DeviceCounters::reduction_levels`]).
+    ReceivedReduction,
+    /// The multipoles the evaluation sends, this rank's boxes of the replicated top and
+    /// every level's sent boxes, packed (Phase 5 T8): one download per evaluation on a
+    /// rank that sends.
+    SentMultipoles,
+    /// The other ranks' boxes of the replicated top that this rank holds, which its
+    /// all-gather received (Phase 5S T5; the coarse blocks of the coarse gather before):
+    /// one upload per evaluation on a rank that holds one.
+    TopMultipoles,
+    /// The ghost multipoles the multipole exchange received, packed (Phase 5 T8): one
+    /// upload per level with a ghost box ([`DeviceCounters::received_levels`]).
+    ReceivedMultipoles,
+    /// Multipoles moved by host-fallback calls.
+    FallbackMultipoles,
+    /// Locals moved by host-fallback calls.
+    FallbackLocals,
+    /// Target output moved by host-fallback calls.
+    FallbackTargetOutput,
+}
+
+impl DataKind {
+    /// Every kind, in report order.
+    pub const ALL: [Self; 15] = [
+        Self::Points,
+        Self::Indices,
+        Self::Geometry,
+        Self::Tables,
+        Self::Charges,
+        Self::Output,
+        Self::GhostSources,
+        Self::SentReduction,
+        Self::ReceivedReduction,
+        Self::SentMultipoles,
+        Self::TopMultipoles,
+        Self::ReceivedMultipoles,
+        Self::FallbackMultipoles,
+        Self::FallbackLocals,
+        Self::FallbackTargetOutput,
+    ];
+
+    /// A short name for reports.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Points => "points",
+            Self::Indices => "indices",
+            Self::Geometry => "geometry",
+            Self::Tables => "tables",
+            Self::Charges => "charges",
+            Self::Output => "output",
+            Self::GhostSources => "ghost sources",
+            Self::SentReduction => "sent reduction",
+            Self::ReceivedReduction => "received reduction",
+            Self::SentMultipoles => "sent multipoles",
+            Self::TopMultipoles => "replicated top",
+            Self::ReceivedMultipoles => "received multipoles",
+            Self::FallbackMultipoles => "fallback multipoles",
+            Self::FallbackLocals => "fallback locals",
+            Self::FallbackTargetOutput => "fallback target output",
+        }
+    }
+}
+
+impl fmt::Display for DataKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// Uploads and downloads of one kind of data: calls and bytes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Traffic {
+    /// Host-to-device copies.
+    pub uploads: u64,
+    /// Bytes copied to the device.
+    pub upload_bytes: u64,
+    /// Device-to-host copies, each one sync.
+    pub downloads: u64,
+    /// Bytes copied to the host.
+    pub download_bytes: u64,
+}
+
+impl Traffic {
+    /// The transfers between two readings of a device's counters.
+    fn between(before: Counters, after: Counters) -> Self {
+        Self {
+            uploads: after.uploads - before.uploads,
+            upload_bytes: after.upload_bytes - before.upload_bytes,
+            downloads: after.downloads - before.downloads,
+            download_bytes: after.download_bytes - before.download_bytes,
+        }
+    }
+
+    /// The sum of two.
+    fn plus(self, other: Self) -> Self {
+        Self {
+            uploads: self.uploads + other.uploads,
+            upload_bytes: self.upload_bytes + other.upload_bytes,
+            downloads: self.downloads + other.downloads,
+            download_bytes: self.download_bytes + other.download_bytes,
+        }
+    }
+}
+
+/// The transfers of a build or an evaluation by [`DataKind`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TrafficByData([Traffic; DataKind::ALL.len()]);
+
+impl TrafficByData {
+    /// The transfers of one kind of data.
+    pub fn get(&self, data: DataKind) -> Traffic {
+        self.0[data as usize]
+    }
+
+    /// The transfers of every kind together.
+    pub fn total(&self) -> Traffic {
+        self.0.iter().fold(Traffic::default(), |a, &b| a.plus(b))
+    }
+
+    fn add(&mut self, data: DataKind, traffic: Traffic) {
+        self.0[data as usize] = self.0[data as usize].plus(traffic);
+    }
+}
+
+/// The transfers, launches and syncs of a device operator: of its build and of the last
+/// evaluation ([module documentation](self#transfer-accounting)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DeviceCounters {
+    /// Everything from opening the device to the end of the build (allocations zero
+    /// their buffers by a kernel, so the build launches too).
+    pub build: Counters,
+    /// Everything from the evaluator's `reset` (`HostData::Reset`) to
+    /// [`read_output`](DeviceOperator::read_output) of the last evaluation, its stage
+    /// syncs and (Phase 5 T8) its exchanges included.
+    pub evaluation: Counters,
+    /// The transfers of the build by kind of data.
+    pub build_traffic: TrafficByData,
+    /// The transfers of the last evaluation by kind of data.
+    pub evaluation_traffic: TrafficByData,
+    /// The uploads of [`DataKind::ReceivedMultipoles`] of the last evaluation by level
+    /// (Phase 5 T8): one per level with a ghost box, none on one rank.
+    pub received_levels: [Traffic; MAX_LEVELS],
+    /// The upward reduction of the last evaluation by level (Phase 5S T6): the downloads
+    /// of [`DataKind::SentReduction`] (one per level at which the rank sends) and the
+    /// uploads of [`DataKind::ReceivedReduction`] (one per level at which it receives);
+    /// none on one rank.
+    pub reduction_levels: [Traffic; MAX_LEVELS],
+}
+
+/// A table family uploaded to the device, for [`DeviceReport`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeviceTable {
+    /// The family: `M2M`, `L2L`, `M2L`, `M2L (expanded from the classes)` or
+    /// `M2L (rotation)`, and the library copies.
+    pub name: &'static str,
+    /// The number of matrices; for the rotation tables, the offsets they translate
+    /// across.
+    pub matrices: usize,
+    /// The bytes on the device.
+    pub bytes: u64,
+}
+
+/// One device level call of M2M, L2L (T8) or M2L (T9), fixed at build, for
+/// [`DeviceReport`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TranslationReport {
+    /// [`OperatorKind::M2m`], [`OperatorKind::L2l`] or [`OperatorKind::M2l`].
+    pub kind: OperatorKind,
+    /// The pass of an M2M call; `None` for L2L and M2L.
+    pub pass: Option<UpwardPass>,
+    /// The level of the call (of the parents for M2M, of the children for L2L, of the
+    /// targets and sources for M2L).
+    pub level: usize,
+    /// The pairs of the view.
+    pub pairs: usize,
+    /// The GEMM that runs.
+    pub gemm: Gemm,
+    /// The layout of the gathered inputs and products: box-major (T12: coefficient-major
+    /// is an option of `tetraleaf-kernels` that the tuner does not register, `tune`).
+    pub orientation: Orientation,
+    /// The chunk budget in bytes (T12: the default unless set or tuned).
+    pub budget: u64,
+    /// How the GEMM gets its input columns (Phase 6 T7): the choice's for the
+    /// hand-written kernel, [`Gather::Separate`] for the library.
+    pub gather: Gather,
+    /// How the reduction finds a chunk's entries (Phase 6 T7).
+    pub reduction: Reduction,
+    /// The chunks: three launches each, two with the fused gather
+    /// ([`launches`](Self::launches)).
+    pub chunks: usize,
+    /// The columns the GEMMs compute over the chunks: the pairs with the hand-written
+    /// kernel, and with the library also its padding columns
+    /// ([`GroupedPlan::gemm_columns`]).
+    pub gemm_columns: usize,
+    /// Why the library does not run where the rule would choose it
+    /// ([`GroupedPlan::library_rejection`]).
+    pub library_rejection: Option<String>,
+}
+
+impl TranslationReport {
+    /// The launches of the level call: three per chunk (gather, GEMM, reduction or
+    /// scatter-add), two with the fused gather (Phase 6 T7).
+    pub fn launches(&self) -> usize {
+        self.chunks
+            * match self.gather {
+                Gather::Separate => 3,
+                Gather::Fused => 2,
+            }
+    }
+}
+
+/// One device level call of rotation M2L (T10), fixed at build, for [`DeviceReport`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RotationReport {
+    /// The level of the targets and sources.
+    pub level: usize,
+    /// The pairs of the view.
+    pub pairs: usize,
+    /// The rows with a pair: the cubes of the cube layout.
+    pub rows: usize,
+}
+
+/// One device level call of the plane-wave M2L (Helmholtz CH7.5b), fixed at build, for
+/// [`DeviceReport`]: its chunks of whole parents, each four launches of
+/// `tetraleaf_kernels::plane_wave::m2l` (fewer for a step without items), and the items over
+/// its chunks, m per box with m vectors.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlaneWaveReport {
+    /// The level of the targets and sources.
+    pub level: usize,
+    /// The pairs of the view, m per pair of the plan.
+    pub pairs: usize,
+    /// The chunks of whole parents within the budget.
+    pub chunks: usize,
+    /// The launches of the level call.
+    pub launches: usize,
+    /// The sources over the chunks, each with six wave blocks (a source shared by two
+    /// chunks counts twice).
+    pub sources: usize,
+    /// The accumulators over the chunks.
+    pub accumulators: usize,
+    /// The incoming blocks over the chunks.
+    pub incoming: usize,
+    /// The local items over the chunks.
+    pub locals: usize,
+}
+
+/// How [`StageTimings`](crate::fmm::StageTimings) time the stages of a device
+/// evaluation (docs/design/device-path.md §8.3), fixed at build.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum StageTiming {
+    /// One timing window per stage with device work, timed by the device itself and read
+    /// after the evaluation's one download: no sync of its own
+    /// ([`FmmBuilder::device_timestamps`](crate::fmm::FmmBuilder::device_timestamps), on
+    /// Metal and CUDA; opt-in).
+    DeviceTimestamps,
+    /// A sync after the charge upload and after every stage
+    /// ([`FmmBuilder::synchronous_stages`](crate::fmm::FmmBuilder::synchronous_stages)):
+    /// each stage timed whole on the host.
+    Synchronous,
+    /// The host clock only, which times the enqueueing of each stage: the default, and on
+    /// the CPU runtime also with `device_timestamps(true)`, since its timing windows wait
+    /// for it.
+    #[default]
+    Enqueue,
+}
+
+impl fmt::Display for StageTiming {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::DeviceTimestamps => "device timestamps, one window per stage, no sync",
+            Self::Synchronous => "synchronous stages, a sync after each",
+            Self::Enqueue => "host clock, enqueue time only",
+        })
+    }
+}
+
+/// What a device operator runs on and how, fixed at build, for reports.
+#[derive(Debug)]
+pub struct DeviceReport {
+    /// The device.
+    pub info: DeviceInfo,
+    /// Where each operator kind runs, in [`OperatorKind::ALL`] order.
+    pub placement: [Placement; 8],
+    /// The kinds the builder asked to run on the host ([`FmmBuilder::host_fallback`]).
+    ///
+    /// [`FmmBuilder::host_fallback`]: crate::fmm::FmmBuilder::host_fallback
+    pub requested_fallback: Vec<OperatorKind>,
+    /// The resolved M2L strategy of the host operator; [`strategy_name`](Self::strategy_name)
+    /// says how the device runs it.
+    pub strategy: M2lStrategy,
+    /// The table families on the device.
+    pub tables: Vec<DeviceTable>,
+    /// What the table cache did for the tables the device needs beyond the host's (the
+    /// dense octant tables under `Rotation`); empty without a cache or without such
+    /// tables.
+    pub cache_outcomes: Vec<(TableKind, CacheOutcome)>,
+    /// The cap on the units per cube of the CPU runtime's launches, `threads(n)`;
+    /// `None` on the GPU backends.
+    pub cpu_units: Option<u32>,
+    /// The layout of the device P2P kernel (T6), fixed at build: by default the CPU
+    /// layout on the CPU runtime and the cube layout on the GPUs
+    /// ([`FmmBuilder::device_p2p_layout`](crate::fmm::FmmBuilder::device_p2p_layout)).
+    pub p2p_layout: P2pLayout,
+    /// The layout of the device leaf operators P2M, L2P, P2L and M2P (T7), fixed at
+    /// build for the FMM's degree and precision: by default the CPU layout on the CPU
+    /// runtime and the cube layout on the GPUs
+    /// ([`FmmBuilder::device_leaf_layout`](crate::fmm::FmmBuilder::device_leaf_layout)).
+    pub leaf_layout: LeafLayout,
+    /// The layout of the hand-written GEMM of the device translations (T8, T9), fixed at
+    /// build for the FMM's degree: by default the CPU layout on the CPU runtime and the
+    /// cube layout on the GPUs ([`GemmLayout::default_for`]).
+    pub gemm_layout: GemmLayout,
+    /// The device level calls of M2M, L2L and (under `Dense` and `Classes`) M2L with a
+    /// pair, in the order local M2M, global M2M, L2L, M2L and by level: the GEMM and
+    /// chunks of each (T8, T9).
+    pub translations: Vec<TranslationReport>,
+    /// The layout of the device rotation M2L (T10), fixed at build for the FMM's degree:
+    /// by default the CPU layout on the CPU runtime and the cube layout of (p + 1)² units,
+    /// rounded up to the plane size, on the GPUs ([`RotationLayout::default_for`]).
+    pub rotation_layout: RotationLayout,
+    /// The device level calls of rotation M2L with a pair, under `Rotation`, by level:
+    /// one launch each (T10).
+    pub rotations: Vec<RotationReport>,
+    /// How the device runs M2L under `PlaneWave` (Helmholtz CH7.5b): the builder's
+    /// [`DevicePlaneWave`] where it applies (`PlaneWave` with M2L on the device),
+    /// [`DevicePlaneWave::Dense`] otherwise.
+    pub plane_wave: DevicePlaneWave,
+    /// The layout of the device plane-wave M2L (Helmholtz CH7.5b): by default by backend
+    /// and p ([`DevicePlaneWaveLayout::resolve`]: the CPU layout on the CPU runtime, a cube
+    /// of 128 units on Metal and on CUDA to p = 12, of 256 on CUDA from p = 13), or the cube
+    /// that
+    /// [`FmmBuilder::device_plane_wave_layout`](crate::fmm::FmmBuilder::device_plane_wave_layout)
+    /// names (Helmholtz CH7.5c). It runs only where [`plane_wave`](Self::plane_wave) is
+    /// [`DevicePlaneWave::Kernels`].
+    pub plane_wave_layout: PlaneWaveLayout,
+    /// The device level calls of the plane-wave M2L with a pair, under `PlaneWave` with
+    /// [`DevicePlaneWave::Kernels`], by level (Helmholtz CH7.5b).
+    pub plane_waves: Vec<PlaneWaveReport>,
+    /// The bytes of the plane-wave scratch, the widest chunk's (Helmholtz CH7.5b); 0
+    /// without plane-wave level calls.
+    pub plane_wave_scratch_bytes: u64,
+    /// The bytes of the translation scratch: the gathered inputs and the products of
+    /// the widest chunk (T8, T9).
+    pub scratch_bytes: u64,
+    /// The bytes of every buffer the operator allocates on the device, as summed for the
+    /// check before allocating, less what tuning released after it (T12).
+    pub memory_needed: u64,
+    /// The bytes the device reported as available before the allocation, `None` if the
+    /// backend reports no limit; the check was then skipped.
+    pub memory_available: Option<u64>,
+    /// How the stages of an evaluation are timed: by the host clock, unless
+    /// `synchronous_stages` asks for a sync per stage or `device_timestamps` for timing
+    /// windows (where the device times on itself).
+    pub stage_timing: StageTiming,
+    /// What the tuner did (T12, [`crate::tune`]): every decision of the build, with its
+    /// source (the static rule, the cache, or tuned now) and the candidates' times; `None`
+    /// only before the points are loaded.
+    pub tuning: Option<TuningReport>,
+    /// Where the output pass runs (Phase 4S T9, [`OutputPass`]): on the device
+    /// (`tetraleaf_kernels::movement::gather_output`) where it does f64 arithmetic unless
+    /// `FmmBuilder::output_pass` asks for the host, on the host otherwise.
+    pub output_pass: Placement,
+    /// The bytes the operator holds on the host as mirrors of host-fallback calls: the
+    /// multipoles and the locals with any kind on the host, and the target output (o N_t
+    /// values) with L2P, M2P or P2P on the host; 0 with every kind on the device. The
+    /// evaluation's download lands in CubeCL's host memory, not here (Phase 4S T11).
+    pub host_mirror_bytes: u64,
+    /// Where the rank sits among the ranks and on its node, which shares the device
+    /// (Phase 5 T8).
+    pub ranks: RankPlacement,
+    /// The bytes of the exchanges' packed buffers and their column lists (Phase 5 T8,
+    /// docs/design/distributed-fmm.md §7.3): the sent multipoles, the received boxes of
+    /// the replicated top, one level's received ghost multipoles, one reduction level's
+    /// sent multipoles and received children (Phase 5S T6); 0 on one rank. Part of
+    /// [`memory_needed`](Self::memory_needed).
+    pub exchange_bytes: u64,
+    /// The bytes of the ghost slots in the device stores: the multipoles and locals of the
+    /// ghost boxes and the source chunks of the ghost leaves, which the plan's layouts hold
+    /// (Phase 5 T8); 0 on one rank. Part of [`memory_needed`](Self::memory_needed).
+    pub ghost_bytes: u64,
+    /// The charge vectors of every evaluation (Phase 6 T5; `FmmBuilder::vectors`): the
+    /// stores, the transfers and the grouped views carry m of each ([module
+    /// documentation](self#several-charge-vectors-phase-6-t5)).
+    pub vectors: usize,
+}
+
+impl DeviceReport {
+    /// Where `kind` runs.
+    pub fn placement(&self, kind: OperatorKind) -> Placement {
+        self.placement[kind as usize]
+    }
+
+    /// How the device runs the strategy (device-path.md §6.6, §6.8): `Dense`, "Classes,
+    /// run as dense on the device" (the 316 tables of `M2lClasses::expand` on the device,
+    /// the class tables on the host for the fallback), `Rotation` (the rotation kernel,
+    /// T10), "Batched, run as dense on the device" (the dense tables, whose device M2L
+    /// is already a product per level; Phase 6 T2), or "PlaneWave, run as dense on the
+    /// device" (dense tables the device path builds or loads; Phase 6 T13), or with
+    /// [`DevicePlaneWave::Kernels`] "PlaneWave, merge and shift on the device" (Helmholtz
+    /// CH7.5b); with M2L on the host fallback by request, the strategy and "M2L on the
+    /// host fallback".
+    pub fn strategy_name(&self) -> String {
+        match (self.strategy, self.placement(OperatorKind::M2l)) {
+            (M2lStrategy::Dense, Placement::Device) => "Dense".to_owned(),
+            (M2lStrategy::Classes, Placement::Device) => {
+                "Classes, run as dense on the device".to_owned()
+            }
+            (M2lStrategy::Rotation, Placement::Device) => "Rotation".to_owned(),
+            (M2lStrategy::Batched, Placement::Device) => {
+                "Batched, run as dense on the device".to_owned()
+            }
+            (M2lStrategy::PlaneWave, Placement::Device) => match self.plane_wave {
+                DevicePlaneWave::Dense => "PlaneWave, run as dense on the device".to_owned(),
+                DevicePlaneWave::Kernels => "PlaneWave, merge and shift on the device".to_owned(),
+            },
+            (strategy, _) => format!("{strategy:?}, M2L on the host fallback"),
+        }
+    }
+
+    /// The device level calls of `kind`.
+    pub fn translations_of(&self, kind: OperatorKind) -> impl Iterator<Item = &TranslationReport> {
+        self.translations.iter().filter(move |t| t.kind == kind)
+    }
+}
+
+impl fmt::Display for DeviceReport {
+    /// A few lines: the device, the placement, the tables and the memory.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "device: {}", self.info)?;
+        if self.vectors > 1 {
+            writeln!(f, "charge vectors: {}", self.vectors)?;
+        }
+        let placement: Vec<String> = OperatorKind::ALL
+            .iter()
+            .map(|&kind| format!("{kind} {}", self.placement(kind)))
+            .collect();
+        writeln!(f, "placement: {}", placement.join(", "))?;
+        let tables: Vec<String> = self
+            .tables
+            .iter()
+            .map(|t| format!("{} ({} matrices, {} B)", t.name, t.matrices, t.bytes))
+            .collect();
+        writeln!(
+            f,
+            "strategy {}; tables on the device: {}",
+            self.strategy_name(),
+            if tables.is_empty() {
+                "none".to_owned()
+            } else {
+                tables.join(", ")
+            }
+        )?;
+        writeln!(f, "P2P layout: {}", self.p2p_layout)?;
+        writeln!(f, "leaf-operator layout: {}", self.leaf_layout)?;
+        for (name, kinds) in [
+            ("M2M/L2L", &[OperatorKind::M2m, OperatorKind::L2l][..]),
+            ("M2L", &[OperatorKind::M2l][..]),
+        ] {
+            let calls: Vec<&TranslationReport> = self
+                .translations
+                .iter()
+                .filter(|t| kinds.contains(&t.kind))
+                .collect();
+            if calls.is_empty() {
+                continue;
+            }
+            let library = calls.iter().filter(|t| t.gemm == Gemm::Library).count();
+            let chunks: usize = calls.iter().map(|t| t.chunks).sum();
+            writeln!(
+                f,
+                "{name}: {} level calls in {chunks} chunks, the library GEMM in {library}, \
+                 the hand-written {} in the others",
+                calls.len(),
+                self.gemm_layout,
+            )?;
+            for t in calls.iter().filter(|t| {
+                t.orientation != Orientation::BoxMajor
+                    || t.budget != default_scratch_bytes(&self.info)
+                    || matches!(t.gemm, Gemm::HandWritten(l) if l != self.gemm_layout)
+            }) {
+                writeln!(
+                    f,
+                    "  {} level {}: {}, {}, {} MB",
+                    t.kind,
+                    t.level,
+                    t.gemm,
+                    t.orientation,
+                    t.budget >> 20
+                )?;
+            }
+        }
+        if !self.rotations.is_empty() {
+            let pairs: usize = self.rotations.iter().map(|r| r.pairs).sum();
+            writeln!(
+                f,
+                "M2L: rotation in {} level calls of {pairs} pairs, one launch each, layout {}",
+                self.rotations.len(),
+                self.rotation_layout
+            )?;
+        }
+        if !self.plane_waves.is_empty() {
+            let chunks: usize = self.plane_waves.iter().map(|r| r.chunks).sum();
+            let pairs: usize = self.plane_waves.iter().map(|r| r.pairs).sum();
+            writeln!(
+                f,
+                "M2L: plane waves in {} level calls of {pairs} pairs, {chunks} chunks, layout \
+                 {}, scratch {} B",
+                self.plane_waves.len(),
+                self.plane_wave_layout,
+                self.plane_wave_scratch_bytes
+            )?;
+        }
+        if !self.translations.is_empty() {
+            writeln!(f, "translation scratch: {} B", self.scratch_bytes)?;
+        }
+        let r = &self.ranks;
+        writeln!(
+            f,
+            "rank {} of {}, local rank {} of {} on the node, each opening the node's device",
+            r.rank, r.ranks, r.local_rank, r.local_ranks
+        )?;
+        if r.ranks > 1 {
+            writeln!(
+                f,
+                "exchange buffers: {} B; ghost slots: {} B",
+                self.exchange_bytes, self.ghost_bytes
+            )?;
+        }
+        if let Some(units) = self.cpu_units {
+            if (units as usize) < r.threads {
+                writeln!(
+                    f,
+                    "CPU runtime: at most {units} units per cube (threads({}) capped at {} \
+                     cores / {} ranks on the node)",
+                    r.threads, r.cores, r.local_ranks
+                )?;
+            } else {
+                writeln!(f, "CPU runtime: at most {units} units per cube")?;
+            }
+        }
+        writeln!(f, "stage timing: {}", self.stage_timing)?;
+        writeln!(f, "output pass: {}", self.output_pass)?;
+        if let Some(tuning) = &self.tuning {
+            writeln!(f, "{tuning}")?;
+        }
+        if r.follows_rank0 {
+            writeln!(
+                f,
+                "tuning: rank 0 tunes; this rank takes its M2L strategy and the static rule"
+            )?;
+        }
+        match self.memory_available {
+            Some(available) => write!(
+                f,
+                "device memory: {} B needed, {available} B available",
+                self.memory_needed
+            ),
+            None => write!(
+                f,
+                "device memory: {} B needed; the backend reports no limit, not checked",
+                self.memory_needed
+            ),
+        }
+    }
+}
+
+/// The settings of a [`DeviceOperator`] beyond its host operator.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeviceOptions {
+    /// Kinds to run on the host even where a device kernel exists.
+    pub host_fallback: Vec<OperatorKind>,
+    /// The table cache of the tables the device needs beyond the host's.
+    pub table_cache: Option<PathBuf>,
+    /// The layout of the device P2P (T6); [`DeviceP2pLayout::Auto`] by default.
+    pub p2p_layout: DeviceP2pLayout,
+    /// The layout of the device leaf operators (T7); [`DeviceLeafLayout::Auto`] by
+    /// default.
+    pub leaf_layout: DeviceLeafLayout,
+    /// The GEMM of the device translations M2M, L2L and M2L (T8, T9); [`DeviceGemm::Auto`]
+    /// by default.
+    pub gemm: DeviceGemm,
+    /// How the hand-written GEMM gets its input columns (Phase 6 T7);
+    /// [`DeviceGather::Auto`] by default.
+    pub gather: DeviceGather,
+    /// How the reduction finds a chunk's entries (Phase 6 T7); [`DeviceReduction::ByChunk`]
+    /// by default.
+    pub reduction: DeviceReduction,
+    /// The scratch budget of the device translations in bytes; `None` for the device's
+    /// default, `tetraleaf_kernels::translate::default_scratch_bytes` (128 MB on Metal and the CPU
+    /// runtime, 2 GB on CUDA; Phase 4S T7).
+    pub scratch_budget: Option<u64>,
+    /// How M2L runs on the device under `PlaneWave` (Helmholtz CH7.5b);
+    /// [`DevicePlaneWave::Kernels`] by default (Helmholtz CH7.5c).
+    pub plane_wave: DevicePlaneWave,
+    /// The budget of one chunk of a plane-wave level call in bytes (Helmholtz CH7.5b);
+    /// `None` for the device's default, [`default_plane_wave_budget`].
+    pub plane_wave_budget: Option<u64>,
+    /// The layout of the plane-wave launches (Helmholtz CH7.5c);
+    /// [`DevicePlaneWaveLayout::Auto`] by default.
+    pub plane_wave_layout: DevicePlaneWaveLayout,
+    /// How to time the stages; [`StageTiming::Enqueue`] by default.
+    /// [`StageTiming::DeviceTimestamps`] falls back to it on a device that does not time on
+    /// itself.
+    pub stage_timing: StageTiming,
+    /// Where the output pass runs (Phase 4S T9); [`OutputPass::Auto`] by default, on the
+    /// device where it does f64 arithmetic.
+    pub output_pass: OutputPass,
+    /// Where the rank sits among the ranks and on its node (Phase 5 T8), for the report;
+    /// one rank by default.
+    pub ranks: RankPlacement,
+}
+
+/// Where a device operator's rank sits (Phase 5 T8; docs/design/distributed-fmm.md §7.4),
+/// for [`DeviceReport`]: every rank opens the default device of its backend, and the ranks
+/// of a node share it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RankPlacement {
+    /// The rank in the `Fmm`'s communicator.
+    pub rank: usize,
+    /// The ranks of the communicator.
+    pub ranks: usize,
+    /// The rank on its node: its rank in the communicator `split_shared` makes once per
+    /// build.
+    pub local_rank: usize,
+    /// The ranks on the node, which share its device.
+    pub local_ranks: usize,
+    /// The cores of the node as the system reports them
+    /// (`std::thread::available_parallelism`), which the CPU runtime's ranks share.
+    pub cores: usize,
+    /// The `threads(n)` of the builder: on the CPU runtime the units per cube, capped at
+    /// `cores / local_ranks` ([`DeviceReport::cpu_units`]).
+    pub threads: usize,
+    /// Whether the tuning decisions of this rank follow rank 0's (several ranks with a
+    /// tuning cache, docs/design/distributed-fmm.md §7.6): rank 0's M2L strategy, and the
+    /// static rule for the GEMMs and the P2P layout.
+    pub follows_rank0: bool,
+}
+
+impl Default for RankPlacement {
+    /// One rank alone on its node, with every core and one thread.
+    fn default() -> Self {
+        Self {
+            rank: 0,
+            ranks: 1,
+            local_rank: 0,
+            local_ranks: 1,
+            cores: std::thread::available_parallelism().map_or(1, usize::from),
+            threads: 1,
+            follows_rank0: false,
+        }
+    }
+}
+
+impl RankPlacement {
+    /// The units per cube of the CPU runtime's launches for this rank: `threads(n)`,
+    /// capped so that the ranks of the node together stay within its cores (at least one;
+    /// device-path.md §11).
+    pub fn cpu_units(&self) -> usize {
+        self.threads
+            .min((self.cores / self.local_ranks.max(1)).max(1))
+    }
+}
+
+/// The index lists of the evaluator's exchanges that a device operator needs (Phase 5 T8;
+/// docs/design/distributed-fmm.md §7.1–§7.3), copied at build from
+/// `tetraleaf_plan::exchange`: the packed buffers are sized from them and their columns
+/// uploaded once. Every list is empty on one rank. Since Phase 5S T6 they include the
+/// upward reduction's (docs/design/scale-out.md §4.5).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExchangeLists {
+    /// Per level, the boxes the upward reduction of the level sends to the owners of their
+    /// parents, in send order (`ReductionExchange::send_boxes`; Phase 5S T6); empty on the
+    /// levels that are not reduction levels.
+    pub reduction_send: Vec<Vec<u32>>,
+    /// Per level, the children the upward reduction of the level writes, ascending, in the
+    /// order of its receive buffer (`ReductionExchange::receive_boxes`; Phase 5S T6).
+    pub reduction_receive: Vec<Vec<u32>>,
+    /// This rank's boxes of the replicated top, which its all-gather sends
+    /// (`TopExchange::sent_keys` and `slot`), as (level, box index).
+    pub sent_top: Vec<(usize, u32)>,
+    /// The other ranks' boxes of the replicated top that the all-gather writes on this
+    /// rank (`TopExchange::received_keys` and `slot`), as (level, box index), in key
+    /// order.
+    pub received_top: Vec<(usize, u32)>,
+    /// The values of each box of `received_top` in `TopExchange::gathered`.
+    pub received_values: Vec<Range<usize>>,
+    /// Per level, the boxes the multipole exchange sends, in send order; a box sent to
+    /// two ranks appears twice (`MultipoleExchange::send_boxes`).
+    pub send_boxes: Vec<Vec<u32>>,
+    /// Per level, the ghost boxes the multipole exchange writes, ascending, in the order of
+    /// its receive buffer (`MultipoleExchange::receive_boxes`).
+    pub receive_boxes: Vec<Vec<u32>>,
+}
+
+impl ExchangeLists {
+    /// The lists of an evaluator's upward reduction, multipole exchange and replicated top
+    /// (`Evaluator::reduction_exchange`, `Evaluator::multipole_exchange`,
+    /// `Evaluator::top_exchange`).
+    pub fn new<T: Equivalence + Copy + Default>(
+        reduction: &ReductionExchange<T>,
+        multipoles: &MultipoleExchange<T>,
+        top: &TopExchange<T>,
+    ) -> Self {
+        let nlevels = multipoles.nlevels();
+        let per_level = |boxes: &dyn Fn(usize) -> Vec<u32>| -> Vec<Vec<u32>> {
+            (0..nlevels)
+                .map(|l| {
+                    if reduction.levels().contains(&l) {
+                        boxes(l)
+                    } else {
+                        Vec::new()
+                    }
+                })
+                .collect()
+        };
+        // The value offsets of the keys in the gathered buffer.
+        let nkeys = top.keys().len();
+        let offsets: Vec<usize> = std::iter::once(0)
+            .chain((0..nkeys).scan(0, |end, r| {
+                *end += top.chunk(r).len();
+                Some(*end)
+            }))
+            .collect();
+        let slot = |r: usize| {
+            top.slot(r)
+                .expect("the top's sent and received keys are held")
+        };
+        Self {
+            reduction_send: per_level(&|l| reduction.send_boxes(l).to_vec()),
+            reduction_receive: per_level(&|l| reduction.receive_boxes(l).to_vec()),
+            sent_top: top.sent_keys().map(slot).collect(),
+            received_top: top.received_keys().iter().map(|&r| slot(r)).collect(),
+            received_values: top
+                .received_keys()
+                .iter()
+                .map(|&r| offsets[r]..offsets[r + 1])
+                .collect(),
+            send_boxes: (0..multipoles.nlevels())
+                .map(|l| multipoles.send_boxes(l).to_vec())
+                .collect(),
+            receive_boxes: (0..multipoles.nlevels())
+                .map(|l| multipoles.receive_boxes(l).to_vec())
+                .collect(),
+        }
+    }
+
+    /// The lists of one rank of `nlevels` levels: all empty.
+    pub fn one_rank(nlevels: usize) -> Self {
+        Self {
+            reduction_send: vec![Vec::new(); nlevels],
+            reduction_receive: vec![Vec::new(); nlevels],
+            send_boxes: vec![Vec::new(); nlevels],
+            receive_boxes: vec![Vec::new(); nlevels],
+            ..Self::default()
+        }
+    }
+}
+
+/// The caller's order of the targets, for the output pass on the device (Phase 4S T9,
+/// [`OutputPass`]): every target's point in leaf order and local leaf, in the caller's
+/// order, and two scales per local leaf, 4π r_t and 4π r_t² (CONVENTIONS §3.13,
+/// "Output"), as `Fmm` forms them for its host pass. Since Phase 5 T6 `Fmm` passes the
+/// received order of the targets the rank owns (leaf order) as the caller's order, and
+/// moves the output to the caller's ranks and order after the download.
+#[derive(Clone, Copy, Debug)]
+pub struct CallerOrder<'a> {
+    /// For every target in the caller's order: its point in leaf order.
+    pub points: &'a [u32],
+    /// For every target in the caller's order: its local leaf.
+    pub leaves: &'a [u32],
+    /// For every local leaf j: `[2 j]` divides φ̂, `[2 j + 1]` ĝ.
+    pub scales: &'a [f64],
+}
+
+/// The output of an evaluation, as [`DeviceOperator::read_output`] downloads it: read in
+/// place in CubeCL's host memory (Phase 4S T11), borrowing the operator until it is
+/// dropped.
+#[derive(Debug)]
+pub enum DeviceOutput<'a, T> {
+    /// The target output in the evaluator's layout, unscaled: the host pass follows.
+    LeafOrder {
+        /// The target output in the `LeafStore` layout: leaf j's values from o
+        /// `offsets[j]`, o values per point.
+        values: OutputValues<'a, T>,
+        /// The point offsets of the target leaves, `nleaves + 1` of them.
+        offsets: &'a [usize],
+    },
+    /// With the output pass on the device: φ of every target in the caller's order, then
+    /// three values of ∇φ per target with gradients, scaled.
+    CallerOrder(OutputValues<'a, T>),
+}
+
+/// The values of a [`DeviceOutput`]: the evaluation's one download, read in place in
+/// CubeCL's host memory (an `tetraleaf_kernels::HostValues`, pinned memory on CUDA), without
+/// a copy into a host buffer of the operator (Phase 4S T11, decision 14). Derefs to
+/// `&[T]`. It borrows the operator, so it is dropped, and the memory returned to CubeCL's
+/// pool, before the next evaluation.
+pub struct OutputValues<'a, T> {
+    values: Box<dyn Deref<Target = [T]> + 'a>,
+}
+
+impl<'a, T: DeviceElement> OutputValues<'a, T> {
+    fn new(values: HostValues<T>) -> Self {
+        Self {
+            values: Box::new(values),
+        }
+    }
+}
+
+impl<T> Deref for OutputValues<'_, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
+        &self.values
+    }
+}
+
+impl<T> fmt::Debug for OutputValues<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OutputValues")
+            .field("len", &self.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// The output pass on the device (Phase 4S T9): the output order, uploaded once, and the
+/// buffer of the caller-ordered output, o N_t values.
+#[derive(Debug)]
+struct DevicePass<T: DeviceFloat> {
+    order: OutputOrder,
+    values: DeviceBuffer<T>,
+}
+
+impl DeviceP2pLayout {
+    /// The kernel layout of this choice on the device `info`: for
+    /// [`Auto`](DeviceP2pLayout::Auto) the default of `tetraleaf-kernels`
+    /// (`P2pLayout::default_for`: the CPU layout on the CPU runtime, the cube layout of
+    /// 64 units on the GPUs).
+    pub fn resolve(self, info: &DeviceInfo) -> P2pLayout {
+        match self {
+            Self::Auto => P2pLayout::default_for(info),
+            Self::Cube(units) => P2pLayout::Cube { units },
+            Self::Plane(planes) => P2pLayout::Plane { planes },
+            Self::Cpu => P2pLayout::Cpu {
+                vector_bits: tetraleaf_kernels::p2p::CPU_VECTOR_BITS,
+            },
+        }
+    }
+}
+
+/// The units per cube of the plane-wave layout on CUDA from [`CUDA_PLANE_WAVE_WIDE_FROM`]
+/// (Helmholtz CH7.5c, measured on the H100 at f64 p = 8–20: 128 units fastest to p = 12,
+/// 4.7 % ahead of 256 there; 256 15 % ahead of 128 at p = 14 and within 3.6 % of the fastest
+/// above; p = 13 not measured; tetraleaf-validate/results/helmholtz-ch7-5c.md §5).
+pub const CUDA_PLANE_WAVE_WIDE_UNITS: u32 = 256;
+
+/// The degree from which CUDA's plane-wave layout takes [`CUDA_PLANE_WAVE_WIDE_UNITS`]
+/// units per cube (Helmholtz CH7.5c).
+pub const CUDA_PLANE_WAVE_WIDE_FROM: usize = 13;
+
+/// The plane-wave chunk budget by default on Metal: 1 GB (Helmholtz CH7.5c, measured on the
+/// M6 at f32 p = 8: the translation scratch budget of 128 MB made up to 88 chunks per level
+/// call, and 1 GB was 14–17 % faster in M2L; tetraleaf-validate/results/helmholtz-ch7-5c.md §3).
+pub const METAL_PLANE_WAVE_BUDGET: u64 = 1 << 30;
+
+/// The budget of one chunk of a plane-wave level call by default on the device `info`:
+/// [`METAL_PLANE_WAVE_BUDGET`] on Metal, at most an eighth of the memory the device reports
+/// and never below `tetraleaf_kernels::translate::DEFAULT_SCRATCH_BYTES` (128 MB), as the
+/// translation budget is bounded on CUDA; elsewhere the translation scratch budget,
+/// `default_scratch_bytes` (128 MB on the CPU runtime, 2 GB on CUDA; CH7.5c measured 4 GB
+/// 1–9 % faster than 2 GB on the H100 at p ≥ 12 and kept 2 GB).
+pub fn default_plane_wave_budget(info: &DeviceInfo) -> u64 {
+    match info.backend {
+        BackendKind::Metal => METAL_PLANE_WAVE_BUDGET
+            .min(info.max_memory.map_or(u64::MAX, |m| m / 8))
+            .max(DEFAULT_SCRATCH_BYTES),
+        BackendKind::Cpu | BackendKind::Cuda => default_scratch_bytes(info),
+    }
+}
+
+impl DevicePlaneWaveLayout {
+    /// The kernel layout of this choice on the device `info` at degree p: for
+    /// [`Auto`](DevicePlaneWaveLayout::Auto) by backend and p (Helmholtz CH7.5c): on CUDA
+    /// from [`CUDA_PLANE_WAVE_WIDE_FROM`] a cube of [`CUDA_PLANE_WAVE_WIDE_UNITS`] units (at
+    /// most the device's units per cube), otherwise the default of `tetraleaf-kernels`
+    /// ([`PlaneWaveLayout::default_for`]: the CPU layout on the CPU runtime, a cube of
+    /// `GPU_UNITS` = 128 units on the GPUs).
+    pub fn resolve(self, info: &DeviceInfo, p: usize) -> PlaneWaveLayout {
+        match self {
+            Self::Auto if info.backend == BackendKind::Cuda && p >= CUDA_PLANE_WAVE_WIDE_FROM => {
+                PlaneWaveLayout::Cube {
+                    units: CUDA_PLANE_WAVE_WIDE_UNITS.min(info.max_units_per_cube.max(1)),
+                }
+            }
+            Self::Auto => PlaneWaveLayout::default_for(info),
+            Self::Cube { units } => PlaneWaveLayout::Cube { units },
+        }
+    }
+}
+
+impl DeviceLeafLayout {
+    /// The kernel layout of this choice on the device `info` at degree p in `T`: for
+    /// [`Auto`](DeviceLeafLayout::Auto) the default of `tetraleaf-kernels`
+    /// (`LeafLayout::default_for`: the CPU layout on the CPU runtime, the cube layout of
+    /// 64 units with tiles of up to 32 points on the GPUs).
+    pub fn resolve<T: DeviceFloat>(self, info: &DeviceInfo, p: usize) -> LeafLayout {
+        match self {
+            Self::Auto => LeafLayout::default_for(info, p, T::FLOAT),
+            Self::Cube { units, tile } => LeafLayout::Cube { units, tile },
+            Self::Cpu => LeafLayout::Cpu,
+        }
+    }
+}
+
+/// The kinds with a device kernel (T6, T7, T8, T9, T10): on the device unless
+/// `host_fallback` names them; M2L under every strategy (dense under `Dense` and
+/// `Classes`, T9; the rotation kernel under `Rotation`, T10).
+const DEVICE_KINDS: [OperatorKind; 8] = [
+    OperatorKind::P2m,
+    OperatorKind::M2m,
+    OperatorKind::M2l,
+    OperatorKind::P2l,
+    OperatorKind::L2l,
+    OperatorKind::L2p,
+    OperatorKind::M2p,
+    OperatorKind::P2p,
+];
+
+/// The strengths of the device's source store for the host's source type (Phase 6 T8d;
+/// module documentation, "Dipoles").
+fn source_kind(sources: SourceType) -> SourceKind {
+    match sources {
+        SourceType::Charges => SourceKind::Charges,
+        SourceType::Dipoles => SourceKind::Dipoles,
+        SourceType::ChargesAndDipoles => SourceKind::ChargesAndDipoles,
+    }
+}
+
+/// The leaf operators among them (T7).
+const LEAF_KINDS: [OperatorKind; 4] = [
+    OperatorKind::P2m,
+    OperatorKind::P2l,
+    OperatorKind::L2p,
+    OperatorKind::M2p,
+];
+
+/// The views of one level on the device, uploaded from the plan's
+/// (`tetraleaf_plan::lists::LevelLists`). Box views have one row per box of the level,
+/// leaf views one row per local leaf of the level.
+#[derive(Debug)]
+pub struct LevelViews {
+    /// P2M: leaf indices per box.
+    pub p2m: IndexView,
+    /// M2M of the local pass: children on the next finer level by octant.
+    pub m2m_local: GroupedView,
+    /// M2M of the global pass.
+    pub m2m_global: GroupedView,
+    /// L2L: the parent on the next coarser level by octant.
+    pub l2l: GroupedView,
+    /// M2L: V-list sources by offset index.
+    pub v: GroupedView,
+    /// P2L: X-list leaf indices per box.
+    pub x: IndexView,
+    /// P2P: near-list leaf indices per leaf, the leaf itself included.
+    pub near: IndexView,
+    /// M2P: W-list boxes on the next finer level per leaf.
+    pub w: IndexView,
+    /// L2P: the leaf's box per leaf.
+    pub l2p: IndexView,
+}
+
+/// Every plan view of an FMM on the device, the box and leaf indices, and the index
+/// arrays of the leaf stores, uploaded once at build ([module documentation](self)).
+#[derive(Debug)]
+pub struct DeviceViews {
+    levels: Vec<LevelViews>,
+    boxes: BoxCoordinates,
+    leaves: LeafCoordinates,
+    source_offsets: PointOffsets,
+    target_offsets: PointOffsets,
+    charge_slots: IndexBuffer,
+}
+
+impl DeviceViews {
+    /// The views of `level`.
+    pub fn level(&self, level: usize) -> &LevelViews {
+        &self.levels[level]
+    }
+
+    /// The number of levels.
+    pub fn nlevels(&self) -> usize {
+        self.levels.len()
+    }
+
+    /// The index of every box of every level.
+    pub fn boxes(&self) -> &BoxCoordinates {
+        &self.boxes
+    }
+
+    /// The level and index of every leaf.
+    pub fn leaves(&self) -> &LeafCoordinates {
+        &self.leaves
+    }
+
+    /// The `nleaves + 1` point offsets of the source store.
+    pub fn source_offsets(&self) -> &PointOffsets {
+        &self.source_offsets
+    }
+
+    /// The `nlocal + 1` point offsets of the target input and output.
+    pub fn target_offsets(&self) -> &PointOffsets {
+        &self.target_offsets
+    }
+
+    /// The position in the source store of every strength, in leaf order, the w strengths
+    /// of a source together (m charges, or with dipoles its charge and moment components;
+    /// CONVENTIONS §3.13, "Source chunks"): the targets of the charge scatter.
+    pub fn charge_slots(&self) -> &IndexBuffer {
+        &self.charge_slots
+    }
+
+    /// Downloads every array, for tests and reports.
+    ///
+    /// # Errors
+    ///
+    /// As `Device::download`.
+    pub fn download(&self, device: &mut Device) -> Result<ViewsImage, KernelError> {
+        let levels = self
+            .levels
+            .iter()
+            .map(|views| {
+                Ok(LevelViewsImage {
+                    p2m: views.p2m.download(device)?,
+                    m2m_local: views.m2m_local.download(device)?,
+                    m2m_global: views.m2m_global.download(device)?,
+                    l2l: views.l2l.download(device)?,
+                    v: views.v.download(device)?,
+                    x: views.x.download(device)?,
+                    near: views.near.download(device)?,
+                    w: views.w.download(device)?,
+                    l2p: views.l2p.download(device)?,
+                })
+            })
+            .collect::<Result<_, KernelError>>()?;
+        let indices = |device: &mut Device, buffer: &IndexBuffer| {
+            let mut out = vec![0u32; buffer.len()];
+            device
+                .download(buffer.buffer().as_slice(), &mut out)
+                .map(|()| out)
+        };
+        Ok(ViewsImage {
+            levels,
+            boxes: self.boxes.download(device)?,
+            leaves: self.leaves.download(device)?,
+            source_offsets: self.source_offsets.download(device)?,
+            target_offsets: self.target_offsets.download(device)?,
+            charge_slots: indices(device, &self.charge_slots)?,
+        })
+    }
+}
+
+/// The views of one level as downloaded ([`DeviceViews::download`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LevelViewsImage {
+    /// P2M.
+    pub p2m: CsrImage,
+    /// M2M, local pass.
+    pub m2m_local: GroupedImage,
+    /// M2M, global pass.
+    pub m2m_global: GroupedImage,
+    /// L2L.
+    pub l2l: GroupedImage,
+    /// M2L.
+    pub v: GroupedImage,
+    /// P2L.
+    pub x: CsrImage,
+    /// P2P.
+    pub near: CsrImage,
+    /// M2P.
+    pub w: CsrImage,
+    /// L2P.
+    pub l2p: CsrImage,
+}
+
+/// Every array of [`DeviceViews`] as downloaded.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ViewsImage {
+    /// The views of each level.
+    pub levels: Vec<LevelViewsImage>,
+    /// The index of every box, level after level.
+    pub boxes: Vec<Vec<[u32; 3]>>,
+    /// The level and index of every leaf.
+    pub leaves: Vec<(u32, [u32; 3])>,
+    /// The point offsets of the source store.
+    pub source_offsets: Vec<u32>,
+    /// The point offsets of the target input and output.
+    pub target_offsets: Vec<u32>,
+    /// The position of every strength (charge or moment component) in the source store.
+    pub charge_slots: Vec<u32>,
+}
+
+/// The data stores of an evaluation on the device ([module documentation](self)).
+#[derive(Debug)]
+struct DeviceStores<T: DeviceFloat> {
+    multipoles: DeviceBuffer<T>,
+    locals: DeviceBuffer<T>,
+    sources: DeviceBuffer<T>,
+    target_input: DeviceBuffer<T>,
+    target_output: DeviceBuffer<T>,
+    /// The charges of an evaluation in leaf order, before the scatter.
+    charges: DeviceBuffer<T>,
+}
+
+/// The translation tables on the device, with their library copies where a level call may
+/// take the library GEMM (`tetraleaf_kernels::translate::Tables`).
+#[derive(Debug)]
+struct DeviceTables<T: DeviceFloat> {
+    m2m: Tables<T>,
+    l2l: Tables<T>,
+    /// The dense M2L tables, under `Dense` and `Classes` (expanded from the classes).
+    m2l: Option<Tables<T>>,
+    /// The M2L family of the rotation tables, under `Rotation` (T10).
+    rotation: Option<DeviceRotation<T>>,
+    /// The plane-wave tables, under `PlaneWave` with [`DevicePlaneWave::Kernels`]
+    /// (Helmholtz CH7.5b).
+    plane_wave: Option<DevicePlaneWaves<T>>,
+}
+
+/// One grouped level call on the device: its plan and the GEMM choice it was built with
+/// (T12: the static rule, the cache, or the tuner).
+#[derive(Debug)]
+struct LevelCall {
+    plan: GroupedPlan,
+    choice: GemmChoice,
+}
+
+/// The plans of the device M2M, L2L (T8) and dense M2L (T9) level calls, one per level and
+/// view (empty where the kind runs on the host), their shared scratch, the plans of the
+/// rotation M2L level calls (T10; empty unless M2L runs on the device under `Rotation`), and
+/// the chunks of the plane-wave level calls with their shared scratch (Helmholtz CH7.5b;
+/// empty unless M2L runs on the device under `PlaneWave` with [`DevicePlaneWave::Kernels`]).
+#[derive(Debug)]
+struct Translations<T: DeviceFloat> {
+    m2m_local: Vec<LevelCall>,
+    m2m_global: Vec<LevelCall>,
+    l2l: Vec<LevelCall>,
+    m2l: Vec<LevelCall>,
+    scratch: TranslationScratch<T>,
+    rotation: Vec<RotationPlan>,
+    rotation_layout: RotationLayout,
+    plane_waves: Vec<Vec<PlaneWavePlan>>,
+    plane_wave_scratch: Option<PlaneWaveScratch<T>>,
+    plane_wave_layout: PlaneWaveLayout,
+}
+
+impl<T: DeviceFloat> Translations<T> {
+    /// The level calls of `kind` (and `pass` for M2M).
+    fn calls(&self, kind: OperatorKind, pass: Option<UpwardPass>) -> &[LevelCall] {
+        match (kind, pass) {
+            (OperatorKind::M2m, Some(UpwardPass::Local)) => &self.m2m_local,
+            (OperatorKind::M2m, Some(UpwardPass::Global)) => &self.m2m_global,
+            (OperatorKind::L2l, None) => &self.l2l,
+            (OperatorKind::M2l, None) => &self.m2l,
+            _ => unreachable!("M2M with a pass, L2L or M2L"),
+        }
+    }
+
+    /// The level calls of `kind` (and `pass` for M2M), mutably.
+    fn calls_mut(&mut self, kind: OperatorKind, pass: Option<UpwardPass>) -> &mut Vec<LevelCall> {
+        match (kind, pass) {
+            (OperatorKind::M2m, Some(UpwardPass::Local)) => &mut self.m2m_local,
+            (OperatorKind::M2m, Some(UpwardPass::Global)) => &mut self.m2m_global,
+            (OperatorKind::L2l, None) => &mut self.l2l,
+            (OperatorKind::M2l, None) => &mut self.m2l,
+            _ => unreachable!("M2M with a pass, L2L or M2L"),
+        }
+    }
+}
+
+/// A grouped level call: (kind, pass of M2M, level).
+type CallId = (OperatorKind, Option<UpwardPass>, usize);
+
+/// The grouped level calls, in report order: (kind, pass).
+const GROUPED: [(OperatorKind, Option<UpwardPass>); 4] = [
+    (OperatorKind::M2m, Some(UpwardPass::Local)),
+    (OperatorKind::M2m, Some(UpwardPass::Global)),
+    (OperatorKind::L2l, None),
+    (OperatorKind::M2l, None),
+];
+
+/// A packed exchange buffer on the device and the multipole columns it is gathered from
+/// or scattered to (Phase 5 T8).
+#[derive(Debug)]
+struct Packed<T: DeviceFloat> {
+    /// The global column of every packed column in the multipole buffer: the level's
+    /// first column plus the box index.
+    columns: IndexBuffer,
+    /// The packed values, n per column.
+    values: DeviceBuffer<T>,
+}
+
+/// The exchanges on the device (Phase 5 T8, docs/design/distributed-fmm.md §7.1, §7.3):
+/// the packed buffers, allocated at build and sized from the exchanges' index lists, and
+/// what the host side of each event needs. Every buffer is `None` where its list is
+/// empty, as on one rank.
+#[derive(Debug)]
+struct Exchanges<T: DeviceFloat> {
+    /// The sent multipoles: this rank's boxes of the replicated top, then every level's
+    /// sent boxes.
+    send: Option<Packed<T>>,
+    /// (level, box index) of every column of `send`, in order.
+    sent: Vec<(usize, u32)>,
+    /// The other ranks' boxes of the replicated top that this rank holds.
+    top: Option<Packed<T>>,
+    /// Their values in the gathered buffer, box by box.
+    top_values: Vec<Range<usize>>,
+    /// The host copy of the received boxes, packed, for their one upload.
+    top_staging: Vec<T>,
+    /// Every level's received ghost boxes, the levels one after the other, and the values
+    /// of the largest level, reused level after level (one stream orders an upload after
+    /// the scatter that read the buffer before).
+    receive: Option<Packed<T>>,
+    /// `nlevels + 1` offsets of the levels in `receive`'s columns.
+    receive_offsets: Vec<usize>,
+    /// The values of the ghost leaves in the source store: its tail.
+    ghost_sources: Range<usize>,
+    /// The test hook ([`DeviceOperator::inject_error`]): fail at the next
+    /// [`HostData::SendMultipoles`].
+    inject: bool,
+    /// The received multipoles of the current evaluation by level.
+    received_levels: [Traffic; MAX_LEVELS],
+    /// The upward reduction's sent multipoles (Phase 5S T6): every reduction level's, the
+    /// levels one after the other, and the values of the largest level, reused level after
+    /// level (each level's download waits for its gather before the next gather).
+    reduction_send: Option<Packed<T>>,
+    /// `nlevels + 1` offsets of the levels in `reduction_send`'s columns.
+    reduction_send_offsets: Vec<usize>,
+    /// The upward reduction's received children, laid out as `reduction_send`, the values
+    /// reused level after level as those of `receive`.
+    reduction_receive: Option<Packed<T>>,
+    /// `nlevels + 1` offsets of the levels in `reduction_receive`'s columns.
+    reduction_receive_offsets: Vec<usize>,
+    /// The upward reduction of the current evaluation by level.
+    reduction_levels: [Traffic; MAX_LEVELS],
+}
+
+/// The host copies of the multipoles and locals that host-fallback calls work on.
+#[derive(Debug)]
+struct Mirrors<T> {
+    multipoles: LevelBuffers<T>,
+    locals: LevelBuffers<T>,
+    /// The target output, with L2P, M2P or P2P on the host: the kinds that write it
+    /// (Phase 4S T11; before, the operator always held it, as the download target).
+    target_output: Option<LeafStore<T>>,
+}
+
+/// The device with the accounting of its transfers and the first failure of an
+/// evaluation.
+#[derive(Debug)]
+struct Link {
+    device: Device,
+    traffic: TrafficByData,
+    error: Option<KernelError>,
+}
+
+impl Link {
+    /// Runs `op` on the device unless an earlier operation failed, counts its transfers
+    /// as `data`, and keeps its failure.
+    fn run<R>(
+        &mut self,
+        data: DataKind,
+        op: impl FnOnce(&mut Device) -> Result<R, KernelError>,
+    ) -> Option<R> {
+        if self.error.is_some() {
+            return None;
+        }
+        let before = self.device.counters();
+        let result = op(&mut self.device);
+        self.traffic
+            .add(data, Traffic::between(before, self.device.counters()));
+        result.map_err(|error| self.error = Some(error)).ok()
+    }
+
+    /// [`run`](Self::run) at build, where a failure ends the build.
+    fn build<R>(
+        &mut self,
+        data: DataKind,
+        op: impl FnOnce(&mut Device) -> Result<R, KernelError>,
+    ) -> Result<R, FmmError> {
+        match self.run(data, op) {
+            Some(value) => Ok(value),
+            None => Err(FmmError::Device(
+                self.error
+                    .take()
+                    .map_or_else(String::new, |error| error.to_string()),
+            )),
+        }
+    }
+}
+
+/// Which level store a host-fallback transfer moves.
+#[derive(Clone, Copy, Debug)]
+enum Level {
+    Multipoles,
+    Locals,
+}
+
+/// The Laplace operator with its data on a device, and a host fallback per operator
+/// kind; see the [module documentation](self).
+///
+/// It wraps the [`LaplaceOperator`] that runs its host-fallback kinds, built as
+/// `FmmBuilder::build` builds the host operator, and implements [`FmmSizes`] and
+/// [`FmmOperator`] for the `Evaluator`, whose `host_data` mirrors the evaluator's data
+/// movements on the device. [`Fmm`](crate::fmm::Fmm) drives the evaluation boundary:
+/// [`begin_evaluation`](Self::begin_evaluation) after the evaluator's `reset`,
+/// [`read_output`](Self::read_output) after its stages.
+pub struct DeviceOperator<T: DeviceScalar> {
+    host: LaplaceOperator<T>,
+    link: Link,
+    placement: [Placement; 8],
+    /// The layout of the device P2P, fixed at build.
+    p2p_layout: P2pLayout,
+    /// The layout of the device leaf operators, fixed at build.
+    leaf_layout: LeafLayout,
+    stores: DeviceStores<T>,
+    /// `nlevels + 1` offsets of the levels in the multipole and local buffers, in values.
+    level_offsets: Vec<usize>,
+    views: DeviceViews,
+    tables: DeviceTables<T>,
+    translations: Translations<T>,
+    mirrors: Option<Mirrors<T>>,
+    /// The point offsets of the target leaves (`nleaves + 1`) in the target output's
+    /// `LeafStore` layout, on the device and in [`DeviceOutput::LeafOrder`].
+    output_offsets: Vec<usize>,
+    /// The values per target point of the target output: 4 with gradients, else 1.
+    output_point_size: usize,
+    /// With the output pass on the device (Phase 4S T9): its order and output buffer.
+    pass: Option<DevicePass<T>>,
+    /// The exchanges' packed buffers and lists (Phase 5 T8).
+    exchanges: Exchanges<T>,
+    report: DeviceReport,
+    build_counters: Counters,
+    build_traffic: TrafficByData,
+    evaluation_counters: Counters,
+    /// Whether stages are timed by timing windows ([`StageTiming::DeviceTimestamps`]);
+    /// turned off for good if a window was not timed on the device.
+    stage_windows: bool,
+    /// The open timing window of the current stage.
+    window: Option<TimingWindow>,
+    /// The closed windows of this evaluation, resolved by `read_output`.
+    pending: Vec<(DeviceStage, WindowTime)>,
+    /// The device times of the stages of the last evaluation.
+    stage_timings: Option<DeviceStageTimings>,
+    /// The settings the operator was built with.
+    options: DeviceOptions,
+    /// The tuner until the points are loaded (T12): the translations are tuned at the end
+    /// of [`new`](Self::new), P2P in [`load_points`](Self::load_points), which ends it.
+    tuner: Option<Tuner>,
+    /// Per level, the local leaves of its P2P level call and their near-field pairs
+    /// (targets times sources over the near list), for the P2P decision.
+    p2p_levels: Vec<(Range<usize>, usize)>,
+    /// The mean points per local leaf, (N_s + N_t) / (2 leaves) rounded up: the bucket of
+    /// the P2P decision.
+    mean_points: usize,
+}
+
+impl<T: DeviceScalar> fmt::Debug for DeviceOperator<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DeviceOperator")
+            .field("report", &self.report)
+            .field("error", &self.link.error)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The bytes of a CSR view of `nrows` rows and `len` entries on the device.
+fn csr_bytes(nrows: usize, len: usize) -> u64 {
+    Device::buffer_bytes::<u32>(nrows + 1) + Device::buffer_bytes::<u32>(len)
+}
+
+/// The bytes of the views of every level, the grouped ones with m columns per box.
+fn view_bytes(plan: &Plan, columns: &ColumnViews) -> u64 {
+    plan.levels()
+        .iter()
+        .zip(&columns.levels)
+        .map(|(lists, grouped)| {
+            let csr = |view: &Csr| csr_bytes(view.nrows(), view.len());
+            csr(lists.p2m())
+                + grouped.m2m_local.bytes()
+                + grouped.m2m_global.bytes()
+                + grouped.l2l.bytes()
+                + grouped.v.bytes()
+                + csr(lists.x())
+                + csr(lists.near())
+                + csr(lists.w())
+                + csr(lists.l2p())
+        })
+        .sum()
+}
+
+/// CSR point offsets of `counts`, as `u32`.
+fn point_offsets(counts: &[usize]) -> Result<Vec<u32>, KernelError> {
+    let mut offsets = Vec::with_capacity(counts.len() + 1);
+    let mut total = 0usize;
+    offsets.push(0);
+    for &n in counts {
+        total += n;
+        offsets.push(u32::try_from(total).map_err(|_| KernelError::TooLarge {
+            what: "leaf store",
+            len: total,
+        })?);
+    }
+    Ok(offsets)
+}
+
+/// The position of every strength in a source store with `counts` points per leaf and the
+/// strengths of `kind` (m = `vectors` charges, a moment, or a charge and a moment per
+/// point; CONVENTIONS §3.13, "Source chunks" and "Several charge vectors"), in the order of
+/// the evaluation's upload: leaf order, the w strengths of a point together (its charges,
+/// or its charge and then its moment). With s values per point and P_j the first point of
+/// leaf j: charge v of point k at s P_j + 3 n_j + m k + v; with dipoles (m = 1) moment
+/// component c of point k at s P_j + 3 n_j + q n_j + 3 k + c, q = 1 with charges and 0
+/// without, and its charge at s P_j + 3 n_j + k.
+fn strength_slots(
+    counts: &[usize],
+    kind: SourceKind,
+    vectors: usize,
+) -> Result<Vec<u32>, KernelError> {
+    let total: usize = counts.iter().sum();
+    let size = kind.point_size(vectors);
+    let charges = if kind.has_charges() { vectors } else { 0 };
+    let strengths = size - 3;
+    let mut slots = Vec::with_capacity(strengths * total);
+    let slot = |at: usize| {
+        u32::try_from(at).map_err(|_| KernelError::TooLarge {
+            what: "source store",
+            len: size * total,
+        })
+    };
+    let mut start = 0usize;
+    for &n in counts {
+        let first = start + 3 * n;
+        for k in 0..n {
+            for v in 0..charges {
+                slots.push(slot(first + charges * k + v)?);
+            }
+            if kind.has_dipoles() {
+                for c in 0..3 {
+                    slots.push(slot(first + charges * n + 3 * k + c)?);
+                }
+            }
+        }
+        start += size * n;
+    }
+    Ok(slots)
+}
+
+/// The arrays of a grouped view of the plan.
+fn grouped_arrays<G: Copy + Into<usize>>(view: &GroupedCsr<G>) -> GroupedArrays<'_, G> {
+    GroupedArrays {
+        row_offsets: view.row_offsets(),
+        sources: view.sources(),
+        groups: view.groups(),
+        batch_offsets: view.batch_offsets(),
+        batch_targets: view.batch_targets(),
+        batch_sources: view.batch_sources(),
+    }
+}
+
+/// A grouped view of the plan with m columns per box (Phase 6 T5, C6.3): box b's vector v
+/// is column b m + v of the level's store (CONVENTIONS §3.13, "Several charge vectors"),
+/// so row t m + v holds the entries of row t with sources s m + v, and every batch holds
+/// the pairs (t m + v, s m + v) of its pairs (t, s), v ascending. Each column so meets its
+/// sources in the order of the plan's row, and the device's grouped GEMM, reduction and
+/// rotation kernel, which index columns, give vector v the one-vector chain. With m = 1 a
+/// copy of the plan's arrays.
+#[derive(Clone, Debug)]
+struct Columns<G> {
+    row_offsets: Vec<u32>,
+    sources: Vec<u32>,
+    groups: Vec<G>,
+    batch_offsets: Vec<u32>,
+    batch_targets: Vec<u32>,
+    batch_sources: Vec<u32>,
+}
+
+impl<G: Copy + Into<usize>> Columns<G> {
+    /// The columns of the grouped view of the plan `view` for `m` vectors.
+    fn new(view: &GroupedCsr<G>, m: usize) -> Self {
+        Self::of(&grouped_arrays(view), m)
+    }
+
+    /// The columns of the grouped arrays `view` for `m` vectors.
+    fn of(view: &GroupedArrays<'_, G>, m: usize) -> Self {
+        let m32 = u32::try_from(m).expect("the charge vectors fit in u32");
+        let column = |box_index: u32, v: u32| -> u32 {
+            box_index
+                .checked_mul(m32)
+                .and_then(|c| c.checked_add(v))
+                .expect("a column index fits in u32")
+        };
+        let nrows = view.row_offsets.len() - 1;
+        let mut row_offsets = Vec::with_capacity(m * nrows + 1);
+        let (mut sources, mut groups) = (Vec::new(), Vec::new());
+        row_offsets.push(0u32);
+        for t in 0..nrows {
+            let row = view.row_offsets[t] as usize..view.row_offsets[t + 1] as usize;
+            for v in 0..m32 {
+                sources.extend(view.sources[row.clone()].iter().map(|&s| column(s, v)));
+                groups.extend_from_slice(&view.groups[row.clone()]);
+                row_offsets
+                    .push(u32::try_from(sources.len()).expect("the pairs of m vectors fit in u32"));
+            }
+        }
+        let batch_offsets = view.batch_offsets.iter().map(|&o| o * m32).collect();
+        let (mut batch_targets, mut batch_sources) = (Vec::new(), Vec::new());
+        for (&t, &s) in view.batch_targets.iter().zip(view.batch_sources) {
+            for v in 0..m32 {
+                batch_targets.push(column(t, v));
+                batch_sources.push(column(s, v));
+            }
+        }
+        Self {
+            row_offsets,
+            sources,
+            groups,
+            batch_offsets,
+            batch_targets,
+            batch_sources,
+        }
+    }
+
+    /// The arrays, borrowed, as `tetraleaf-kernels` takes them.
+    fn arrays(&self) -> GroupedArrays<'_, G> {
+        GroupedArrays {
+            row_offsets: &self.row_offsets,
+            sources: &self.sources,
+            groups: &self.groups,
+            batch_offsets: &self.batch_offsets,
+            batch_targets: &self.batch_targets,
+            batch_sources: &self.batch_sources,
+        }
+    }
+
+    /// The bytes of the view on the device: seven index buffers.
+    fn bytes(&self) -> u64 {
+        let len = self.sources.len();
+        Device::buffer_bytes::<u32>(self.row_offsets.len())
+            + Device::buffer_bytes::<u32>(self.batch_offsets.len())
+            + 5 * Device::buffer_bytes::<u32>(len)
+    }
+}
+
+/// The grouped views of one level with m columns per box ([`Columns`]).
+#[derive(Clone, Debug)]
+struct LevelColumns {
+    m2m_local: Columns<u8>,
+    m2m_global: Columns<u8>,
+    l2l: Columns<u8>,
+    v: Columns<u16>,
+}
+
+/// The grouped views of every level of `plan` with `m` columns per box, and the columns
+/// of every level (m per box): what the device's grouped translations and rotation M2L
+/// run on (Phase 6 T5).
+#[derive(Clone, Debug)]
+struct ColumnViews {
+    levels: Vec<LevelColumns>,
+    columns: Vec<usize>,
+}
+
+impl ColumnViews {
+    fn new(plan: &Plan, m: usize) -> Self {
+        let index = plan.index();
+        Self {
+            levels: plan
+                .levels()
+                .iter()
+                .map(|lists| LevelColumns {
+                    m2m_local: Columns::new(lists.m2m_local(), m),
+                    m2m_global: Columns::new(lists.m2m_global(), m),
+                    l2l: Columns::new(lists.l2l(), m),
+                    v: Columns::new(lists.v(), m),
+                })
+                .collect(),
+            columns: (0..plan.nlevels()).map(|l| m * index.len(l)).collect(),
+        }
+    }
+
+    /// The columns of `level`, zero for a level outside the tree.
+    fn bound(&self, level: Option<usize>) -> usize {
+        level
+            .and_then(|l| self.columns.get(l))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// The columns of the octant view of the grouped call (`kind`, `pass`) on `level`.
+    fn octants(&self, kind: OperatorKind, pass: Option<UpwardPass>, level: usize) -> &Columns<u8> {
+        let lists = &self.levels[level];
+        match (kind, pass) {
+            (OperatorKind::M2m, Some(UpwardPass::Local)) => &lists.m2m_local,
+            (OperatorKind::M2m, _) => &lists.m2m_global,
+            _ => &lists.l2l,
+        }
+    }
+
+    /// The batch offsets of the grouped call (`kind`, `pass`) on `level`, in columns.
+    fn batch_offsets(&self, (kind, pass, level): CallId) -> &[u32] {
+        match kind {
+            OperatorKind::M2l => &self.levels[level].v.batch_offsets,
+            _ => &self.octants(kind, pass, level).batch_offsets,
+        }
+    }
+
+    /// The rows of the grouped call (`kind`, `pass`) on `level`, in columns.
+    fn rows(&self, (kind, pass, level): CallId) -> usize {
+        match kind {
+            OperatorKind::M2l => self.levels[level].v.row_offsets.len() - 1,
+            _ => self.octants(kind, pass, level).row_offsets.len() - 1,
+        }
+    }
+}
+
+/// The plan of one grouped level call on the device (T8, T9), built through `link` as
+/// index data: `GroupedPlan::new` for the `view` (octant or offset groups, m columns per
+/// box) with `sources_bound` input columns.
+fn build_plan<G: Copy + Into<usize> + Into<u32>, T: DeviceFloat>(
+    link: &mut Link,
+    view: &Columns<G>,
+    sources_bound: usize,
+    settings: &PlanSettings,
+    tables: &Tables<T>,
+    scratch: &mut TranslationScratch<T>,
+) -> Result<GroupedPlan, FmmError> {
+    link.build(DataKind::Indices, |d| {
+        GroupedPlan::new(d, &view.arrays(), sources_bound, settings, tables, scratch)
+    })
+}
+
+/// `choice` with the gather the builder names (Phase 6 T7): `gather` unless it is
+/// [`DeviceGather::Auto`], which keeps the choice's (the static rule's or the tuner's). A
+/// library choice keeps its own: the library always gathers.
+fn named_gather(choice: GemmChoice, gather: DeviceGather) -> GemmChoice {
+    let gather = match gather {
+        _ if choice.is_library() => return choice,
+        DeviceGather::Auto => return choice,
+        DeviceGather::Separate => Gather::Separate,
+        DeviceGather::Fused => Gather::Fused,
+    };
+    GemmChoice { gather, ..choice }
+}
+
+/// The columns of X (gathered inputs) and Y (products) a translation scratch holds or its
+/// plans need (Phase 6 T7: a plan with the fused gather needs no X).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ScratchColumns {
+    gathered: usize,
+    products: usize,
+}
+
+impl ScratchColumns {
+    /// The columns `scratch` holds of tables of order n.
+    fn of<T: DeviceFloat>(scratch: &TranslationScratch<T>, n: usize) -> Self {
+        Self {
+            gathered: scratch.gathered_len() / n,
+            products: scratch.len() / n,
+        }
+    }
+
+    /// Widens to the columns of a plan of `size`.
+    fn cover(&mut self, size: PlanSize) {
+        self.gathered = self.gathered.max(size.gathered);
+        self.products = self.products.max(size.columns);
+    }
+
+    /// Whether these columns hold a plan of `size`.
+    fn covers(&self, size: PlanSize) -> bool {
+        self.gathered >= size.gathered && self.products >= size.columns
+    }
+
+    /// The bytes of a scratch of these columns of order n.
+    fn bytes<T: DeviceFloat>(&self, n: usize) -> u64 {
+        TranslationScratch::<T>::split_bytes(self.gathered * n, self.products * n)
+    }
+
+    /// Allocates a scratch of these columns of order n.
+    fn alloc<T: DeviceFloat>(
+        &self,
+        device: &mut Device,
+        n: usize,
+    ) -> Result<TranslationScratch<T>, KernelError> {
+        TranslationScratch::split(device, self.gathered * n, self.products * n)
+    }
+}
+
+/// The most charge vectors whose chunk budgets the device adds up on Metal when the builder
+/// names no budget (Phase 6 T7; the module docs, "Several charge vectors"): 8, 1 GB at the
+/// default 128 MB. With the reduction by chunk the evaluation per vector no longer grows as m
+/// with the chunks (the M3 Max, f32 p = 8, the N = 10⁶ cube, `tools/scaling/run.sh
+/// t7-device`): at m = 32 it took 65.3 ms under one vector's 128 MB, 56.0 under 1 GB and
+/// 54.0 under T5's 4 GB (449 ms under 128 MB with Phase 4's walking reduction), and at
+/// m = 8 the cap is T5's budget.
+pub const METAL_BUDGET_VECTORS: usize = 8;
+
+/// The plan settings of `choice` for the level calls of `vectors` charge vectors (Phase 6
+/// T5): unless the builder names a budget (`named`), a choice's chunk budget is per
+/// vector, so the calls of m vectors chunk with m times its bytes (on Metal at most
+/// [`METAL_BUDGET_VECTORS`] times, and on CUDA once: one vector's 2 GB, Phase 6 T7), at
+/// most an eighth of the device's memory (never below the choice's own budget). On the H100
+/// (f32 p = 8, the N = 10⁶ cube, `tools/scaling/run.sh t7-device`) the evaluation per vector
+/// at m = 32 took 22.0 ms under 2 GB against 21.4 ms under T5's 12 GB. Phase 4's reduction of `Accumulate::Rows` walked
+/// every entry of a target's row once per chunk, and a call of m vectors has m times the
+/// entries; under the one-vector budget it also had m times the chunks, and its cost grew
+/// as m² (on Metal, f32 p = 8, the evaluation per vector was 3.1× the one vector's at m = 8
+/// and 10× at m = 32). The reduction by chunk (Phase 6 T7, the default) visits every
+/// entry once per level call, so a smaller budget costs only the chunks' own launches and
+/// loads. The chunks do not change a bit (`tests/device_common` compares m vectors with
+/// one-vector evaluations), the tuned and cached choices keep their per-vector budgets, and
+/// with one vector this is `choice.settings`. The reduction is the builder's (Phase 6 T7).
+fn vector_settings(
+    choice: &GemmChoice,
+    info: &DeviceInfo,
+    (n, vectors): (usize, usize),
+    named: Option<u64>,
+    reduction: DeviceReduction,
+) -> PlanSettings {
+    let mut settings = choice.settings(info, n);
+    settings.reduction = match reduction {
+        DeviceReduction::ByChunk => Reduction::ByChunk,
+        DeviceReduction::Walk => Reduction::Walk,
+    };
+    if named.is_none() && vectors > 1 {
+        let cap = info
+            .max_memory
+            .map_or(u64::MAX, |bytes| bytes / 8)
+            .max(choice.budget);
+        // On CUDA one vector's budget (2 GB) for any m; the CPU runtime, the correctness
+        // backend, keeps T5's rule.
+        let budgets = match info.backend {
+            BackendKind::Metal => vectors.min(METAL_BUDGET_VECTORS),
+            BackendKind::Cuda => 1,
+            BackendKind::Cpu => vectors,
+        };
+        settings.budget = choice.budget.saturating_mul(budgets as u64).min(cap);
+    }
+    settings
+}
+
+/// The plan of the grouped level call (`kind`, `pass`, `level`) of the plan's `columns`
+/// (its views with m columns per box, Phase 6 T5) with `settings`, over the device tables
+/// of its family (T8, T9; T12 builds candidates and tuned choices the same way).
+fn plan_level_call<T: DeviceFloat>(
+    link: &mut Link,
+    columns: &ColumnViews,
+    (kind, pass, level): (OperatorKind, Option<UpwardPass>, usize),
+    settings: &PlanSettings,
+    tables: &DeviceTables<T>,
+    scratch: &mut TranslationScratch<T>,
+) -> Result<GroupedPlan, FmmError> {
+    match (kind, pass) {
+        (OperatorKind::M2m, _) => build_plan(
+            link,
+            columns.octants(kind, pass, level),
+            columns.bound(Some(level + 1)),
+            settings,
+            &tables.m2m,
+            scratch,
+        ),
+        (OperatorKind::L2l, _) => build_plan(
+            link,
+            columns.octants(kind, pass, level),
+            columns.bound(level.checked_sub(1)),
+            settings,
+            &tables.l2l,
+            scratch,
+        ),
+        _ => build_plan(
+            link,
+            &columns.levels[level].v,
+            columns.bound(Some(level)),
+            settings,
+            tables
+                .m2l
+                .as_ref()
+                .expect("M2L on the device has its tables"),
+            scratch,
+        ),
+    }
+}
+
+/// The report of every grouped level call with a pair, in the order local M2M, global
+/// M2M, L2L, M2L and by level.
+fn translation_reports<T: DeviceFloat>(translations: &Translations<T>) -> Vec<TranslationReport> {
+    GROUPED
+        .iter()
+        .flat_map(|&(kind, pass)| {
+            translations
+                .calls(kind, pass)
+                .iter()
+                .enumerate()
+                .filter(|(_, call)| !call.plan.is_empty())
+                .map(move |(level, call)| TranslationReport {
+                    kind,
+                    pass,
+                    level,
+                    pairs: call.plan.len(),
+                    gemm: call.plan.gemm(),
+                    orientation: call.plan.orientation(),
+                    budget: call.choice.budget,
+                    gather: call.plan.gather(),
+                    reduction: call.plan.reduction(),
+                    chunks: call.plan.nchunks(),
+                    gemm_columns: call.plan.gemm_columns(),
+                    library_rejection: call.plan.library_rejection().map(str::to_owned),
+                })
+        })
+        .collect()
+}
+
+/// A key's index on its level as `u32`.
+fn key_index(key: morton::MortonKey) -> (u32, [u32; 3]) {
+    let (level, index) = morton::decode(key);
+    (level as u32, index.map(|c| c as u32))
+}
+
+/// The M2L family of the rotation tables as the device takes them (T10): the slices of
+/// `ShiftTables`' accessors concatenated in index order, its storage unchanged, and the
+/// geometry of each offset with `u32` indices. [`arrays`](Self::arrays) borrows them as
+/// the `tetraleaf_kernels::rotation::RotationArrays` that `RotationTables::upload` takes;
+/// public for tests and reports that launch the kernel themselves.
+#[derive(Clone, Debug)]
+pub struct RotationHostArrays<T> {
+    p: usize,
+    forward: Vec<T>,
+    backward: Vec<T>,
+    azimuth: Vec<T>,
+    coaxial: Vec<T>,
+    shifts: Vec<DeviceShift>,
+}
+
+impl<T: DeviceScalar> RotationHostArrays<T> {
+    /// Copies the arrays of `tables` (the M2L family, `RotationTables::tables(Operator::M2l)`;
+    /// any family converts the same way).
+    ///
+    /// # Panics
+    ///
+    /// If a table index does not fit in `u32`.
+    pub fn new(tables: &ShiftTables<T>) -> Self {
+        fn concat<T: Copy>(count: usize, piece: impl Fn(usize) -> Vec<T>) -> Vec<T> {
+            (0..count).flat_map(piece).collect()
+        }
+        let index = |i: usize| u32::try_from(i).expect("a table index fits in u32");
+        Self {
+            p: tables.p(),
+            forward: concat(tables.polar_count(), |i| tables.forward_blocks(i).to_vec()),
+            backward: concat(tables.polar_count(), |i| tables.backward_blocks(i).to_vec()),
+            azimuth: concat(tables.azimuth_count(), |i| {
+                tables.azimuth_factors(i).to_vec()
+            }),
+            coaxial: concat(tables.distance_count(), |i| {
+                tables.coaxial_factors(i).to_vec()
+            }),
+            shifts: (0..tables.count())
+                .map(|d| {
+                    let shift = tables.shift(d);
+                    DeviceShift {
+                        alignment: match shift.alignment {
+                            Alignment::Up => DeviceAlignment::Up,
+                            Alignment::Down => DeviceAlignment::Down,
+                            Alignment::Rotated { polar, azimuth } => DeviceAlignment::Rotated {
+                                polar: index(polar),
+                                azimuth: index(azimuth),
+                            },
+                        },
+                        distance: index(shift.distance),
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    /// The arrays, borrowed.
+    pub fn arrays(&self) -> RotationArrays<'_, T> {
+        RotationArrays {
+            p: self.p,
+            forward: &self.forward,
+            backward: &self.backward,
+            azimuth: &self.azimuth,
+            coaxial: &self.coaxial,
+            shifts: &self.shifts,
+        }
+    }
+}
+
+/// The λ nodes of the host's plane-wave tables as the device takes them (Helmholtz CH7.5b):
+/// [`arrays`](Self::arrays) borrows the tables' other arrays as they are, so the device
+/// tables hold the host's values (`tetraleaf_kernels::plane_wave::PlaneWaveArrays`).
+struct PlaneWaveHostArrays<'a, T: DeviceScalar> {
+    tables: &'a HostPlaneWaveTables<T>,
+    nodes: Vec<LambdaNode>,
+}
+
+impl<'a, T: DeviceScalar> PlaneWaveHostArrays<'a, T> {
+    /// The nodes of `tables`.
+    fn new(tables: &'a HostPlaneWaveTables<T>) -> Self {
+        let nodes = tables
+            .blocks()
+            .iter()
+            .map(|b| LambdaNode {
+                start: b.start,
+                len: b.len,
+                modes: b.modes,
+                mode_start: b.mode_start,
+                trig: b.trig,
+            })
+            .collect();
+        Self { tables, nodes }
+    }
+
+    /// The arrays, borrowed.
+    fn arrays(&self) -> PlaneWaveArrays<'_, T> {
+        let t = self.tables;
+        PlaneWaveArrays {
+            p: t.p(),
+            nodes: &self.nodes,
+            outgoing_powers: t.outgoing_powers(),
+            incoming_powers: t.incoming_powers(),
+            cos: t.cos(),
+            sin: t.sin(),
+            multipole_rotations: [t.multipole_rotation(1), t.multipole_rotation(2)],
+            local_rotations: [t.local_rotation(1), t.local_rotation(2)],
+            source_shifts: t.source_shifts(),
+            child_shifts: t.child_shifts(),
+        }
+    }
+}
+
+/// One parent of a plane-wave level call for one vector (Helmholtz CH7.5b): what the host's
+/// merge and shift computes for it (`src/operator_plane_wave.rs`), as lists over the boxes
+/// of the level.
+#[derive(Debug, Default)]
+struct PlaneWaveParent {
+    /// Its distinct sources, boxes of the level, in the order of first use.
+    sources: Vec<u32>,
+    /// Each accumulator with an entry, its entries in slot order: (its source's position in
+    /// `sources`, the direction, the source shift).
+    accumulators: Vec<Vec<(u32, u32, u32)>>,
+    /// Each incoming block: its child shift 8 d + o and its accumulators in order.
+    incoming: Vec<(u32, Vec<u32>)>,
+    /// Each local item: its box and its incoming block per direction, or [`NO_BLOCK`].
+    locals: Vec<(u32, [u32; DIRECTIONS])>,
+}
+
+/// The parents of the plane-wave level call of `level` with the V view `v`, in index order,
+/// those with a local item only: per parent, as the host's `plane_parent`, its computed
+/// children (those with a V row), its sources by slot from their rows, per direction in
+/// [`Direction::ALL`] order every accumulator whose mask meets the computed children over
+/// its slots present in ascending order, and per computed child its accumulators in order
+/// (the order of CH7.5a's test, `Lists::new`).
+fn plane_wave_parents<T: DeviceScalar>(
+    index: &BoxIndex,
+    level: usize,
+    v: &VList,
+    tables: &HostPlaneWaveTables<T>,
+) -> Vec<PlaneWaveParent> {
+    let offsets = m2l_offsets();
+    let geometry = tables.geometry();
+    let wave_len = tables.wave_len();
+    let boxes = index.len(level);
+    let mut parents = Vec::new();
+    let mut t = 0;
+    while t < boxes {
+        let key = morton::parent(index.key(level, t));
+        let mut end = t + 1;
+        while end < boxes && morton::parent(index.key(level, end)) == key {
+            end += 1;
+        }
+        let mut children = [u32::MAX; PLANE_CHILDREN];
+        let mut computed = 0u8;
+        let mut slots = [u32::MAX; SLOTS];
+        for b in t..end {
+            let o = morton::child_index(index.key(level, b));
+            children[o] = b as u32;
+            let (sources, row) = v.row(b);
+            if sources.is_empty() {
+                continue;
+            }
+            computed |= 1 << o;
+            for (&s, &d) in sources.iter().zip(row) {
+                let slot =
+                    slot_of(o, offsets[d as usize]).expect("a V pair lies in the parent's slots");
+                slots[slot] = s;
+            }
+        }
+        t = end;
+        if computed == 0 {
+            continue;
+        }
+        let mut parent = PlaneWaveParent::default();
+        let position = |s: u32, sources: &mut Vec<u32>| -> u32 {
+            match sources.iter().position(|&x| x == s) {
+                Some(i) => i as u32,
+                None => {
+                    sources.push(s);
+                    (sources.len() - 1) as u32
+                }
+            }
+        };
+        let mut incoming = [[NO_BLOCK; DIRECTIONS]; PLANE_CHILDREN];
+        for (d, direction) in Direction::ALL.into_iter().enumerate() {
+            let accumulators = geometry.accumulators(direction);
+            let mut found = vec![None; accumulators.len()];
+            for (a, accumulator) in accumulators.iter().enumerate() {
+                if accumulator.mask & computed == 0 {
+                    continue;
+                }
+                let mut entries = Vec::new();
+                for &slot in &accumulator.slots {
+                    let s = slots[slot as usize];
+                    if s == u32::MAX {
+                        continue;
+                    }
+                    let shift = tables
+                        .source_shift_offset(direction, slot as usize)
+                        .expect("a slot of an accumulator has a shift")
+                        / wave_len;
+                    entries.push((position(s, &mut parent.sources), d as u32, shift as u32));
+                }
+                if !entries.is_empty() {
+                    found[a] = Some(parent.accumulators.len() as u32);
+                    parent.accumulators.push(entries);
+                }
+            }
+            for (o, block) in incoming.iter_mut().enumerate() {
+                if computed & (1 << o) == 0 {
+                    continue;
+                }
+                let mine: Vec<u32> = accumulators
+                    .iter()
+                    .zip(&found)
+                    .filter_map(|(accumulator, &a)| a.filter(|_| accumulator.mask & (1 << o) != 0))
+                    .collect();
+                if !mine.is_empty() {
+                    block[d] = parent.incoming.len() as u32;
+                    parent
+                        .incoming
+                        .push(((PLANE_CHILDREN * d + o) as u32, mine));
+                }
+            }
+        }
+        for (o, block) in incoming.iter().enumerate() {
+            if computed & (1 << o) != 0 && block.iter().any(|&g| g != NO_BLOCK) {
+                parent.locals.push((children[o], *block));
+            }
+        }
+        if !parent.locals.is_empty() {
+            parents.push(parent);
+        }
+    }
+    parents
+}
+
+/// The lists of one chunk of a plane-wave level call (Helmholtz CH7.5b), owned, with the m
+/// vectors as columns: the chunk's parents for vector 0, then again for vector 1 and so on,
+/// on the columns b m + v of the level's multipoles and locals.
+#[derive(Debug, Default)]
+struct PlaneWaveChunk {
+    sources: Vec<u32>,
+    merge_offsets: Vec<u32>,
+    merge_entries: Vec<u32>,
+    gather_shifts: Vec<u32>,
+    gather_offsets: Vec<u32>,
+    gather_entries: Vec<u32>,
+    locals: Vec<u32>,
+    incoming: Vec<u32>,
+}
+
+impl PlaneWaveChunk {
+    /// The lists of `parents` with `m` vectors: each parent's sources at their first
+    /// position in the chunk, its accumulators, incoming blocks and local items after the
+    /// earlier parents'.
+    fn new(parents: &[PlaneWaveParent], m: usize) -> Self {
+        let mut position = HashMap::new();
+        let mut boxes = Vec::new();
+        for parent in parents {
+            for &s in &parent.sources {
+                position.entry(s).or_insert_with(|| {
+                    boxes.push(s);
+                    (boxes.len() - 1) as u32
+                });
+            }
+        }
+        let (nsources, m32) = (boxes.len() as u32, m as u32);
+        let naccumulators: u32 = parents.iter().map(|p| p.accumulators.len() as u32).sum();
+        let nincoming: u32 = parents.iter().map(|p| p.incoming.len() as u32).sum();
+        let mut chunk = Self {
+            merge_offsets: vec![0],
+            gather_offsets: vec![0],
+            ..Self::default()
+        };
+        for v in 0..m32 {
+            chunk.sources.extend(boxes.iter().map(|&s| s * m32 + v));
+            let (mut accumulator, mut block) = (v * naccumulators, v * nincoming);
+            for parent in parents {
+                for entries in &parent.accumulators {
+                    for &(i, d, shift) in entries {
+                        let source = position[&parent.sources[i as usize]] + v * nsources;
+                        chunk
+                            .merge_entries
+                            .extend([DIRECTIONS as u32 * source + d, shift]);
+                    }
+                    chunk
+                        .merge_offsets
+                        .push((chunk.merge_entries.len() / 2) as u32);
+                }
+                for (shift, accumulators) in &parent.incoming {
+                    chunk.gather_shifts.push(*shift);
+                    chunk
+                        .gather_entries
+                        .extend(accumulators.iter().map(|&a| a + accumulator));
+                    chunk.gather_offsets.push(chunk.gather_entries.len() as u32);
+                }
+                for (t, blocks) in &parent.locals {
+                    chunk.locals.push(t * m32 + v);
+                    chunk
+                        .incoming
+                        .extend(blocks.map(|g| if g == NO_BLOCK { NO_BLOCK } else { g + block }));
+                }
+                accumulator += parent.accumulators.len() as u32;
+                block += parent.incoming.len() as u32;
+            }
+        }
+        chunk
+    }
+
+    /// The lists, borrowed.
+    fn lists(&self) -> PlaneWaveLists<'_> {
+        PlaneWaveLists {
+            sources: &self.sources,
+            merge_offsets: &self.merge_offsets,
+            merge_entries: &self.merge_entries,
+            gather_shifts: &self.gather_shifts,
+            gather_offsets: &self.gather_offsets,
+            gather_entries: &self.gather_entries,
+            locals: &self.locals,
+            incoming: &self.incoming,
+        }
+    }
+
+    /// Its sources, accumulators and incoming blocks: the sizes of its scratch.
+    fn counts(&self) -> [usize; 3] {
+        [
+            self.sources.len(),
+            self.merge_offsets.len() - 1,
+            self.gather_shifts.len(),
+        ]
+    }
+}
+
+/// The chunks of a plane-wave level call (Helmholtz CH7.5b): `parents` in order, cut into
+/// runs of whole parents whose scratch for m vectors (the waves of their distinct sources,
+/// their accumulators and incoming blocks, blocks of `block_len` values) fits `budget`
+/// bytes and whose buffers each stay within the kernels' 32-bit index range, at least one
+/// parent each (a parent has at most 216 sources, so one always fits the range).
+fn plane_wave_chunks<T: DeviceScalar>(
+    parents: &[PlaneWaveParent],
+    m: usize,
+    block_len: usize,
+    budget: u64,
+) -> Vec<PlaneWaveChunk> {
+    let bytes =
+        |[s, a, g]: [usize; 3]| PlaneWaveScratch::<T>::bytes_of([m * s, m * a, m * g], block_len);
+    let fits = |[s, a, g]: [usize; 3]| {
+        [DIRECTIONS * s, a, g]
+            .iter()
+            .all(|&blocks| u32::try_from(m * blocks * block_len).is_ok())
+    };
+    let mut chunks = Vec::new();
+    let (mut first, mut seen) = (0, HashSet::new());
+    let mut counts = [0usize; 3];
+    for (k, parent) in parents.iter().enumerate() {
+        let fresh = parent.sources.iter().filter(|s| !seen.contains(*s)).count();
+        let grown = [
+            counts[0] + fresh,
+            counts[1] + parent.accumulators.len(),
+            counts[2] + parent.incoming.len(),
+        ];
+        if k > first && (bytes(grown) > budget || !fits(grown)) {
+            chunks.push(PlaneWaveChunk::new(&parents[first..k], m));
+            first = k;
+            seen.clear();
+            counts = [
+                parent.sources.len(),
+                parent.accumulators.len(),
+                parent.incoming.len(),
+            ];
+        } else {
+            counts = grown;
+        }
+        seen.extend(parent.sources.iter().copied());
+    }
+    if first < parents.len() {
+        chunks.push(PlaneWaveChunk::new(&parents[first..], m));
+    }
+    chunks
+}
+
+impl<T: DeviceScalar> DeviceOperator<T> {
+    /// Creates the operator on `device` for `plan` with `source_counts` points per leaf of
+    /// the numbering (the local leaves, then the ghost leaves with their owners' counts:
+    /// the evaluator's `SourceExchange::leaf_counts`) and `target_counts` per local leaf:
+    /// checks that everything fits in the memory the device reports, then allocates the
+    /// stores (zeroed; ghost slots included) and the packed buffers of `exchanges` (Phase 5
+    /// T8; none on one rank), uploads the plan views, the exchanges' columns, the geometry
+    /// and the tables, and keeps `host` for the host-fallback kinds. The points follow
+    /// with [`load_points`](Self::load_points). With the output pass on the device (Phase
+    /// 4S T9: `options.output_pass` not [`OutputPass::Host`], on a device with f64
+    /// arithmetic) it also uploads the output order of `caller` and allocates the
+    /// caller-ordered output.
+    ///
+    /// `host` must be built as the host path builds its operator (its tables, gradients,
+    /// `max_leaf_points`, P2P kernel and pool), so that host-fallback kinds give the
+    /// host path's bits. `tuner` holds the build's tuning key, cache and budget (T12): the
+    /// level calls' GEMMs and the P2P layout come from its decisions, cache or static rule,
+    /// and the GEMM decisions it lacks are tuned at the end of this call ([module
+    /// documentation](self#autotune-t12-c47-cratetune)).
+    ///
+    /// # Errors
+    ///
+    /// [`SettingsError::DeviceMemory`] (as [`FmmError::InvalidSettings`]) if the
+    /// buffers do not fit, before anything is allocated; [`FmmError::Device`] if an
+    /// allocation or upload fails.
+    ///
+    /// # Panics
+    ///
+    /// If the counts do not have one entry per leaf of the numbering (sources) and per
+    /// local leaf (targets), `exchanges` names a box the plan does not hold, a view is
+    /// malformed, or (with the output pass on the device) `caller` does not place every
+    /// target in its leaf.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        host: LaplaceOperator<T>,
+        device: Device,
+        plan: &Plan,
+        (source_counts, target_counts): (&[usize], &[usize]),
+        exchanges: &ExchangeLists,
+        caller: CallerOrder<'_>,
+        options: &DeviceOptions,
+        tuner: Tuner,
+    ) -> Result<Self, FmmError> {
+        let index = plan.index();
+        let nlevels = plan.nlevels();
+        let leaves = index.leaves();
+        assert_eq!(
+            source_counts.len(),
+            leaves.len(),
+            "one source count per leaf of the numbering"
+        );
+        assert_eq!(
+            target_counts.len(),
+            leaves.nlocal(),
+            "one target count per leaf"
+        );
+        let p = host.p();
+        let n = (p + 1) * (p + 1);
+        // m charge vectors (Phase 6 T5): m columns of n per box, 3 + m values per source,
+        // o = m or 4 m per target.
+        let m = host.vectors();
+        let o = host.target_output_point_size();
+        // Values per source point: 3 + m with charges, 6 or 7 with dipoles (Phase 6 T8);
+        // the strengths per source an evaluation uploads, m or 3 or 4 (T8d; module
+        // documentation, "Dipoles").
+        let sps = host.source_point_size();
+        let kind = source_kind(host.sources());
+        let strengths = sps - 3;
+        let strategy = host.tables().strategy();
+        let columns = ColumnViews::new(plan, m);
+
+        // The dense octant tables: the host's, or under `Rotation` built or loaded here.
+        let mut cache_outcomes = Vec::new();
+        let octants: Option<(M2mTables<T>, L2lTables<T>)> = match host.tables().octant_families() {
+            Some(_) => None,
+            None => Some(match &options.table_cache {
+                Some(dir) => {
+                    let cache = TableCache::new(dir);
+                    let (m2m, m2m_outcome) = cache.load_or_build::<M2mTables<T>>(p);
+                    let (l2l, l2l_outcome) = cache.load_or_build::<L2lTables<T>>(p);
+                    cache_outcomes.push((TableKind::M2m, m2m_outcome));
+                    cache_outcomes.push((TableKind::L2l, l2l_outcome));
+                    (m2m, l2l)
+                }
+                None => (M2mTables::build(p), L2lTables::build(p)),
+            }),
+        };
+        let (m2m, l2l) = match (&octants, host.tables().octant_families()) {
+            (Some((m2m, l2l)), _) => (m2m.matrices(), l2l.matrices()),
+            (None, Some((m2m, l2l))) => (m2m.matrices(), l2l.matrices()),
+            (None, None) => unreachable!("one of the two holds the octant tables"),
+        };
+        let expanded = host.tables().classes_m2l().map(|classes| classes.expand());
+        // Under `PlaneWave` with `DevicePlaneWave::Dense` the device runs M2L as `Dense`
+        // (Phase 6 T13): the dense tables, built or loaded here, where M2L runs on the
+        // device; the default runs merge and shift (Helmholtz CH7.5b, CH7.5c).
+        let plane_dense = (strategy == M2lStrategy::PlaneWave
+            && options.plane_wave == DevicePlaneWave::Dense
+            && !options.host_fallback.contains(&OperatorKind::M2l))
+        .then(|| match &options.table_cache {
+            Some(dir) => {
+                let (m2l, outcome) = TableCache::new(dir).load_or_build::<M2lTables<T>>(p);
+                cache_outcomes.push((TableKind::M2l, outcome));
+                m2l
+            }
+            None => M2lTables::build(p),
+        });
+        let m2l: Option<&MatrixSet<T>> = host
+            .tables()
+            .dense_m2l()
+            .or(expanded.as_ref())
+            .or(plane_dense.as_ref())
+            .map(|tables| tables.matrices());
+        let rotation = host.tables().rotation_m2l().map(RotationHostArrays::new);
+
+        // The kinds with a device kernel run on the device unless `host_fallback` names
+        // them: P2P from T6, P2M, P2L, L2P and M2P from T7, M2M and L2L from T8, M2L under
+        // `Dense` and `Classes` from T9 and under `Rotation` from T10.
+        let mut placement = [Placement::Host; 8];
+        for kind in DEVICE_KINDS {
+            if !options.host_fallback.contains(&kind) {
+                placement[kind as usize] = Placement::Device;
+            }
+        }
+        let on_device = |kind: OperatorKind| placement[kind as usize] == Placement::Device;
+        // M2L on the device runs the dense tables or the rotation kernel, by strategy.
+        let dense_m2l = on_device(OperatorKind::M2l) && m2l.is_some();
+        let rotation = rotation.filter(|_| on_device(OperatorKind::M2l));
+        // Under `PlaneWave` with `DevicePlaneWave::Kernels`, merge and shift on the device
+        // from the host's plane-wave tables (Helmholtz CH7.5b).
+        let plane_wave = (strategy == M2lStrategy::PlaneWave
+            && options.plane_wave == DevicePlaneWave::Kernels
+            && on_device(OperatorKind::M2l))
+        .then(|| {
+            PlaneWaveHostArrays::new(
+                host.tables()
+                    .plane_waves()
+                    .expect("PlaneWave has its plane-wave tables"),
+            )
+        });
+        debug_assert!(
+            !on_device(OperatorKind::M2l)
+                || usize::from(dense_m2l)
+                    + usize::from(rotation.is_some())
+                    + usize::from(plane_wave.is_some())
+                    == 1
+        );
+
+        // The GEMM of each grouped level call (T8, T9, T12): the builder's `device_gemm`
+        // and scratch budget where it names them; under `DeviceGemm::Auto` the choice of the
+        // call's decision, taken earlier in this build (the M2L GEMM tuned with the
+        // strategy) or found in the tuning cache, else the static rule. A family whose level
+        // calls may take the library GEMM gets the library copy of its tables; with
+        // decisions to tune, every candidate is provided for (the library copies where the
+        // library applies, the scratch of its padded layout), and what no chosen plan needs
+        // is released after tuning.
+        let info = device.info().clone();
+        let backend = info.backend;
+        let gemm_layout = GemmLayout::default_for(&info, n);
+        let tunable_gemm = options.gemm == DeviceGemm::Auto;
+        let choice_of = |kind: OperatorKind, pairs: usize| -> GemmChoice {
+            let fixed = named_gather(
+                static_gemm(
+                    &info,
+                    T::FLOAT,
+                    n,
+                    kind,
+                    options.gemm,
+                    options.scratch_budget,
+                ),
+                options.gather,
+            );
+            if !tunable_gemm {
+                return fixed;
+            }
+            let decision = Decision::Gemm {
+                kind,
+                bucket: bucket(pairs),
+            };
+            let mut choice = tuner
+                .decided(decision)
+                .or_else(|| tuner.cached(decision))
+                .and_then(|c| c.gemm())
+                .map_or(fixed, |c| named_gather(c, options.gather));
+            if let Some(budget) = options.scratch_budget {
+                choice.budget = budget;
+            }
+            choice
+        };
+        let grouped_on_device =
+            |kind: OperatorKind| on_device(kind) && (kind != OperatorKind::M2l || dense_m2l);
+        // Every grouped level call with a pair: (kind, pass, level, pairs, batch offsets).
+        // The pairs are the plan's, which key the GEMM decisions whatever m (so that a
+        // tuning cache gives FMMs of any m the same choices), the batch offsets those of
+        // the m columns per box, which size the chunks (Phase 6 T5).
+        let columns_ref = &columns;
+        let calls: Vec<(CallId, usize, &[u32])> = GROUPED
+            .iter()
+            .filter(|(kind, _)| grouped_on_device(*kind))
+            .flat_map(|&(kind, pass)| {
+                plan.levels().iter().enumerate().map(move |(level, lists)| {
+                    let len = match (kind, pass) {
+                        (OperatorKind::M2m, Some(UpwardPass::Local)) => lists.m2m_local().len(),
+                        (OperatorKind::M2m, _) => lists.m2m_global().len(),
+                        (OperatorKind::L2l, _) => lists.l2l().len(),
+                        _ => lists.v().len(),
+                    };
+                    let call = (kind, pass, level);
+                    (call, len, columns_ref.batch_offsets(call))
+                })
+            })
+            .collect();
+        // Whether a GEMM decision is left to tune: a level call large enough whose decision
+        // the build has not taken and the cache does not hold.
+        let tuning = tuner.enabled()
+            && tunable_gemm
+            && calls.iter().any(|&((kind, _, _), pairs, _)| {
+                let decision = Decision::Gemm {
+                    kind,
+                    bucket: bucket(pairs),
+                };
+                pairs >= MIN_TUNED_PAIRS
+                    && tuner.decided(decision).is_none()
+                    && tuner.cached(decision).is_none()
+            });
+        let tuning_library = tuning && library_applies(backend, T::FLOAT, n);
+        let library = |kind: OperatorKind| {
+            grouped_on_device(kind)
+                && (tuning_library
+                    || calls
+                        .iter()
+                        .any(|c| c.0.0 == kind && c.1 > 0 && choice_of(kind, c.1).is_library()))
+        };
+        let mut tables_report = Vec::new();
+        let mut table = |name: &'static str, set: &MatrixSet<T>, library: bool| {
+            tables_report.push(DeviceTable {
+                name,
+                matrices: set.count(),
+                bytes: Device::buffer_bytes::<T>(set.as_slice().len()),
+            });
+            if library {
+                tables_report.push(DeviceTable {
+                    name: match name {
+                        "M2M" => "M2M (library copy)",
+                        "L2L" => "L2L (library copy)",
+                        _ => "M2L (library copy)",
+                    },
+                    matrices: set.count(),
+                    bytes: Tables::<T>::bytes(n, set.count(), true)
+                        - Tables::<T>::bytes(n, set.count(), false),
+                });
+            }
+        };
+        table("M2M", m2m, library(OperatorKind::M2m));
+        table("L2L", l2l, library(OperatorKind::L2l));
+        if let Some(m2l) = m2l.filter(|_| dense_m2l) {
+            let name = if expanded.is_some() {
+                "M2L (expanded from the classes)"
+            } else {
+                "M2L"
+            };
+            table(name, m2l, library(OperatorKind::M2l));
+        }
+        if let Some(rotation) = &rotation {
+            tables_report.push(DeviceTable {
+                name: "M2L (rotation)",
+                matrices: rotation.shifts.len(),
+                bytes: DeviceRotation::<T>::bytes(&rotation.arrays()),
+            });
+        }
+        if let Some(arrays) = &plane_wave {
+            tables_report.push(DeviceTable {
+                name: "M2L (plane waves)",
+                matrices: arrays.tables.source_shift_count(),
+                bytes: DevicePlaneWaves::<T>::bytes_of(&arrays.arrays()),
+            });
+        }
+
+        // The plans of the device M2M, L2L and M2L level calls: their index buffers and the
+        // widest chunk, at most, before anything is allocated (T8, T9); with decisions to
+        // tune, also the widest chunk of any candidate (T12).
+        // The scratch's columns of X and of Y (Phase 6 T7: none of X for a plan with the fused
+        // gather, whose chunks are twice as wide).
+        let (mut plan_bytes, mut scratch_columns) = (0u64, ScratchColumns::default());
+        let named = options.scratch_budget;
+        for &(call, pairs, batch_offsets) in &calls {
+            let rows = columns.rows(call);
+            let size = vector_settings(
+                &choice_of(call.0, pairs),
+                &info,
+                (n, m),
+                named,
+                options.reduction,
+            )
+            .size(backend, T::FLOAT, batch_offsets, rows);
+            plan_bytes += size.bytes;
+            scratch_columns.cover(size);
+            if tuning {
+                // Every candidate the tuner registers for the call (`tune_translations`).
+                for choice in gemm_candidates(&info, T::FLOAT, n, call.0, named.is_none()) {
+                    let choice = named_gather(
+                        GemmChoice {
+                            budget: named.unwrap_or(choice.budget),
+                            ..choice
+                        },
+                        options.gather,
+                    );
+                    let settings =
+                        vector_settings(&choice, &info, (n, m), named, options.reduction);
+                    scratch_columns.cover(settings.size(backend, T::FLOAT, batch_offsets, rows));
+                }
+            }
+        }
+        let scratch_bytes = scratch_columns.bytes::<T>(n);
+        // The rows of each rotation M2L level call (T10).
+        if rotation.is_some() {
+            plan_bytes += columns
+                .levels
+                .iter()
+                .map(|lists| RotationPlan::bytes(&lists.v.row_offsets))
+                .sum::<u64>();
+        }
+        // The chunks of each plane-wave level call and their one scratch, the widest
+        // chunk's (Helmholtz CH7.5b).
+        let plane_budget = options
+            .plane_wave_budget
+            .unwrap_or_else(|| default_plane_wave_budget(&info));
+        let plane_chunks: Vec<Vec<PlaneWaveChunk>> = match &plane_wave {
+            Some(arrays) => plan
+                .levels()
+                .iter()
+                .enumerate()
+                .map(|(level, lists)| {
+                    let parents = plane_wave_parents(index, level, lists.v(), arrays.tables);
+                    plane_wave_chunks::<T>(&parents, m, arrays.tables.wave_len(), plane_budget)
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        plan_bytes += plane_chunks
+            .iter()
+            .flatten()
+            .map(|chunk| chunk.lists().bytes())
+            .sum::<u64>();
+        let plane_scratch_bytes = match &plane_wave {
+            Some(arrays) if plane_chunks.iter().any(|chunks| !chunks.is_empty()) => {
+                let widest = plane_chunks.iter().flatten().fold([0; 3], |w, chunk| {
+                    let c = chunk.counts();
+                    [w[0].max(c[0]), w[1].max(c[1]), w[2].max(c[2])]
+                });
+                PlaneWaveScratch::<T>::bytes_of(widest, arrays.tables.wave_len())
+            }
+            _ => 0,
+        };
+
+        // Every buffer, summed before anything is allocated (§4.6); with the output pass on
+        // the device (Phase 4S T9) also its order and its output; on several ranks (Phase 5
+        // T8) the exchanges' packed buffers and columns, and the ghost slots of the stores.
+        let nboxes: usize = (0..nlevels).map(|l| index.len(l)).sum();
+        let nlocal = leaves.nlocal();
+        // The local sources (the charges) and every source of the numbering (the store).
+        let (nsources, nstored): (usize, usize) = (
+            source_counts[..nlocal].iter().sum(),
+            source_counts.iter().sum(),
+        );
+        let nstrengths = strengths * nsources;
+        let ntargets: usize = target_counts.iter().sum();
+        let nleaves = leaves.len();
+        // The first box of each level in the multipole buffer (m n values per box on every
+        // level): a box is one column of m n values of the exchanges' gathers and scatters.
+        let first_columns: Vec<usize> = (0..nlevels)
+            .scan(0, |total, l| {
+                let first = *total;
+                *total += index.len(l);
+                Some(first)
+            })
+            .collect();
+        let column = |(level, i): (usize, u32)| -> u32 {
+            assert!(
+                level < nlevels && (i as usize) < index.len(level),
+                "the exchanges name box {i} of level {level}, which the plan does not hold"
+            );
+            u32::try_from(first_columns[level] + i as usize)
+                .expect("the box index fits in u32, so its column does")
+        };
+        let sent: Vec<(usize, u32)> = exchanges
+            .sent_top
+            .iter()
+            .copied()
+            .chain(
+                exchanges
+                    .send_boxes
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(l, boxes)| boxes.iter().map(move |&i| (l, i))),
+            )
+            .collect();
+        let send_columns: Vec<u32> = sent.iter().map(|&b| column(b)).collect();
+        let top_columns: Vec<u32> = exchanges.received_top.iter().map(|&b| column(b)).collect();
+        assert_eq!(
+            exchanges
+                .received_values
+                .iter()
+                .map(Range::len)
+                .sum::<usize>(),
+            top_columns.len() * m * n,
+            "the received boxes' values of the top, m n per box"
+        );
+        // The columns of per-level lists, the levels one after the other, their `nlevels +
+        // 1` offsets, and the largest level's width.
+        let by_level = |lists: &[Vec<u32>]| -> (Vec<u32>, Vec<usize>, usize) {
+            let mut offsets = vec![0usize];
+            let mut columns = Vec::new();
+            for (l, boxes) in lists.iter().enumerate() {
+                columns.extend(boxes.iter().map(|&i| column((l, i))));
+                offsets.push(columns.len());
+            }
+            offsets.resize(nlevels + 1, columns.len());
+            let width = lists.iter().map(Vec::len).max().unwrap_or(0);
+            (columns, offsets, width)
+        };
+        let (receive_columns, receive_offsets, receive_width) = by_level(&exchanges.receive_boxes);
+        // The upward reduction's (Phase 5S T6).
+        let (reduction_send_columns, reduction_send_offsets, reduction_send_width) =
+            by_level(&exchanges.reduction_send);
+        let (reduction_receive_columns, reduction_receive_offsets, reduction_receive_width) =
+            by_level(&exchanges.reduction_receive);
+        let packed_bytes = |columns: usize, width: usize| {
+            if columns == 0 {
+                0
+            } else {
+                Device::buffer_bytes::<u32>(columns) + Device::buffer_bytes::<T>(width * m * n)
+            }
+        };
+        let exchange_bytes = packed_bytes(send_columns.len(), send_columns.len())
+            + packed_bytes(top_columns.len(), top_columns.len())
+            + packed_bytes(receive_columns.len(), receive_width)
+            + packed_bytes(reduction_send_columns.len(), reduction_send_width)
+            + packed_bytes(reduction_receive_columns.len(), reduction_receive_width);
+        let ghost_boxes: usize = (0..nlevels)
+            .map(|l| index.kinds(l).iter().filter(|k| k.is_ghost()).count())
+            .sum();
+        let ghost_bytes =
+            (2 * ghost_boxes * m * n + sps * (nstored - nsources)) as u64 * size_of::<T>() as u64;
+        let device_pass = options.output_pass != OutputPass::Host
+            && device.supports(tetraleaf_kernels::Precision::F64);
+        let pass_bytes = if device_pass {
+            OutputOrder::bytes(ntargets, leaves.nlocal()) + Device::buffer_bytes::<T>(o * ntargets)
+        } else {
+            0
+        };
+        let needed = 2 * Device::buffer_bytes::<T>(nboxes * m * n)
+            + Device::buffer_bytes::<T>(sps * nstored)
+            + Device::buffer_bytes::<T>(3 * ntargets)
+            + Device::buffer_bytes::<T>(o * ntargets)
+            + Device::buffer_bytes::<T>(nstrengths)
+            + view_bytes(plan, &columns)
+            + Device::buffer_bytes::<u32>(nleaves + 1)
+            + Device::buffer_bytes::<u32>(leaves.nlocal() + 1)
+            + Device::buffer_bytes::<u32>(nstrengths)
+            + Device::buffer_bytes::<u32>(3 * nboxes)
+            + Device::buffer_bytes::<u32>(4 * nleaves)
+            + tables_report.iter().map(|t| t.bytes).sum::<u64>()
+            + plan_bytes
+            + scratch_bytes
+            + plane_scratch_bytes
+            + pass_bytes
+            + exchange_bytes;
+        let available = device.available_memory();
+        if let Some(limit) = available
+            && needed > limit
+        {
+            return Err(SettingsError::DeviceMemory { needed, limit }.into());
+        }
+
+        let mut link = Link {
+            device,
+            traffic: TrafficByData::default(),
+            error: None,
+        };
+        let level_offsets: Vec<usize> = std::iter::once(0)
+            .chain((0..nlevels).scan(0, |total, l| {
+                *total += index.len(l) * m * n;
+                Some(*total)
+            }))
+            .collect();
+
+        // An allocation zeroes its buffer by a kernel and transfers nothing, so the data
+        // kind it is counted under stays without traffic.
+        let mut alloc = |len: usize| link.build(DataKind::Points, |d| d.alloc::<T>(len));
+        let stores = DeviceStores {
+            multipoles: alloc(nboxes * m * n)?,
+            locals: alloc(nboxes * m * n)?,
+            sources: alloc(sps * nstored)?,
+            target_input: alloc(3 * ntargets)?,
+            target_output: alloc(o * ntargets)?,
+            charges: alloc(nstrengths)?,
+        };
+
+        let mut levels = Vec::with_capacity(nlevels);
+        for (level, (lists, grouped_lists)) in plan.levels().iter().zip(&columns.levels).enumerate()
+        {
+            let boxes = |l: Option<usize>| l.filter(|&l| l < nlevels).map_or(0, |l| index.len(l));
+            let csr = |link: &mut Link, view: &Csr, columns: usize| {
+                link.build(DataKind::Indices, |d| {
+                    IndexView::upload(d, view.row_offsets(), view.entries(), columns)
+                })
+            };
+            // The grouped views with m columns per box (Phase 6 T5).
+            let grouped = |link: &mut Link, view: &Columns<u8>, bound: usize| {
+                link.build(DataKind::Indices, |d| {
+                    GroupedView::upload(d, &view.arrays(), bound)
+                })
+            };
+            levels.push(LevelViews {
+                p2m: csr(&mut link, lists.p2m(), nleaves)?,
+                m2m_local: grouped(
+                    &mut link,
+                    &grouped_lists.m2m_local,
+                    columns.bound(Some(level + 1)),
+                )?,
+                m2m_global: grouped(
+                    &mut link,
+                    &grouped_lists.m2m_global,
+                    columns.bound(Some(level + 1)),
+                )?,
+                l2l: grouped(
+                    &mut link,
+                    &grouped_lists.l2l,
+                    columns.bound(level.checked_sub(1)),
+                )?,
+                v: link.build(DataKind::Indices, |d| {
+                    GroupedView::upload(d, &grouped_lists.v.arrays(), columns.bound(Some(level)))
+                })?,
+                x: csr(&mut link, lists.x(), nleaves)?,
+                near: csr(&mut link, lists.near(), nleaves)?,
+                w: csr(&mut link, lists.w(), boxes(Some(level + 1)))?,
+                l2p: csr(&mut link, lists.l2p(), index.len(level))?,
+            });
+        }
+        let source_offsets = point_offsets(source_counts).map_err(device_error)?;
+        let target_offsets = point_offsets(target_counts).map_err(device_error)?;
+        let slots = strength_slots(&source_counts[..nlocal], kind, m).map_err(device_error)?;
+        let box_indices: Vec<Vec<[u32; 3]>> = (0..nlevels)
+            .map(|l| index.keys(l).iter().map(|&key| key_index(key).1).collect())
+            .collect();
+        let leaf_indices: Vec<(u32, [u32; 3])> =
+            leaves.keys().iter().map(|&key| key_index(key)).collect();
+        let views = DeviceViews {
+            levels,
+            source_offsets: link.build(DataKind::Indices, |d| {
+                PointOffsets::upload(d, &source_offsets)
+            })?,
+            target_offsets: link.build(DataKind::Indices, |d| {
+                PointOffsets::upload(d, &target_offsets)
+            })?,
+            charge_slots: link.build(DataKind::Indices, |d| d.upload_indices(&slots))?,
+            boxes: link.build(DataKind::Geometry, |d| {
+                BoxCoordinates::upload(d, &box_indices)
+            })?,
+            leaves: link.build(DataKind::Geometry, |d| {
+                LeafCoordinates::upload(d, &leaf_indices)
+            })?,
+        };
+        let pass = if device_pass {
+            Some(DevicePass {
+                order: link.build(DataKind::Indices, |d| {
+                    OutputOrder::upload(
+                        d,
+                        &target_offsets,
+                        caller.points,
+                        caller.leaves,
+                        caller.scales,
+                    )
+                })?,
+                values: link.build(DataKind::Points, |d| d.alloc::<T>(o * ntargets))?,
+            })
+        } else {
+            None
+        };
+        // The exchanges' columns, uploaded once with the other index data, and their packed
+        // buffers (Phase 5 T8; none on one rank).
+        let mut packed = |columns: &[u32], width: usize| -> Result<Option<Packed<T>>, FmmError> {
+            if columns.is_empty() {
+                return Ok(None);
+            }
+            Ok(Some(Packed {
+                columns: link.build(DataKind::Indices, |d| d.upload_indices(columns))?,
+                values: link.build(DataKind::Points, |d| d.alloc::<T>(width * m * n))?,
+            }))
+        };
+        let exchanges_on_device = Exchanges {
+            send: packed(&send_columns, send_columns.len())?,
+            sent,
+            top: packed(&top_columns, top_columns.len())?,
+            top_values: exchanges.received_values.clone(),
+            top_staging: vec![T::default(); top_columns.len() * m * n],
+            receive: packed(&receive_columns, receive_width)?,
+            receive_offsets,
+            ghost_sources: sps * nsources..sps * nstored,
+            inject: false,
+            received_levels: [Traffic::default(); MAX_LEVELS],
+            reduction_send: packed(&reduction_send_columns, reduction_send_width)?,
+            reduction_send_offsets,
+            reduction_receive: packed(&reduction_receive_columns, reduction_receive_width)?,
+            reduction_receive_offsets,
+            reduction_levels: [Traffic::default(); MAX_LEVELS],
+        };
+
+        let upload = |link: &mut Link, set: &MatrixSet<T>, library: bool| {
+            link.build(DataKind::Tables, |d| {
+                Tables::upload(d, set.as_slice(), n, library)
+            })
+        };
+        let tables = DeviceTables {
+            m2m: upload(&mut link, m2m, library(OperatorKind::M2m))?,
+            l2l: upload(&mut link, l2l, library(OperatorKind::L2l))?,
+            m2l: match m2l.filter(|_| dense_m2l) {
+                Some(m2l) => Some(upload(&mut link, m2l, library(OperatorKind::M2l))?),
+                None => None,
+            },
+            rotation: match &rotation {
+                Some(rotation) => Some(link.build(DataKind::Tables, |d| {
+                    DeviceRotation::upload(d, &rotation.arrays())
+                })?),
+                None => None,
+            },
+            plane_wave: match &plane_wave {
+                Some(arrays) => Some(link.build(DataKind::Tables, |d| {
+                    DevicePlaneWaves::upload(d, &arrays.arrays())
+                })?),
+                None => None,
+            },
+        };
+        let plane_kernels = plane_wave.is_some();
+        drop(plane_wave);
+
+        // The scratch and the plans of the device translations (T8, T9, T12); a library
+        // choice probes its shapes here, so the GEMM is fixed before the first evaluation.
+        let mut scratch = link.build(DataKind::Points, |d| scratch_columns.alloc::<T>(d, n))?;
+        gemm_layout
+            .check(link.device.info())
+            .map_err(device_error)?;
+        let mut level_calls: [Vec<LevelCall>; 4] = Default::default();
+        for &((kind, pass, level), pairs, _) in &calls {
+            let choice = choice_of(kind, pairs);
+            let grouped_plan = plan_level_call(
+                &mut link,
+                &columns,
+                (kind, pass, level),
+                &vector_settings(&choice, &info, (n, m), named, options.reduction),
+                &tables,
+                &mut scratch,
+            )?;
+            let slot = GROUPED
+                .iter()
+                .position(|&g| g == (kind, pass))
+                .expect("a grouped level call");
+            level_calls[slot].push(LevelCall {
+                plan: grouped_plan,
+                choice,
+            });
+        }
+        let [m2m_local, m2m_global, l2l_calls, m2l_calls] = level_calls;
+        let mut translations = Translations {
+            m2m_local,
+            m2m_global,
+            l2l: l2l_calls,
+            m2l: m2l_calls,
+            scratch,
+            rotation: Vec::new(),
+            rotation_layout: RotationLayout::default_for(link.device.info(), p),
+            plane_waves: Vec::new(),
+            plane_wave_scratch: None,
+            plane_wave_layout: options.plane_wave_layout.resolve(link.device.info(), p),
+        };
+
+        // The rows of the rotation M2L level calls and the layout (T10).
+        let rotation_layout = translations.rotation_layout;
+        let mut rotation_plans = Vec::new();
+        let mut rotation_report = Vec::new();
+        if rotation.is_some() {
+            rotation_layout
+                .check(link.device.info(), p, T::FLOAT)
+                .map_err(device_error)?;
+            for (level, lists) in columns.levels.iter().enumerate() {
+                let rotation_plan = link.build(DataKind::Indices, |d| {
+                    RotationPlan::new(d, &lists.v.arrays(), columns.bound(Some(level)))
+                })?;
+                if !rotation_plan.is_empty() {
+                    rotation_report.push(RotationReport {
+                        level,
+                        pairs: rotation_plan.len(),
+                        rows: rotation_plan.active_rows(),
+                    });
+                }
+                rotation_plans.push(rotation_plan);
+            }
+        }
+        translations.rotation = rotation_plans;
+
+        // The plans of the plane-wave level calls, one per chunk, their scratch and the
+        // layout (Helmholtz CH7.5b).
+        let plane_wave_layout = translations.plane_wave_layout;
+        let mut plane_report = Vec::new();
+        if let Some(waves) = &tables.plane_wave {
+            plane_wave_layout
+                .check(link.device.info(), p, waves.modes(), T::FLOAT)
+                .map_err(device_error)?;
+            for (level, chunks) in plane_chunks.iter().enumerate() {
+                let bound = columns.bound(Some(level));
+                let mut plans = Vec::with_capacity(chunks.len());
+                for chunk in chunks {
+                    plans.push(link.build(DataKind::Indices, |d| {
+                        PlaneWavePlan::new(d, &chunk.lists(), waves, bound, bound)
+                    })?);
+                }
+                if !plans.is_empty() {
+                    let sum = |count: fn(&PlaneWavePlan) -> usize| plans.iter().map(count).sum();
+                    plane_report.push(PlaneWaveReport {
+                        level,
+                        pairs: m * plan.level(level).v().len(),
+                        chunks: plans.len(),
+                        launches: plans
+                            .iter()
+                            .map(|c| {
+                                [c.sources(), c.accumulators(), c.incoming(), c.locals()]
+                                    .iter()
+                                    .filter(|&&k| k > 0)
+                                    .count()
+                            })
+                            .sum(),
+                        sources: sum(PlaneWavePlan::sources),
+                        accumulators: sum(PlaneWavePlan::accumulators),
+                        incoming: sum(PlaneWavePlan::incoming),
+                        locals: sum(PlaneWavePlan::locals),
+                    });
+                }
+                translations.plane_waves.push(plans);
+            }
+            if !plane_report.is_empty() {
+                translations.plane_wave_scratch = Some(link.build(DataKind::Points, |d| {
+                    PlaneWaveScratch::covering(d, translations.plane_waves.iter().flatten(), waves)
+                })?);
+            }
+        }
+
+        // P2P: the near-field pairs of each level's leaves and the mean points per leaf,
+        // for the P2P decision (T12); the layout of the builder, or under
+        // `DeviceP2pLayout::Auto` the cached choice or the static rule.
+        let p2p_levels: Vec<(Range<usize>, usize)> = plan
+            .levels()
+            .iter()
+            .enumerate()
+            .map(|(level, lists)| {
+                let range = leaves.local(level);
+                let near = lists.near();
+                let pairs = (0..near.nrows())
+                    .map(|r| {
+                        let sources: usize =
+                            near.row(r).iter().map(|&s| source_counts[s as usize]).sum();
+                        target_counts[range.start + r] * sources
+                    })
+                    .sum();
+                (range, pairs)
+            })
+            .collect();
+        let mean_points = (nsources + ntargets).div_ceil(2 * leaves.nlocal().max(1));
+        // With dipoles the static rule: the tuning cache's P2P decisions are the charge
+        // kernel's (Phase 6 T8d; module documentation, "Dipoles").
+        let p2p_layout = match options.p2p_layout {
+            DeviceP2pLayout::Auto if kind.has_dipoles() => static_p2p(link.device.info()),
+            DeviceP2pLayout::Auto => tuner
+                .cached(Decision::P2p {
+                    bucket: bucket(mean_points),
+                })
+                .and_then(|c| c.p2p())
+                .unwrap_or_else(|| static_p2p(link.device.info())),
+            layout => layout.resolve(link.device.info()),
+        };
+        p2p_layout
+            .check_sources(link.device.info(), T::FLOAT, kind)
+            .map_err(device_error)?;
+        let leaf_layout = options.leaf_layout.resolve::<T>(link.device.info(), p);
+        if LEAF_KINDS
+            .iter()
+            .any(|&kind| placement[kind as usize] == Placement::Device)
+        {
+            leaf_layout
+                .check(link.device.info(), p, T::FLOAT)
+                .map_err(device_error)?;
+        }
+        let lens: Vec<usize> = (0..nlevels).map(|l| index.len(l)).collect();
+        let sizes = vec![m * n; nlevels];
+        let writes_output = [OperatorKind::L2p, OperatorKind::M2p, OperatorKind::P2p]
+            .iter()
+            .any(|&kind| placement[kind as usize] == Placement::Host);
+        let mirrors = placement.contains(&Placement::Host).then(|| Mirrors {
+            multipoles: LevelBuffers::new(&lens, &sizes),
+            locals: LevelBuffers::new(&lens, &sizes),
+            target_output: writes_output.then(|| LeafStore::new(target_counts, o)),
+        });
+        let host_mirror_bytes = mirrors.as_ref().map_or(0, |m| {
+            let values = m.multipoles.as_slice().len()
+                + m.locals.as_slice().len()
+                + m.target_output.as_ref().map_or(0, |t| t.as_slice().len());
+            (values * size_of::<T>()) as u64
+        });
+        let output_offsets: Vec<usize> = std::iter::once(0)
+            .chain(target_counts.iter().scan(0, |end, &count| {
+                *end += count;
+                Some(*end)
+            }))
+            .collect();
+        debug_assert!(
+            mirrors
+                .as_ref()
+                .is_none_or(|m| m.multipoles.offsets() == &level_offsets[..nlevels])
+        );
+        let stage_timing = match options.stage_timing {
+            StageTiming::DeviceTimestamps if !link.device.times_on_device() => StageTiming::Enqueue,
+            timing => timing,
+        };
+        let report = DeviceReport {
+            info: link.device.info().clone(),
+            placement,
+            requested_fallback: options.host_fallback.clone(),
+            strategy,
+            tables: tables_report,
+            cache_outcomes,
+            cpu_units: (backend == BackendKind::Cpu).then(|| link.device.units_cap()),
+            p2p_layout,
+            leaf_layout,
+            gemm_layout,
+            translations: translation_reports(&translations),
+            rotation_layout,
+            rotations: rotation_report,
+            plane_wave: if plane_kernels {
+                DevicePlaneWave::Kernels
+            } else {
+                DevicePlaneWave::Dense
+            },
+            plane_wave_layout,
+            plane_waves: plane_report,
+            plane_wave_scratch_bytes: plane_scratch_bytes,
+            scratch_bytes,
+            memory_needed: needed,
+            memory_available: available,
+            stage_timing,
+            tuning: None,
+            output_pass: if device_pass {
+                Placement::Device
+            } else {
+                Placement::Host
+            },
+            host_mirror_bytes,
+            ranks: options.ranks,
+            exchange_bytes,
+            ghost_bytes,
+            vectors: m,
+        };
+        let mut operator = Self {
+            host,
+            link,
+            placement,
+            p2p_layout,
+            leaf_layout,
+            stores,
+            level_offsets,
+            views,
+            tables,
+            translations,
+            mirrors,
+            output_offsets,
+            output_point_size: o,
+            pass,
+            exchanges: exchanges_on_device,
+            report,
+            build_counters: Counters::default(),
+            build_traffic: TrafficByData::default(),
+            evaluation_counters: Counters::default(),
+            stage_windows: stage_timing == StageTiming::DeviceTimestamps,
+            window: None,
+            pending: Vec::with_capacity(DeviceStage::ALL.len()),
+            stage_timings: None,
+            options: options.clone(),
+            tuner: Some(tuner),
+            p2p_levels,
+            mean_points,
+        };
+        operator.tune_translations(&columns)?;
+        Ok(operator)
+    }
+
+    /// Uploads the leaf-scaled source store (coordinates, with any charges) and target
+    /// input, as `build` writes them in its step 8 (CONVENTIONS §3.13): two uploads, once
+    /// per build. The charges of each evaluation overwrite their slots. Then takes the P2P
+    /// decision (timed on the loaded points with a tuning cache that lacks it, T12), ends
+    /// the tuning (storing what was tuned) and records the build's counters.
+    ///
+    /// # Errors
+    ///
+    /// [`FmmError::Device`] if an upload fails.
+    ///
+    /// # Panics
+    ///
+    /// If the stores do not have the layout of the operator's counts.
+    pub fn load_points(
+        &mut self,
+        sources: &LeafStore<T>,
+        target_input: &LeafStore<T>,
+    ) -> Result<(), FmmError> {
+        let stores = &mut self.stores;
+        self.link.build(DataKind::Points, |d| {
+            d.write(stores.sources.as_slice_mut(), sources.as_slice())
+        })?;
+        self.link.build(DataKind::Points, |d| {
+            d.write(stores.target_input.as_slice_mut(), target_input.as_slice())
+        })?;
+        self.tune_p2p();
+        if let Some(tuner) = self.tuner.take() {
+            self.report.tuning = Some(tuner.finish());
+        }
+        self.finish_build();
+        Ok(())
+    }
+
+    /// Records the counters of the build: from here on the counters belong to
+    /// evaluations.
+    fn finish_build(&mut self) {
+        self.build_counters = self.link.device.counters();
+        self.build_traffic = self.link.traffic;
+    }
+
+    /// The GEMM decisions of the grouped level calls (T12, [`crate::tune`]): under
+    /// `DeviceGemm::Auto`, one decision per (kind, pair bucket) with a level call, M2L
+    /// first, then M2M and L2L, larger buckets first, each timed on its bucket's largest
+    /// level call (with a tuning cache that lacks it) or taken from the cache or the
+    /// static rule; then the plans of the level calls whose choice changed are rebuilt, and
+    /// what no chosen plan needs (library copies, scratch) is released.
+    fn tune_translations(&mut self, columns: &ColumnViews) -> Result<(), FmmError> {
+        let Some(mut tuner) = self.tuner.take() else {
+            return Ok(());
+        };
+        if self.options.gemm != DeviceGemm::Auto {
+            self.tuner = Some(tuner);
+            return Ok(());
+        }
+        tuner.start_phase();
+        let info = self.link.device.info().clone();
+        let n = self.n();
+        let budget = self.options.scratch_budget;
+        let vectors = self.vectors();
+        // The largest level call of each decision.
+        let mut decisions: Vec<(Decision, CallId, usize)> = Vec::new();
+        for &(kind, pass) in &GROUPED {
+            for (level, call) in self.translations.calls(kind, pass).iter().enumerate() {
+                // The plan's pairs key the decision whatever m (`new`).
+                let pairs = call.plan.len() / self.vectors();
+                if pairs == 0 {
+                    continue;
+                }
+                let decision = Decision::Gemm {
+                    kind,
+                    bucket: bucket(pairs),
+                };
+                match decisions.iter_mut().find(|d| d.0 == decision) {
+                    Some(entry) if entry.2 >= pairs => {}
+                    Some(entry) => *entry = (decision, (kind, pass, level), pairs),
+                    None => decisions.push((decision, (kind, pass, level), pairs)),
+                }
+            }
+        }
+        let rank = |kind: OperatorKind| match kind {
+            OperatorKind::M2l => 0,
+            OperatorKind::M2m => 1,
+            _ => 2,
+        };
+        decisions.sort_by_key(|&(decision, (kind, _, _), _)| {
+            let Decision::Gemm { bucket, .. } = decision else {
+                unreachable!("GEMM decisions")
+            };
+            (rank(kind), std::cmp::Reverse(bucket))
+        });
+        for &(decision, call, pairs) in &decisions {
+            // A gather the builder names holds for every candidate (the candidates that then
+            // coincide are timed once).
+            let mut candidates: Vec<Candidate> = Vec::new();
+            for mut choice in gemm_candidates(&info, T::FLOAT, n, call.0, budget.is_none()) {
+                if let Some(budget) = budget {
+                    choice.budget = budget;
+                }
+                let candidate = Candidate::Gemm(named_gather(choice, self.options.gather));
+                if !candidates.contains(&candidate) {
+                    candidates.push(candidate);
+                }
+            }
+            tuner.decide(
+                decision,
+                (Some(call.2), pairs),
+                candidates,
+                |candidate, deadline| {
+                    let choice = candidate.gemm().expect("a GEMM candidate");
+                    self.time_grouped(columns, call, &choice, deadline)
+                },
+            );
+        }
+        tuner.end_phase();
+        // Every level call takes its decision's choice.
+        for &(kind, pass) in &GROUPED {
+            for level in 0..self.translations.calls(kind, pass).len() {
+                let call = &self.translations.calls(kind, pass)[level];
+                let pairs = call.plan.len() / self.vectors();
+                if pairs == 0 {
+                    continue;
+                }
+                let decision = Decision::Gemm {
+                    kind,
+                    bucket: bucket(pairs),
+                };
+                let Some(mut choice) = tuner.decided(decision).and_then(|c| c.gemm()) else {
+                    continue;
+                };
+                // A budget the builder names holds for every level call, as in the plans
+                // built before tuning (the scratch is sized for it), and so does a gather.
+                if let Some(budget) = self.options.scratch_budget {
+                    choice.budget = budget;
+                }
+                choice = named_gather(choice, self.options.gather);
+                if choice == call.choice {
+                    continue;
+                }
+                let Self {
+                    link,
+                    tables,
+                    translations,
+                    ..
+                } = self;
+                let rebuilt = plan_level_call(
+                    link,
+                    columns,
+                    (kind, pass, level),
+                    &vector_settings(&choice, &info, (n, vectors), budget, self.options.reduction),
+                    tables,
+                    &mut translations.scratch,
+                )?;
+                translations.calls_mut(kind, pass)[level] = LevelCall {
+                    plan: rebuilt,
+                    choice,
+                };
+            }
+        }
+        self.tuner = Some(tuner);
+        self.release_unused()?;
+        self.report.translations = translation_reports(&self.translations);
+        Ok(())
+    }
+
+    /// The order n = (p + 1)² of the tables.
+    fn n(&self) -> usize {
+        let p = self.host.p();
+        (p + 1) * (p + 1)
+    }
+
+    /// The charge vectors m (Phase 6 T5).
+    fn vectors(&self) -> usize {
+        self.host.vectors()
+    }
+
+    /// The values of a box's multipole or local: m n, one column of the exchanges'
+    /// gathers and scatters.
+    fn box_size(&self) -> usize {
+        self.vectors() * self.n()
+    }
+
+    /// Times the grouped level call (`kind`, `pass`, `level`) with a plan built for
+    /// `choice` (T12), on the operator's own buffers (their values do not matter: every
+    /// evaluation zeroes them first).
+    fn time_grouped(
+        &mut self,
+        columns: &ColumnViews,
+        (kind, pass, level): (OperatorKind, Option<UpwardPass>, usize),
+        choice: &GemmChoice,
+        deadline: Instant,
+    ) -> Result<Duration, Rejection> {
+        let info = self.link.device.info().clone();
+        let n = self.n();
+        let budget_named = self.options.scratch_budget;
+        let vectors = self.vectors();
+        if let GemmKind::HandWritten(layout) = choice.gemm {
+            layout
+                .check_for(&info, n, T::FLOAT)
+                .map_err(|e| Rejection::Unregistered(e.to_string()))?;
+        }
+        let input = match kind {
+            OperatorKind::M2m => level + 1,
+            OperatorKind::L2l => level - 1,
+            _ => level,
+        };
+        let (input, output) = (
+            self.level_values(input..input + 1),
+            self.level_values(level..level + 1),
+        );
+        let Self {
+            link,
+            views,
+            tables,
+            stores,
+            translations,
+            ..
+        } = self;
+        let family = match kind {
+            OperatorKind::M2m => &tables.m2m,
+            OperatorKind::L2l => &tables.l2l,
+            _ => tables
+                .m2l
+                .as_ref()
+                .expect("M2L on the device has its tables"),
+        };
+        if choice.is_library() && !family.has_library_copy() {
+            return Err(Rejection::Unregistered(
+                "the tables have no library copy".into(),
+            ));
+        }
+        // The operator's scratch is sized at build for every candidate the tuner registers
+        // itself; an offered candidate with wider chunks (a `TuningHook`) is not timed, and
+        // is checked before its plan is built (which asserts that the scratch holds it).
+        let batch_offsets = columns.batch_offsets((kind, pass, level));
+        let settings = vector_settings(
+            choice,
+            &info,
+            (n, vectors),
+            budget_named,
+            self.options.reduction,
+        );
+        let wanted = settings.size(
+            info.backend,
+            T::FLOAT,
+            batch_offsets,
+            columns.rows((kind, pass, level)),
+        );
+        if !ScratchColumns::of(&translations.scratch, n).covers(wanted) {
+            return Err(Rejection::Skipped(format!(
+                "its chunks need a scratch of {} and {} values, the operator's holds {} and {}",
+                wanted.gathered * n,
+                wanted.columns * n,
+                translations.scratch.gathered_len(),
+                translations.scratch.len()
+            )));
+        }
+        let candidate = plan_level_call(
+            link,
+            columns,
+            (kind, pass, level),
+            &settings,
+            tables,
+            &mut translations.scratch,
+        )
+        .map_err(|e| Rejection::Failed(e.to_string()))?;
+        if choice.is_library() && candidate.gemm() != Gemm::Library {
+            return Err(Rejection::Unregistered(format!(
+                "the library does not take the level's shapes: {}",
+                candidate.library_rejection().unwrap_or("not a candidate")
+            )));
+        }
+        // The smaller budget of the tuner's own candidates, when the builder names none.
+        if budget_named.is_none()
+            && choice.budget < default_scratch_bytes(&info)
+            && candidate.nchunks() <= 1
+        {
+            return Err(Rejection::Unregistered(
+                "one chunk under either budget: the default budget's plan".into(),
+            ));
+        }
+        let level_views = &views.levels[level];
+        let (view, accumulate) = match (kind, pass) {
+            (OperatorKind::M2m, Some(UpwardPass::Local)) => {
+                (&level_views.m2m_local, Accumulate::Rows)
+            }
+            (OperatorKind::M2m, _) => (&level_views.m2m_global, Accumulate::Rows),
+            (OperatorKind::L2l, _) => (&level_views.l2l, Accumulate::Scatter),
+            _ => (&level_views.v, Accumulate::Rows),
+        };
+        let scratch = &mut translations.scratch;
+        time_launches(&mut link.device, deadline, |d| {
+            let operands = match kind {
+                OperatorKind::M2m => Operands::Shared {
+                    buffer: &mut stores.multipoles,
+                    input: input.clone(),
+                    output: output.clone(),
+                },
+                OperatorKind::L2l => Operands::Shared {
+                    buffer: &mut stores.locals,
+                    input: input.clone(),
+                    output: output.clone(),
+                },
+                _ => Operands::Separate {
+                    input: stores.multipoles.slice(input.clone()),
+                    output: stores.locals.slice_mut(output.clone()),
+                },
+            };
+            grouped(d, &candidate, view, accumulate, family, operands, scratch)
+        })
+        .map_err(Rejection::from)
+    }
+
+    /// Releases what no chosen plan needs after tuning (T12): the library copy of a family
+    /// whose level calls all run the hand-written kernel, and the scratch beyond the widest
+    /// chunk of the chosen plans; the report's tables, scratch and memory follow.
+    fn release_unused(&mut self) -> Result<(), FmmError> {
+        let n = self.n();
+        let uses_library = |translations: &Translations<T>, kinds: &[OperatorKind]| {
+            GROUPED.iter().any(|&(kind, pass)| {
+                kinds.contains(&kind)
+                    && translations
+                        .calls(kind, pass)
+                        .iter()
+                        .any(|c| c.plan.gemm() == Gemm::Library)
+            })
+        };
+        let mut freed = 0u64;
+        for (kinds, name) in [
+            (&[OperatorKind::M2m][..], "M2M (library copy)"),
+            (&[OperatorKind::L2l][..], "L2L (library copy)"),
+            (&[OperatorKind::M2l][..], "M2L (library copy)"),
+        ] {
+            if uses_library(&self.translations, kinds) {
+                continue;
+            }
+            let family = match kinds[0] {
+                OperatorKind::M2m => Some(&mut self.tables.m2m),
+                OperatorKind::L2l => Some(&mut self.tables.l2l),
+                _ => self.tables.m2l.as_mut(),
+            };
+            if let Some(family) = family
+                && family.has_library_copy()
+            {
+                freed += family.release_library_copy();
+                self.report.tables.retain(|t| t.name != name);
+            }
+        }
+        let mut needed = ScratchColumns::default();
+        for call in GROUPED
+            .iter()
+            .flat_map(|&(kind, pass)| self.translations.calls(kind, pass))
+        {
+            needed.gathered = needed.gathered.max(call.plan.gathered_columns());
+            needed.products = needed.products.max(call.plan.columns());
+        }
+        let held = ScratchColumns::of(&self.translations.scratch, n);
+        if needed != held {
+            let old = held.bytes::<T>(n);
+            self.translations.scratch = self
+                .link
+                .build(DataKind::Points, |d| needed.alloc::<T>(d, n))?;
+            let new = needed.bytes::<T>(n);
+            freed += old - new;
+            self.report.scratch_bytes = new;
+        }
+        self.report.memory_needed = self.report.memory_needed.saturating_sub(freed);
+        Ok(())
+    }
+
+    /// The P2P decision (T12, [`crate::tune`]): under `DeviceP2pLayout::Auto` with P2P on
+    /// the device, timed on the level with the most near-field pairs (with a tuning cache
+    /// that lacks it), after the points are loaded; else from the cache or the static rule.
+    fn tune_p2p(&mut self) {
+        let Some(mut tuner) = self.tuner.take() else {
+            return;
+        };
+        let best = self
+            .p2p_levels
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, pairs))| *pairs > 0)
+            .max_by_key(|(_, (_, pairs))| *pairs)
+            .map(|(level, (leaves, pairs))| (level, leaves.clone(), *pairs));
+        if self.placement(OperatorKind::P2p) == Placement::Device
+            && self.options.p2p_layout == DeviceP2pLayout::Auto
+            && self.host.sources() == SourceType::Charges
+            && let Some((level, leaves, pairs)) = best
+        {
+            tuner.start_phase();
+            let info = self.link.device.info().clone();
+            let candidates = p2p_candidates(&info)
+                .into_iter()
+                .map(Candidate::P2p)
+                .collect();
+            let decision = Decision::P2p {
+                bucket: bucket(self.mean_points),
+            };
+            let choice = tuner.decide(
+                decision,
+                (Some(level), pairs),
+                candidates,
+                |candidate, deadline| {
+                    let layout = candidate.p2p().expect("a P2P candidate");
+                    self.time_p2p(level, &leaves, layout, deadline)
+                },
+            );
+            tuner.end_phase();
+            if let Some(layout) = choice.p2p() {
+                self.p2p_layout = layout;
+                self.report.p2p_layout = layout;
+            }
+        }
+        self.tuner = Some(tuner);
+    }
+
+    /// Times the P2P level call of `level` (its local leaves `leaves`) in `layout` (T12),
+    /// on the operator's loaded points; the target output it adds into is zeroed by every
+    /// evaluation.
+    fn time_p2p(
+        &mut self,
+        level: usize,
+        leaves: &Range<usize>,
+        layout: P2pLayout,
+        deadline: Instant,
+    ) -> Result<Duration, Rejection> {
+        let kind = source_kind(self.host.sources());
+        layout
+            .check_sources(self.link.device.info(), T::FLOAT, kind)
+            .map_err(|e| Rejection::Unregistered(e.to_string()))?;
+        let gradients = self.host.gradients();
+        let Self {
+            link,
+            views,
+            stores,
+            ..
+        } = self;
+        let inputs = P2pInputs {
+            near: &views.levels[level].near,
+            first_leaf: leaves.start,
+            leaves: &views.leaves,
+            source_offsets: &views.source_offsets,
+            sources: stores.sources.as_slice(),
+            target_offsets: &views.target_offsets,
+            target_input: stores.target_input.as_slice(),
+            vectors: self.host.vectors(),
+            source_kind: source_kind(self.host.sources()),
+        };
+        let output = &mut stores.target_output;
+        time_launches(&mut link.device, deadline, |d| {
+            tetraleaf_kernels::p2p::p2p(d, layout, gradients, &inputs, output.as_slice_mut())
+        })
+        .map_err(Rejection::from)
+    }
+
+    /// Starts an evaluation at the evaluator's `reset` ([`HostData::Reset`]): resets the
+    /// evaluation counters, opens the timing window of [`DeviceStage::Load`] (with
+    /// [`StageTiming::DeviceTimestamps`]) and zeroes the multipoles, the locals and the
+    /// target output on the device (+0.0, the bits of `reset`): three launches, none for an
+    /// empty store. [`begin_evaluation`](Self::begin_evaluation) follows.
+    fn reset_evaluation(&mut self) {
+        self.link.device.reset_counters();
+        self.link.traffic = TrafficByData::default();
+        self.exchanges.received_levels = [Traffic::default(); MAX_LEVELS];
+        self.exchanges.reduction_levels = [Traffic::default(); MAX_LEVELS];
+        self.pending.clear();
+        self.stage_timings = None;
+        self.open_stage();
+        let stores = &mut self.stores;
+        // The zero kernels transfer nothing; they are counted with the output they clear.
+        for buffer in [
+            &mut stores.multipoles,
+            &mut stores.locals,
+            &mut stores.target_output,
+        ] {
+            self.link
+                .run(DataKind::Output, |d| zero(d, buffer.as_slice_mut()));
+        }
+    }
+
+    /// Loads the strengths of an evaluation, after the evaluator's `reset` (which zeroed
+    /// the device stores, [`HostData::Reset`]): uploads `charges` (w per local source, in
+    /// leaf order: the k-th source of the local leaves in leaf order has the k-th w
+    /// values; w = m charges, or with dipoles its moment d̂ in units of its leaf, after its
+    /// charge if it has one, Phase 6 T8d) and scatters them into their slots of the source
+    /// store. One launch and one upload, no sync; the upload takes `charges` without a copy
+    /// (`Device::write_owned`, Phase 4S T11). With [`StageTiming::DeviceTimestamps`] it
+    /// closes the timing window of [`DeviceStage::Load`], which the reset opened.
+    ///
+    /// A failure is kept and returned by [`read_output`](Self::read_output).
+    ///
+    /// # Panics
+    ///
+    /// If `charges` does not hold w values per local source.
+    pub fn begin_evaluation(&mut self, charges: Vec<T>) {
+        assert_eq!(
+            charges.len(),
+            self.stores.charges.len(),
+            "the strengths of every local source"
+        );
+        let (stores, views) = (&mut self.stores, &self.views);
+        self.link.run(DataKind::Charges, |d| {
+            d.write_owned(stores.charges.as_slice_mut(), charges)
+        });
+        self.link.run(DataKind::Charges, |d| {
+            scatter_values(
+                d,
+                stores.charges.as_slice(),
+                views.charge_slots.as_slice(),
+                stores.sources.as_slice_mut(),
+            )
+        });
+        self.close_stage(DeviceStage::Load);
+    }
+
+    /// [`HostData::ReceivedSources`]: one upload of the ghost tail of the host's source
+    /// store (coordinates and charges, the `LeafStore` layout) into the device's (Phase 5
+    /// T8); nothing without ghost leaves.
+    fn receive_sources(&mut self, tail: &[T]) {
+        let range = self.exchanges.ghost_sources.clone();
+        assert_eq!(
+            tail.len(),
+            range.len(),
+            "the ghost tail of the source store"
+        );
+        if range.is_empty() {
+            return;
+        }
+        let sources = &mut self.stores.sources;
+        self.link.run(DataKind::GhostSources, |d| {
+            d.write(sources.slice_mut(range), tail)
+        });
+    }
+
+    /// [`HostData::SendMultipoles`]: gathers the multipoles this rank sends (its boxes of
+    /// the replicated top, then every level's sent boxes) into the packed buffer, downloads it (one
+    /// download, one sync) and writes each column into its slot of the host store, where
+    /// the exchanges read it (Phase 5 T8); nothing if the rank sends nothing. With the test
+    /// hook ([`inject_error`](Self::inject_error)) the operator fails here instead.
+    fn send_multipoles(&mut self, multipoles: &mut LevelBuffers<T>) {
+        if std::mem::take(&mut self.exchanges.inject) && self.link.error.is_none() {
+            self.link.error = Some(KernelError::Device {
+                reason: "injected at the mid-evaluation sync (test hook)".to_owned(),
+            });
+        }
+        // One column of m n values per box (Phase 6 T5).
+        let n = self.box_size();
+        let (stores, exchanges) = (&self.stores, &mut self.exchanges);
+        let Some(send) = &mut exchanges.send else {
+            return;
+        };
+        self.link.run(DataKind::SentMultipoles, |d| {
+            gather_columns(
+                d,
+                n,
+                stores.multipoles.as_slice(),
+                send.columns.as_slice(),
+                send.values.as_slice_mut(),
+            )
+        });
+        let values = self.link.run(DataKind::SentMultipoles, |d| {
+            d.download_view(send.values.as_slice())
+        });
+        if let Some(values) = values {
+            for (column, &(level, i)) in values.chunks_exact(n).zip(&exchanges.sent) {
+                multipoles
+                    .chunk_mut(level, i as usize)
+                    .copy_from_slice(column);
+            }
+        }
+    }
+
+    /// [`HostData::ReceivedTop`]: one upload of the other ranks' boxes of the replicated
+    /// top that this rank holds, packed on the host from the gathered buffer `gathered`,
+    /// and one scatter into their slots of the multipoles (Phase 5S T5, as the coarse
+    /// blocks of Phase 5 T8); nothing where the rank holds none.
+    fn receive_top(&mut self, gathered: &[T]) {
+        // One column of m n values per box (Phase 6 T5).
+        let n = self.box_size();
+        let (stores, exchanges) = (&mut self.stores, &mut self.exchanges);
+        let Some(top) = &mut exchanges.top else {
+            return;
+        };
+        let staging = &mut exchanges.top_staging;
+        for (column, values) in staging.chunks_exact_mut(n).zip(&exchanges.top_values) {
+            column.copy_from_slice(&gathered[values.clone()]);
+        }
+        self.link.run(DataKind::TopMultipoles, |d| {
+            d.write(top.values.as_slice_mut(), staging)
+        });
+        self.link.run(DataKind::TopMultipoles, |d| {
+            scatter_columns(
+                d,
+                n,
+                top.values.as_slice(),
+                top.columns.as_slice(),
+                stores.multipoles.as_slice_mut(),
+            )
+        });
+    }
+
+    /// [`HostData::SendReduction`] of `level`: gathers this rank's multipoles of the level
+    /// that the upward reduction sends (`boxes`, in send order: own blocks and the owned
+    /// `Global` boxes the global M2M of the level formed on the device) into the packed
+    /// buffer, downloads them (one download, one sync: the values must reach the host
+    /// before the exchange reads them) and writes each column into its slot of the host
+    /// store (Phase 5S T6, docs/design/scale-out.md §4.5); nothing on a level at which the
+    /// rank sends nothing.
+    fn send_reduction(&mut self, level: usize, boxes: &[u32], multipoles: &mut LevelBuffers<T>) {
+        // One column of m n values per box (Phase 6 T5).
+        let n = self.box_size();
+        let (stores, exchanges) = (&self.stores, &mut self.exchanges);
+        let columns =
+            exchanges.reduction_send_offsets[level]..exchanges.reduction_send_offsets[level + 1];
+        assert_eq!(
+            boxes.len(),
+            columns.len(),
+            "the reduction's sent boxes of level {level}"
+        );
+        let Some(send) = exchanges
+            .reduction_send
+            .as_mut()
+            .filter(|_| !columns.is_empty())
+        else {
+            return;
+        };
+        let before = self.link.device.counters();
+        let packed = 0..columns.len() * n;
+        self.link.run(DataKind::SentReduction, |d| {
+            gather_columns(
+                d,
+                n,
+                stores.multipoles.as_slice(),
+                send.columns.slice(columns),
+                send.values.slice_mut(packed.clone()),
+            )
+        });
+        let values = self.link.run(DataKind::SentReduction, |d| {
+            d.download_view(send.values.slice(packed))
+        });
+        if let Some(values) = values {
+            for (column, &i) in values.chunks_exact(n).zip(boxes) {
+                multipoles
+                    .chunk_mut(level, i as usize)
+                    .copy_from_slice(column);
+            }
+        }
+        let moved = Traffic::between(before, self.link.device.counters());
+        exchanges.reduction_levels[level] = exchanges.reduction_levels[level].plus(moved);
+    }
+
+    /// [`HostData::ReceivedReduction`] of `level`: one upload of the reduction's receive
+    /// buffer `received` (the level's children from other ranks, packed) and one scatter
+    /// into their slots of the multipoles, before the global M2M of the level above reads
+    /// them (Phase 5S T6); nothing on a level at which the rank receives nothing.
+    fn receive_reduction(&mut self, level: usize, received: &[T]) {
+        // One column of m n values per box (Phase 6 T5).
+        let n = self.box_size();
+        let (stores, exchanges) = (&mut self.stores, &mut self.exchanges);
+        let columns = exchanges.reduction_receive_offsets[level]
+            ..exchanges.reduction_receive_offsets[level + 1];
+        assert_eq!(
+            received.len(),
+            columns.len() * n,
+            "the reduction's receive buffer of level {level}"
+        );
+        let Some(receive) = exchanges
+            .reduction_receive
+            .as_mut()
+            .filter(|_| !columns.is_empty())
+        else {
+            return;
+        };
+        let before = self.link.device.counters();
+        let packed = 0..received.len();
+        self.link.run(DataKind::ReceivedReduction, |d| {
+            d.write(receive.values.slice_mut(packed.clone()), received)
+        });
+        self.link.run(DataKind::ReceivedReduction, |d| {
+            scatter_columns(
+                d,
+                n,
+                receive.values.slice(packed),
+                receive.columns.slice(columns),
+                stores.multipoles.as_slice_mut(),
+            )
+        });
+        let moved = Traffic::between(before, self.link.device.counters());
+        exchanges.reduction_levels[level] = exchanges.reduction_levels[level].plus(moved);
+    }
+
+    /// [`HostData::ReceivedMultipoles`] of `level`: one upload of the exchange's receive
+    /// buffer `received` (the level's ghost boxes, packed) and one scatter into their slots
+    /// of the multipoles (Phase 5 T8); nothing on a level without ghost boxes.
+    fn receive_multipoles(&mut self, level: usize, received: &[T]) {
+        // One column of m n values per box (Phase 6 T5).
+        let n = self.box_size();
+        let (stores, exchanges) = (&mut self.stores, &mut self.exchanges);
+        let columns = exchanges.receive_offsets[level]..exchanges.receive_offsets[level + 1];
+        assert_eq!(
+            received.len(),
+            columns.len() * n,
+            "the receive buffer of level {level}"
+        );
+        let Some(receive) = exchanges.receive.as_mut().filter(|_| !columns.is_empty()) else {
+            return;
+        };
+        let before = self.link.device.counters();
+        let packed = 0..received.len();
+        self.link.run(DataKind::ReceivedMultipoles, |d| {
+            d.write(receive.values.slice_mut(packed.clone()), received)
+        });
+        self.link.run(DataKind::ReceivedMultipoles, |d| {
+            scatter_columns(
+                d,
+                n,
+                receive.values.slice(packed),
+                receive.columns.slice(columns),
+                stores.multipoles.as_slice_mut(),
+            )
+        });
+        exchanges.received_levels[level] = Traffic::between(before, self.link.device.counters());
+    }
+
+    /// A test hook (Phase 5 T8, decision 12): the next [`HostData::SendMultipoles`], the
+    /// mid-evaluation sync of several ranks, fails with a device error, which the
+    /// operator keeps like any other ([module documentation](self#errors-12)); on a rank
+    /// that sends nothing the event fails all the same.
+    #[doc(hidden)]
+    pub fn inject_error(&mut self) {
+        self.exchanges.inject = true;
+    }
+    /// Opens the timing window of a stage, with [`StageTiming::DeviceTimestamps`]: no
+    /// sync on a device that times on itself (device-path.md §8.3). `Fmm` calls it before
+    /// each stage with device work.
+    pub fn open_stage(&mut self) {
+        if self.stage_windows {
+            self.window = self.link.run(DataKind::Output, Device::open_window);
+        }
+    }
+
+    /// Closes the timing window of `stage`, opened by [`open_stage`](Self::open_stage);
+    /// its time is read by [`read_output`](Self::read_output). A window the device did not
+    /// time itself (it waited for the stream: a wgpu stream that found the device's
+    /// timestamp queries spent) turns the windows off for every later evaluation.
+    pub fn close_stage(&mut self, stage: DeviceStage) {
+        let Some(window) = self.window.take() else {
+            return;
+        };
+        if let Some(time) = self.link.run(DataKind::Output, |d| d.close_window(window)) {
+            self.stage_windows &= time.on_device();
+            self.pending.push((stage, time));
+        }
+    }
+
+    /// The device times of the stages of the last evaluation, with
+    /// [`StageTiming::DeviceTimestamps`] and if every window was timed on the device.
+    pub fn stage_timings(&self) -> Option<DeviceStageTimings> {
+        self.stage_timings
+    }
+
+    /// Waits for every queued launch and transfer: one sync. `Fmm` calls it after every
+    /// stage with `synchronous_stages`. A failure is kept for
+    /// [`read_output`](Self::read_output).
+    pub fn sync(&mut self) {
+        self.link.run(DataKind::Output, Device::sync);
+    }
+
+    /// Opens a timing window of one level call, for `FmmBuilder::kind_timings` with
+    /// `KindTiming::Device` (Phase 4S T5): `Device::open_window` at the current position
+    /// of the stream, no sync on a device that times on itself. `None` after a failure,
+    /// which is kept for [`read_output`](Self::read_output).
+    pub fn open_call_window(&mut self) -> Option<TimingWindow> {
+        self.link.run(DataKind::Output, Device::open_window)
+    }
+
+    /// Closes `window`, opened by [`open_call_window`](Self::open_call_window), after the
+    /// level call's launches: its time, to resolve after the evaluation's download.
+    /// `None` after a failure, which is kept for [`read_output`](Self::read_output).
+    pub fn close_call_window(&mut self, window: TimingWindow) -> Option<WindowTime> {
+        self.link.run(DataKind::Output, |d| d.close_window(window))
+    }
+
+    /// Ends an evaluation: downloads the target output (one download, one sync) and
+    /// returns it: in the evaluator's layout, unscaled; or with the output pass on the
+    /// device (Phase 4S T9) first launches `gather_output`, which makes φ and ∇φ in the
+    /// caller's order, scaled, and downloads those instead (one launch more, the same
+    /// download and sync, o N_t values either way). The values are read in place in
+    /// CubeCL's host memory (`Device::download_view`, Phase 4S T11): the operator keeps
+    /// no host copy of the output.
+    ///
+    /// # Errors
+    ///
+    /// The first failure of the evaluation, if any device operation failed (a launch
+    /// error surfaces at this download, §12).
+    pub fn read_output(&mut self) -> Result<DeviceOutput<'_, T>, KernelError> {
+        let (gradients, m) = (self.host.gradients(), self.host.vectors());
+        let stores = &self.stores;
+        if let Some(pass) = &mut self.pass {
+            self.link.run(DataKind::Output, |d| {
+                gather_output(
+                    d,
+                    &pass.order,
+                    stores.target_output.as_slice(),
+                    (gradients, m),
+                    pass.values.as_slice_mut(),
+                )
+            });
+        }
+        let source = match &self.pass {
+            None => stores.target_output.as_slice(),
+            Some(pass) => pass.values.as_slice(),
+        };
+        let values = self.link.run(DataKind::Output, |d| d.download_view(source));
+        // The stage windows, read after the download: the stream is idle. A window
+        // without device work measures nothing and times zero.
+        if self.link.error.is_none() && !self.pending.is_empty() {
+            let mut timings = DeviceStageTimings::default();
+            let mut on_device = true;
+            for (stage, time) in self.pending.drain(..) {
+                on_device &= time.on_device();
+                timings.set(stage, time.resolve().unwrap_or_default());
+            }
+            self.stage_timings = on_device.then_some(timings);
+        }
+        self.evaluation_counters = self.link.device.counters();
+        match (&self.link.error, values) {
+            (Some(error), _) => Err(error.clone()),
+            (None, Some(values)) => Ok(match self.pass {
+                None => DeviceOutput::LeafOrder {
+                    values: OutputValues::new(values),
+                    offsets: &self.output_offsets,
+                },
+                Some(_) => DeviceOutput::CallerOrder(OutputValues::new(values)),
+            }),
+            (None, None) => unreachable!("a download without a failure gives its values"),
+        }
+    }
+
+    /// Downloads the target output of the last evaluation in the evaluator's layout,
+    /// unscaled, for the test oracle of the output pass (`Fmm::reference_output`, Phase 4S
+    /// T9): one download, counted toward the evaluation counters until the next
+    /// evaluation's `reset`.
+    ///
+    /// # Errors
+    ///
+    /// As `Device::download`.
+    pub fn download_target_output(&mut self) -> Result<LeafStore<T>, KernelError> {
+        let counts: Vec<usize> = self
+            .output_offsets
+            .windows(2)
+            .map(|w| w[1] - w[0])
+            .collect();
+        let mut store = LeafStore::new(&counts, self.output_point_size);
+        self.link
+            .device
+            .download(self.stores.target_output.as_slice(), store.as_mut_slice())?;
+        Ok(store)
+    }
+
+    /// Downloads the multipoles and the locals of every level, in the `LevelBuffers`
+    /// layout (box t of level l at the level's offset plus t (p + 1)²), for tests and
+    /// reports: two downloads, counted toward the evaluation counters until the next
+    /// evaluation's `reset`.
+    ///
+    /// # Errors
+    ///
+    /// As `Device::download`.
+    pub fn download_expansions(&mut self) -> Result<(Vec<T>, Vec<T>), KernelError> {
+        let mut multipoles = vec![T::default(); self.stores.multipoles.len()];
+        let mut locals = vec![T::default(); self.stores.locals.len()];
+        let device = &mut self.link.device;
+        device.download(self.stores.multipoles.as_slice(), &mut multipoles)?;
+        device.download(self.stores.locals.as_slice(), &mut locals)?;
+        Ok((multipoles, locals))
+    }
+
+    /// The host operator of the fallback kinds.
+    pub fn host(&self) -> &LaplaceOperator<T> {
+        &self.host
+    }
+
+    /// The host operator, mutably (for `set_serial`).
+    pub fn host_mut(&mut self) -> &mut LaplaceOperator<T> {
+        &mut self.host
+    }
+
+    /// The device.
+    pub fn device(&self) -> &Device {
+        &self.link.device
+    }
+
+    /// The views on the device.
+    pub fn views(&self) -> &DeviceViews {
+        &self.views
+    }
+
+    /// Downloads every view, for tests and reports. Its transfers count toward the
+    /// evaluation counters until the next evaluation's `reset`.
+    ///
+    /// # Errors
+    ///
+    /// As `Device::download`.
+    pub fn download_views(&mut self) -> Result<ViewsImage, KernelError> {
+        self.views.download(&mut self.link.device)
+    }
+
+    /// What the operator runs on and how.
+    pub fn report(&self) -> &DeviceReport {
+        &self.report
+    }
+
+    /// The transfers, launches and syncs of the build and of the last evaluation.
+    pub fn counters(&self) -> DeviceCounters {
+        DeviceCounters {
+            build: self.build_counters,
+            evaluation: self.evaluation_counters,
+            build_traffic: self.build_traffic,
+            evaluation_traffic: self.link.traffic,
+            received_levels: self.exchanges.received_levels,
+            reduction_levels: self.exchanges.reduction_levels,
+        }
+    }
+
+    /// Where `kind` runs.
+    pub fn placement(&self, kind: OperatorKind) -> Placement {
+        self.placement[kind as usize]
+    }
+
+    /// The value range of `levels` in the multipole and local buffers.
+    fn level_values(&self, levels: Range<usize>) -> Range<usize> {
+        self.level_offsets[levels.start]..self.level_offsets[levels.end]
+    }
+
+    /// The value range of the local leaves `leaves` in the target output.
+    fn output_values(&self, leaves: &Range<usize>) -> Range<usize> {
+        let (offsets, o) = (&self.output_offsets, self.output_point_size);
+        offsets[leaves.start] * o..offsets[leaves.end] * o
+    }
+
+    /// Downloads `levels` of `store` into its mirror (nothing for an empty range).
+    fn fetch_levels(&mut self, store: Level, levels: Range<usize>) {
+        let values = self.level_values(levels);
+        if values.is_empty() {
+            return;
+        }
+        let (stores, mirrors) = (&self.stores, self.mirrors.as_mut().expect(MIRRORS));
+        let (buffer, mirror, data) = match store {
+            Level::Multipoles => (
+                &stores.multipoles,
+                &mut mirrors.multipoles,
+                DataKind::FallbackMultipoles,
+            ),
+            Level::Locals => (
+                &stores.locals,
+                &mut mirrors.locals,
+                DataKind::FallbackLocals,
+            ),
+        };
+        self_fetch(
+            &mut self.link,
+            data,
+            buffer.slice(values.clone()),
+            &mut mirror.as_mut_slice()[values],
+        );
+    }
+
+    /// Uploads `level` of `store` from its mirror.
+    fn send_level(&mut self, store: Level, level: usize) {
+        let values = self.level_values(level..level + 1);
+        if values.is_empty() {
+            return;
+        }
+        let (stores, mirrors) = (&mut self.stores, self.mirrors.as_ref().expect(MIRRORS));
+        let (buffer, mirror, data) = match store {
+            Level::Multipoles => (
+                &mut stores.multipoles,
+                &mirrors.multipoles,
+                DataKind::FallbackMultipoles,
+            ),
+            Level::Locals => (
+                &mut stores.locals,
+                &mirrors.locals,
+                DataKind::FallbackLocals,
+            ),
+        };
+        self_send(
+            &mut self.link,
+            data,
+            buffer.slice_mut(values.clone()),
+            &mirror.as_slice()[values],
+        );
+    }
+
+    /// Downloads the target output of `leaves` into its mirror.
+    fn fetch_output(&mut self, leaves: &Range<usize>) {
+        let values = self.output_values(leaves);
+        if !values.is_empty() {
+            let mirror = output_mirror(&mut self.mirrors);
+            self_fetch(
+                &mut self.link,
+                DataKind::FallbackTargetOutput,
+                self.stores.target_output.slice(values.clone()),
+                &mut mirror.as_mut_slice()[values],
+            );
+        }
+    }
+
+    /// Uploads the target output of `leaves` from its mirror.
+    fn send_output(&mut self, leaves: &Range<usize>) {
+        let values = self.output_values(leaves);
+        if !values.is_empty() {
+            let mirror = output_mirror(&mut self.mirrors);
+            self_send(
+                &mut self.link,
+                DataKind::FallbackTargetOutput,
+                self.stores.target_output.slice_mut(values.clone()),
+                &mirror.as_slice()[values],
+            );
+        }
+    }
+
+    /// True if a host-fallback call can go ahead: no earlier failure.
+    fn healthy(&self) -> bool {
+        self.link.error.is_none()
+    }
+}
+
+/// The panic message of a host-fallback call without mirrors.
+const MIRRORS: &str = "host-fallback kinds have host mirrors";
+
+/// [`Link::run`] for a download.
+fn self_fetch<E: DeviceElement>(
+    link: &mut Link,
+    data: DataKind,
+    slice: DeviceSlice<'_, E>,
+    out: &mut [E],
+) {
+    link.run(data, |d| d.download(slice, out));
+}
+
+/// [`Link::run`] for an upload.
+fn self_send<E: DeviceElement>(
+    link: &mut Link,
+    data: DataKind,
+    slice: DeviceSliceMut<'_, E>,
+    values: &[E],
+) {
+    link.run(data, |d| d.write(slice, values));
+}
+
+/// A kernel error at build as an [`FmmError`].
+fn device_error(error: KernelError) -> FmmError {
+    FmmError::Device(error.to_string())
+}
+
+impl<T: DeviceScalar> FmmSizes for DeviceOperator<T> {
+    type Value = T;
+
+    fn multipole_size(&self, level: usize) -> usize {
+        self.host.multipole_size(level)
+    }
+
+    fn local_size(&self, level: usize) -> usize {
+        self.host.local_size(level)
+    }
+
+    fn source_point_size(&self) -> usize {
+        self.host.source_point_size()
+    }
+
+    fn target_input_point_size(&self) -> usize {
+        self.host.target_input_point_size()
+    }
+
+    fn target_output_point_size(&self) -> usize {
+        self.host.target_output_point_size()
+    }
+}
+
+impl<T: DeviceScalar> DeviceOperator<T> {
+    /// The plan and view of the M2M (of `pass`) or L2L level call of `level`.
+    fn translation(
+        &self,
+        kind: OperatorKind,
+        level: usize,
+        pass: Option<UpwardPass>,
+    ) -> (&GroupedPlan, &GroupedView) {
+        let (translations, views) = (&self.translations, &self.views.levels[level]);
+        match (kind, pass) {
+            (OperatorKind::M2m, Some(UpwardPass::Local)) => {
+                (&translations.m2m_local[level].plan, &views.m2m_local)
+            }
+            (OperatorKind::M2m, Some(UpwardPass::Global)) => {
+                (&translations.m2m_global[level].plan, &views.m2m_global)
+            }
+            (OperatorKind::L2l, None) => (&translations.l2l[level].plan, &views.l2l),
+            _ => unreachable!("M2M with a pass or L2L"),
+        }
+    }
+
+    /// M2M (of `pass`, children on `level + 1` into parents on `level`) or L2L (parents on
+    /// `level − 1` into children on `level`) on the device: the grouped translation of
+    /// the level's view with the dense octant tables, three launches per chunk (T8).
+    fn translate_on_device(&mut self, kind: OperatorKind, level: usize, pass: Option<UpwardPass>) {
+        let (input, accumulate) = match kind {
+            OperatorKind::M2m => (level + 1, Accumulate::Rows),
+            _ => (level - 1, Accumulate::Scatter),
+        };
+        let input = self.level_values(input..input + 1);
+        let output = self.level_values(level..level + 1);
+        let Self {
+            translations,
+            views,
+            tables,
+            stores,
+            link,
+            ..
+        } = self;
+        let views = &views.levels[level];
+        let (plan, view, table, buffer) = match (kind, pass) {
+            (OperatorKind::M2m, Some(UpwardPass::Local)) => (
+                &translations.m2m_local[level].plan,
+                &views.m2m_local,
+                &tables.m2m,
+                &mut stores.multipoles,
+            ),
+            (OperatorKind::M2m, Some(UpwardPass::Global)) => (
+                &translations.m2m_global[level].plan,
+                &views.m2m_global,
+                &tables.m2m,
+                &mut stores.multipoles,
+            ),
+            (OperatorKind::L2l, None) => (
+                &translations.l2l[level].plan,
+                &views.l2l,
+                &tables.l2l,
+                &mut stores.locals,
+            ),
+            _ => unreachable!("M2M with a pass or L2L"),
+        };
+        let scratch = &mut translations.scratch;
+        link.run(DataKind::Output, |d| {
+            grouped(
+                d,
+                plan,
+                view,
+                accumulate,
+                table,
+                Operands::Shared {
+                    buffer,
+                    input,
+                    output,
+                },
+                scratch,
+            )
+        });
+    }
+
+    /// M2L of `level` on the device, from the multipoles into the locals of the level: under
+    /// `Rotation` the rotation kernel over the level's V view, one launch (T10,
+    /// device-path.md §6.6); otherwise the grouped translation with the 316 dense offset
+    /// tables, three launches per chunk (T9, device-path.md §6.4).
+    fn m2l_on_device(&mut self, level: usize) {
+        let values = self.level_values(level..level + 1);
+        let Self {
+            translations,
+            views,
+            tables,
+            stores,
+            link,
+            ..
+        } = self;
+        if let Some(waves) = &tables.plane_wave {
+            // Merge and shift (Helmholtz CH7.5b): four launches per chunk of parents.
+            let layout = translations.plane_wave_layout;
+            let Translations {
+                plane_waves,
+                plane_wave_scratch,
+                ..
+            } = translations;
+            for chunk in &plane_waves[level] {
+                let scratch = plane_wave_scratch
+                    .as_mut()
+                    .expect("a plane-wave level call has its scratch");
+                link.run(DataKind::Output, |d| {
+                    tetraleaf_kernels::plane_wave::m2l(
+                        d,
+                        layout,
+                        chunk,
+                        waves,
+                        stores.multipoles.slice(values.clone()),
+                        stores.locals.slice_mut(values.clone()),
+                        scratch,
+                    )
+                });
+            }
+            return;
+        }
+        if let Some(rotation) = &tables.rotation {
+            let (plan, view) = (&translations.rotation[level], &views.levels[level].v);
+            let layout = translations.rotation_layout;
+            link.run(DataKind::Output, |d| {
+                tetraleaf_kernels::rotation::m2l(
+                    d,
+                    layout,
+                    plan,
+                    view,
+                    rotation,
+                    stores.multipoles.slice(values.clone()),
+                    stores.locals.slice_mut(values),
+                )
+            });
+            return;
+        }
+        let table = tables
+            .m2l
+            .as_ref()
+            .expect("M2L on the device has its tables");
+        let (plan, view) = (&translations.m2l[level].plan, &views.levels[level].v);
+        let scratch = &mut translations.scratch;
+        link.run(DataKind::Output, |d| {
+            grouped(
+                d,
+                plan,
+                view,
+                Accumulate::Rows,
+                table,
+                Operands::Separate {
+                    input: stores.multipoles.slice(values.clone()),
+                    output: stores.locals.slice_mut(values),
+                },
+                scratch,
+            )
+        });
+    }
+
+    /// P2M (`irregular` false) or P2L of `level` on the device: one launch from the
+    /// level's view, adding into the multipoles or locals of the level (T7).
+    fn expand_on_device(&mut self, level: usize, irregular: bool) {
+        let values = self.level_values(level..level + 1);
+        let views = &self.views;
+        let inputs = SourceInputs {
+            view: if irregular {
+                &views.levels[level].x
+            } else {
+                &views.levels[level].p2m
+            },
+            level,
+            boxes: &views.boxes,
+            leaves: &views.leaves,
+            source_offsets: &views.source_offsets,
+            sources: self.stores.sources.as_slice(),
+            vectors: self.host.vectors(),
+            source_kind: source_kind(self.host.sources()),
+        };
+        let (layout, p) = (self.leaf_layout, self.host.p());
+        let out = if irregular {
+            &mut self.stores.locals
+        } else {
+            &mut self.stores.multipoles
+        };
+        self.link.run(DataKind::Output, |d| {
+            let out = out.slice_mut(values);
+            if irregular {
+                tetraleaf_kernels::leaf::p2l(d, layout, p, &inputs, out)
+            } else {
+                tetraleaf_kernels::leaf::p2m(d, layout, p, &inputs, out)
+            }
+        });
+    }
+
+    /// L2P (`irregular` false) or M2P of the leaves `leaves` of `level` on the device: one
+    /// launch from the level's view, the locals of the level or the multipoles of the
+    /// level below, adding into the target output (T7).
+    fn evaluate_on_device(&mut self, level: usize, leaves: &Range<usize>, irregular: bool) {
+        let entry_level = level + usize::from(irregular);
+        let values = self.level_values(entry_level..entry_level + 1);
+        let views = &self.views;
+        let view = if irregular {
+            &views.levels[level].w
+        } else {
+            &views.levels[level].l2p
+        };
+        debug_assert_eq!(view.nrows(), leaves.len());
+        let inputs = TargetInputs {
+            view,
+            level,
+            first_leaf: leaves.start,
+            boxes: &views.boxes,
+            leaves: &views.leaves,
+            target_offsets: &views.target_offsets,
+            target_input: self.stores.target_input.as_slice(),
+            vectors: self.host.vectors(),
+        };
+        let (layout, p, gradients) = (self.leaf_layout, self.host.p(), self.host.gradients());
+        let coefficients = if irregular {
+            self.stores.multipoles.slice(values)
+        } else {
+            self.stores.locals.slice(values)
+        };
+        let output = &mut self.stores.target_output;
+        self.link.run(DataKind::Output, |d| {
+            let output = output.as_slice_mut();
+            if irregular {
+                tetraleaf_kernels::leaf::m2p(d, layout, p, gradients, &inputs, coefficients, output)
+            } else {
+                tetraleaf_kernels::leaf::l2p(d, layout, p, gradients, &inputs, coefficients, output)
+            }
+        });
+    }
+}
+
+/// Every kind on the host fallback ([module documentation](self#host-fallback-7)):
+/// download, the host operator's own method on the mirrors, upload; every kind with a
+/// device kernel on the device unless it falls back ([module
+/// documentation](self#p2p-on-the-device-t6), [the leaf
+/// operators](self#the-leaf-operators-on-the-device-t7), [M2M and
+/// L2L](self#m2m-and-l2l-on-the-device-t8), [dense M2L](self#dense-m2l-on-the-device-t9),
+/// [rotation M2L](self#rotation-m2l-on-the-device-t10)).
+impl<T: DeviceScalar> FmmOperator for DeviceOperator<T> {
+    /// The evaluator's data movements (Phase 5 T8, docs/design/distributed-fmm.md §7.1):
+    /// the device mirrors each one, as the [module documentation](self#several-ranks-phase-5-t8)
+    /// lists; on one rank only `Reset` moves anything.
+    fn host_data(&mut self, event: HostData<'_, T>) {
+        match event {
+            HostData::Reset => self.reset_evaluation(),
+            // `Fmm` writes the charges of the sent leaves into the host chunks before the
+            // stages; the coordinates are there from the build.
+            HostData::SendSources { .. } => {}
+            HostData::ReceivedSources { leaves, sources } => {
+                self.receive_sources(sources.range(leaves).as_slice());
+            }
+            HostData::SendReduction {
+                level,
+                exchange,
+                multipoles,
+            } => self.send_reduction(level, exchange.send_boxes(level), multipoles),
+            HostData::ReceivedReduction {
+                level, exchange, ..
+            } => self.receive_reduction(level, exchange.receive_buffer(level)),
+            HostData::SendMultipoles { multipoles, .. } => self.send_multipoles(multipoles),
+            HostData::ReceivedTop { top, .. } => self.receive_top(top.gathered()),
+            HostData::ReceivedMultipoles {
+                level, exchange, ..
+            } => self.receive_multipoles(level, exchange.receive_buffer(level)),
+        }
+    }
+
+    fn p2m(&mut self, batch: P2m<'_, T>) {
+        let level = batch.level;
+        if batch.leaves.is_empty() || !self.healthy() {
+            return;
+        }
+        if self.placement(OperatorKind::P2m) == Placement::Device {
+            self.expand_on_device(level, false);
+            return;
+        }
+        self.fetch_levels(Level::Multipoles, level..level + 1);
+        if !self.healthy() {
+            return;
+        }
+        let mirrors = self.mirrors.as_mut().expect(MIRRORS);
+        self.host.p2m(P2m {
+            multipoles: mirrors.multipoles.level_mut(level),
+            ..batch
+        });
+        self.send_level(Level::Multipoles, level);
+    }
+
+    fn m2m(&mut self, batch: M2m<'_, T>) {
+        let level = batch.level;
+        if batch.children.is_empty() || !self.healthy() {
+            return;
+        }
+        if self.placement(OperatorKind::M2m) == Placement::Device {
+            debug_assert_eq!(
+                batch.children.len(),
+                self.translation(OperatorKind::M2m, level, Some(batch.pass))
+                    .0
+                    .len()
+            );
+            self.translate_on_device(OperatorKind::M2m, level, Some(batch.pass));
+            return;
+        }
+        self.fetch_levels(Level::Multipoles, level..level + 2);
+        if !self.healthy() {
+            return;
+        }
+        let mirrors = self.mirrors.as_mut().expect(MIRRORS);
+        let (multipoles, child_multipoles) = mirrors.multipoles.parent_child_mut(level);
+        self.host.m2m(M2m {
+            multipoles,
+            child_multipoles,
+            ..batch
+        });
+        self.send_level(Level::Multipoles, level);
+    }
+
+    fn m2l(&mut self, batch: M2l<'_, T>) {
+        let level = batch.level;
+        if batch.pairs.is_empty() || !self.healthy() {
+            return;
+        }
+        if self.placement(OperatorKind::M2l) == Placement::Device {
+            debug_assert!(
+                self.tables.plane_wave.is_some()
+                    || batch.pairs.len()
+                        == match self.tables.rotation {
+                            Some(_) => self.translations.rotation[level].len(),
+                            None => self.translations.m2l[level].plan.len(),
+                        }
+            );
+            self.m2l_on_device(level);
+            return;
+        }
+        self.fetch_levels(Level::Multipoles, level..level + 1);
+        self.fetch_levels(Level::Locals, level..level + 1);
+        if !self.healthy() {
+            return;
+        }
+        let mirrors = self.mirrors.as_mut().expect(MIRRORS);
+        self.host.m2l(M2l {
+            multipoles: mirrors.multipoles.level(level),
+            locals: mirrors.locals.level_mut(level),
+            ..batch
+        });
+        self.send_level(Level::Locals, level);
+    }
+
+    fn p2l(&mut self, batch: P2l<'_, T>) {
+        let level = batch.level;
+        if batch.x.is_empty() || !self.healthy() {
+            return;
+        }
+        if self.placement(OperatorKind::P2l) == Placement::Device {
+            self.expand_on_device(level, true);
+            return;
+        }
+        self.fetch_levels(Level::Locals, level..level + 1);
+        if !self.healthy() {
+            return;
+        }
+        let mirrors = self.mirrors.as_mut().expect(MIRRORS);
+        self.host.p2l(P2l {
+            locals: mirrors.locals.level_mut(level),
+            ..batch
+        });
+        self.send_level(Level::Locals, level);
+    }
+
+    fn l2l(&mut self, batch: L2l<'_, T>) {
+        let level = batch.level;
+        if batch.parents.is_empty() || !self.healthy() {
+            return;
+        }
+        if self.placement(OperatorKind::L2l) == Placement::Device {
+            debug_assert_eq!(
+                batch.parents.len(),
+                self.translation(OperatorKind::L2l, level, None).0.len()
+            );
+            self.translate_on_device(OperatorKind::L2l, level, None);
+            return;
+        }
+        self.fetch_levels(Level::Locals, level - 1..level + 1);
+        if !self.healthy() {
+            return;
+        }
+        let mirrors = self.mirrors.as_mut().expect(MIRRORS);
+        let (locals, parent_locals) = mirrors.locals.child_parent_mut(level - 1);
+        self.host.l2l(L2l {
+            locals,
+            parent_locals,
+            ..batch
+        });
+        self.send_level(Level::Locals, level);
+    }
+
+    fn l2p(&mut self, batch: L2p<'_, T>) {
+        let (level, leaves) = (batch.level, batch.leaves.clone());
+        if batch.boxes.is_empty() || self.output_values(&leaves).is_empty() || !self.healthy() {
+            return;
+        }
+        if self.placement(OperatorKind::L2p) == Placement::Device {
+            self.evaluate_on_device(level, &leaves, false);
+            return;
+        }
+        self.fetch_levels(Level::Locals, level..level + 1);
+        self.fetch_output(&leaves);
+        if !self.healthy() {
+            return;
+        }
+        let mirrors = self.mirrors.as_mut().expect(MIRRORS);
+        let target_output = mirrors.target_output.as_mut().expect(MIRRORS);
+        self.host.l2p(L2p {
+            locals: mirrors.locals.level(level),
+            target_output: target_output.range_mut(leaves.clone()),
+            ..batch
+        });
+        self.send_output(&leaves);
+    }
+
+    fn m2p(&mut self, batch: M2p<'_, T>) {
+        let (level, leaves) = (batch.level, batch.leaves.clone());
+        if batch.w.is_empty() || self.output_values(&leaves).is_empty() || !self.healthy() {
+            return;
+        }
+        if self.placement(OperatorKind::M2p) == Placement::Device {
+            // A non-empty W list names boxes of level + 1, which then exists.
+            self.evaluate_on_device(level, &leaves, true);
+            return;
+        }
+        // A non-empty W list names boxes of level + 1, which then exists.
+        self.fetch_levels(Level::Multipoles, level + 1..level + 2);
+        self.fetch_output(&leaves);
+        if !self.healthy() {
+            return;
+        }
+        let mirrors = self.mirrors.as_mut().expect(MIRRORS);
+        let target_output = mirrors.target_output.as_mut().expect(MIRRORS);
+        self.host.m2p(M2p {
+            multipoles: mirrors.multipoles.level(level + 1),
+            target_output: target_output.range_mut(leaves.clone()),
+            ..batch
+        });
+        self.send_output(&leaves);
+    }
+
+    fn p2p(&mut self, batch: P2p<'_, T>) {
+        let leaves = batch.leaves.clone();
+        if batch.near.is_empty() || self.output_values(&leaves).is_empty() || !self.healthy() {
+            return;
+        }
+        if self.placement(OperatorKind::P2p) == Placement::Device {
+            // One launch: the level's near view on the device, rows `leaves` (T6).
+            let views = &self.views;
+            let near = &views.levels[batch.level].near;
+            debug_assert_eq!(near.nrows(), leaves.len());
+            let inputs = P2pInputs {
+                near,
+                first_leaf: leaves.start,
+                leaves: &views.leaves,
+                source_offsets: &views.source_offsets,
+                sources: self.stores.sources.as_slice(),
+                target_offsets: &views.target_offsets,
+                target_input: self.stores.target_input.as_slice(),
+                vectors: self.host.vectors(),
+                source_kind: source_kind(self.host.sources()),
+            };
+            let (layout, gradients) = (self.p2p_layout, self.host.gradients());
+            let output = &mut self.stores.target_output;
+            self.link.run(DataKind::Output, |d| {
+                tetraleaf_kernels::p2p::p2p(d, layout, gradients, &inputs, output.as_slice_mut())
+            });
+            return;
+        }
+        self.fetch_output(&leaves);
+        if !self.healthy() {
+            return;
+        }
+        self.host.p2p(P2p {
+            target_output: output_mirror(&mut self.mirrors).range_mut(leaves.clone()),
+            ..batch
+        });
+        self.send_output(&leaves);
+    }
+}
+
+/// The target-output mirror of host-fallback calls, which exists with L2P, M2P or P2P on
+/// the host, the only kinds that call for it.
+fn output_mirror<T>(mirrors: &mut Option<Mirrors<T>>) -> &mut LeafStore<T> {
+    mirrors
+        .as_mut()
+        .and_then(|m| m.target_output.as_mut())
+        .expect(MIRRORS)
+}
+
+/// What [`Fmm`](crate::fmm::Fmm) needs of a device operator, for either precision: the
+/// operator is created for the concrete f32 or f64 ([`driver`]) and held as
+/// `Box<dyn DeviceDriver<T>>`, so `Fmm` keeps its bounds.
+pub(crate) trait DeviceDriver<T: SimdScalar>: FmmOperator<Value = T> + Send {
+    fn host(&self) -> &LaplaceOperator<T>;
+    fn host_mut(&mut self) -> &mut LaplaceOperator<T>;
+    fn load_points(
+        &mut self,
+        sources: &LeafStore<T>,
+        target_input: &LeafStore<T>,
+    ) -> Result<(), FmmError>;
+    fn begin_evaluation(&mut self, charges: Vec<T>);
+    fn open_stage(&mut self);
+    fn close_stage(&mut self, stage: DeviceStage);
+    fn stage_timings(&self) -> Option<DeviceStageTimings>;
+    fn sync(&mut self);
+    fn open_call_window(&mut self) -> Option<TimingWindow>;
+    fn close_call_window(&mut self, window: TimingWindow) -> Option<WindowTime>;
+    fn read_output(&mut self) -> Result<DeviceOutput<'_, T>, KernelError>;
+    fn download_target_output(&mut self) -> Result<LeafStore<T>, KernelError>;
+    fn report(&self) -> &DeviceReport;
+    fn counters(&self) -> DeviceCounters;
+    fn download_views(&mut self) -> Result<ViewsImage, KernelError>;
+    fn download_expansions(&mut self) -> Result<(Vec<T>, Vec<T>), KernelError>;
+    fn inject_error(&mut self);
+}
+
+impl<T: DeviceScalar> DeviceDriver<T> for DeviceOperator<T> {
+    fn host(&self) -> &LaplaceOperator<T> {
+        DeviceOperator::host(self)
+    }
+    fn host_mut(&mut self) -> &mut LaplaceOperator<T> {
+        DeviceOperator::host_mut(self)
+    }
+    fn load_points(
+        &mut self,
+        sources: &LeafStore<T>,
+        target_input: &LeafStore<T>,
+    ) -> Result<(), FmmError> {
+        DeviceOperator::load_points(self, sources, target_input)
+    }
+    fn begin_evaluation(&mut self, charges: Vec<T>) {
+        DeviceOperator::begin_evaluation(self, charges);
+    }
+    fn open_stage(&mut self) {
+        DeviceOperator::open_stage(self);
+    }
+    fn close_stage(&mut self, stage: DeviceStage) {
+        DeviceOperator::close_stage(self, stage);
+    }
+    fn stage_timings(&self) -> Option<DeviceStageTimings> {
+        DeviceOperator::stage_timings(self)
+    }
+    fn sync(&mut self) {
+        DeviceOperator::sync(self);
+    }
+    fn open_call_window(&mut self) -> Option<TimingWindow> {
+        DeviceOperator::open_call_window(self)
+    }
+    fn close_call_window(&mut self, window: TimingWindow) -> Option<WindowTime> {
+        DeviceOperator::close_call_window(self, window)
+    }
+    fn read_output(&mut self) -> Result<DeviceOutput<'_, T>, KernelError> {
+        DeviceOperator::read_output(self)
+    }
+    fn download_target_output(&mut self) -> Result<LeafStore<T>, KernelError> {
+        DeviceOperator::download_target_output(self)
+    }
+    fn report(&self) -> &DeviceReport {
+        DeviceOperator::report(self)
+    }
+    fn counters(&self) -> DeviceCounters {
+        DeviceOperator::counters(self)
+    }
+    fn download_views(&mut self) -> Result<ViewsImage, KernelError> {
+        DeviceOperator::download_views(self)
+    }
+    fn download_expansions(&mut self) -> Result<(Vec<T>, Vec<T>), KernelError> {
+        DeviceOperator::download_expansions(self)
+    }
+    fn inject_error(&mut self) {
+        DeviceOperator::inject_error(self);
+    }
+}
+
+/// `value` as a `U`, where `T` and `U` are one type: `SimdScalar` is implemented for f32
+/// and f64 only, so generic code that has checked the type may convert between `T` and
+/// the concrete type it names.
+fn same_type<T: 'static, U: 'static>(value: T) -> U {
+    *(Box::new(value) as Box<dyn Any>)
+        .downcast::<U>()
+        .unwrap_or_else(|_| panic!("the two types are one"))
+}
+
+/// Creates the device operator of `host` for the precision of `T` ([`DeviceOperator::new`]).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn driver<T: SimdScalar + Stored + Equivalence + Default>(
+    host: LaplaceOperator<T>,
+    device: Device,
+    plan: &Plan,
+    counts: (&[usize], &[usize]),
+    exchanges: &ExchangeLists,
+    caller: CallerOrder<'_>,
+    options: &DeviceOptions,
+    tuner: Tuner,
+) -> Result<Box<dyn DeviceDriver<T>>, FmmError> {
+    #[allow(clippy::too_many_arguments)]
+    fn concrete<E: DeviceScalar, T: SimdScalar>(
+        host: LaplaceOperator<T>,
+        device: Device,
+        plan: &Plan,
+        counts: (&[usize], &[usize]),
+        exchanges: &ExchangeLists,
+        caller: CallerOrder<'_>,
+        options: &DeviceOptions,
+        tuner: Tuner,
+    ) -> Result<Box<dyn DeviceDriver<T>>, FmmError> {
+        let host: LaplaceOperator<E> = same_type(host);
+        let operator = DeviceOperator::new(
+            host, device, plan, counts, exchanges, caller, options, tuner,
+        )?;
+        let boxed: Box<dyn DeviceDriver<E>> = Box::new(operator);
+        Ok(same_type(boxed))
+    }
+    match T::PRECISION {
+        tetraleaf_tables::cache::Precision::F32 => concrete::<f32, T>(
+            host, device, plan, counts, exchanges, caller, options, tuner,
+        ),
+        tetraleaf_tables::cache::Precision::F64 => concrete::<f64, T>(
+            host, device, plan, counts, exchanges, caller, options, tuner,
+        ),
+    }
+}
+
+/// The precision of `T` in `tetraleaf-kernels`' terms.
+pub(crate) fn precision_of<T: Stored>() -> tetraleaf_kernels::Precision {
+    match T::PRECISION {
+        tetraleaf_tables::cache::Precision::F32 => tetraleaf_kernels::Precision::F32,
+        tetraleaf_tables::cache::Precision::F64 => tetraleaf_kernels::Precision::F64,
+    }
+}
+
+/// The M2L strategy of a device FMM of degree p under `M2lStrategy::Auto` with M2L on the
+/// device (T12, [`crate::tune`], "When tuning runs"), decided before the tables are built,
+/// since it decides which tables the host and the device build: from the cache, by the
+/// static rule, or by timing rotation against dense with each M2L GEMM candidate on the
+/// plan's largest V level, standalone on `device` (the level's multipoles and locals, its
+/// V view, and the candidate's tables through `table_cache` when given, uploaded for the
+/// timing and freed after). At p ≥ 12 without `table_cache` the dense candidate would
+/// take seconds to build, so the strategy keeps the static rule there and is not stored.
+/// Where dense wins, the GEMM it won with becomes the decision of the M2L level calls of
+/// the largest level's bucket.
+pub(crate) fn tune_strategy<T: Stored>(
+    tuner: &mut Tuner,
+    device: &mut Device,
+    plan: &Plan,
+    p: usize,
+    table_cache: Option<&Path>,
+    budget: Option<u64>,
+) -> M2lStrategy {
+    match T::PRECISION {
+        tetraleaf_tables::cache::Precision::F32 => {
+            strategy::<f32>(tuner, device, plan, p, table_cache, budget)
+        }
+        tetraleaf_tables::cache::Precision::F64 => {
+            strategy::<f64>(tuner, device, plan, p, table_cache, budget)
+        }
+    }
+}
+
+/// [`tune_strategy`] in `T`.
+fn strategy<T: DeviceScalar>(
+    tuner: &mut Tuner,
+    device: &mut Device,
+    plan: &Plan,
+    p: usize,
+    table_cache: Option<&Path>,
+    budget: Option<u64>,
+) -> M2lStrategy {
+    let precision = T::FLOAT;
+    let info = device.info().clone();
+    let n = (p + 1) * (p + 1);
+    let fixed = static_strategy(info.backend, precision, p);
+    // A budget the builder names holds for the dense candidates, as for the plans.
+    let dense: Vec<Candidate> = gemm_candidates(&info, precision, n, OperatorKind::M2l, false)
+        .into_iter()
+        .map(|choice| {
+            Candidate::Dense(GemmChoice {
+                budget: budget.unwrap_or(choice.budget),
+                ..choice
+            })
+        })
+        .collect();
+    let first = match fixed {
+        M2lStrategy::Rotation => Candidate::Rotation,
+        _ => dense[0],
+    };
+    let candidates: Vec<Candidate> = if fixed == M2lStrategy::Rotation {
+        std::iter::once(Candidate::Rotation).chain(dense).collect()
+    } else {
+        dense.into_iter().chain([Candidate::Rotation]).collect()
+    };
+    if tuner.enabled()
+        && tuner.cached(Decision::Strategy).is_none()
+        && p >= 12
+        && table_cache.is_none()
+    {
+        tuner.record_static(
+            Decision::Strategy,
+            first,
+            "the dense candidate at p ≥ 12 needs a table cache: not tuned, not stored".to_owned(),
+        );
+        return fixed;
+    }
+    let (level, pairs) = (0..plan.nlevels())
+        .map(|l| (l, plan.level(l).v().len()))
+        .max_by_key(|&(l, k)| (k, std::cmp::Reverse(l)))
+        .unwrap_or((0, 0));
+    tuner.start_phase();
+    let mut bench: Option<StrategyBench<'_, T>> = None;
+    let choice = tuner.decide(
+        Decision::Strategy,
+        (Some(level), pairs),
+        candidates,
+        |candidate, deadline| {
+            if bench.is_none() {
+                bench = Some(StrategyBench::new(device, plan, level)?);
+            }
+            let bench = bench.as_mut().expect("created above");
+            match candidate {
+                Candidate::Dense(choice) => {
+                    bench.time_dense(device, (p, table_cache), choice, deadline)
+                }
+                _ => bench.time_rotation(device, (p, table_cache), deadline),
+            }
+        },
+    );
+    drop(bench);
+    tuner.end_phase();
+    if choice.strategy() == Some(M2lStrategy::Dense) {
+        tuner.record_dense_gemm(bucket(pairs));
+    }
+    choice.strategy().unwrap_or(fixed)
+}
+
+/// The device data of the strategy decision (T12): the largest V level's multipoles and
+/// locals (zero), its V view (host and device), and each candidate's tables, created when
+/// first timed.
+struct StrategyBench<'a, T: DeviceFloat> {
+    boxes: usize,
+    host_view: &'a VList,
+    view: GroupedView,
+    multipoles: DeviceBuffer<T>,
+    locals: DeviceBuffer<T>,
+    dense: Option<(Tables<T>, TranslationScratch<T>)>,
+    rotation: Option<(DeviceRotation<T>, RotationPlan)>,
+}
+
+impl<'a, T: DeviceScalar> StrategyBench<'a, T> {
+    fn new(device: &mut Device, plan: &'a Plan, level: usize) -> Result<Self, Rejection> {
+        let boxes = plan.index().len(level);
+        let host_view = plan.level(level).v();
+        let view = GroupedView::upload(device, &grouped_arrays(host_view), boxes)?;
+        Ok(Self {
+            boxes,
+            host_view,
+            view,
+            multipoles: device.alloc(0)?,
+            locals: device.alloc(0)?,
+            dense: None,
+            rotation: None,
+        })
+    }
+
+    /// Allocates the level's multipoles and locals for order n, once.
+    fn buffers(&mut self, device: &mut Device, n: usize) -> Result<(), Rejection> {
+        if self.multipoles.len() != self.boxes * n {
+            self.multipoles = device.alloc(self.boxes * n)?;
+            self.locals = device.alloc(self.boxes * n)?;
+        }
+        Ok(())
+    }
+
+    /// Times the level's dense M2L with `choice`.
+    fn time_dense(
+        &mut self,
+        device: &mut Device,
+        (p, table_cache): (usize, Option<&Path>),
+        choice: &GemmChoice,
+        deadline: Instant,
+    ) -> Result<Duration, Rejection> {
+        let n = (p + 1) * (p + 1);
+        let info = device.info().clone();
+        if let GemmKind::HandWritten(layout) = choice.gemm {
+            layout
+                .check_for(&info, n, T::FLOAT)
+                .map_err(|e| Rejection::Unregistered(e.to_string()))?;
+        }
+        self.buffers(device, n)?;
+        if self.dense.is_none() {
+            let library = library_applies(info.backend, T::FLOAT, n);
+            let batch_offsets = self.host_view.batch_offsets();
+            // The scratch of the first candidate timed (with the budget of every candidate the
+            // tuner registers, the static rule's) and of the library at that budget.
+            let mut columns = ScratchColumns::default();
+            for c in [
+                *choice,
+                GemmChoice {
+                    budget: choice.budget,
+                    ..GemmChoice::library(T::FLOAT)
+                },
+            ] {
+                columns.cover(c.settings(&info, n).size(
+                    info.backend,
+                    T::FLOAT,
+                    batch_offsets,
+                    self.boxes,
+                ));
+            }
+            let needed = Tables::<T>::bytes(n, 316, library) + columns.bytes::<T>(n);
+            if let Some(limit) = device.available_memory()
+                && needed > limit
+            {
+                return Err(Rejection::Skipped(format!(
+                    "the dense tables and scratch need {needed} bytes, {limit} are available"
+                )));
+            }
+            let tables: M2lTables<T> = match table_cache {
+                Some(dir) => TableCache::new(dir).load_or_build(p).0,
+                None => M2lTables::build(p),
+            };
+            let tables = Tables::upload(device, tables.matrices().as_slice(), n, library)?;
+            let scratch = columns.alloc::<T>(device, n)?;
+            self.dense = Some((tables, scratch));
+        }
+        let (tables, scratch) = self.dense.as_mut().expect("created above");
+        if choice.is_library() && !tables.has_library_copy() {
+            return Err(Rejection::Unregistered(
+                "the tables have no library copy".into(),
+            ));
+        }
+        // A candidate with chunks wider than the scratch so far (a larger budget, offered by
+        // a `TuningHook`) gets a scratch of its own width: the scratch is this bench's, and
+        // temporary.
+        let held = ScratchColumns::of(scratch, n);
+        let mut wanted = held;
+        wanted.cover(choice.settings(&info, n).size(
+            info.backend,
+            T::FLOAT,
+            self.host_view.batch_offsets(),
+            self.boxes,
+        ));
+        if wanted != held {
+            let extra = wanted.bytes::<T>(n).saturating_sub(held.bytes::<T>(n));
+            if let Some(limit) = device.available_memory()
+                && extra > limit
+            {
+                return Err(Rejection::Skipped(format!(
+                    "its chunks need a scratch of {} and {} values, {limit} bytes are available",
+                    wanted.gathered * n,
+                    wanted.products * n
+                )));
+            }
+            *scratch = TranslationScratch::<T>::new(device, 0)?;
+            *scratch = wanted.alloc::<T>(device, n)?;
+        }
+        let plan = GroupedPlan::new(
+            device,
+            &grouped_arrays(self.host_view),
+            self.boxes,
+            &choice.settings(&info, n),
+            tables,
+            scratch,
+        )?;
+        if choice.is_library() && plan.gemm() != Gemm::Library {
+            return Err(Rejection::Unregistered(format!(
+                "the library does not take the level's shapes: {}",
+                plan.library_rejection().unwrap_or("not a candidate")
+            )));
+        }
+        let (view, multipoles, locals) = (&self.view, &self.multipoles, &mut self.locals);
+        time_launches(device, deadline, |d| {
+            grouped(
+                d,
+                &plan,
+                view,
+                Accumulate::Rows,
+                tables,
+                Operands::Separate {
+                    input: multipoles.as_slice(),
+                    output: locals.as_slice_mut(),
+                },
+                scratch,
+            )
+        })
+        .map_err(Rejection::from)
+    }
+
+    /// Times the level's rotation M2L in the backend's default layout.
+    fn time_rotation(
+        &mut self,
+        device: &mut Device,
+        (p, table_cache): (usize, Option<&Path>),
+        deadline: Instant,
+    ) -> Result<Duration, Rejection> {
+        let n = (p + 1) * (p + 1);
+        let layout = RotationLayout::default_for(device.info(), p);
+        layout
+            .check(device.info(), p, T::FLOAT)
+            .map_err(|e| Rejection::Unregistered(e.to_string()))?;
+        self.buffers(device, n)?;
+        if self.rotation.is_none() {
+            let tables: HostRotationTables<T> = match table_cache {
+                Some(dir) => TableCache::new(dir).load_or_build(p).0,
+                None => HostRotationTables::build(p),
+            };
+            let arrays = RotationHostArrays::new(tables.tables(RotationOperator::M2l));
+            let rotation = DeviceRotation::upload(device, &arrays.arrays())?;
+            let plan = RotationPlan::new(device, &grouped_arrays(self.host_view), self.boxes)?;
+            self.rotation = Some((rotation, plan));
+        }
+        let (rotation, plan) = self.rotation.as_ref().expect("created above");
+        let (view, multipoles, locals) = (&self.view, &self.multipoles, &mut self.locals);
+        time_launches(device, deadline, |d| {
+            tetraleaf_kernels::rotation::m2l(
+                d,
+                layout,
+                plan,
+                view,
+                rotation,
+                multipoles.as_slice(),
+                locals.as_slice_mut(),
+            )
+        })
+        .map_err(Rejection::from)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strength_slots_follow_the_source_chunks() {
+        let charges = |counts: &[usize], m| strength_slots(counts, SourceKind::Charges, m);
+        // Leaves of 2, 0 and 3 points: chunks of 8, 0 and 12 values.
+        assert_eq!(charges(&[2, 0, 3], 1).unwrap(), vec![6, 7, 17, 18, 19]);
+        assert_eq!(point_offsets(&[2, 0, 3]).unwrap(), vec![0, 2, 2, 5]);
+        assert!(charges(&[], 1).unwrap().is_empty());
+        // Two vectors (Phase 6 T5): chunks of 10, 0 and 15 values, the two charges of a
+        // point together after the coordinates.
+        assert_eq!(
+            charges(&[2, 0, 3], 2).unwrap(),
+            vec![6, 7, 8, 9, 19, 20, 21, 22, 23, 24]
+        );
+        // Dipoles (Phase 6 T8d): chunks of 12 and 18 values, the three components of a
+        // moment together after the coordinates.
+        assert_eq!(
+            strength_slots(&[2, 3], SourceKind::Dipoles, 1).unwrap(),
+            vec![6, 7, 8, 9, 10, 11, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+        );
+        // Charges and dipoles: chunks of 14 and 21 values; per point its charge, then its
+        // moment, the charges of a leaf before its moments.
+        assert_eq!(
+            strength_slots(&[2, 3], SourceKind::ChargesAndDipoles, 1).unwrap(),
+            vec![
+                6, 8, 9, 10, 7, 11, 12, 13, 23, 26, 27, 28, 24, 29, 30, 31, 25, 32, 33, 34
+            ]
+        );
+    }
+
+    /// The chunk budget of several vectors (Phase 6 T5): per vector unless named, capped at
+    /// an eighth of the device's memory, the choice's own settings for one vector.
+    #[test]
+    fn vector_settings_scale_the_budget_unless_named() {
+        let info = DeviceInfo {
+            backend: tetraleaf_kernels::BackendKind::Metal,
+            name: "Test Device".into(),
+            compiler: "test<msl>".into(),
+            cubecl_version: tetraleaf_kernels::CUBECL_VERSION,
+            f32: true,
+            f64: false,
+            plane_size: (32, 32),
+            max_shared_memory: 32_768,
+            max_units_per_cube: 1024,
+            max_cube_count: (65_535, 65_535, 65_535),
+            max_memory: None,
+        };
+        let n = 81;
+        let choice = GemmChoice {
+            budget: 128 << 20,
+            ..GemmChoice::hand_written(GemmLayout::default_for(&info, n))
+        };
+        assert_eq!(
+            vector_settings(&choice, &info, (n, 1), None, DeviceReduction::ByChunk),
+            choice.settings(&info, n)
+        );
+        let budget = |info: &DeviceInfo, m, named| {
+            vector_settings(&choice, info, (n, m), named, DeviceReduction::ByChunk).budget
+        };
+        assert_eq!(budget(&info, 8, None), 8 * (128 << 20));
+        assert_eq!(budget(&info, 8, Some(16 << 20)), 128 << 20);
+        // On Metal at most eight vectors' worth, on CUDA one vector's (Phase 6 T7); on the
+        // CPU runtime m.
+        assert_eq!(budget(&info, 32, None), 8 * (128 << 20));
+        let on = |backend| DeviceInfo {
+            backend,
+            ..info.clone()
+        };
+        assert_eq!(
+            budget(&on(tetraleaf_kernels::BackendKind::Cuda), 32, None),
+            128 << 20
+        );
+        assert_eq!(
+            budget(&on(tetraleaf_kernels::BackendKind::Cpu), 32, None),
+            32 * (128 << 20)
+        );
+        // An eighth of 4 GB is 512 MB: four vectors' worth, never below one vector's.
+        let small = DeviceInfo {
+            max_memory: Some(4 << 30),
+            ..info.clone()
+        };
+        assert_eq!(budget(&small, 32, None), 512 << 20);
+        let tiny = DeviceInfo {
+            max_memory: Some(256 << 20),
+            ..info
+        };
+        assert_eq!(budget(&tiny, 32, None), 128 << 20);
+    }
+
+    /// The plane-wave defaults by backend (Helmholtz CH7.5c): the layout by backend and p,
+    /// a named cube as named; the budget 1 GB on Metal within an eighth of the memory, the
+    /// translation budget elsewhere.
+    #[test]
+    fn plane_wave_defaults_follow_the_backend_and_p() {
+        use tetraleaf_kernels::BackendKind::{Cpu, Cuda, Metal};
+        let on = |backend, max_memory| DeviceInfo {
+            backend,
+            name: "Test Device".into(),
+            compiler: "test".into(),
+            cubecl_version: tetraleaf_kernels::CUBECL_VERSION,
+            f32: true,
+            f64: backend != Metal,
+            plane_size: (32, 32),
+            max_shared_memory: 32_768,
+            max_units_per_cube: 1024,
+            max_cube_count: (65_535, 65_535, 65_535),
+            max_memory,
+        };
+        let auto = |info: &DeviceInfo, p| DevicePlaneWaveLayout::Auto.resolve(info, p);
+        let cube = |units| PlaneWaveLayout::Cube { units };
+        for p in [3, 12, 13, 20] {
+            assert_eq!(auto(&on(Cpu, None), p), PlaneWaveLayout::Cpu);
+            assert_eq!(auto(&on(Metal, None), p), cube(128));
+            assert_eq!(
+                DevicePlaneWaveLayout::Cube { units: 32 }.resolve(&on(Cuda, None), p),
+                cube(32)
+            );
+        }
+        assert_eq!(auto(&on(Cuda, None), 12), cube(128));
+        assert_eq!(auto(&on(Cuda, None), 13), cube(256));
+        assert_eq!(auto(&on(Cuda, None), 20), cube(256));
+        let narrow = DeviceInfo {
+            max_units_per_cube: 192,
+            ..on(Cuda, None)
+        };
+        assert_eq!(auto(&narrow, 18), cube(192));
+
+        assert_eq!(default_plane_wave_budget(&on(Metal, None)), 1 << 30);
+        assert_eq!(
+            default_plane_wave_budget(&on(Metal, Some(24 << 30))),
+            1 << 30
+        );
+        assert_eq!(
+            default_plane_wave_budget(&on(Metal, Some(4 << 30))),
+            512 << 20
+        );
+        assert_eq!(
+            default_plane_wave_budget(&on(Metal, Some(256 << 20))),
+            128 << 20
+        );
+        assert_eq!(default_plane_wave_budget(&on(Cpu, None)), 128 << 20);
+        assert_eq!(default_plane_wave_budget(&on(Cuda, None)), 2 << 30);
+        assert_eq!(
+            default_plane_wave_budget(&on(Cuda, Some(96 << 30))),
+            default_scratch_bytes(&on(Cuda, Some(96 << 30)))
+        );
+    }
+
+    /// The column views of several vectors (Phase 6 T5): rows and batches with m columns
+    /// per box, v ascending within a box, and the plan's own arrays for one vector.
+    #[test]
+    fn columns_expand_rows_and_batches() {
+        // Rows: box 0 takes sources 4 (group 1) and 1 (group 5), box 1 nothing, box 2
+        // source 0 (group 2); the batches of groups 0 to 5 hold the same pairs.
+        let view = GroupedArrays::<u8> {
+            row_offsets: &[0, 2, 2, 3],
+            sources: &[4, 1, 0],
+            groups: &[1, 5, 2],
+            batch_offsets: &[0, 0, 1, 2, 2, 2, 3],
+            batch_targets: &[0, 2, 0],
+            batch_sources: &[4, 0, 1],
+        };
+        let one = Columns::of(&view, 1);
+        assert_eq!(one.row_offsets, view.row_offsets);
+        assert_eq!(one.sources, view.sources);
+        assert_eq!(one.groups, view.groups);
+        assert_eq!(one.batch_offsets, view.batch_offsets);
+        assert_eq!(one.batch_targets, view.batch_targets);
+        assert_eq!(one.batch_sources, view.batch_sources);
+        let two = Columns::of(&view, 2);
+        assert_eq!(two.row_offsets, vec![0, 2, 4, 4, 4, 5, 6]);
+        assert_eq!(two.sources, vec![8, 2, 9, 3, 0, 1]);
+        assert_eq!(two.groups, vec![1, 5, 1, 5, 2, 2]);
+        assert_eq!(two.batch_offsets, vec![0, 0, 2, 4, 4, 4, 6]);
+        assert_eq!(two.batch_targets, vec![0, 1, 4, 5, 0, 1]);
+        assert_eq!(two.batch_sources, vec![8, 9, 0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn traffic_by_data_adds_up() {
+        let mut by = TrafficByData::default();
+        let t = Traffic {
+            uploads: 1,
+            upload_bytes: 8,
+            downloads: 2,
+            download_bytes: 16,
+        };
+        by.add(DataKind::Charges, t);
+        by.add(DataKind::Output, t);
+        by.add(DataKind::Output, t);
+        assert_eq!(by.get(DataKind::Output).downloads, 4);
+        assert_eq!(by.total().upload_bytes, 24);
+        assert_eq!(DataKind::ALL.len(), 15);
+        assert!(
+            DataKind::ALL
+                .iter()
+                .enumerate()
+                .all(|(i, &k)| k as usize == i)
+        );
+    }
+
+    #[test]
+    fn same_type_converts_only_between_equal_types() {
+        let x: f32 = same_type::<f32, f32>(1.5);
+        assert_eq!(x, 1.5);
+        assert!(std::panic::catch_unwind(|| same_type::<f32, f64>(1.5)).is_err());
+    }
+}

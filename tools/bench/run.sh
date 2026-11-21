@@ -1,7 +1,7 @@
 #!/bin/sh
 # tools/bench/run.sh: the one-command FMM benchmark (Phase 4S T6). POSIX sh.
 #
-#     tools/bench/run.sh [options of nd-fmm-bench]
+#     tools/bench/run.sh [options of tetraleaf-bench]
 #     tools/bench/run.sh --backend cuda --precision f32,f64 --degree 3,6,8
 #     tools/bench/run.sh --help
 #
@@ -9,7 +9,7 @@
 # `host,cuda` builds with `--features cuda`, the host alone with none), sets every BLAS
 # thread variable to 1 and runs
 #
-#     cargo run --release -p nd-fmm-bench --features ... -- "$@"
+#     cargo run --release -p tetraleaf-bench --features ... -- "$@"
 #
 # from any directory: the report goes to bench-results/ under the current directory
 # unless --output says otherwise. On locust it first sources tools/gh200/env.sh if that
@@ -56,8 +56,8 @@ export GOTO_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 if [ "$(uname -s)" = Darwin ]; then export HWLOC_COMPONENTS="${HWLOC_COMPONENTS--darwin}"; fi
 
 if [ -n "$features" ]; then
-    exec cargo run --release --manifest-path "$root/Cargo.toml" -p nd-fmm-bench \
+    exec cargo run --release --manifest-path "$root/Cargo.toml" -p tetraleaf-bench \
         --features "$features" -- "$@"
 else
-    exec cargo run --release --manifest-path "$root/Cargo.toml" -p nd-fmm-bench -- "$@"
+    exec cargo run --release --manifest-path "$root/Cargo.toml" -p tetraleaf-bench -- "$@"
 fi

@@ -20,7 +20,7 @@ rule's choice, scored by the option it took as timed in the forced run (a level'
 vary from launch to launch on small levels; CH4.3b1 §4.3), and whether it is within 1.05× of the
 fastest. `summary` prints per machine the levels, those within 1.05×, the seconds lost and at the
 best, and per ε. No timing is asserted; the numbers go into
-fmm-validate/results/helmholtz-ch4-3b2a.md.
+tetraleaf-validate/results/helmholtz-ch4-3b2a.md.
 """
 
 import pathlib

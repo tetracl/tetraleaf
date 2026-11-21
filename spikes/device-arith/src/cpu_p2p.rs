@@ -1,4 +1,4 @@
-//! A CPU-shaped P2P on the CubeCL CPU runtime, against `nd_fmm_simd::P2pKernel` (decision 10).
+//! A CPU-shaped P2P on the CubeCL CPU runtime, against `tetraleaf_simd::P2pKernel` (decision 10).
 //!
 //! The kernel mirrors the Phase 3S NEON kernel (docs/design/simd-p2p.md §4.1–§4.2,
 //! spikes/p2p-simd/SPIKE_REPORT.md): targets in `Vector<T, N>` lanes with N the NEON width
@@ -7,7 +7,7 @@
 //! cleared to 0 where r² = 0. No shared memory and no `sync_cube`. Each unit takes a
 //! contiguous share of the target leaves; one unit per core.
 //!
-//! Inputs are W1's gathered form (`nd_fmm_validate::p2p_kernels`): per target leaf its n_t
+//! Inputs are W1's gathered form (`tetraleaf_validate::p2p_kernels`): per target leaf its n_t
 //! targets and 27 n_t sources. Targets are uploaded transposed, one vector of x, y and z
 //! per N targets, and outputs come back the same way: the kernel's own layout, transposed
 //! on the host and not timed (it is O(n_t) per leaf against O(27 n_t²) pairs).
@@ -15,9 +15,9 @@
 use std::time::Instant;
 
 use cubecl::prelude::*;
-use nd_fmm_simd::P2pKernel;
-use nd_fmm_validate::bench::median_time_per_call;
-use nd_fmm_validate::p2p_kernels::{Accuracy, Set, accuracy};
+use tetraleaf_simd::P2pKernel;
+use tetraleaf_validate::bench::median_time_per_call;
+use tetraleaf_validate::p2p_kernels::{Accuracy, Set, accuracy};
 use rayon::prelude::*;
 
 use crate::backend::{read, sync};
@@ -245,7 +245,7 @@ pub fn read_outputs<T: Real>(client: &Client, out: CpuOutputs) -> Vec<(Vec<T>, V
 pub fn accuracy_on<T: Real>(
     client: &Client,
     sets: &[Set<T>],
-    oracles: &[nd_fmm_validate::p2p_kernels::Oracle],
+    oracles: &[tetraleaf_validate::p2p_kernels::Oracle],
     gradients: bool,
     units: u32,
 ) -> Accuracy {
@@ -260,7 +260,7 @@ pub fn accuracy_on<T: Real>(
 }
 
 /// How many outputs (φ and ∇φ components) of the kernel on `sets` equal those of
-/// `kernel` (`nd-fmm-simd`) bit for bit, and how many there are.
+/// `kernel` (`tetraleaf-simd`) bit for bit, and how many there are.
 pub fn identical_to_simd<T: Real>(
     client: &Client,
     kernel: P2pKernel<T>,
@@ -369,7 +369,7 @@ pub fn launch_latency<T: Real>(client: &Client, pool: &CpuPool, leaves: usize, u
     times[7]
 }
 
-/// Seconds per evaluation of `leaves` leaves (the pool cycled) by `nd_fmm_simd`'s kernel,
+/// Seconds per evaluation of `leaves` leaves (the pool cycled) by `tetraleaf_simd`'s kernel,
 /// on one thread or on a rayon pool of `threads` threads.
 pub fn time_simd<T: Real>(
     kernel: P2pKernel<T>,

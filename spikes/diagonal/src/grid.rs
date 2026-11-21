@@ -7,16 +7,16 @@
 //! map onto itself under x → −x, y → −y and x ↔ y ([`crate::classes`]); the nodes in cos θ
 //! are symmetric, so z → −z maps the rings onto each other.
 //!
-//! With the basis of S7 (`nd_fmm_spike_truncation::harmonics`),
+//! With the basis of S7 (`tetraleaf_spike_truncation::harmonics`),
 //! Yₙ⁰ = Θₙ⁰(θ), Yₙ^{+m} = Θₙᵐ(θ) cos mφ, Yₙ^{−m} = Θₙᵐ(θ) sin mφ, where Θₙᵐ = p̄ₙᵐ(cos θ)/√π
 //! for m ≥ 1 and p̄ₙ⁰(cos θ)/√(2π) for m = 0; a ring's Θ is S7's Yₙᵐ at φ = 0.
 //!
 //! Everything is computed in double-double and rounded to the working precision, as the
 //! tables of §6.2 are rounded when stored.
 
-use nd_fmm_spike_truncation::coaxial::gauss_legendre;
-use nd_fmm_spike_truncation::harmonics::{Harmonics, Polar, idx};
-use nd_fmm_spike_truncation::real::{Dd, Real};
+use tetraleaf_spike_truncation::coaxial::gauss_legendre;
+use tetraleaf_spike_truncation::harmonics::{Harmonics, Polar, idx};
+use tetraleaf_spike_truncation::real::{Dd, Real};
 
 /// Index of (n, m), 0 ≤ m ≤ n, in a triangle.
 #[inline(always)]

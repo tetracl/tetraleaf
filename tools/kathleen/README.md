@@ -24,7 +24,7 @@ lifted from Phase 5N's 2 nodes. 4-node jobs run in `small` ("Jobs and QoS").
 | `remote.sh` | M3 Max | runs a short command in that copy on the login node, inside `env.sh` |
 | `submit.sh` | M3 Max | submits a job script from that copy, waits for it (polling `sacct`), prints its times, wait, state and the output's tail |
 | `jobs/lib.sh` | jobs | shared by the job scripts: `env.sh`, the per-job `TMPDIR` on every node, the batch shell bound to the physical cores, `step` (timed, recorded, carries on), the summary table at exit |
-| `jobs/build.sbatch` | 1 node, `singlenode` | fetch, release build, `cargo test -p nd-fmm-math`, every test executable, the release examples, sizes |
+| `jobs/build.sbatch` | 1 node, `singlenode` | fetch, release build, `cargo test -p tetraleaf-math`, every test executable, the release examples, sizes |
 | `jobs/check.sbatch` | 1 node, `singlenode` | the CPU-side checks of root CLAUDE.md in groups: `root`, `strict`, `simd`, `kernels` |
 | `jobs/mpi.sbatch` | 1 node `singlenode`, 2 nodes `test`, or 4 nodes `small` | `.github/scripts/run-mpi-tests.sh` build, then run at the given rank counts with `mpirun --bind-to core` |
 | `jobs/launcher.sbatch` | 2 nodes, `test` (2 × 40 ranks fixed: a record of decision 4, not run at 4 nodes) | decision 4: `mpirun` against `srun --mpi=pmix` at 2 × 40 ranks, the bindings, the transport between and within nodes |
@@ -59,7 +59,7 @@ built without those features, and only rlst's own tests link OpenBLAS); the `ope
 and `fftw` modules are loaded as the brief pins them, so that a later need finds them.
 The llvm module sets `CC` and `CXX` to its clang; `env.sh` sets them back to the gcc
 module's `gcc` and `g++`. The gcc module adds no library path, so a binary with C++
-compiled by its `g++` (CubeCL's CPU runtime in nd-fmm-kernels) loaded RHEL 9's older
+compiled by its `g++` (CubeCL's CPU runtime in tetraleaf-kernels) loaded RHEL 9's older
 `/usr/lib64/libstdc++.so.6` and failed (`GLIBCXX_3.4.30' not found`, job 238824);
 `env.sh` puts the gcc module's runtime directory first on `LD_LIBRARY_PATH`. rustc links with rust-lld by default on x86_64 Linux, through
 the gcc module's `cc` driver; nothing needed GNU ld.
@@ -113,7 +113,7 @@ ssh kathleen 'cd /scratch/scratch/ucahtbe/fmm/src/<branch> && bash -l tools/kath
 
 `setup.sh` runs on the login node: it only downloads and unpacks (rustup and the
 toolchain: 20 seconds, 543 MB). The first build job downloads the crates and, for
-nd-fmm-kernels' `cpu` feature, the x86_64 Linux tracel-llvm bundle (compute nodes reach
+tetraleaf-kernels' `cpu` feature, the x86_64 Linux tracel-llvm bundle (compute nodes reach
 crates.io and GitHub).
 
 ## Daily loop
@@ -122,9 +122,9 @@ On the M3 Max, outside the sandbox:
 
 ```sh
 tools/kathleen/sync.sh
-tools/kathleen/submit.sh build.sbatch                      # build; nd-fmm-math's tests
+tools/kathleen/submit.sh build.sbatch                      # build; tetraleaf-math's tests
 tools/kathleen/submit.sh check.sbatch root                 # the root checks
-tools/kathleen/submit.sh run.sbatch 'cargo test -p nd-fmm-exec'
+tools/kathleen/submit.sh run.sbatch 'cargo test -p tetraleaf-exec'
 tools/kathleen/submit.sh --qos=test --nodes=2 -- mpi.sbatch 80
 tools/kathleen/submit.sh --qos=small --nodes=4 --time=00:45:00 -- mpi.sbatch 160
 tools/kathleen/remote.sh 'cargo fmt -- --check; lquota'   # login node: light only
@@ -148,12 +148,12 @@ as the job scripts build them:
 | --- | --- | --- |
 | 238823, cold (empty registry and `target/`) | `cargo fetch` (crates onto Lustre) | 243 s |
 | | `cargo build --release` (default members) | 53 s |
-| | `cargo test -p nd-fmm-math` (build and run) | 15 s |
+| | `cargo test -p tetraleaf-math` (build and run) | 15 s |
 | | `cargo test --workspace --no-run` (every test executable, debug; downloads the tracel-llvm bundle) | 131 s |
-| | release examples (nd-octree's, `scaling`) | 15 s |
+| | release examples (tetraleaf-octree's, `scaling`) | 15 s |
 | | the whole job | 8 min 21 s |
 | 238844, warm (unchanged tree) | the same steps | 74 s in all, 50 s of them `du` over `target/` |
-| 238824, first `check.sbatch` | every clippy, `cargo doc`, the CUDA type-checks, the CPU-runtime build of nd-fmm-kernels | 8 min 55 s with the tests |
+| 238824, first `check.sbatch` | every clippy, `cargo doc`, the CUDA type-checks, the CPU-runtime build of tetraleaf-kernels | 8 min 55 s with the tests |
 
 Results of the checks on Kathleen (jobs 238824, 238833, 238839, 238830, 238825, 238841):
 
@@ -162,7 +162,7 @@ Results of the checks on Kathleen (jobs 238824, 238833, 238839, 238830, 238825, 
 | `cargo fmt -- --check`; `cargo clippy -- -D warnings`; `--examples`; `cargo doc --no-deps` | pass |
 | `cargo test` (default members) | pass: 57 executables, 702 passed, 45 ignored (as on the M3 Max) |
 | `cargo clippy --workspace --all-targets -- -D warnings` | pass |
-| `cargo test --workspace --no-fail-fast` | 67 executables, 744 passed, 45 ignored, **2 failed**, both in the Phase 3S spike `spikes/p2p-simd` (not a default member, never built in CI): `kernel_rsqrt_within_contract` (its AVX2 f64 candidate "est+S2", the `rsqrtps` estimate and two Newton steps, reaches 289 u against 4 u: the estimate on this Intel CPU is coarser than where the spike was measured) and the `compare` example's `compare_core_on_a_small_cell` (green-kernels' AVX2 f64 gradient 1.17e-14 against the 1e-14 bound; ours 4.3e-16). nd-fmm-simd's own kernels pass (below) |
+| `cargo test --workspace --no-fail-fast` | 67 executables, 744 passed, 45 ignored, **2 failed**, both in the Phase 3S spike `spikes/p2p-simd` (not a default member, never built in CI): `kernel_rsqrt_within_contract` (its AVX2 f64 candidate "est+S2", the `rsqrtps` estimate and two Newton steps, reaches 289 u against 4 u: the estimate on this Intel CPU is coarser than where the spike was measured) and the `compare` example's `compare_core_on_a_small_cell` (green-kernels' AVX2 f64 gradient 1.17e-14 against the 1e-14 bound; ours 4.3e-16). tetraleaf-simd's own kernels pass (below) |
 | run-tests-simd: clippy, tests, `--release -- --ignored` | pass. ISAs run: scalar, avx2 (detected avx2; avx512f present, not built). Contract: f32 every float in [1, 4), avx2 max 1.500 u (scalar 1.500 u); f64 10⁷ samples, avx2 1.000 u (scalar 1.496 u); large term tests within 4.2 u (potential) and 8.7 u (gradient) |
 | run-tests-kernels: clippy `--features cpu`, check `--features cuda` (kernels, exec), CPU-runtime tests in release | pass: 32 and 73 tests passed, 2 ignored (after the `LD_LIBRARY_PATH` fix of `env.sh`, "Pins") |
 | MPI test list, one node, 1, 2, 4, 8 ranks (`mpi.sbatch`) | 36 of 36 launches pass (job 238825) |
@@ -199,7 +199,7 @@ cores per node, no hyperthreads). From `sacctmgr show qos` (2026-10-10):
 | `small` (4 nodes, probe only) | 1 | still pending after 7 min 34 s, cancelled (docs/phase5n/kathleen-probe.md) |
 
 Phase 5S T0, Sunday 2026-10-11, 12:24–17:43, with all 188 nodes allocated and about 1,600
-two-node `small` jobs pending at noon (fmm-validate/results/phase5n-kathleen.md, "Phase
+two-node `small` jobs pending at noon (tetraleaf-validate/results/phase5n-kathleen.md, "Phase
 5S, T0", S0.3):
 
 | QoS | Jobs | Waits |
@@ -254,7 +254,7 @@ wait, the largest, the factor). At 160 ranks on 4 nodes, dense bursts (every ran
 a few KB to every other at once: an `MPI_Alltoallv` or immediate sends) lose packets in
 about half the phases, and each loss stalled the receiving rank by about 160 ms, and the
 other ranks at their next collective. It never happened on 2 nodes. With `10:40:2` the
-same losses cost about 10 ms (jobs 604021, 604022; fmm-validate/results/phase5s-t8.md
+same losses cost about 10 ms (jobs 604021, 604022; tetraleaf-validate/results/phase5s-t8.md
 §9.3). T8's full correctness job passed with it at 4 nodes, 640 ranks oversubscribed
 included (job 604023). The `ofi` MTL hung in the same test.
 
@@ -305,7 +305,7 @@ tools/kathleen/submit.sh --qos=small --nodes=4 --time=03:00:00 \
 
 `LAUNCH_TIMEOUT` (1,800 s) bounds each `scaling` launch. T2's runs (jobs 447987 at 2
 nodes, 19 min 38 s; 447366 at 4 nodes, 10 min 39 s) and their times are in
-`fmm-validate/results/phase5s-t2.md`. If every launch across the nodes fails in
+`tetraleaf-validate/results/phase5s-t2.md`. If every launch across the nodes fails in
 `MPI_Init` with "assign_context command failed: Device or resource busy" on one node
 (T2's first attempt, job 447359, node-c11a-011), that node's HFI contexts are taken:
 resubmit with `--exclude=<node>`.
@@ -313,7 +313,7 @@ resubmit with `--exclude=<node>`.
 ## Scaling sweeps
 
 Phase 5N T2 (docs/phase5n/T2-kathleen-baseline.md, the report
-`fmm-validate/results/phase5n-kathleen.md`). `jobs/sweep.sbatch` runs sweeps of
+`tetraleaf-validate/results/phase5n-kathleen.md`). `jobs/sweep.sbatch` runs sweeps of
 `tools/scaling/run.sh` inside one allocation, one step per sweep, with every launch under
 `timeout`; under Slurm, `run.sh` maps the ranks evenly over the job's nodes and each
 node's two sockets (`mpirun --map-by ppr:<ranks per socket>:socket:PE=<threads>
@@ -347,7 +347,7 @@ tools/kathleen/submit.sh --qos=small --nodes=4 --time=00:40:00 '--exclude=node-c
     '--export=ALL,ONLY=^nodes-strong-cube-n1000000-f64-p3-auto-N4-40x1$' -- sweep.sbatch nodes-strong
 ```
 
-The work-weighted cut (Phase 5S T7, `fmm-validate/results/phase5s-t7.md`): `calibrate`
+The work-weighted cut (Phase 5S T7, `tetraleaf-validate/results/phase5s-t7.md`): `calibrate`
 fits the cost model's constants (40 ranks, the three workloads at N = 10⁷, four
 configurations; 8 min of job 603049), `cut` times the first cut against the second at
 the job's nodes (N = 10⁷: 11 min at one node, 6 min at two; `CUT_NS` adds 10⁸ at four),
@@ -361,7 +361,7 @@ tools/kathleen/submit.sh --qos=small --nodes=4 --time=01:30:00 '--export=ALL,CUT
     -- sweep.sbatch cut cut-counts
 ```
 
-The scaling report (Phase 5S T9, `fmm-validate/results/phase5s-kathleen.md`): `t9-strong`
+The scaling report (Phase 5S T9, `tetraleaf-validate/results/phase5s-kathleen.md`): `t9-strong`
 (the cube and the Plummer sphere at N = 10⁷ and 10⁸, f64 p = 3 and 8, f32 p = 8 under `auto`,
 both splits, overlap both, the errors of one charge vector; at N = 10⁷ also the first cut),
 `t9-weak` (2.5 × 10⁴ points per rank at 40 × 1, 10⁶ per socket at 2 × 20, three workloads,

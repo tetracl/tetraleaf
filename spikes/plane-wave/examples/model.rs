@@ -1,9 +1,9 @@
 //! Prints the cost model of the stop rule (src/model.rs) as Markdown:
-//! `cargo run --release -p nd-fmm-spike-plane-wave --example model`.
+//! `cargo run --release -p tetraleaf-spike-plane-wave --example model`.
 
-use nd_fmm_spike_plane_wave::geometry::{Counts, Level};
-use nd_fmm_spike_plane_wave::model::{self, ROTATION_ONE_CORE_MEASURED};
-use nd_fmm_spike_plane_wave::quadrature::Quadrature;
+use tetraleaf_spike_plane_wave::geometry::{Counts, Level};
+use tetraleaf_spike_plane_wave::model::{self, ROTATION_ONE_CORE_MEASURED};
+use tetraleaf_spike_plane_wave::quadrature::Quadrature;
 
 fn main() {
     println!("## Counts per level (uniform)\n");

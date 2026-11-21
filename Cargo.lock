@@ -2761,124 +2761,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d5439c4ad607c3c23abf66de8c8bf57ba8adcd1f129e699851a6e43935d339d"
 
 [[package]]
-name = "nd-fmm-bench"
-version = "0.1.0-dev"
-dependencies = [
- "mpi",
- "nd-fmm-exec",
- "nd-fmm-tables",
- "nd-fmm-validate",
-]
-
-[[package]]
-name = "nd-fmm-exec"
-version = "0.1.0-dev"
-dependencies = [
- "mpi",
- "nd-fmm-kernels",
- "nd-fmm-math",
- "nd-fmm-plan",
- "nd-fmm-ref",
- "nd-fmm-simd",
- "nd-fmm-tables",
- "nd-octree",
- "proptest",
- "rayon",
- "rlst",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "nd-fmm-kernels"
-version = "0.1.0-dev"
-dependencies = [
- "cubecl",
- "cubek-matmul",
- "cubek-std",
- "nd-fmm-math",
- "nd-fmm-ref",
- "nd-fmm-tables",
- "proptest",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "nd-fmm-math"
-version = "0.1.0-dev"
-dependencies = [
- "num-complex",
- "num-traits",
- "proptest",
- "serde_json",
-]
-
-[[package]]
-name = "nd-fmm-plan"
-version = "0.1.0-dev"
-dependencies = [
- "mpi",
- "nd-octree",
- "rand_chacha 0.10.0",
- "rlst",
-]
-
-[[package]]
-name = "nd-fmm-ref"
-version = "0.1.0-dev"
-dependencies = [
- "nd-fmm-math",
- "num-traits",
- "proptest",
- "serde_json",
-]
-
-[[package]]
-name = "nd-fmm-simd"
-version = "0.1.0-dev"
-dependencies = [
- "nd-fmm-math",
- "nd-fmm-ref",
- "proptest",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "nd-fmm-tables"
-version = "0.1.0-dev"
-dependencies = [
- "nd-fmm-math",
- "nd-fmm-ref",
- "num-traits",
- "proptest",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "nd-fmm-validate"
-version = "0.1.0-dev"
-dependencies = [
- "mpi",
- "nd-fmm-exec",
- "nd-fmm-kernels",
- "nd-fmm-math",
- "nd-fmm-ref",
- "nd-fmm-simd",
- "nd-fmm-tables",
- "nd-octree",
-]
-
-[[package]]
-name = "nd-octree"
-version = "0.1.1-dev"
-dependencies = [
- "itertools 0.15.0",
- "mpi",
- "rand 0.10.3",
- "rand_chacha 0.10.0",
- "rlst",
-]
-
-[[package]]
 name = "ndk-sys"
 version = "0.6.0+11769913"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4326,6 +4208,124 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "tetraleaf-bench"
+version = "0.1.0-dev"
+dependencies = [
+ "mpi",
+ "tetraleaf-exec",
+ "tetraleaf-tables",
+ "tetraleaf-validate",
+]
+
+[[package]]
+name = "tetraleaf-exec"
+version = "0.1.0-dev"
+dependencies = [
+ "mpi",
+ "proptest",
+ "rayon",
+ "rlst",
+ "tetraleaf-kernels",
+ "tetraleaf-math",
+ "tetraleaf-octree",
+ "tetraleaf-plan",
+ "tetraleaf-ref",
+ "tetraleaf-simd",
+ "tetraleaf-tables",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tetraleaf-kernels"
+version = "0.1.0-dev"
+dependencies = [
+ "cubecl",
+ "cubek-matmul",
+ "cubek-std",
+ "proptest",
+ "tetraleaf-math",
+ "tetraleaf-ref",
+ "tetraleaf-tables",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tetraleaf-math"
+version = "0.1.0-dev"
+dependencies = [
+ "num-complex",
+ "num-traits",
+ "proptest",
+ "serde_json",
+]
+
+[[package]]
+name = "tetraleaf-octree"
+version = "0.1.1-dev"
+dependencies = [
+ "itertools 0.15.0",
+ "mpi",
+ "rand 0.10.3",
+ "rand_chacha 0.10.0",
+ "rlst",
+]
+
+[[package]]
+name = "tetraleaf-plan"
+version = "0.1.0-dev"
+dependencies = [
+ "mpi",
+ "rand_chacha 0.10.0",
+ "rlst",
+ "tetraleaf-octree",
+]
+
+[[package]]
+name = "tetraleaf-ref"
+version = "0.1.0-dev"
+dependencies = [
+ "num-traits",
+ "proptest",
+ "serde_json",
+ "tetraleaf-math",
+]
+
+[[package]]
+name = "tetraleaf-simd"
+version = "0.1.0-dev"
+dependencies = [
+ "proptest",
+ "tetraleaf-math",
+ "tetraleaf-ref",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tetraleaf-tables"
+version = "0.1.0-dev"
+dependencies = [
+ "num-traits",
+ "proptest",
+ "tetraleaf-math",
+ "tetraleaf-ref",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tetraleaf-validate"
+version = "0.1.0-dev"
+dependencies = [
+ "mpi",
+ "tetraleaf-exec",
+ "tetraleaf-kernels",
+ "tetraleaf-math",
+ "tetraleaf-octree",
+ "tetraleaf-ref",
+ "tetraleaf-simd",
+ "tetraleaf-tables",
 ]
 
 [[package]]

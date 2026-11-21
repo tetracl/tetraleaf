@@ -14,7 +14,7 @@
 # (decision 1).
 spack:
   specs:
-  # MPI for nd-octree and nd-fmm-plan (rsmpi). mpi-sys finds it through `mpicc -show`
+  # MPI for tetraleaf-octree and tetraleaf-plan (rsmpi). mpi-sys finds it through `mpicc -show`
   # and pkg-config, and runs bindgen over mpi.h. Open MPI 5 serves the one-rank runs of
   # Phase 4S and the multi-rank runs of Phase 5 on this one node. No Fortran bindings:
   # nothing here uses them.

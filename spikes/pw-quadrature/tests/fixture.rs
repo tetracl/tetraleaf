@@ -1,10 +1,10 @@
 //! FMM3D's tables, from the fixture (a few domains, `tools/extract_fixture.sh`): the
 //! parser, the domain lookup, the node maps and the evaluator, against the kernel.
 
-use nd_fmm_spike_pw_quadrature::fmm3d::{self, Tables};
-use nd_fmm_spike_pw_quadrature::quadrature::Quadrature;
-use nd_fmm_spike_pw_quadrature::region::{Grid, Pairs};
-use nd_fmm_spike_pw_quadrature::{C, kernel};
+use tetraleaf_spike_pw_quadrature::fmm3d::{self, Tables};
+use tetraleaf_spike_pw_quadrature::quadrature::Quadrature;
+use tetraleaf_spike_pw_quadrature::region::{Grid, Pairs};
+use tetraleaf_spike_pw_quadrature::{C, kernel};
 use std::path::Path;
 
 fn fixture() -> Tables {
@@ -146,7 +146,7 @@ fn fast_sums_against_the_slow_path() {
 /// stated errors, the Helmholtz one with complex nodes on a contour from −iκ.
 #[test]
 fn laplace_limit() {
-    use nd_fmm_spike_plane_wave::quadrature::Quadrature as Laplace;
+    use tetraleaf_spike_plane_wave::quadrature::Quadrature as Laplace;
     let t = fixture();
     let dom = &t.precisions[3][&1];
     let q = Quadrature::from_fmm3d(dom, C::new(0.0, 0.0));

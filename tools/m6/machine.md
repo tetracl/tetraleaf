@@ -7,7 +7,7 @@ with the facts of the move; other tasks add theirs.
 | Item | Value | Command |
 | --- | --- | --- |
 | Machine | Mac mini (Mac18,5), Apple M6, 12 cores (2 Super, 4 Performance, 6 Efficiency), 24 GB | `system_profiler SPHardwareDataType`, `sysctl hw.perflevel<i>.name hw.perflevel<i>.physicalcpu` |
-| Cores used by the sweeps | 6: Super and Performance (`tools/scaling/run.sh`, `tools/fmm3d/run.sh`; `nd_fmm_validate::bench::performance_cores`) | the user, 2026-10-31 |
+| Cores used by the sweeps | 6: Super and Performance (`tools/scaling/run.sh`, `tools/fmm3d/run.sh`; `tetraleaf_validate::bench::performance_cores`) | the user, 2026-10-31 |
 | GPU | Apple M6, 12 cores, Metal 4 | `system_profiler SPDisplaysDataType` |
 | OS | macOS 27.2 (26B123), Darwin 27.2.0, arm64 | `sw_vers`, `uname -srm` |
 | SIMD | NEON (also SME, SME2, FP16, BF16; unused) | `sysctl hw.optional.neon hw.optional.arm.FEAT_SME …` (denied inside Claude Code's sandbox) |

@@ -33,13 +33,13 @@ Conventions of this document:
 > Where this document and docs/CONVENTIONS.md differ, **the conventions file takes
 > precedence.** Phase 4 changes no convention except the §3.13 addition that T3 drafts.
 
-**Recommendation in one paragraph.** Add a crate `nd-fmm-kernels` that hides CubeCL
+**Recommendation in one paragraph.** Add a crate `tetraleaf-kernels` that hides CubeCL
 behind its own `Device`, `DeviceBuffer` and per-family launch wrappers, and a device
-operator in `nd-fmm-exec` that wraps `LaplaceOperator` for its host fallback. On one rank
+operator in `tetraleaf-exec` that wraps `LaplaceOperator` for its host fallback. On one rank
 the `Evaluator` writes nothing outside operator calls except `reset`'s zeroing, so the
 operator keeps every store on the device and `Fmm` tells it when an evaluation starts,
 uploads the charges and downloads the output once: two transfers and one sync per
-evaluation, and **no `nd-fmm-plan` change (no T4b)**. The device backend is refused on
+evaluation, and **no `tetraleaf-plan` change (no T4b)**. The device backend is refused on
 more than one rank until C5.1, for which Section 4.5 sketches the plan hook. M2M, L2L and
 dense M2L share one *grouped translation*: a gather in batch order, one grouped GEMM per
 level (chunked by offset), and a reduction per target in row order, which is bit-identical
@@ -48,7 +48,7 @@ target leaf with sources staged through shared memory in near-row order; P2M and
 each unit a coefficient and add the points in point order; rotation M2L is one cube per
 target walking its V row. The run-time backend is a value, not a type parameter
 (CubeCL 0.11's `Client` is no longer generic over the runtime). M2L strategies are tuned
-by a strategy-level tuner in `nd-fmm-exec` at build, with a cache only in a directory the
+by a strategy-level tuner in `tetraleaf-exec` at build, with a cache only in a directory the
 caller passes; CubeCL's own autotune is not used.
 
 | Question (Section 16) | Recommendation | Section |
@@ -60,7 +60,7 @@ caller passes; CubeCL's own autotune is not used.
 | 5. `Classes` on the device | run as `Dense` from `M2lClasses::expand` | 6.8 |
 | 6. f64 rule for p = 9–11 | dense through p = 11, rotation from p = 12 (provisional); on CUDA dense at every p (Phase 4S decision 9, §18.2) | 10.5 |
 | 7. CPU runtime and `threads(n)` | no rayon pool with the CPU backend; `threads(n)` caps the units per cube of the CPU layouts | 11 |
-| 8. Autotune | strategy-level tuner in `nd-fmm-exec`, cache only in a caller-supplied directory | 10 |
+| 8. Autotune | strategy-level tuner in `tetraleaf-exec`, cache only in a caller-supplied directory | 10 |
 | 9. C4.2 target | ≥ 25% of the P2P peak model on W2 (N = 10⁵), ≥ 10% on W1 at n_t = 64 with ≥ 4,096 target leaves per launch | 13.4 |
 | 10. Metal compiler (new) | keep wgpu-msl; switch to `metal-native` only if T3 finds wgpu-msl's math mode breaks §3.13 | 5.3 |
 
@@ -70,48 +70,48 @@ caller passes; CubeCL's own autotune is not used.
 
 The device path plugs into the following, unchanged.
 
-- **The interface** (`nd_fmm_plan::operator`). `FmmOperator: FmmSizes` with one method
+- **The interface** (`tetraleaf_plan::operator`). `FmmOperator: FmmSizes` with one method
   per level and kind: `p2m`, `m2m` (once per `UpwardPass`), `m2l`, `p2l`, `l2l`, `l2p`,
   `m2p`, `p2p`. Each takes a batch struct (`P2m` … `P2p`) holding `level`,
   `index: &BoxIndex`, the views, shared inputs and an exclusive output. Every call adds;
   each target's contributions come in the order of its row ("Accumulation rule").
-- **Both views of each list** (`nd_fmm_plan::lists`):
+- **Both views of each list** (`tetraleaf_plan::lists`):
   - `Csr` (`row_offsets()`, `entries()`, both `&[u32]`) for X, near, W, P2M and L2P;
   - `GroupedCsr<G>` as `VList` (G = `u16` offset index), `Children` and `Parents`
     (G = `u8` octant), with the rows (`row_offsets()`, `sources()`, `groups()`) and the
     batches (`batch_offsets()`, `batch_targets()`, `batch_sources()`). A batch lists
     each target at most once, ascending; walking batches 0, 1, … meets each target in
     row order (`lists.rs`, "Guarantees").
-- **The stores** (`nd_fmm_plan::store`):
+- **The stores** (`tetraleaf_plan::store`):
   - `LevelBuffers<T>`: one allocation per kind; level l is a column-major
     (p + 1)² × K_l matrix, box i at `offsets()[l] + i · size(l)`, a GEMM operand;
     `as_slice()` for one upload;
   - `LeafStore<T>`: CSR with `point_offsets()` (`usize`) and `point_size()`; the
     sources (local leaves, then ghost leaves), target input and target output.
-- **The evaluator** (`nd_fmm_plan::evaluator`): `Evaluator<'p, C, Op, P>` owns `Data`
+- **The evaluator** (`tetraleaf_plan::evaluator`): `Evaluator<'p, C, Op, P>` owns `Data`
   (the five stores), the three exchanges and the operator; its public stages are
   `reset`, `exchange_sources`, `upward_local`, `upward_global`, `exchange_multipoles`,
   `downward`, `evaluate_leaves`, with a debug check of their order.
-- **`LaplaceOperator<T>`** (`nd_fmm_exec::operator`): `Kernels<T>` (p, `Tables<T>`,
+- **`LaplaceOperator<T>`** (`tetraleaf_exec::operator`): `Kernels<T>` (p, `Tables<T>`,
   gradients, `max_leaf_points`, the P2P kernel) with one body per target,
   `Kernels::{p2m,m2m,m2l,p2l,l2l,l2p,m2p,p2p}_target`, run serially or in the `Fmm`'s
   rayon pool by `Execution::{boxes, leaves}`. It also implements `PairOperator`.
-- **`Tables<T>`** (`nd_fmm_exec::tables`): one resolved `M2lStrategy` (`Dense`,
+- **`Tables<T>`** (`tetraleaf_exec::tables`): one resolved `M2lStrategy` (`Dense`,
   `Classes`, `Rotation`; `Auto` resolves to `Dense` for p ≤ 8). Its families are private
   (`Families`); T5 adds crate-private accessors, no public change.
-- **`nd-fmm-tables`**: `MatrixSet` (column-major, entry (r, c) of matrix i at
+- **`tetraleaf-tables`**: `MatrixSet` (column-major, entry (r, c) of matrix i at
   i n² + r + c n, CONVENTIONS §3.12 "Matrix layout"); `M2mTables`, `L2lTables`,
   `M2lTables` (`matrices()`); `M2lClasses` (`expand()` to `M2lTables`); `RotationTables`
   (`tables(Operator)` → `ShiftTables` with `forward_blocks(polar)`,
   `backward_blocks(polar)`, `azimuth_factors(a)`, `coaxial_factors(d)`, `shift(t)`).
-- **Geometry** (`nd_fmm_exec::geometry`): `relative_frame` from integer key indices,
+- **Geometry** (`tetraleaf_exec::geometry`): `relative_frame` from integer key indices,
   exact in f32 and f64 (CONVENTIONS §3.13, "Relative frames").
-- **`Fmm`** (`nd_fmm_exec::fmm`): `FmmBuilder::build` (steps 1–8; step 1's all-reduce
+- **`Fmm`** (`tetraleaf_exec::fmm`): `FmmBuilder::build` (steps 1–8; step 1's all-reduce
   agrees the settings, the pool, the supplied domain and the finiteness of the points;
   step 3 (points inside the domain) and step 5 (`PointsNotOwned`) have their own),
   `Fmm::evaluate` (charges into the source chunks, `reset`, the six stages timed into
   `StageTimings`, output scaled by 1/(4π r_t)).
-- **Phase 3S**: `nd_fmm_simd::P2pKernel` (NEON 4.03 Gpairs/s f32 φ at one thread,
+- **Phase 3S**: `tetraleaf_simd::P2pKernel` (NEON 4.03 Gpairs/s f32 φ at one thread,
   measured, Phase 3S T7), the C3S.4 contract (8 / 16 u_T per term).
 - **The Phase 0 spike** (`spikes/cubecl-gemm`): the hand-written `tiled-smem`,
   `tiled-reg-cols` and `tiled-reg-rows` kernels; library CMMA at 3.5–4.4 TFLOP/s for
@@ -162,21 +162,21 @@ The eleven requirements of the README, and how this design meets each.
 | # | Requirement | How the design meets it | Change? |
 | --- | --- | --- | --- |
 | 1 | Same interface | `DeviceOperator<T>` implements `FmmSizes` and `FmmOperator`; the `Evaluator` drives it; `FmmBuilder::backend` is one more setting, `Backend::Host` the default (Section 3.3) | clarified: device backend on one rank only until C5.1 (Section 4.4) |
-| 2 | Same data and conventions | device stores mirror the evaluator's layouts value for value (§3.6, §3.7, §3.13); tables uploaded from `nd-fmm-tables` as built and rounded; frames from integer box coordinates on the device (Section 6.2); 1/(4π) and r_t applied by `Fmm::output` unchanged | none |
+| 2 | Same data and conventions | device stores mirror the evaluator's layouts value for value (§3.6, §3.7, §3.13); tables uploaded from `tetraleaf-tables` as built and rounded; frames from integer box coordinates on the device (Section 6.2); 1/(4π) and r_t applied by `Fmm::output` unchanged | none |
 | 3 | Device-resident data | plan views, geometry and tables uploaded once at build; points once; charges and output once per evaluation (Section 4.2); counted by the transfer accounting | none |
 | 4 | Accumulation rule | every kernel adds each target's contributions in row order, starting from the value already in the output; the grouped reduction reproduces the per-offset order exactly (Sections 6.1, 6.4) | none |
 | 5 | No atomics | P2P, leaf operators and reductions are target- or coefficient-owned; GEMM outputs go to distinct columns (Section 6) | none |
 | 6 | Deterministic | fixed launch sequence on one stream; explicit matmul strategies; layouts, chunks and tuned choices fixed at build (Sections 8, 9, 10) | none |
 | 7 | Precision is a capability | `Device::supports(Precision::F64)` from CubeCL's type registry; refusal in step 1 of `build` (Section 5) | none |
 | 8 | Host fallback | per-kind placement; fallback calls run `LaplaceOperator`'s own `FmmOperator` method on host mirrors with explicit transfers; bit-identical with every kind on the host (Section 7) | none |
-| 9 | Safe at the boundary | `unsafe` only in `nd-fmm-kernels` (`launch_unchecked`, `BufferArg::from_raw_parts`, F5); `nd-fmm-exec` sees only `nd-fmm-kernels` types | none |
+| 9 | Safe at the boundary | `unsafe` only in `tetraleaf-kernels` (`launch_unchecked`, `BufferArg::from_raw_parts`, F5); `tetraleaf-exec` sees only `tetraleaf-kernels` types | none |
 | 10 | Tested on what can run | CPU runtime f32 and f64, Metal f32 ignored and by hand; every test prints `DeviceInfo` (Section 13) | none |
-| 11 | Measured, never asserted | timings only in `nd-fmm-validate` examples, Metal, release, compilation excluded (Section 13.3) | none |
+| 11 | Measured, never asserted | timings only in `tetraleaf-validate` examples, Metal, release, compilation excluded (Section 13.3) | none |
 
 **Proposed clarification of requirement 1 and of the README's MPI rule** ("On more than
 one rank `Fmm` still reports `PointsNotOwned` until C5.1, for either backend"). That
 holds, but on several ranks a build can also succeed, when every point happens to lie
-in a leaf of its own rank (`fmm-exec/tests/mpi_exec.rs`, module docs). The host path
+in a leaf of its own rank (`tetraleaf-exec/tests/mpi_exec.rs`, module docs). The host path
 then runs distributed. The device path cannot yet (Section 4.4). Proposal: with a
 device backend on more than one rank, `build` returns
 `SettingsError::DeviceNeedsOneRank { ranks }` **after** the `PointsNotOwned` check of
@@ -206,10 +206,10 @@ on every rank, so the error needs no agreement.
 
 ## 3. Crates and public surfaces
 
-### 3.1 `nd-fmm-kernels`
+### 3.1 `tetraleaf-kernels`
 
-Package `nd-fmm-kernels`, library `nd_fmm_kernels`, in `fmm-kernels/`, as the README
-fixes. No MPI, no `nd-fmm-plan`, no rayon: it takes plain `&[u32]` index arrays and
+Package `tetraleaf-kernels`, library `tetraleaf_kernels`, in `tetraleaf-kernels/`, as the README
+fixes. No MPI, no `tetraleaf-plan`, no rayon: it takes plain `&[u32]` index arrays and
 `&[T]` data, so it builds and tests alone.
 
 | Module | Contents | Task |
@@ -342,22 +342,22 @@ pub mod p2p {
 
 ### 3.2 Generic over the runtime, or chosen at run time
 
-| | `R: Runtime` threaded through `nd-fmm-exec` | A run-time value |
+| | `R: Runtime` threaded through `tetraleaf-exec` | A run-time value |
 | --- | --- | --- |
 | Fits CubeCL 0.11 | no: 0.11 removed `R` from the client and the launch (F1) | yes: `cubecl::Device` is already an enum and `Client` is one type (F1, F2) |
-| `nd-fmm-exec` without `cubecl` (requirement 9) | needs `Runtime` re-exported, and leaks it into `Fmm<'o, T, C, R>` | sees only `nd_fmm_kernels::Device` |
+| `tetraleaf-exec` without `cubecl` (requirement 9) | needs `Runtime` re-exported, and leaks it into `Fmm<'o, T, C, R>` | sees only `tetraleaf_kernels::Device` |
 | `Fmm`'s API (requirement 1) | a new type parameter on `Fmm` | unchanged; `backend` is a builder setting, as the README asks |
 | CLI and tests (`--backend metal`) | a `match` that instantiates one type per backend | parse a value |
-| Compile time | `nd-fmm-exec`'s device code compiled once per runtime | once |
+| Compile time | `tetraleaf-exec`'s device code compiled once per runtime | once |
 | Cost per call | none | none: kernels are still generic over `F: Float` and comptime p; the backend is a value in the client |
 
 **Recommendation: a run-time value.** CubeCL 0.11 decided most of this: kernels are
 generic over the float type and comptime parameters only, and the runtime is a property
-of the `Client`. `nd-fmm-kernels` keeps `cubecl::Device` and `Client` inside its own
+of the `Client`. `tetraleaf-kernels` keeps `cubecl::Device` and `Client` inside its own
 `Device`. Per-backend choices (cube layouts, tile sizes, the GEMM) are values looked up
 from `DeviceInfo::backend` at build (Section 6.1).
 
-### 3.3 The `nd-fmm-exec` side
+### 3.3 The `tetraleaf-exec` side
 
 Settings and reports on `FmmBuilder` and `Fmm`. The `Backend` enum and the kinds exist
 without the `gpu` feature, so a host-only build refuses `Metal` with a typed error
@@ -403,13 +403,13 @@ New `SettingsError` variants, all `Copy` as the enum is today:
 `DeviceNeedsOneRank { ranks: usize }`. `FmmError` gains `Device(String)` for failures
 after the settings were accepted (Section 12).
 
-**The device operator.** In a new module `nd_fmm_exec::device` (feature `gpu`):
+**The device operator.** In a new module `tetraleaf_exec::device` (feature `gpu`):
 
 ```rust
 /// The Laplace operator on a device; see Sections 4 and 7.
 pub struct DeviceOperator<T: SimdScalar> {
     host: LaplaceOperator<T>,      // the fallback bodies, the host tables, the P2P choice
-    device: nd_fmm_kernels::Device,
+    device: tetraleaf_kernels::Device,
     placement: Placement,          // per OperatorKind: Device or Host
     stores: DeviceStores<T>,       // multipoles, locals (one buffer each), sources,
                                    // target input, target output, charge slots
@@ -441,13 +441,13 @@ path compiles to what it is today.
 
 | Crate | Feature | Builds |
 | --- | --- | --- |
-| `nd-fmm-kernels` | none | kernel definitions and host-side types; no runtime; `BackendKind::is_compiled` false everywhere |
+| `tetraleaf-kernels` | none | kernel definitions and host-side types; no runtime; `BackendKind::is_compiled` false everywhere |
 | | `cpu` | `cubecl/cpu` (the CubeCL CPU runtime and its `tracel-llvm` bundle) |
 | | `metal` | `cubecl/metal` (= `wgpu-msl`, F4) |
 | | `cuda` | `cubecl/cuda`; type-checked only |
-| `nd-fmm-exec` | `gpu` | `dep:nd-fmm-kernels`, `Backend` support, `DeviceOperator` |
-| | `cpu`, `metal`, `cuda` | `gpu` plus the matching `nd-fmm-kernels` feature |
-| `nd-fmm-validate` | `gpu`, `cpu`, `metal`, `cuda` | passed through to `nd-fmm-exec`; the device rows of the examples |
+| `tetraleaf-exec` | `gpu` | `dep:tetraleaf-kernels`, `Backend` support, `DeviceOperator` |
+| | `cpu`, `metal`, `cuda` | `gpu` plus the matching `tetraleaf-kernels` feature |
+| `tetraleaf-validate` | `gpu`, `cpu`, `metal`, `cuda` | passed through to `tetraleaf-exec`; the device rows of the examples |
 
 None is on by default. CubeCL's `persistence` feature stays off with `cpu` and `cuda`
 **only because all three workspace entries set `default-features = false`** (root
@@ -458,7 +458,7 @@ which enables `cubecl-runtime/default`, which includes `persistence`
 `cubek-std` turn on `cubecl/default` (`cubek-matmul-0.3.0-pre.4/Cargo.toml`,
 `cubek-std-0.3.0-pre.4/Cargo.toml`). Cargo unifies features, so any crate in the graph
 that takes one of the three with its defaults turns persistence on; T4 checks with
-`cargo tree -e features`, and `fmm-kernels/CLAUDE.md` keeps the rule.
+`cargo tree -e features`, and `tetraleaf-kernels/CLAUDE.md` keeps the rule.
 
 **Corrected by T4 (measured, accepted at its sign-off on 2026-10-03):** with `metal`,
 persistence is on whatever the workspace sets. `cubecl-wgpu-0.11.0-pre.4/Cargo.toml`
@@ -488,7 +488,7 @@ E_U (near entries), E_W, E_X pairs per view, summed over levels.
 | caller-ordered output (Phase 4S T9) | with the output pass on the device: o N_t s, φ then ∇φ in the caller's order | never (written by the gather) | once per evaluation, instead of the target output |
 | index arena (u32) | about 12 E_V + 12 (E_M + E_L) + 4 (E_U + E_W + E_X) + 8 J + 8 K + 4 N_s: views, row-to-batch maps (Section 6.4), point offsets, `charge_slots` | once at build, one call | never |
 | geometry (u32) | 16 J (level and index per leaf) + 12 K (index per box) | once at build | never |
-| tables | dense: (316 + 16) n_c² s; rotation: the M2L `ShiftTables` (94 B + 64 p + 15 C) s plus 16 n_c² s for the dense octants (B, C as in `nd_fmm_tables::rotation`) | once at build | never |
+| tables | dense: (316 + 16) n_c² s; rotation: the M2L `ShiftTables` (94 B + 64 p + 15 C) s plus 16 n_c² s for the dense octants (B, C as in `tetraleaf_tables::rotation`) | once at build | never |
 | GEMM scratch | at most S_scr (default 128 MB, *model*; Section 6.4) | never | never |
 
 Everything is allocated at build: an evaluation allocates nothing on the device, so the
@@ -525,7 +525,7 @@ the bytes are those of the table above.
 
 ### 4.2 Every host-side write of the `Evaluator` outside operator calls
 
-Read from `fmm-plan/src/evaluator.rs` and `fmm-plan/src/exchange.rs`. "Reads" are listed
+Read from `tetraleaf-plan/src/evaluator.rs` and `tetraleaf-plan/src/exchange.rs`. "Reads" are listed
 too, because a stale host value that an exchange *sends* is as wrong as one it writes.
 
 | Stage | Function | What it does | On one rank | On several ranks |
@@ -533,20 +533,20 @@ too, because a stale host value that an exchange *sends* is as wrong as one it w
 | construction | `Evaluator::new` → `Data::new` | allocates the five stores zeroed (`LevelBuffers::from_index`, `LeafStore::new`) | same | same |
 | `reset` | `Evaluator::reset` → `Data::reset` → `LevelBuffers::clear` (multipoles, locals), `LeafStore::clear` (target output) | fills them with `T::default()` (+0.0); sources and target input are kept | **writes**: every multipole, local and target output | same |
 | step 1 | `Evaluator::exchange_sources` → `SourceExchange::forward` | reads the local chunks `sources.chunk(leaf)` of `send_leaves` into `send_buffer`; `forward_send_values` writes the received chunks into the ghost tail `sources.range_mut(ghost_leaves())` | no ghost leaves and empty `send_leaves`: the neighbour collective runs with empty buffers; **nothing read or written** | **reads** local source chunks (coordinates and this evaluation's charges); **writes** the ghost tail |
-| step 3 | `Evaluator::upward_global` → `CoarseExchange::gather` | copies this rank's coarse blocks (`multipoles.chunk(level, i)` for b in `rank_blocks(rank)`) into `send_buffer`; all-gather-v into `gathered`; writes every *other* rank's block into its slot | the only coarse block is the root (`compute_coarse_tree` returns `[root]` on one rank, `octree/src/octree/implementation.rs`), which is this rank's: **reads the root multipole** into its send buffer, before the global M2M forms it, so the value read is `reset`'s +0.0 on host and device alike; **writes nothing** | **reads** own coarse-block multipoles (formed in `upward_local`); **writes** the other ranks' blocks, which are ghost boxes on this rank (`OctreeOptions::with_ghost_children`, octree docs) |
+| step 3 | `Evaluator::upward_global` → `CoarseExchange::gather` | copies this rank's coarse blocks (`multipoles.chunk(level, i)` for b in `rank_blocks(rank)`) into `send_buffer`; all-gather-v into `gathered`; writes every *other* rank's block into its slot | the only coarse block is the root (`compute_coarse_tree` returns `[root]` on one rank, `tetraleaf-octree/src/octree/implementation.rs`), which is this rank's: **reads the root multipole** into its send buffer, before the global M2M forms it, so the value read is `reset`'s +0.0 on host and device alike; **writes nothing** | **reads** own coarse-block multipoles (formed in `upward_local`); **writes** the other ranks' blocks, which are ghost boxes on this rank (`OctreeOptions::with_ghost_children`, octree docs) |
 | step 4 | `Evaluator::exchange_multipoles` → `MultipoleExchange::forward_all` → `forward(level)` for l = 0..L | per level: copies the `send_boxes(l)` multipoles into the send buffer; neighbour all-to-all; scatters the receive buffer into the `receive_boxes(l)` slots | no ghost boxes, so both lists are empty on every level: **nothing read or written** | **reads** sent non-ghost multipoles of every level; **writes** the ghost boxes named by V rows of l and W rows of l − 1 |
 
 The caller's writes, through the `Evaluator`'s API, are listed for completeness:
 `Fmm::build` step 8 writes the leaf-scaled coordinates (`sources_mut`,
 `target_input_mut`) once, and `Fmm::evaluate` writes the charges every evaluation
 (`local_sources_mut`). Operator calls write only their batch output. Nothing else in
-`nd-fmm-plan` writes a store.
+`tetraleaf-plan` writes a store.
 
 On one rank the octree has no ghost keys: `generate_all_keys` builds ghosts only when
-`size > 1` (`octree/src/octree/implementation.rs`). It does have one `Global` key, the
+`size > 1` (`tetraleaf-octree/src/octree/implementation.rs`). It does have one `Global` key, the
 root, which it inserts after the leaf loop unless the root is itself a leaf
 (`all_keys.entry(morton::root()).or_insert(KeyType::Global)`). So on one rank
-`m2m_global(0)` holds the root's row (`fmm-plan/src/plan.rs`, first pass) and the
+`m2m_global(0)` holds the root's row (`tetraleaf-plan/src/plan.rs`, first pass) and the
 global pass forms the root multipole: an operator call, not a host write. The exchanges
 have nothing to move. That leaves exactly one evaluator-side write per evaluation,
 `reset`'s zeroing, and one read whose result is never observed: the root multipole, +0.0
@@ -589,11 +589,11 @@ shared). The operator could only download every non-ghost multipole of a level i
 the last call that writes it (`p2m(l)`), one sync per level, and upload ghost slots
 inside the first call that reads them: correct but neither minimal nor simple.
 
-**(b) An `nd-fmm-plan` hook around the four data movements** (redesign §10). The
+**(b) An `tetraleaf-plan` hook around the four data movements** (redesign §10). The
 `Evaluator` tells the operator before and after each movement, with the index lists the
 movement uses, so a device operator downloads exactly what is sent and uploads exactly
 what arrives. Exact on every rank count; sketched in Section 4.5. It changes
-`nd-fmm-plan` and needs multi-rank `IndexFmm` checks (a T4b), and in Phase 4 it would
+`tetraleaf-plan` and needs multi-rank `IndexFmm` checks (a T4b), and in Phase 4 it would
 have no user beyond one rank, where it does what (a) does.
 
 **(c) Alternatives considered and rejected:**
@@ -606,7 +606,7 @@ have no user beyond one rank, where it does what (a) does.
   sizes (`EvaluatorError::ZeroSize`) and the batch types carry host slices, so it is a
   plan redesign, not a hook.
 
-**Recommendation: (a) for Phase 4, without an `nd-fmm-plan` change; T4b is not
+**Recommendation: (a) for Phase 4, without an `tetraleaf-plan` change; T4b is not
 needed.** The device backend runs on one rank, where the only evaluator-side write is
 the zeroing that `begin_evaluation` mirrors. (b) is the C5.1 path; Section 4.5 gives its
 shape so that C5.1 starts from a designed hook.
@@ -825,7 +825,7 @@ and the order, so every P2P test runs on both. Not designed further here.
 Cartesian recursion of CONVENTIONS §3.5, into a local array of n_c values (n_c of degree
 p + 1 for M2P's gradient), with p comptime and the loops over n and m unrolled. The
 recursion coefficients are **formed in the kernel**, operation for operation as
-`nd_fmm_math::harmonics` forms them (`fmm-math/src/harmonics.rs`): for `regular`, `1 /
+`tetraleaf_math::harmonics` forms them (`tetraleaf-math/src/harmonics.rs`): for `regular`, `1 /
 int(2m)`, `int(2n − 1) · z / int((n + m)(n − m))` and `−r² / int((n + m)(n − m))`; for
 `irregular`, one `inv_r2 = 1 / r²` per point, then `int(2m − 1) · inv_r2`, `int(2m + 1)
 · z · inv_r2`, `int(2n − 1) · z · inv_r2` and `−int((n − 1 − m)(n − 1 + m)) · inv_r2`,
@@ -944,7 +944,7 @@ Details:
 | shared memory | two working vectors of n_c values (7 KB at p = 20 in f64) |
 | loop | for each (source s, offset d) of row t in offset order: load the multipole of s; the five steps of `ShiftTables::apply`: z-rotation (one unit per (+m, −m) pair), forward y-blocks (one unit per output slot (n, m), summing the degree's 2n + 1 inputs), coaxial step (one unit per (j, i), summing over n in the order-i matrix), backward y-blocks, z-rotation back, each followed by `sync_cube`; the last step adds into the unit's accumulator, which started from the local as L2L left it. `Up` and `Down` offsets run the coaxial step alone (with the parity for `Down`) |
 | order | V row in offset order (requirement 4); inside a pair, the order of `ShiftTables::apply` |
-| device tables | the M2L `ShiftTables` only (M2M and L2L use the dense octant GEMM, README): forward blocks [polar][B], backward blocks [polar][B], azimuth factors [azimuth][2p], coaxial factors [distance][C], and per offset a u32 quadruple (alignment, polar, azimuth, distance), concatenated at upload from the public accessors; no change to `nd-fmm-tables` |
+| device tables | the M2L `ShiftTables` only (M2M and L2L use the dense octant GEMM, README): forward blocks [polar][B], backward blocks [polar][B], azimuth factors [azimuth][2p], coaxial factors [distance][C], and per offset a u32 quadruple (alignment, polar, azimuth, distance), concatenated at upload from the public accessors; no change to `tetraleaf-tables` |
 
 On the CPU runtime a kernel that repeats `ShiftTables::apply` step for step can equal
 `RotationTables::m2l` bit for bit; T10 tests that where it holds. Many units idle in the
@@ -975,7 +975,7 @@ device".
   host keeps the memory saving that `Classes` exists for.
 - *Against*: the device saves no memory; the fit check covers that. `expand` forms each
   matrix as T_L(P) M2L(d₀) T_M(Pᵀ) in T and "agrees with `M2lTables::build` up to
-  rounding" (`fmm-tables/src/m2l.rs`), so device `Classes` and device `Dense` agree to
+  rounding" (`tetraleaf-tables/src/m2l.rs`), so device `Classes` and device `Dense` agree to
   rounding, not bit for bit, as on the host. Expanding costs O(p⁵) per offset on the
   host at build, less than building the dense tables (O(p⁶)).
 
@@ -992,7 +992,7 @@ build and reported (`DeviceReport`).
 
 The device operator owns host mirrors, created only if some kind is on the host:
 `LevelBuffers::new(lens, sizes)` for multipoles and locals and `LeafStore::new(counts,
-o)` for the target output, the public constructors of `nd-fmm-plan`. A host-fallback
+o)` for the target output, the public constructors of `tetraleaf-plan`. A host-fallback
 call:
 
 1. downloads the call's device inputs and its output region into the mirrors (exact
@@ -1193,16 +1193,16 @@ measured):
    r² = 0 exactly for coincident stored points and every other r² ≥ 2⁻¹⁰⁶; if not, the
    formulation or option that restores it, or the switch to `metal-native` (Section 5.3);
 4. the P2P formulation per backend and precision, and its pair-term and sum errors
-   against `nd_fmm_ref::p2p` and `direct_sum` (the device P2P contract);
-5. a degree-20 harmonic against `nd-fmm-math` and one GEMM against `MatrixSet::apply`
+   against `tetraleaf_ref::p2p` and `direct_sum` (the device P2P contract);
+5. a degree-20 harmonic against `tetraleaf-math` and one GEMM against `MatrixSet::apply`
    per backend, so that T7 and T8 know which of their tests can be bit for bit;
-6. decision 10: the CPU-shaped P2P against `nd-fmm-simd`.
+6. decision 10: the CPU-shaped P2P against `tetraleaf-simd`.
 
 ## 10. Autotune (C4.7)
 
 ### 10.1 CubeCL's autotune or a strategy-level tuner
 
-| | CubeCL's autotune (`LocalTuner`, F15) | A strategy-level tuner in `nd-fmm-exec` |
+| | CubeCL's autotune (`LocalTuner`, F15) | A strategy-level tuner in `tetraleaf-exec` |
 | --- | --- | --- |
 | what it chooses | one kernel among candidates per call key | the M2L strategy for the whole `Fmm`, then per level the GEMM and layouts, and the P2P layout |
 | when | at the first call with a new key, so inside the first `evaluate` | at build, outside `evaluate` (README) |
@@ -1210,13 +1210,13 @@ measured):
 | persistence | a database under `<workspace>/target/environment`, a user cache directory or what `cubecl.toml` says (F15, F24); process-wide configuration | a file in the directory the caller passes, nowhere else |
 | fixed for the `Fmm`'s lifetime (requirement 6) | not by itself: the key and the cache decide per call | yes |
 
-**Recommendation: a strategy-level tuner in `nd-fmm-exec`** (module `tune`, T12), on
-timing primitives of `nd-fmm-kernels` (`Device::sync` and its counters). CubeCL's
+**Recommendation: a strategy-level tuner in `tetraleaf-exec`** (module `tune`, T12), on
+timing primitives of `tetraleaf-kernels` (`Device::sync` and its counters). CubeCL's
 autotune is never called, and its `persistence` feature stays off (with `metal` it is
 on but unused, and leaves an empty store; Section 3.4), so the
 rule of the host table cache holds: a directory only when the caller passes one, no
 default directory, no environment variable read by this workspace. CubeCL's own
-configuration file and variables (F24) are documented in `fmm-kernels/CLAUDE.md`, not
+configuration file and variables (F24) are documented in `tetraleaf-kernels/CLAUDE.md`, not
 set or read by the crates.
 
 ### 10.2 The key
@@ -1224,7 +1224,7 @@ set or read by the crates.
 - backend, device name and compiler (`DeviceInfo`), precision, p, gradients;
 - for the GEMM and layout choices, the level's V pairs (or octant pairs) bucketed to a
   power of two; for the P2P layout, the mean points per leaf bucketed to a power of two;
-- versions: CubeCL, `nd-fmm-kernels`, `CONVENTION_VERSION`, the candidate set and the
+- versions: CubeCL, `tetraleaf-kernels`, `CONVENTION_VERSION`, the candidate set and the
   file format. A different version makes an entry stale.
 
 ### 10.3 The candidates
@@ -1273,7 +1273,7 @@ No rotation M2L has been measured on a GPU. On one host P-core the table-driven 
 reaches about 9% of f64 peak (*estimate*, against 4 FMA pipes × 2 lanes × 2 flops ×
 4.05 GHz = 64.8 GFLOP/s):
 - one M2L at p = 12 is (p + 1)(10p² + 32p + 9)/3 = 7,943 multiply–adds plus 26 additions
-  (`ShiftTables::apply`, `fmm-tables/src/rotation.rs`), about 15,900 flops. Phase 3 T12's
+  (`ShiftTables::apply`, `tetraleaf-tables/src/rotation.rs`), about 15,900 flops. Phase 3 T12's
   2.65 µs per V pair at p = 12 is the whole downward stage (L2L and P2L included) divided
   by the V pairs, so it bounds the M2L from above: at least 6.0 GFLOP/s, at least 9.3%;
 - Phase 2's single table rotation at p = 18, about 8 µs (quoted in design §7, Phase 3,
@@ -1347,9 +1347,9 @@ seen early.
 
 | Layer | Oracle | Where | Tasks |
 | --- | --- | --- | --- |
-| kernel primitives: buffers, zero, gather, scatter-add, scatter | host loops, bit for bit | `nd-fmm-kernels`, no MPI | T4 |
-| a kernel per operator | `nd-fmm-ref` (`direct`, `leaf`, `p2p`), `nd-fmm-math`, `nd-fmm-tables` (`MatrixSet::apply`, `RotationTables`) at the canonical frames, levels 2, 9 and 16 of a dyadic domain | `nd-fmm-kernels`, no MPI | T6–T10 |
-| the device operator against the host operator, per kind | `LaplaceOperator` on the same batch, with a `Plan` built locally by the public `Plan::from_key_types` (as `fmm-plan/src/plan_tests.rs` does; `fmm-exec/tests/operator/` builds no plan and tests the per-pair methods `p2m_leaf`, `m2m_pair`, `m2l_pair`, … instead) | `nd-fmm-exec` tests, no MPI | T5–T10 |
+| kernel primitives: buffers, zero, gather, scatter-add, scatter | host loops, bit for bit | `tetraleaf-kernels`, no MPI | T4 |
+| a kernel per operator | `tetraleaf-ref` (`direct`, `leaf`, `p2p`), `tetraleaf-math`, `tetraleaf-tables` (`MatrixSet::apply`, `RotationTables`) at the canonical frames, levels 2, 9 and 16 of a dyadic domain | `tetraleaf-kernels`, no MPI | T6–T10 |
+| the device operator against the host operator, per kind | `LaplaceOperator` on the same batch, with a `Plan` built locally by the public `Plan::from_key_types` (as `tetraleaf-plan/src/plan_tests.rs` does; `tetraleaf-exec/tests/operator/` builds no plan and tests the per-pair methods `p2m_leaf`, `m2m_pair`, `m2l_pair`, … instead) | `tetraleaf-exec` tests, no MPI | T5–T10 |
 | the device FMM against the host FMM and the direct sum | the host `Fmm` with the same settings; `direct_sum` | `tests/mpi_exec.rs` (a helper `evaluate_on_backends` beside `evaluate_threaded`), the ignored `tests/accuracy.rs` and `tests/adaptive.rs` | T5–T11 |
 | transfers, launches, syncs | the formulas of Sections 4.1, 7.2 and 8.1 | `tests/mpi_exec.rs` | T5, T11 |
 
@@ -1375,7 +1375,7 @@ seen early.
 
 ### 13.4 Benchmark harness, metrics and performance targets
 
-In `nd-fmm-validate` behind `gpu` (T6–T13): stage times (synchronous mode), GFLOP/s and
+In `tetraleaf-validate` behind `gpu` (T6–T13): stage times (synchronous mode), GFLOP/s and
 GB/s against the spike's peaks (M3 Max f32 14.3 TFLOP/s, derived; 400 GB/s), P2P pairs
 per second against host NEON at 1 and 12 threads, and launches, syncs and transfers per
 evaluation. Metal, release, compilation excluded, many launches per sync, median over
@@ -1408,7 +1408,7 @@ small fraction of 40 GPU cores; the GPU row needs a level-sized launch, at least
 ## 14. Multi-rank and overlap compatibility
 
 **C5.1, the device on several ranks** (exchanges staged through host buffers) needs:
-- the hook of Section 4.5 (a T4b-style `nd-fmm-plan` task with its `IndexFmm` check on
+- the hook of Section 4.5 (a T4b-style `tetraleaf-plan` task with its `IndexFmm` check on
   1, 2 and 4 ranks), so the device operator downloads exactly the sent values and
   uploads exactly the received ones;
 - device errors agreed on every rank before the next collective (Section 12);
@@ -1423,9 +1423,9 @@ finish (redesign §10) and device buffers the operator owns instead of the evalu
 host stores; Section 4.3 names the latter. Neither conflicts with this design.
 
 **As built in Phase 5** (T7, T8; [distributed-fmm.md](distributed-fmm.md) §6, §7 and §15;
-the `device` module docs of `nd-fmm-exec`, "Several ranks"). The device runs on any number
+the `device` module docs of `tetraleaf-exec`, "Several ranks"). The device runs on any number
 of ranks, for correctness only (Phase 5 decision 3); `DeviceNeedsOneRank` is gone.
-- **The hook** (T7): `nd_fmm_plan::operator::HostData`, six events around `reset` and the
+- **The hook** (T7): `tetraleaf_plan::operator::HostData`, six events around `reset` and the
   three exchanges, each with the index lists its movement uses: `Reset`, `SendSources`,
   `ReceivedSources`, `SendMultipoles` (once, before the coarse gather, for the coarse
   blocks and every level's multipole sends), `ReceivedCoarse` and `ReceivedMultipoles(l)`
@@ -1475,7 +1475,7 @@ of ranks, for correctness only (Phase 5 decision 3); `DeviceNeedsOneRank` is gon
   (2026-10-10) at 1, 2 and 4 ranks on the CPU runtime (M3 Max) and on CUDA (locust, N =
   10⁵, f32 p = 3 and 8, f64 p = 8): every point passes, f64 within 5.8e-15 and f32
   within 2.9e-6 of the host on the same ranks, every transfer the formula, one sync on
-  one rank and two on several (tables in `fmm-validate/results/phase5-m3max.md` §11 and
+  one rank and two on several (tables in `tetraleaf-validate/results/phase5-m3max.md` §11 and
   `phase5-gh200.md` §12).
 
 **Changed in Phase 5S** (T5, T6, signed off as [scale-out.md](scale-out.md) §4.5, §12
@@ -1510,7 +1510,7 @@ the hook follows it:
   progress while the device computes (scale-out.md §13.3).
 
 **Several charge vectors** (Phase 6 T5, C6.3; docs/design/optimisation.md §4; the `device`
-module docs of `nd-fmm-exec`, "Several charge vectors"). With m vectors the formula keeps
+module docs of `tetraleaf-exec`, "Several charge vectors"). With m vectors the formula keeps
 its calls, launches and syncs and multiplies the bytes: per evaluation the charges up,
 m N_s s; the output down, o m N_t s (o = 1, or 4 with gradients); the ghost tail up,
 (3 + m) G_s s; every multipole the exchanges move, m n_c s per box (the reduction's, the
@@ -1541,17 +1541,17 @@ concurrent streams (CUDA, or `metal-native`'s multistream,
 
 | Task | Modules | Tests | Brief change proposed |
 | --- | --- | --- | --- |
-| T4 | `fmm-kernels/src/{lib, device, buffer, error, movement}.rs`; `fmm-kernels/CLAUDE.md` | capability per backend; round trips (sizes 0, 1, 7, 10³, 10⁶; −0, subnormal, extremes, ±∞, NaN) for f32, f64, u32; zero, gather, scatter-add and scatter against host loops; proptest | device index arrays are u32 only (u16/u8 widened at upload), so no u16/u8 buffers; add `scatter_values` (assign by index) for the charges; no CSR gather/scatter is needed; `Device::open` uses CubeCL 0.11's fallible `cubecl::Device` constructors and refuses Metal without the MSL compiler; T4 checks with `cargo tree -e features` that CubeCL's `persistence` is off |
+| T4 | `tetraleaf-kernels/src/{lib, device, buffer, error, movement}.rs`; `tetraleaf-kernels/CLAUDE.md` | capability per backend; round trips (sizes 0, 1, 7, 10³, 10⁶; −0, subnormal, extremes, ±∞, NaN) for f32, f64, u32; zero, gather, scatter-add and scatter against host loops; proptest | device index arrays are u32 only (u16/u8 widened at upload), so no u16/u8 buffers; add `scatter_values` (assign by index) for the charges; no CSR gather/scatter is needed; `Device::open` uses CubeCL 0.11's fallible `cubecl::Device` constructors and refuses Metal without the MSL compiler; T4 checks with `cargo tree -e features` that CubeCL's `persistence` is off |
 | T4b | not needed | — | — |
-| T5 | `fmm-exec/src/device.rs` (`DeviceOperator`, mirrors, `begin_evaluation`, `read_output`), `fmm.rs` (`Backend`, `OperatorKind`, settings, `ExecOperator`), `tables.rs` (crate-private family accessors) | full-fallback bit identity on every `mpi_exec.rs` scenario; transfers against Sections 4.1 and 7.2; settings errors; the threads rule; `view` types and their upload | the device backend runs on one rank (`DeviceNeedsOneRank` after step 5); `Fmm` drives `begin_evaluation` and `read_output`; `synchronous_stages`; the threads rule of Section 11 |
-| T6 | `fmm-kernels/src/p2p.rs`; the P2P kind in `device.rs`; a row in `nd_fmm_validate::p2p_kernels` | as the brief, plus device frames against `relative_frame` bit for bit | the GPU W1 row uses at least 4,096 target leaves per launch, not the 64-set pool; the C4.2 target of Section 13.4; the plane-per-leaf layout as a candidate |
-| T7 | `fmm-kernels/src/leaf/{harmonics, p2m, l2p, p2l, m2p}.rs` | as the brief; bit identity with `nd-fmm-math` and `nd_fmm_ref::leaf` on the CPU runtime only where T3 finds a formulation free of cubecl-opt's fma fusion (Section 5.3) | P2M and P2L use the coefficient-owner mapping in point order (Section 6.3), not a shared-memory or plane reduction; coefficients formed in the kernel |
-| T8 | `fmm-kernels/src/{gemm/tiled, translate, view}.rs` | as the brief; the grouped call against per-octant launches bit for bit | the GEMM writes a temporary (β = 0); the grouped translation of Section 6.4 (gather in batch order, grouped GEMM with a tile schedule, row-ordered reduction for M2M, scatter-add for L2L) |
-| T9 | `fmm-kernels/src/gemm/library.rs`; dense M2L through `translate::grouped` with offset chunks | as the brief; grouped against per-offset (A) bit for bit with the same GEMM; the TF32 guard from `MatmulElems` | the launch structure is (B) of Section 6.4; `Classes` runs as dense from `expand` |
-| T10 | `fmm-kernels/src/rotation.rs` | as the brief; bit identity with `RotationTables::m2l` on the CPU runtime where it holds | one cube per target box (Section 6.6) |
+| T5 | `tetraleaf-exec/src/device.rs` (`DeviceOperator`, mirrors, `begin_evaluation`, `read_output`), `fmm.rs` (`Backend`, `OperatorKind`, settings, `ExecOperator`), `tables.rs` (crate-private family accessors) | full-fallback bit identity on every `mpi_exec.rs` scenario; transfers against Sections 4.1 and 7.2; settings errors; the threads rule; `view` types and their upload | the device backend runs on one rank (`DeviceNeedsOneRank` after step 5); `Fmm` drives `begin_evaluation` and `read_output`; `synchronous_stages`; the threads rule of Section 11 |
+| T6 | `tetraleaf-kernels/src/p2p.rs`; the P2P kind in `device.rs`; a row in `tetraleaf_validate::p2p_kernels` | as the brief, plus device frames against `relative_frame` bit for bit | the GPU W1 row uses at least 4,096 target leaves per launch, not the 64-set pool; the C4.2 target of Section 13.4; the plane-per-leaf layout as a candidate |
+| T7 | `tetraleaf-kernels/src/leaf/{harmonics, p2m, l2p, p2l, m2p}.rs` | as the brief; bit identity with `tetraleaf-math` and `tetraleaf_ref::leaf` on the CPU runtime only where T3 finds a formulation free of cubecl-opt's fma fusion (Section 5.3) | P2M and P2L use the coefficient-owner mapping in point order (Section 6.3), not a shared-memory or plane reduction; coefficients formed in the kernel |
+| T8 | `tetraleaf-kernels/src/{gemm/tiled, translate, view}.rs` | as the brief; the grouped call against per-octant launches bit for bit | the GEMM writes a temporary (β = 0); the grouped translation of Section 6.4 (gather in batch order, grouped GEMM with a tile schedule, row-ordered reduction for M2M, scatter-add for L2L) |
+| T9 | `tetraleaf-kernels/src/gemm/library.rs`; dense M2L through `translate::grouped` with offset chunks | as the brief; grouped against per-offset (A) bit for bit with the same GEMM; the TF32 guard from `MatmulElems` | the launch structure is (B) of Section 6.4; `Classes` runs as dense from `expand` |
+| T10 | `tetraleaf-kernels/src/rotation.rs` | as the brief; bit identity with `RotationTables::m2l` on the CPU runtime where it holds | one cube per target box (Section 6.6) |
 | T11 | scheduling in `device.rs`; device timestamps; `--backend` in `fmm_accuracy` | as the brief; one sync per evaluation | top levels stay on the device; the cross-level M2L merge is optional (Section 6.7) |
-| T12 | `fmm-exec/src/tune.rs`; `FmmBuilder::tuning_cache` | as the brief | tuning runs only with a tuning-cache directory; the static f64 rule is dense through p = 11 |
-| T13 | `nd-fmm-validate` `device_fmm` | as the brief | none |
+| T12 | `tetraleaf-exec/src/tune.rs`; `FmmBuilder::tuning_cache` | as the brief | tuning runs only with a tuning-cache directory; the static f64 rule is dense through p = 11 |
+| T13 | `tetraleaf-validate` `device_fmm` | as the brief | none |
 
 Facts in the briefs corrected at sign-off (README, T1, T2, T3 and T6):
 - The README ("The CubeCL CPU runtime", decision 10), T1, T2, T3 and T6 called
@@ -1572,12 +1572,12 @@ Signed off on 2026-10-03: every recommendation below is accepted as stated.
 | --- | --- | --- |
 | 1 | The requirements and tolerances | Keep requirements 1–11. Clarify that the device backend runs on one rank until C5.1 (`DeviceNeedsOneRank`, after `PointsNotOwned`). Dense f64 operators: within 1e-14, or twice the host operator's error on the same cell, whichever is larger. Every other tolerance as the README states (Sections 2, 9.2) |
 | 2 | The residency option, and T4b | (a): device stores in the operator, `Fmm` drives `begin_evaluation` and `read_output`; on one rank the only evaluator-side write is `reset`'s zeroing. **No T4b in Phase 4**; the hook of Section 4.5 is the C5.1 design (Section 4) |
-| 3 | Runtime-generic code or a run-time enum | A run-time value: `Backend` in `nd-fmm-exec`, `Device` over `cubecl::Device` in `nd-fmm-kernels`; CubeCL 0.11 removed `R` from the client (Section 3.2) |
+| 3 | Runtime-generic code or a run-time enum | A run-time value: `Backend` in `tetraleaf-exec`, `Device` over `cubecl::Device` in `tetraleaf-kernels`; CubeCL 0.11 removed `R` from the client (Section 3.2) |
 | 4 | The dense M2L launch structure | (B): grouped GEMM per level and offset chunk, then a row-ordered reduction per target; bit-identical to per-offset launches at about 1% of their launches (Section 6.4) |
 | 5 | `Classes` on the device | Run as `Dense` from `M2lClasses::expand`, reported as such (Section 6.8) |
 | 6 | The f64 static rule for p = 9–11 | `Dense` through p = 11, `Rotation` from p = 12, provisional until a GPU measures rotation (Section 10.5); measured on CUDA in Phase 4S: `Dense` at every p there (§18.2) |
 | 7 | The CPU runtime and `threads(n)` | No rayon pool with the CPU backend; `threads(n)` caps the units per cube of the CPU layouts. With Metal and CUDA the pool serves host-fallback kinds only, and is idle during device work by construction (Section 11) |
-| 8 | Autotune and its persistence | A strategy-level tuner in `nd-fmm-exec` at build; a cache file only in a caller-supplied directory, with the `TableCache` rules; CubeCL's autotune unused and its persistence feature off (Section 10) |
+| 8 | Autotune and its persistence | A strategy-level tuner in `tetraleaf-exec` at build; a cache file only in a caller-supplied directory, with the `TableCache` rules; CubeCL's autotune unused and its persistence feature off (Section 10) |
 | 9 | The C4.2 performance target | At least 25% of the P2P peak model (720 / 480 Gpairs/s) on W2 at N = 10⁵, and at least 10% on W1 at n_t = 64 with at least 4,096 target leaves per launch, Metal f32 (Section 13.4) |
 | 10 | (new) The Metal runtime | Keep `metal` = wgpu-msl (README). If T3 finds that its default math mode breaks the §3.13 argument and no formulation restores it, switch the `metal` feature to `metal-native` (`cubecl-metal`, safe math mode) by a separate sign-off (Section 5.3) |
 
@@ -1586,7 +1586,7 @@ Signed off on 2026-10-03: every recommendation below is accepted as stated.
 Every number here is measured on the Apple M3 Max (Metal f32 for timings; the CubeCL
 CPU runtime for f64 correctness) unless marked *model*; no f64 GPU run and no CUDA run
 was made, and CUDA is type-checked only. The full tables are in
-`fmm-validate/results/phase4-m3max.md` (T13) and the task reports (the T2–T12 pull requests);
+`tetraleaf-validate/results/phase4-m3max.md` (T13) and the task reports (the T2–T12 pull requests);
 laplace-fmm-plan.md §7, Phase 4, carries the status per component.
 
 *Phase 4S note (2026-10-07).* Section 18 runs this design on CUDA (the H100 of locust's
@@ -1610,8 +1610,8 @@ the one GPU, so no device figure of Phase 5 is a timing.
 | §3.13 addition (9.3) | drafted by T3 | signed off (decision 3): the C3S.4 P2P contract unchanged, on flushing backends for q = 0 or \|q\| ≥ 2⁻¹⁰⁰; ŷ by an explicit fma, `inverse_sqrt` without a Newton step, masking by compare and select |
 | Metal runtime (5.3) | keep wgpu-msl | kept (decision 11); no `metal-native` |
 | persistence (3.4) | off | off with `cpu` and `cuda`; on with `metal` through CubeCL's manifests, an empty store, unused (T4 sign-off) |
-| CI (13.2) | T4 measures the CPU-runtime job | kept as built (`run-tests-kernels`: 4 min 53 s cold, 51 s warm); `nd-fmm-kernels` a member, not a default member (decision 7). Phase 4S T10: one test run with CubeCL's profiling log, cached package installs, caches restored from `main`: 11 min 16 s cold, 5 min 14 s warm, of which about 4 min are the kernel tests of the grown suite (PR #71) |
-| CPU runtime target (decision 10) | if T3's ratio ≤ 1.5 | set (T3: 1.004); T6's CPU layout of P2P at 1.16× `nd_fmm_simd::P2pKernel` per pair at one thread (target 1.5), 2.2× on all cores (reported) |
+| CI (13.2) | T4 measures the CPU-runtime job | kept as built (`run-tests-kernels`: 4 min 53 s cold, 51 s warm); `tetraleaf-kernels` a member, not a default member (decision 7). Phase 4S T10: one test run with CubeCL's profiling log, cached package installs, caches restored from `main`: 11 min 16 s cold, 5 min 14 s warm, of which about 4 min are the kernel tests of the grown suite (PR #71) |
+| CPU runtime target (decision 10) | if T3's ratio ≤ 1.5 | set (T3: 1.004); T6's CPU layout of P2P at 1.16× `tetraleaf_simd::P2pKernel` per pair at one thread (target 1.5), 2.2× on all cores (reported) |
 | frames (6.1) | a table of exact powers of two | the powers formed exactly in the kernel from integer keys (T6), bit for bit `relative_frame` |
 | P2P layouts (6.2) | cube; plane per leaf a candidate; CPU layout if decision 10 | all three built and tested on every backend; cube 64 by default on GPUs; the tuner picks plane (2 per cube) or cube 32 on small leaves |
 | P2M, P2L (6.3) | coefficient owners in point order | as designed; tiles of up to 32 points' harmonics in shared memory (18 at p = 20 in f64) |
@@ -1637,7 +1637,7 @@ the one GPU, so no device figure of Phase 5 is a timing.
 | device memory (4.6) | dense M2L 13 MB (f32, p = 8) plus scratch 128 MB | 95–172 MB per `Fmm` at N = 10⁵ (dense), 20–30 MB (rotation); 322–358 MB at N = 10⁶ |
 | evaluation, Metal f32 against the host (README target: none) | — | tuned device 2.1–10.9 ms at N = 10⁵ (15–73 ms at N = 10⁶): 35–125× the host at one thread, 4.0–12.9× at 12 threads (T13) |
 | tuning time (10.4) | about 6 candidates × 0.3 s plus a few per bucket, within 10 s | 2.9–6.7 s per build on Metal f32 (T12, T13); a rebuild from the cache 0.08–0.12 s |
-| CPU-runtime suite (13.3) | under 5 minutes | 16 s warm for `nd-fmm-kernels` (T12) |
+| CPU-runtime suite (13.3) | under 5 minutes | 16 s warm for `tetraleaf-kernels` (T12) |
 
 
 ## 18. CUDA on Grace Hopper (Phase 4S)
@@ -1655,7 +1655,7 @@ after.
 ### 18.1 CUDA facts (T2, measured on locust, 2026-10-06)
 
 The facts continue the F-table of §1.2. "Measured" means on the GH200 with
-`nd-fmm-kernels`' tests (`--features cuda`), the GEMM spike or a minimal reproducer;
+`tetraleaf-kernels`' tests (`--features cuda`), the GEMM spike or a minimal reproducer;
 CubeCL 0.11.0-pre.4 through its default LLVM NVPTX path, CUDA 12.6.3, driver 565.57.01.
 
 | # | Fact | Source |
@@ -1666,8 +1666,8 @@ CubeCL 0.11.0-pre.4 through its default LLVM NVPTX path, CUDA 12.6.3, driver 565
 | F28 | No CMMA strategy launches on the LLVM path: `SimpleCyclicCmma` and `DoubleCyclicCmma` are `Unavailable` ("No tile size is available for the problem") at every shape tried, f32 and f64, p from 4 to 16. `Strategy::Auto` falls back to `SimpleUnit`. So `GemmPolicy::Auto`'s probe fails before the input-precision guard is reached, and the hand-written GEMM runs at every p and precision, as decided (README, "Precisions on CUDA") | measured (spike; `library_level_call`, `m2l_library`) |
 | F29 | `PLANE_POS` is not lowered for NVPTX: compiling a kernel that reads it panics (`unimplemented!`) on the server's compile thread. The launch is dropped and no error reaches the client: a later `read_one` returns the buffer's previous contents as `Ok`. `UNIT_POS_PLANE` (the lane id), `sync_plane` and `sync_cube` work. The P2P plane layout derives its plane and lane from `UNIT_POS` (T2). Fixed upstream after 0.11.0-pre.4: tracel-ai/cubecl#1714 (merged 2026-09-25, not yet released) sets `PlanePos` as `UNIT_POS / PLANE_DIM`, and its description reports the same silent failure | measured (reproducer; P2P tests before and after); `cubecl-llvm-0.11.0-pre.4/src/nvptx/builtins.rs`; tracel-ai/cubecl#1714 |
 | F30 | Timing by CUDA events (`TimingMethod::Device`): a window adds no sync. An empty window measures (6.6 µs here) where wgpu reports nothing; `Device::close_window` drops the time of a window without a launch on every backend (T2) | measured (`times_windows`); `cubecl-cuda-0.11.0-pre.4/src/runtime.rs` |
-| F31 | Every bit-for-bit test of `nd-fmm-kernels` holds on CUDA in f32 and f64: copies, scatters, zeroing, frames, the hand-written GEMM against its host `mul_add` loop, (B) against (A), rotation M2L against its host replica, P2P and leaf layouts against each other. LLVM's `contract` flag (F17) changed none of these results; every operator test stays within the Phase 4 bounds | measured (the suite, 56 CUDA tests) |
-| F32 | Kernel compilation (first launches, LLVM to PTX plus the driver's JIT): 537 variants of the kernel suite in 18 s, the slowest 0.54 s (`HarmonicsKernel`, f64); on the first run, the leaf tests' 7.2 s were 11.1 s (the driver's PTX cache in `CUDA_CACHE_PATH`, presumably). The GEMM spike: 144 variants, 4.4 s | measured (`CUBECL_DEBUG_LOG`, `fmm-kernels/tools/compile_times.awk`) |
+| F31 | Every bit-for-bit test of `tetraleaf-kernels` holds on CUDA in f32 and f64: copies, scatters, zeroing, frames, the hand-written GEMM against its host `mul_add` loop, (B) against (A), rotation M2L against its host replica, P2P and leaf layouts against each other. LLVM's `contract` flag (F17) changed none of these results; every operator test stays within the Phase 4 bounds | measured (the suite, 56 CUDA tests) |
+| F32 | Kernel compilation (first launches, LLVM to PTX plus the driver's JIT): 537 variants of the kernel suite in 18 s, the slowest 0.54 s (`HarmonicsKernel`, f64); on the first run, the leaf tests' 7.2 s were 11.1 s (the driver's PTX cache in `CUDA_CACHE_PATH`, presumably). The GEMM spike: 144 variants, 4.4 s | measured (`CUBECL_DEBUG_LOG`, `tetraleaf-kernels/tools/compile_times.awk`) |
 
 The GEMM spike's CUDA run (spikes/cubecl-gemm/SPIKE_REPORT.md, "CUDA on GH200") puts the
 hand-written f64 GEMM at 7.8–9.9 TFLOP/s for p = 8 to 16 at B = 1e5, 23–29% of the
@@ -1676,7 +1676,7 @@ not the Phase 4 GEMM; T7 measures that one.
 
 **Signed off on 2026-10-06** (with T2, PR #63): the facts F25–F32 as recorded, and:
 1. **The `PLANE_POS` workaround (F29) is accepted.** It is a small workaround in
-   `nd-fmm-kernels` under the brief's rule. The P2P plane layout takes its plane and lane
+   `tetraleaf-kernels` under the brief's rule. The P2P plane layout takes its plane and lane
    as `UNIT_POS / group` and `UNIT_POS % group`. That is exact under three conditions,
    all guaranteed: a 1-D cube, one fixed plane size (`P2pLayout::check`), and planes made
    of consecutive units (CUDA documents this; the CPU runtime's planes are one unit;
@@ -1687,7 +1687,7 @@ not the Phase 4 GEMM; T7 measures that one.
    The reproducer is in PR #63.
 2. **An empty timing window measures nothing on every backend (F30).** This is a change
    on the CPU runtime too: its empty windows resolved to about 10 µs and now resolve to
-   `None`, so nd-fmm-exec's stage timings there read zero for a stage without a launch,
+   `None`, so tetraleaf-exec's stage timings there read zero for a stage without a launch,
    as that code already documents. No computed value changes.
 3. **F31 covers only the kernels tested.** "LLVM's `contract` flag changed none of
    these results" holds for kernels whose results are pinned by explicit `fma` in a
@@ -1712,7 +1712,7 @@ on CUDA in f32 and f64, with the CPU runtime on Grace as the control
    backends measured; products with other uses may be fused on CUDA; the CUDA column of
    the table measured (F33, F34); the coincident-pair check extended to CUDA.
    `CONVENTION_VERSION` stays 1. No formulation change and no compiler option.
-2. **`fmm-kernels/CLAUDE.md`, "Arithmetic"**, says that any `a · b ± c` may be fused, a
+2. **`tetraleaf-kernels/CLAUDE.md`, "Arithmetic"**, says that any `a · b ± c` may be fused, a
    lone one on every backend and any one on CUDA.
 3. **NVRTC stays off (decision 4).** T7 measures the production P2P on the LLVM path. Only
    if `inverse_sqrt` proves a large share of the FMM's time does NVRTC, an in-kernel
@@ -1729,7 +1729,7 @@ showed no other process and 0% utilisation and the host a load below 3 (`nvidia-
 are not locked (the SM clock idles at 345 MHz and runs at its 1,980 MHz maximum under
 load). Every number is *measured (locust, CUDA)* unless marked *datasheet* or *model*.
 
-**Peaks** (`nd_fmm_validate::peaks`, keyed by `DeviceInfo::name`, "NVIDIA GH200 480GB"):
+**Peaks** (`tetraleaf_validate::peaks`, keyed by `DeviceInfo::name`, "NVIDIA GH200 480GB"):
 f32 67 TFLOP/s and f64 34 TFLOP/s without tensor cores, HBM3 4.0 TB/s (*datasheet*, at
 the 1,980 MHz maximum SM clock of `nvidia-smi -q -d CLOCK`). The f64 figure agrees with
 132 SMs × 64 FP64 lanes × 2 × 1.98 GHz = 33.5 TFLOP/s. **P2P peak model** (as §13.4 for
@@ -1739,14 +1739,14 @@ second (f64: 64 lanes, 16.7 × 10¹²) over 10 operations per pair (φ) or 15 (�
 square root is two IEEE sequences (`sqrt.rn`, `rcp.rn`; F33, F36), so the model is an
 upper bound the kernel cannot reach.
 
-**Method.** `nd-fmm-validate`'s `layout_sweep` (new in T7) measures every layout on the
+**Method.** `tetraleaf-validate`'s `layout_sweep` (new in T7) measures every layout on the
 level calls of an FMM's own plan, the uniform cube of C3.3 at N = 10⁶ (32,768 leaves,
 30.5 points per leaf on average, 5.4 × 10⁶ V pairs on level 5), gradients on: the GEMM
 and P2P candidates through `tune::TuningHook::offer`, timed by the tuner itself (median of
 five batches of ≥ 10 ms of the whole level call), and the leaf layouts, the P2P layouts and
 the chunk budgets by `KindTiming::Device` (CUDA events, a breakdown on CUDA). The kernel
 examples (`p2p_kernels`, `m2l_kernels`, `translation_kernels`, `rotation_kernels`) take
-`--precision f64` and `--n` from T7, and `nd-fmm-bench` gives the evaluation end to end.
+`--precision f64` and `--n` from T7, and `tetraleaf-bench` gives the evaluation end to end.
 
 | Kernel (§) | Metal default | CUDA default (T7) | The measurement behind it |
 | --- | --- | --- | --- |
@@ -1773,7 +1773,7 @@ p in f32 and f64.** Dense against rotation under the CUDA defaults, the cube:
 | --- | --- | --- |
 | per level, every V level (`rotation_kernels`), f64, N = 10⁵ / 10⁶ | 4–20 | 1.17–3.28 / 1.06–2.24 |
 | per level, f32, N = 10⁵ / 10⁶ | 2–10 | 1.55–3.24 / 1.27–3.72 |
-| end to end (`nd-fmm-bench`, mean of 5), f64, N = 10⁵ / 10⁶ | 4–20 | 1.15–1.90 / 1.05–1.50 |
+| end to end (`tetraleaf-bench`, mean of 5), f64, N = 10⁵ / 10⁶ | 4–20 | 1.15–1.90 / 1.05–1.50 |
 | end to end, f32, N = 10⁵ / 10⁶ | 2–10 | 1.25–1.56 / 1.15–1.38 |
 
 The rotation kernel reaches 1.5–3.4% of the f64 peak (model flops, (20/3)(p + 1)³ per
@@ -1801,7 +1801,7 @@ gradients, mean of 10 evaluations, static rule, no tuning cache), before T7 and 
 | f64, 12 | 110.26 | 105.65 | 1.04 | 79.35 / 78.74 (rotation) | 4.33 / 3.21 | 6.92 / 4.75 |
 
 The kind times (ms, `KindTiming::Synchronous`, a second build) carry one sync per call. With
-decision 9, f64 p = 12 runs dense: 78.9 ms in `nd-fmm-bench --strategy dense` (1.40× the
+decision 9, f64 p = 12 runs dense: 78.9 ms in `tetraleaf-bench --strategy dense` (1.40× the
 110.3 ms before), its M2L 52.6 ms against 78.7 ms under rotation. A rerun of the benchmark
 with the final code gave the same device time per kind (within 1–3%) but evaluations
 1.6–5.7 ms slower, all of it in `other`, while a root file-system audit (`find`, `rpm -V`)
@@ -1861,13 +1861,13 @@ above. f64 p = 12 under the rule before decision 9: rotation 89% of the GPU's ti
 
 ### 18.3 The device FMM on the GH200 as measured (T8, locust, 2026-10-07)
 
-`fmm-bench/results/phase4s-gh200.md` has every table; the GPU had no other process
+`tetraleaf-bench/results/phase4s-gh200.md` has every table; the GPU had no other process
 before or after each step, and its clocks were not locked. Same versions as §18.2.
 *Measured (locust, CUDA)* unless marked; the host is NEON on the Grace cores.
 
 | Item (section) | Model or earlier figure | Measured |
 | --- | --- | --- |
-| evaluation, tuned (`nd-fmm-bench`, the unit cube, gradients) | §18.2 at N = 10⁶ (static rule) | N = 10⁵: 1.6–2.6 ms (f32, p = 3–8), 2.0–26.5 ms (f64, p = 3–18); N = 10⁶: 12.8–21.7 and 20.5–243 ms; N = 10⁷: 221–315 ms and 0.36–3.1 s. Bit-identical repeats, one upload, one download, one sync |
+| evaluation, tuned (`tetraleaf-bench`, the unit cube, gradients) | §18.2 at N = 10⁶ (static rule) | N = 10⁵: 1.6–2.6 ms (f32, p = 3–8), 2.0–26.5 ms (f64, p = 3–18); N = 10⁶: 12.8–21.7 and 20.5–243 ms; N = 10⁷: 221–315 ms and 0.36–3.1 s. Bit-identical repeats, one upload, one download, one sync |
 | against the Grace host | — | 2.2–6.2× the host at 72 threads at N = 10⁵ and 10⁶ (2.0–7.5× on the Phase 4 problems, `device_fmm`) and 1.5–4.2× at N = 10⁷; the level calls alone 2.3–9.8×; 59–291× the host at one thread (N = 10⁵ and 10⁶) |
 | against the M3 Max (f32, the Phase 4 problems; two runs) | Metal 2.1–73.5 ms (Phase 4 T13) | CUDA 1.6–22.9 ms: 1.1–3.2× Metal, most at p = 8 on the cube at N = 10⁶ |
 | f64 accuracy (§9) | the CPU runtime's bounds | device − host at most 1.2e-14 (bound 1e-12), error ratios 1.0000 |
@@ -1896,12 +1896,12 @@ before or after each step, and its clocks were not locked. Same versions as §18
 §18.3 found the host's work outside the level calls to be the largest cost of the device
 FMM at large N. T9 made it parallel and moved the output pass to the device, without
 changing a bit of the output (C4S.8; decisions 11 and 12 of docs/phase4s/README.md):
-- **the output pass** (`nd_fmm_exec::fmm`, "The output pass"): `build` stores, per target
+- **the output pass** (`tetraleaf_exec::fmm`, "The output pass"): `build` stores, per target
   in the caller's order, its point in leaf order and its leaf (`u32`, 8 N_t bytes on the
   host) and per leaf the two scales (16 bytes). On the host it is one loop over the
   targets on the `Fmm`'s pool, collected into the output buffers without a zero fill. On
   a device with f64 arithmetic (CUDA, the CPU runtime) it runs by default on the device:
-  `nd_fmm_kernels::movement::gather_output` reads an `OutputOrder` uploaded once
+  `tetraleaf_kernels::movement::gather_output` reads an `OutputOrder` uploaded once
   (8 N_t + 20 J_loc + 4 bytes) into a caller-ordered output (o N_t s bytes), divides in
   f64 and rounds once to T. That buffer is downloaded instead of the target output: one
   download, one sync, the same o N_t s bytes and one launch more (§4.1). Metal, without
@@ -1920,8 +1920,8 @@ f32 and f64, gradients off and on; the CPU runtime with both passes), `tests/dev
 ignored gates. The whole output there also has the hash of the code before T9, on the host
 (M3 Max and Grace), the CPU runtime, Metal and CUDA (f32 and f64).
 
-`fmm-bench/results/phase4s-t9-host-part.md` has every table, the whole-output hashes
-before and after, the `nsys` trace and the raw output. The measurements: `nd-fmm-bench`,
+`tetraleaf-bench/results/phase4s-t9-host-part.md` has every table, the whole-output hashes
+before and after, the `nsys` trace and the raw output. The measurements: `tetraleaf-bench`,
 the unit cube with gradients, the static rule (`Dense`),
 2 warm-ups and 10 timed evaluations; load and output from a second build with
 `KindTiming::Synchronous`. In that mode `load` includes the sync after the upload, so on
@@ -2006,7 +2006,7 @@ one download and one sync (§4.1).
   N = 10⁶.
 
 **The changes**:
-- `nd_fmm_kernels::Device::download_view` returns a `HostValues<E>` that owns CubeCL's host
+- `tetraleaf_kernels::Device::download_view` returns a `HostValues<E>` that owns CubeCL's host
   buffer of the download and derefs to `&[E]` (CubeCL's safe `bytemuck` cast, no `unsafe`),
   with `download`'s counters, checks and errors; `download` is the copy of a view.
   `Device::write_owned` hands a `Vec` to CubeCL without the copy `write` makes;
@@ -2019,10 +2019,10 @@ one download and one sync (§4.1).
 - `Fmm` gathers the charges in leaf order into a fresh `Vec` on its pool, without a zero
   fill, and `begin_evaluation` hands it to `write_owned`.
 
-**Before and after** (`nd-fmm-bench`, the unit cube with gradients, `Dense`, 2 warm-ups and
+**Before and after** (`tetraleaf-bench`, the unit cube with gradients, `Dense`, 2 warm-ups and
 10 timed evaluations, medians in ms; load and output means from a second build with
 `KindTiming::Synchronous`; before = main `a12d9d6`; locust idle at every check, clocks not
-locked; fmm-bench/results/phase4s-t11-download-path.md has every table, the trace and the
+locked; tetraleaf-bench/results/phase4s-t11-download-path.md has every table, the trace and the
 raw output). *Measured (locust, CUDA)*:
 
 | N | precision | p | before | after | load before → after | output before → after (of it the download) |
@@ -2064,7 +2064,7 @@ both output passes.
 ## 19. Outcome of Phase 6's kernel work (C6.1, C6.3, C6.4; T5, T7, T8d, T11)
 
 Phase 6 changed the device path in three tasks and set one device default in T11; the
-reports are `fmm-validate/results/phase6-device.md` (T7), `phase6-rhs.md` (T5, §3.5),
+reports are `tetraleaf-validate/results/phase6-device.md` (T7), `phase6-rhs.md` (T5, §3.5),
 `phase6-dipoles.md` (T8d) and `phase6.md` (T11). Every change keeps the device's
 accumulation order and the host-against-device bounds of docs/phase4/README.md.
 

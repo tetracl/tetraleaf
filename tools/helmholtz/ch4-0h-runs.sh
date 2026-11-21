@@ -3,7 +3,7 @@
 # in parallel (docs/helmholtz/tasks/CH4.0h.md, "Machine runs"), from the repository root
 # after
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch4-0h-runs.sh <out-dir> <stage…>
 #
 # Every launch runs `helmholtz_accuracy` at the library's defaults as CH4.0e's did

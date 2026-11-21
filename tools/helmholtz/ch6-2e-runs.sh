@@ -3,7 +3,7 @@
 # (docs/helmholtz/tasks/CH6.2e.md, "Machine runs"), from the repository root after the
 # example was built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch6-2e-runs.sh <out-dir> <stage…>
 #
 # Stages (one rank × THREADS threads, default 72; BLAS threads 1; the default waves budget):

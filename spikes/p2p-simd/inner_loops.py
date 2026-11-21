@@ -3,10 +3,10 @@
 
 Usage (from the repository root):
 
-    cargo build --release -p nd-fmm-spike-p2p-simd [--target x86_64-apple-darwin]
-    python3 spikes/p2p-simd/inner_loops.py target/release/nd-fmm-spike-p2p-simd
+    cargo build --release -p tetraleaf-spike-p2p-simd [--target x86_64-apple-darwin]
+    python3 spikes/p2p-simd/inner_loops.py target/release/tetraleaf-spike-p2p-simd
     python3 spikes/p2p-simd/inner_loops.py \
-        target/x86_64-apple-darwin/release/nd-fmm-spike-p2p-simd
+        target/x86_64-apple-darwin/release/tetraleaf-spike-p2p-simd
 
 It disassembles the binary with `objdump` (llvm-objdump on macOS), finds every
 `kernels::{neon,avx2}::<prec>_<pot|grad>::<entry>` function, takes the innermost loop

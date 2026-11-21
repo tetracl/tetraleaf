@@ -11,8 +11,8 @@
 #             --no-fail-fast, so that one failing executable does not hide the others)
 #   simd      the run-tests-simd job: clippy, the tests, the ignored release tests (the
 #             4 u_T contract, exhaustive in f32), with the CPU and the ISAs printed
-#   kernels   the run-tests-kernels job: clippy with cpu, check with cuda (nd-fmm-kernels
-#             and nd-fmm-exec; type-checked only, Kathleen has no GPU), the CPU-runtime
+#   kernels   the run-tests-kernels job: clippy with cpu, check with cuda (tetraleaf-kernels
+#             and tetraleaf-exec; type-checked only, Kathleen has no GPU), the CPU-runtime
 #             tests in release
 # Every test that initialises MPI runs as a singleton here; the multi-rank tests are
 # mpi.sbatch. Each command is a step: a failure is reported and the job carries on.
@@ -41,15 +41,15 @@ for group in $groups; do
         ;;
     simd)
         step cpu 'lscpu | grep -E "Model name|Flags" | sed "s/Flags:.*\(avx2\).*\(avx512f\).*\(fma\).*/Flags: ... \1 ... \2 ... \3 .../"'
-        step simd-clippy 'cargo clippy -p nd-fmm-simd --all-targets -- -D warnings'
-        step simd-test 'cargo test -p nd-fmm-simd -- --show-output'
-        step simd-ignored 'cargo test -p nd-fmm-simd --release -- --ignored --show-output'
+        step simd-clippy 'cargo clippy -p tetraleaf-simd --all-targets -- -D warnings'
+        step simd-test 'cargo test -p tetraleaf-simd -- --show-output'
+        step simd-ignored 'cargo test -p tetraleaf-simd --release -- --ignored --show-output'
         ;;
     kernels)
-        step kernels-clippy 'cargo clippy -p nd-fmm-kernels --all-targets --features cpu -- -D warnings'
-        step kernels-check-cuda 'cargo check -p nd-fmm-kernels --features cuda'
-        step exec-check-cuda 'cargo check -p nd-fmm-exec --features cuda'
-        step kernels-test 'cargo test -p nd-fmm-kernels --features cpu --release -- --show-output'
+        step kernels-clippy 'cargo clippy -p tetraleaf-kernels --all-targets --features cpu -- -D warnings'
+        step kernels-check-cuda 'cargo check -p tetraleaf-kernels --features cuda'
+        step exec-check-cuda 'cargo check -p tetraleaf-exec --features cuda'
+        step kernels-test 'cargo test -p tetraleaf-kernels --features cpu --release -- --show-output'
         step bundle 'du -sh "$HOME/.cache/tracel" "$XDG_DATA_HOME/tracel" 2>&1; ls "$XDG_DATA_HOME/tracel" "$HOME/.cache/tracel" 2>&1'
         ;;
     *) step "unknown-group-$group" false ;;

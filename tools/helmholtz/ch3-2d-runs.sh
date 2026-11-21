@@ -3,7 +3,7 @@
 # (docs/helmholtz/tasks/CH3.2d.md, "Machine runs"), from the repository root after both
 # examples were built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_m2l --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_m2l --example helmholtz_accuracy
 #     tools/helmholtz/ch3-2d-runs.sh <out-dir> [p2p,…] [m2l-isa …]
 #
 # For each P2P choice of the second argument (default `auto`; `avx2` on Kathleen runs the

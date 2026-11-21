@@ -3,7 +3,7 @@
 # (docs/helmholtz/tasks/CH4.0.md, "Machine runs"), from the repository root after the
 # examples were built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_m2l --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_m2l --example helmholtz_accuracy
 #     tools/helmholtz/ch4-0-runs.sh pairs <out-dir> <isa…>
 #     tools/helmholtz/ch4-0-runs.sh fmm <out-dir> <stage…>
 #

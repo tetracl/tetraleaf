@@ -4227,3 +4227,20 @@ request, using this template:
   the default; 3, `VAfterPlan` stays opt-in, no task.
 - Laplace: not touched (Helmholtz modules of `nd-fmm-exec`, the validation harness, scripts).
 - Follow-ups: CH4.3b2c measures the defaults with the V price as signed off here (its line).
+
+## 2026-11-21: The tetraleaf rename (not a roadmap task)
+
+- The user renamed the project tetraleaf and moved it: the repository `tbetcke/fmm` was
+  transferred to `tetracl/tetraleaf` (issues, pull requests, branch protection with the
+  required check `run-tests` moved with it; the old web and git URLs redirect).
+- Every crate renamed, directory, package and library (the user, 2026-11-21: "Repo + crates",
+  directories too): `fmm-<name>/`, `nd-fmm-<name>`, `nd_fmm_<name>` became `tetraleaf-<name>/`,
+  `tetraleaf-<name>`, `tetraleaf_<name>`; `octree/`, `nd-octree` became `tetraleaf-octree/`,
+  `tetraleaf-octree`; the spikes' `nd-fmm-spike-<name>` became `tetraleaf-spike-<name>`.
+  The map is in docs/design/workspace-structure.md, "The tetraleaf rename".
+- The records keep the old names and paths (the user: "Leave as written"): this log above this
+  entry, the task plans, gate reports, reviews, phase briefs, spike reports and `results/` files.
+- The lock files changed in package names only (the same 548 and 569 packages, versions and
+  checksums). No convention, behaviour or result changed.
+- The paths on locust (`/data/ucahtbe/fmm`), Kathleen (`/scratch/scratch/ucahtbe/fmm`) and the
+  development Mac keep the name `fmm`.

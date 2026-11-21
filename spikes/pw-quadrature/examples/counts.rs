@@ -1,4 +1,4 @@
-//! `nd-fmm-tables`' quadratures of the Helmholtz exponential M2L (Helmholtz CH6.1a)
+//! `tetraleaf-tables`' quadratures of the Helmholtz exponential M2L (Helmholtz CH6.1a)
 //! against FMM3D's own files, at the centre and the corners of every domain of iprec 1–3:
 //! the nodes and weights bit for bit the spike's parse of FMM3D's files and the node maps
 //! the same to rounding; the wave and mode counts Σ Nₖ, Σ (2Fₖ + 1) against FMM3D's `hnumphys` and
@@ -6,15 +6,15 @@
 //! stated error. Prints a Markdown summary (docs/helmholtz/tasks/CH6.1a.md).
 //!
 //! ```text
-//! cargo run --release -p nd-fmm-spike-pw-quadrature --example counts -- <FMM3D src/Helmholtz>
+//! cargo run --release -p tetraleaf-spike-pw-quadrature --example counts -- <FMM3D src/Helmholtz>
 //! ```
 
-use nd_fmm_spike_pw_quadrature::C;
-use nd_fmm_spike_pw_quadrature::fmm3d::{self, Tables};
-use nd_fmm_spike_pw_quadrature::quadrature::Quadrature as SpikeQuadrature;
-use nd_fmm_spike_pw_quadrature::region::Grid;
-use nd_fmm_tables::helmholtz::plane_wave::quadrature::{DOMAINS, domains};
-use nd_fmm_tables::helmholtz::plane_wave::{Precision, Quadrature};
+use tetraleaf_spike_pw_quadrature::C;
+use tetraleaf_spike_pw_quadrature::fmm3d::{self, Tables};
+use tetraleaf_spike_pw_quadrature::quadrature::Quadrature as SpikeQuadrature;
+use tetraleaf_spike_pw_quadrature::region::Grid;
+use tetraleaf_tables::helmholtz::plane_wave::quadrature::{DOMAINS, domains};
+use tetraleaf_tables::helmholtz::plane_wave::{Precision, Quadrature};
 use rayon::prelude::*;
 
 /// One (domain, κ) row.

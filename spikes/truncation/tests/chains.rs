@@ -7,10 +7,10 @@
 //! reaches 10⁻²² for real k and 5·10⁻²¹ for η = 1.) Every case with Im(k) a ≥ 16 has the
 //! larger bound of [`bound`].
 
-use nd_fmm_spike_truncation::calibrate::{Chain, Config, run, worst};
-use nd_fmm_spike_truncation::chain::{Kind, Setup};
-use nd_fmm_spike_truncation::geometry::Placement;
-use nd_fmm_spike_truncation::real::Dd;
+use tetraleaf_spike_truncation::calibrate::{Chain, Config, run, worst};
+use tetraleaf_spike_truncation::chain::{Kind, Setup};
+use tetraleaf_spike_truncation::geometry::Placement;
+use tetraleaf_spike_truncation::real::Dd;
 
 /// Im(k) a.
 fn im_ka(kind: Kind, ka: f64) -> f64 {

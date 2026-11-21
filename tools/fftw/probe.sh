@@ -145,7 +145,7 @@ else
     cp -R "$source_dir" "$copy"
     chmod -R u+w "$copy"
     # A package of its own: without `[workspace]`, cargo would take it for an undeclared
-    # member of nd-fmm's workspace.
+    # member of tetraleaf's workspace.
     cat >>"$copy/Cargo.toml" <<'EOF'
 
 [[example]]
@@ -156,7 +156,7 @@ required-features = ["fftw"]
 [workspace]
 EOF
     cat >"$copy/examples/fftw_version.rs" <<'EOF'
-//! Written by nd-fmm's tools/fftw/probe.sh: FFTW's version string, as RLST reads it from the
+//! Written by tetraleaf's tools/fftw/probe.sh: FFTW's version string, as RLST reads it from the
 //! library it loaded.
 
 extern crate blas_src;

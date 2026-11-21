@@ -3,7 +3,7 @@
 # rule's plan built once (docs/helmholtz/tasks/CH4.0d1b.md, "Machine runs"), from the
 # repository root after the example was built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch4-0d1b-runs.sh <out-dir> <stage…>
 #
 # The cases of CH4.0d1's runs (tools/helmholtz/ch4-0d1-runs.sh), so that the builds and the

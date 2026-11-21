@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Runs the checks for the current branch of the nd-fmm workspace, chosen by what it changed - format, Clippy, tests, docs, the MPI tests at 2 and 4 ranks, crate-specific and machine checks, and the Laplace protection of the Helmholtz proposal's constraint 1 - and reports exactly what ran. Use before calling any task done, and from /next-task.
+description: Runs the checks for the current branch of the tetraleaf workspace, chosen by what it changed - format, Clippy, tests, docs, the MPI tests at 2 and 4 ranks, crate-specific and machine checks, and the Laplace protection of the Helmholtz proposal's constraint 1 - and reports exactly what ran. Use before calling any task done, and from /next-task.
 ---
 
 # Verify
@@ -38,14 +38,14 @@ working MPI.
 
 ## 3. By what changed
 
-- **nd-fmm-simd**: `cargo clippy -p nd-fmm-simd --all-targets -- -D warnings`,
-  `cargo test -p nd-fmm-simd -- --show-output`,
-  `cargo test -p nd-fmm-simd --release -- --ignored --show-output`, and the other
-  architecture: `cargo clippy -p nd-fmm-simd --all-targets --target <other> -- -D warnings`
+- **tetraleaf-simd**: `cargo clippy -p tetraleaf-simd --all-targets -- -D warnings`,
+  `cargo test -p tetraleaf-simd -- --show-output`,
+  `cargo test -p tetraleaf-simd --release -- --ignored --show-output`, and the other
+  architecture: `cargo clippy -p tetraleaf-simd --all-targets --target <other> -- -D warnings`
   (`x86_64-apple-darwin` on Apple silicon).
-- **nd-fmm-kernels**: the commands of root `CLAUDE.md` (Clippy with `cpu,metal`, the CUDA
+- **tetraleaf-kernels**: the commands of root `CLAUDE.md` (Clippy with `cpu,metal`, the CUDA
   check, the CPU-runtime tests; the Metal tests by hand outside the sandbox; CUDA on locust).
-- **nd-octree, nd-fmm-plan, nd-fmm-exec, or code they call**:
+- **tetraleaf-octree, tetraleaf-plan, tetraleaf-exec, or code they call**:
   `.github/scripts/run-mpi-tests.sh build <list>`, then `run <list> 2 4`, with section 2's
   `CARGO_PROFILE_DEV_OPT_LEVEL=1` and `CARGO_TARGET_DIR` (as CI's `run-tests-mpi`), on macOS with
   `MPIRUN_FLAGS="--mca btl_tcp_if_include lo0 --mca oob_tcp_if_include lo0"`, under an
@@ -54,7 +54,7 @@ working MPI.
   debug run at opt-level 0 (unset `CARGO_PROFILE_DEV_OPT_LEVEL`, the default target
   directory: the tests' `cfg!(debug_assertions)` budgets are set there) and report it
   beside the figure the crate's `CLAUDE.md` records, with the machine's load. Flag a run
-  above the crate's budget (nd-fmm-exec: the debug run under a minute) or one that grew
+  above the crate's budget (tetraleaf-exec: the debug run under a minute) or one that grew
   by more than about 20 %.
 - **Spikes**: their own tests, run from `spikes/` (their own workspace since CHA.1,
   `spikes/README.md`; no root command builds them), reported apart.
@@ -63,9 +63,9 @@ working MPI.
 
 ## 4. Laplace protection (proposal §2, constraint 1)
 
-If the change touches code Laplace runs (`nd-fmm-exec`'s Laplace operator or the shared
-drivers, `nd-fmm-tables`, `nd-fmm-simd`, `nd-fmm-math` as Laplace uses it, `nd-octree`,
-`nd-fmm-plan`, the Laplace kernels of `nd-fmm-kernels`) or a dependency pin:
+If the change touches code Laplace runs (`tetraleaf-exec`'s Laplace operator or the shared
+drivers, `tetraleaf-tables`, `tetraleaf-simd`, `tetraleaf-math` as Laplace uses it, `tetraleaf-octree`,
+`tetraleaf-plan`, the Laplace kernels of `tetraleaf-kernels`) or a dependency pin:
 - the Laplace fixtures and the bit-identity tests across threads, overlap and ranks
   (`mpi_exec`, `mpi_threading`, `invariance` through the MPI script at 2 and 4 ranks); where
   they do not cover the changed path, Laplace's outputs on `main` and on the branch with the

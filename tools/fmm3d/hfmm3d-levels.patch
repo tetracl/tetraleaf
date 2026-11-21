@@ -20,7 +20,7 @@ between FMM3D's own two code paths.
        integer *8 nthd,ithd
        integer *8 omp_get_max_threads,omp_get_thread_num
        integer *8 ntotl1
-+c     tools/fmm3d/hfmm3d-levels.patch (nd-fmm, Helmholtz CH6.2d)
++c     tools/fmm3d/hfmm3d-levels.patch (tetraleaf, Helmholtz CH6.2d)
 +      double precision, allocatable :: tlev(:,:),tthd(:,:)
 +      integer *8, allocatable :: ilvmode(:),ilvnl(:),ilvnw(:)
 +      logical, allocatable :: ifpwlev(:),ifpslev(:)
@@ -35,7 +35,7 @@ between FMM3D's own two code paths.
        do i=1,6
          timeinfo(i)=0
        enddo
-+c     tools/fmm3d/hfmm3d-levels.patch (nd-fmm, Helmholtz CH6.2d)
++c     tools/fmm3d/hfmm3d-levels.patch (tetraleaf, Helmholtz CH6.2d)
 +c     per level: the regime (FMM3D's tests, then the switch), the
 +c     timers and the plane waves' counts
 +      allocate(tlev(9,0:nlevels),tthd(2,nthd),ilvmode(0:nlevels))
@@ -253,7 +253,7 @@ between FMM3D's own two code paths.
        enddo
  
        if(ifprint.ge.1) call prin2('sum(timeinfo)=*',d,1)
-+c     tools/fmm3d/hfmm3d-levels.patch (nd-fmm, Helmholtz CH6.2d)
++c     tools/fmm3d/hfmm3d-levels.patch (tetraleaf, Helmholtz CH6.2d)
 +c     one line per level and the steps' times, on standard output
 +      print *,'hfmm3d-steps: pwlevel=',ipwlev,' t1=',timeinfo(1),
 +     1  ' t2=',timeinfo(2),' t3=',timeinfo(3),' t4=',timeinfo(4),

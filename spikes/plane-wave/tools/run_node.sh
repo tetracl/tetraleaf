@@ -5,7 +5,7 @@
 #
 #   tools/run_node.sh K <level example arguments>
 #
-# Build first: cargo build --release -p nd-fmm-spike-plane-wave --example level
+# Build first: cargo build --release -p tetraleaf-spike-plane-wave --example level
 # (from spikes/, the spikes' workspace since Helmholtz CHA.1; the binary is the root's
 # target/spikes/release/examples/level).
 set -eu

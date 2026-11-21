@@ -151,7 +151,7 @@ pub struct Pair {
 
 /// The table index of a V-list offset (CONVENTIONS §3.12, "V-list offsets").
 pub fn offset_index(d: [i64; 3]) -> usize {
-    nd_fmm_tables::geometry::m2l_offset_index(d).expect("a V-list offset")
+    tetraleaf_tables::geometry::m2l_offset_index(d).expect("a V-list offset")
 }
 
 impl Level {

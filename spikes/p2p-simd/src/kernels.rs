@@ -1,4 +1,4 @@
-//! Prototype P2P kernels with the signature of `nd_fmm_ref::p2p::p2p`:
+//! Prototype P2P kernels with the signature of `tetraleaf_ref::p2p::p2p`:
 //! φᵢ += Σⱼ qⱼ / rᵢⱼ and ∇φᵢ −= Σⱼ qⱼ dᵢⱼ / rᵢⱼ³ with d = xᵢ − yⱼ, a pair with r² = 0
 //! contributing nothing (CONVENTIONS §3.13, "Fast kernels").
 //!
@@ -16,7 +16,7 @@
 
 use crate::simd::{Elem, Rsqrt, Vf};
 
-/// A prototype entry point: the signature of `nd_fmm_ref::p2p::p2p`.
+/// A prototype entry point: the signature of `tetraleaf_ref::p2p::p2p`.
 pub type KernelFn<E> = unsafe fn(&[[E; 3]], &[E], &[[E; 3]], &mut [E], Option<&mut [[E; 3]]>);
 
 /// Loop order of a prototype.

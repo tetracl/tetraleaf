@@ -1,17 +1,17 @@
-//! The trees: nd-octree's points-per-leaf rule with a prototype maximum leaf width
+//! The trees: tetraleaf-octree's points-per-leaf rule with a prototype maximum leaf width
 //! (proposal §3.7).
 //!
-//! nd-octree has no maximum leaf width yet (CH3.0 adds one). The prototype refines in
-//! the spike, by nd-octree's own rule (a box with more than n distinct level-16 keys is
+//! tetraleaf-octree has no maximum leaf width yet (CH3.0 adds one). The prototype refines in
+//! the spike, by tetraleaf-octree's own rule (a box with more than n distinct level-16 keys is
 //! refined, `create_local_tree`) plus the width rule (a box that holds a point and is
 //! wider than c_leaf λ is refined). The leaves of that complete tree go to `Octree::new`
 //! as one level-16 key each, with `max_fine_keys = 1`: every refined box then holds at
-//! least eight keys and every leaf one, so nd-octree rebuilds the same tree and 2:1
+//! least eight keys and every leaf one, so tetraleaf-octree rebuilds the same tree and 2:1
 //! balances it as it balances the Laplace trees.
 
 use mpi::traits::CommunicatorCollectives;
-use nd_octree::constants::{DEEPEST_LEVEL, LEVEL_MASK};
-use nd_octree::{MortonKey, Octree, OctreeOptions, PhysicalBox, morton};
+use tetraleaf_octree::constants::{DEEPEST_LEVEL, LEVEL_MASK};
+use tetraleaf_octree::{MortonKey, Octree, OctreeOptions, PhysicalBox, morton};
 
 /// The deepest level, as a `usize`.
 pub const DEEPEST: usize = DEEPEST_LEVEL as usize;
@@ -89,7 +89,7 @@ pub fn first_descendant(key: MortonKey) -> MortonKey {
     (key & !LEVEL_MASK) | DEEPEST_LEVEL
 }
 
-/// The options of the Laplace FMM's tree (`nd-fmm-exec`'s `Fmm`, step 4), with `max_keys`.
+/// The options of the Laplace FMM's tree (`tetraleaf-exec`'s `Fmm`, step 4), with `max_keys`.
 fn options(max_keys: usize) -> OctreeOptions {
     OctreeOptions::new()
         .with_max_level(DEEPEST)
@@ -97,7 +97,7 @@ fn options(max_keys: usize) -> OctreeOptions {
         .with_ghost_children(true)
 }
 
-/// nd-octree's own tree of the points: `max_keys` points per leaf, no width limit.
+/// tetraleaf-octree's own tree of the points: `max_keys` points per leaf, no width limit.
 pub fn octree_of_points<'c, C: CommunicatorCollectives>(
     keys: &[MortonKey],
     max_keys: usize,
@@ -106,7 +106,7 @@ pub fn octree_of_points<'c, C: CommunicatorCollectives>(
     Octree::new(keys, options(max_keys), comm)
 }
 
-/// The prototype: the tree of `refine` with the width rule, balanced by nd-octree.
+/// The prototype: the tree of `refine` with the width rule, balanced by tetraleaf-octree.
 pub fn octree_with_width<'c, C: CommunicatorCollectives>(
     keys: &[MortonKey],
     max_keys: usize,

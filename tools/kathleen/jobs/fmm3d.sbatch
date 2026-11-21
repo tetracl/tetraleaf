@@ -11,7 +11,7 @@
 #             build (after a change to driver.f90)
 #   helmholtz-check      the two-point check of FMM3D's Helmholtz conventions against the
 #                        draft §3.15, with the identification (Helmholtz CH1.4)
-#   helmholtz-fixtures   fmm-ref/fixtures/helmholtz_fmm3d.json reproduced from this
+#   helmholtz-fixtures   tetraleaf-ref/fixtures/helmholtz_fmm3d.json reproduced from this
 #                        machine's FMM3D, to round-off (`--check --no-reference`)
 #   helmholtz the Helmholtz comparison of CH3.6 (tools/fmm3d/run.sh helmholtz): our
 #             Helmholtz FMM and FMM3D on the cases of H_CASES (default the gate's), both

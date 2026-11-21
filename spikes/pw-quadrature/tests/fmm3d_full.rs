@@ -1,6 +1,6 @@
 //! FMM3D's full tables (`tools/fetch.sh`; `FMM3D_HELMHOLTZ` names the directory).
 
-use nd_fmm_spike_pw_quadrature::fmm3d::{self, Tables};
+use tetraleaf_spike_pw_quadrature::fmm3d::{self, Tables};
 use std::path::Path;
 
 #[test]

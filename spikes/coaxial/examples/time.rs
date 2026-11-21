@@ -2,16 +2,16 @@
 //! projection, for one M2M/L2L table and one M2L table (d = 2) per level, real k.
 //! Prints a Markdown table for SPIKE_REPORT.md.
 //!
-//! `cargo run -p nd-fmm-spike-coaxial --release --example time`
+//! `cargo run -p tetraleaf-spike-coaxial --release --example time`
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use nd_fmm_spike_coaxial::coaxial::Table;
-use nd_fmm_spike_coaxial::complex::C64;
-use nd_fmm_spike_coaxial::config::{degree, m2l_kt, m2m_kt, scale};
-use nd_fmm_spike_coaxial::projection::{default_nodes, regular_regular, singular_regular};
-use nd_fmm_spike_coaxial::{Op, start_values};
+use tetraleaf_spike_coaxial::coaxial::Table;
+use tetraleaf_spike_coaxial::complex::C64;
+use tetraleaf_spike_coaxial::config::{degree, m2l_kt, m2m_kt, scale};
+use tetraleaf_spike_coaxial::projection::{default_nodes, regular_regular, singular_regular};
+use tetraleaf_spike_coaxial::{Op, start_values};
 
 /// Best of `reps` runs, in seconds.
 fn best(reps: usize, mut f: impl FnMut()) -> f64 {

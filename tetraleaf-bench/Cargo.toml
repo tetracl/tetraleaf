@@ -1,0 +1,38 @@
+[package]
+name = "tetraleaf-bench"
+version = "0.1.0-dev"
+description = "One-command benchmark of the tetraleaf FMM: N points in the unit cube, f32/f64, a degree, a backend; Markdown tables."
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "tetraleaf_bench"
+
+# The benchmark binary, run by tools/bench/run.sh (Phase 4S T6). A timing run: not
+# registered with templated-examples or CI.
+[[bin]]
+name = "tetraleaf-bench"
+path = "src/main.rs"
+
+# The device path of tetraleaf-exec, passed through as in tetraleaf-validate
+# (docs/design/device-path.md §3.4). tools/bench/run.sh picks them from `--backend`.
+[features]
+default = []
+gpu = ["tetraleaf-exec/gpu", "tetraleaf-validate/gpu"]
+cpu = ["gpu", "tetraleaf-exec/cpu", "tetraleaf-validate/cpu"]
+metal = ["gpu", "tetraleaf-exec/metal", "tetraleaf-validate/metal"]
+cuda = ["gpu", "tetraleaf-exec/cuda", "tetraleaf-validate/cuda"]
+
+[dependencies]
+tetraleaf-exec = { workspace = true }
+tetraleaf-validate = { workspace = true }
+# Only for the `Stored` bound that `Fmm<T>` carries, which tetraleaf-exec does not
+# re-export: the measurement is generic over f32 and f64.
+tetraleaf-tables = { workspace = true }
+mpi = { workspace = true }
+
+# No `unsafe` in any target of this crate (root CLAUDE.md, "Working rules"; Helmholtz CHA.2).
+[lints.rust]
+unsafe_code = "forbid"

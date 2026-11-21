@@ -3,7 +3,7 @@
 # (docs/helmholtz/tasks/CH6.2a.md, "Machine runs"), from the repository root after the
 # example was built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch6-2a-runs.sh <out-dir> <stage…>
 #
 # Stages: `budgets` (W1 at kD = 500 and W3 at kD = 100 at ε = 1e-6 under `--m2l planewave`

@@ -70,7 +70,7 @@ variable rebuilds everything.
 | `cache/`, `share/`, `config/`, `state/` | `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME` |
 | `tmp/` | `TMPDIR` (cargo, rustc, nvcc, spack, Open MPI's session directories) |
 | `nv/` | `CUDA_CACHE_PATH` (the driver's PTX JIT cache) |
-| `fmm/repo/` | a clone of https://github.com/tbetcke/fmm (read-only; locust never pushes) |
+| `fmm/repo/` | a clone of https://github.com/tetracl/tetraleaf (read-only; locust never pushes) |
 | `fmm/<branch>/` | the trees `sync.sh` copies, each with its own `target/` |
 | `logs/` | setup and long-run logs |
 | `.home-marker` | the time of the first setup, for `check-home.sh` |
@@ -105,7 +105,7 @@ On the M3 Max, outside the sandbox:
 
 ```sh
 tools/gh200/sync.sh
-tools/gh200/remote.sh cargo test -p nd-fmm-math
+tools/gh200/remote.sh cargo test -p tetraleaf-math
 tools/gh200/remote.sh 'RUST_MIN_STACK=8388608 cargo test 2>&1 | tail -n 30'
 ```
 
@@ -128,7 +128,7 @@ launch the binary under an external `timeout`, without the macOS loopback flags.
 example:
 
 ```sh
-tools/gh200/remote.sh 'cargo build --release -p nd-octree --examples &&
+tools/gh200/remote.sh 'cargo build --release -p tetraleaf-octree --examples &&
     timeout 300 mpirun -n 8 target/release/examples/test_mpi_complete_tree'
 ```
 
@@ -136,7 +136,7 @@ A test executable that initialises MPI: build it without running it, take its pa
 cargo's `Executable` line, and keep `RUST_MIN_STACK`:
 
 ```sh
-tools/gh200/remote.sh 'cargo test --release -p nd-fmm-exec --test mpi_exec --no-run'
+tools/gh200/remote.sh 'cargo test --release -p tetraleaf-exec --test mpi_exec --no-run'
 tools/gh200/remote.sh 'RUST_MIN_STACK=8388608 timeout 600 mpirun -n 4 target/release/deps/mpi_exec-<hash>'
 ```
 
@@ -152,8 +152,8 @@ tools/gh200/remote.sh 'RUST_MIN_STACK=8388608 timeout 600 mpirun -n 4 target/rel
   `/data/ucahtbe/tmp/sm_segment.*`.
 
 Measured on 2026-10-07 (Phase 4S T8), release builds, with these launch commands:
-`nd-octree`'s examples `test_mpi_complete_tree`, `test_mpi_construction_edge_cases` and
-`test_mpi_leaf_lookup` pass at 1, 2, 4, 8, 16, 32, 64 and 72 ranks; `nd-fmm-exec`'s
+`tetraleaf-octree`'s examples `test_mpi_complete_tree`, `test_mpi_construction_edge_cases` and
+`test_mpi_leaf_lookup` pass at 1, 2, 4, 8, 16, 32, 64 and 72 ranks; `tetraleaf-exec`'s
 `mpi_exec` passes at 1, 2, 4 and 8 (3.8 s at 1 rank, where every scenario runs; 0.3 s at
 2–8, where only the multi-rank scenario runs). Wall time per example run, start-up
 dominated:
@@ -164,7 +164,7 @@ dominated:
 
 ## The benchmark
 
-`tools/bench/run.sh` (Phase 4S T6, fmm-bench/CLAUDE.md) builds `nd-fmm-bench` with the
+`tools/bench/run.sh` (Phase 4S T6, tetraleaf-bench/CLAUDE.md) builds `tetraleaf-bench` with the
 features of its `--backend` list, sets every BLAS thread variable to 1, sources
 `env.sh` if it is not active, and writes a Markdown report to `bench-results/` under the
 current directory. From the M3 Max, outside the sandbox, after the checks of "GPU
@@ -180,9 +180,9 @@ tools/gh200/remote.sh 'cat bench-results/*.md'
 `sync.sh` deletes what exists only on locust (`rsync --delete`), `bench-results/`
 included: fetch a report before the next sync.
 
-`run.sh` rebuilds `target/release/nd-fmm-bench` with the features of its own `--backend`
+`run.sh` rebuilds `target/release/tetraleaf-bench` with the features of its own `--backend`
 list, so after a host-only run that binary has no CUDA. To run it directly (under `nsys`,
-for example), build it first with `cargo build --release -p nd-fmm-bench --features cuda`;
+for example), build it first with `cargo build --release -p tetraleaf-bench --features cuda`;
 otherwise every CUDA combination is a "refused" row (Phase 4S T8 found this).
 
 ## GPU etiquette

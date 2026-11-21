@@ -3,8 +3,8 @@
 //! `spikes/census/results/`.
 //!
 //! ```sh
-//! cargo run -p nd-fmm-spike-census --release --example census -- sweep
-//! cargo run -p nd-fmm-spike-census --release --example census -- probe W1 1000 0.5 128
+//! cargo run -p tetraleaf-spike-census --release --example census -- sweep
+//! cargo run -p tetraleaf-spike-census --release --example census -- probe W1 1000 0.5 128
 //! ```
 //!
 //! One rank, one thread. `probe <W1|W2|W3|W3u> <kD> <c_leaf|none> <n>` builds one tree
@@ -16,11 +16,11 @@ use std::time::Instant;
 
 use mpi::topology::SimpleCommunicator;
 use mpi::traits::Communicator;
-use nd_fmm_spike_census::census::{Census, DISTANCES, NDIST};
-use nd_fmm_spike_census::model::{Regime, TreeModel, level_ka};
-use nd_fmm_spike_census::tree::{fine_keys, octree_with_width, width_level};
-use nd_fmm_spike_census::workloads::Workload;
-use nd_fmm_validate::fmm_accuracy::Distribution;
+use tetraleaf_spike_census::census::{Census, DISTANCES, NDIST};
+use tetraleaf_spike_census::model::{Regime, TreeModel, level_ka};
+use tetraleaf_spike_census::tree::{fine_keys, octree_with_width, width_level};
+use tetraleaf_spike_census::workloads::Workload;
+use tetraleaf_validate::fmm_accuracy::Distribution;
 
 /// The leaf sizes: 128 (Laplace's host default from p = 12) and 64 (sensitivity).
 const N_LEAF: usize = 128;

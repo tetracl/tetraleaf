@@ -5,10 +5,10 @@
 //! weighted by the bounds of the coefficients it multiplies and produces,
 //! max |ΔE| w / max |E| w.
 
-use nd_fmm_spike_truncation::coaxial::{self, Op, Table};
-use nd_fmm_spike_truncation::complex::Complex;
-use nd_fmm_spike_truncation::radial;
-use nd_fmm_spike_truncation::real::{Dd, Real};
+use tetraleaf_spike_truncation::coaxial::{self, Op, Table};
+use tetraleaf_spike_truncation::complex::Complex;
+use tetraleaf_spike_truncation::radial;
+use tetraleaf_spike_truncation::real::{Dd, Real};
 
 type C = Complex<Dd>;
 
@@ -238,7 +238,7 @@ fn recursion_against_projection() {
             if ka > 32.0 && (im >= 1.0 || re == 0.0) {
                 continue;
             }
-            let p = nd_fmm_spike_truncation::calibrate::formula_p(ka, eps);
+            let p = tetraleaf_spike_truncation::calibrate::formula_p(ka, eps);
             let k = C::new(Dd::from_f64(re * ka), Dd::from_f64(ka) * Dd::from_f64(im));
             let g = if ka < 1.0 { ka } else { 1.0 };
             for (op, d2) in [

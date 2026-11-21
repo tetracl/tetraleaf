@@ -2860,213 +2860,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d5439c4ad607c3c23abf66de8c8bf57ba8adcd1f129e699851a6e43935d339d"
 
 [[package]]
-name = "nd-fmm-exec"
-version = "0.1.0-dev"
-dependencies = [
- "mpi",
- "nd-fmm-math",
- "nd-fmm-plan",
- "nd-fmm-ref",
- "nd-fmm-simd",
- "nd-fmm-tables",
- "nd-octree",
- "rayon",
- "rlst 0.12.0",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "nd-fmm-kernels"
-version = "0.1.0-dev"
-dependencies = [
- "cubecl",
- "cubek-matmul",
- "cubek-std",
- "nd-fmm-math",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "nd-fmm-math"
-version = "0.1.0-dev"
-dependencies = [
- "num-complex",
- "num-traits",
-]
-
-[[package]]
-name = "nd-fmm-plan"
-version = "0.1.0-dev"
-dependencies = [
- "mpi",
- "nd-octree",
- "rlst 0.12.0",
-]
-
-[[package]]
-name = "nd-fmm-ref"
-version = "0.1.0-dev"
-dependencies = [
- "nd-fmm-math",
- "num-traits",
-]
-
-[[package]]
-name = "nd-fmm-simd"
-version = "0.1.0-dev"
-dependencies = [
- "nd-fmm-math",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "nd-fmm-spike-census"
-version = "0.0.0"
-dependencies = [
- "mpi",
- "nd-fmm-plan",
- "nd-fmm-validate",
- "nd-octree",
- "serde_json",
-]
-
-[[package]]
-name = "nd-fmm-spike-coaxial"
-version = "0.0.0"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "nd-fmm-spike-cubecl-gemm"
-version = "0.0.0"
-dependencies = [
- "cubecl",
- "cubek-matmul",
- "cubek-std",
-]
-
-[[package]]
-name = "nd-fmm-spike-device-arith"
-version = "0.0.0"
-dependencies = [
- "cubecl",
- "nd-fmm-kernels",
- "nd-fmm-math",
- "nd-fmm-ref",
- "nd-fmm-simd",
- "nd-fmm-tables",
- "nd-fmm-validate",
- "rayon",
-]
-
-[[package]]
-name = "nd-fmm-spike-diagonal"
-version = "0.0.0"
-dependencies = [
- "nd-fmm-spike-truncation",
-]
-
-[[package]]
-name = "nd-fmm-spike-download-path"
-version = "0.0.0"
-dependencies = [
- "cubecl",
- "nd-fmm-kernels",
- "nd-fmm-validate",
- "rayon",
-]
-
-[[package]]
-name = "nd-fmm-spike-p2p-simd"
-version = "0.0.0"
-dependencies = [
- "green-kernels",
- "nd-fmm-math",
- "nd-fmm-ref",
- "nd-fmm-simd",
- "nd-fmm-validate",
- "pulp",
-]
-
-[[package]]
-name = "nd-fmm-spike-plane-wave"
-version = "0.0.0"
-dependencies = [
- "nd-fmm-math",
- "nd-fmm-ref",
- "nd-fmm-simd",
- "nd-fmm-tables",
-]
-
-[[package]]
-name = "nd-fmm-spike-pw-quadrature"
-version = "0.0.0"
-dependencies = [
- "nd-fmm-ref",
- "nd-fmm-spike-plane-wave",
- "nd-fmm-tables",
- "num-complex",
- "rayon",
-]
-
-[[package]]
-name = "nd-fmm-spike-radial"
-version = "0.0.0"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "nd-fmm-spike-rotation-blocks"
-version = "0.0.0"
-dependencies = [
- "nd-fmm-math",
- "serde_json",
-]
-
-[[package]]
-name = "nd-fmm-spike-truncation"
-version = "0.0.0"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "nd-fmm-tables"
-version = "0.1.0-dev"
-dependencies = [
- "nd-fmm-math",
- "nd-fmm-ref",
- "num-traits",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "nd-fmm-validate"
-version = "0.1.0-dev"
-dependencies = [
- "mpi",
- "nd-fmm-exec",
- "nd-fmm-math",
- "nd-fmm-ref",
- "nd-fmm-simd",
- "nd-fmm-tables",
- "nd-octree",
-]
-
-[[package]]
-name = "nd-octree"
-version = "0.1.1-dev"
-dependencies = [
- "itertools 0.15.0",
- "mpi",
- "rand 0.10.3",
- "rand_chacha 0.10.0",
- "rlst 0.12.0",
-]
-
-[[package]]
 name = "ndk-sys"
 version = "0.6.0+11769913"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4558,6 +4351,213 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "tetraleaf-exec"
+version = "0.1.0-dev"
+dependencies = [
+ "mpi",
+ "rayon",
+ "rlst 0.12.0",
+ "tetraleaf-math",
+ "tetraleaf-octree",
+ "tetraleaf-plan",
+ "tetraleaf-ref",
+ "tetraleaf-simd",
+ "tetraleaf-tables",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tetraleaf-kernels"
+version = "0.1.0-dev"
+dependencies = [
+ "cubecl",
+ "cubek-matmul",
+ "cubek-std",
+ "tetraleaf-math",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tetraleaf-math"
+version = "0.1.0-dev"
+dependencies = [
+ "num-complex",
+ "num-traits",
+]
+
+[[package]]
+name = "tetraleaf-octree"
+version = "0.1.1-dev"
+dependencies = [
+ "itertools 0.15.0",
+ "mpi",
+ "rand 0.10.3",
+ "rand_chacha 0.10.0",
+ "rlst 0.12.0",
+]
+
+[[package]]
+name = "tetraleaf-plan"
+version = "0.1.0-dev"
+dependencies = [
+ "mpi",
+ "rlst 0.12.0",
+ "tetraleaf-octree",
+]
+
+[[package]]
+name = "tetraleaf-ref"
+version = "0.1.0-dev"
+dependencies = [
+ "num-traits",
+ "tetraleaf-math",
+]
+
+[[package]]
+name = "tetraleaf-simd"
+version = "0.1.0-dev"
+dependencies = [
+ "tetraleaf-math",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tetraleaf-spike-census"
+version = "0.0.0"
+dependencies = [
+ "mpi",
+ "serde_json",
+ "tetraleaf-octree",
+ "tetraleaf-plan",
+ "tetraleaf-validate",
+]
+
+[[package]]
+name = "tetraleaf-spike-coaxial"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "tetraleaf-spike-cubecl-gemm"
+version = "0.0.0"
+dependencies = [
+ "cubecl",
+ "cubek-matmul",
+ "cubek-std",
+]
+
+[[package]]
+name = "tetraleaf-spike-device-arith"
+version = "0.0.0"
+dependencies = [
+ "cubecl",
+ "rayon",
+ "tetraleaf-kernels",
+ "tetraleaf-math",
+ "tetraleaf-ref",
+ "tetraleaf-simd",
+ "tetraleaf-tables",
+ "tetraleaf-validate",
+]
+
+[[package]]
+name = "tetraleaf-spike-diagonal"
+version = "0.0.0"
+dependencies = [
+ "tetraleaf-spike-truncation",
+]
+
+[[package]]
+name = "tetraleaf-spike-download-path"
+version = "0.0.0"
+dependencies = [
+ "cubecl",
+ "rayon",
+ "tetraleaf-kernels",
+ "tetraleaf-validate",
+]
+
+[[package]]
+name = "tetraleaf-spike-p2p-simd"
+version = "0.0.0"
+dependencies = [
+ "green-kernels",
+ "pulp",
+ "tetraleaf-math",
+ "tetraleaf-ref",
+ "tetraleaf-simd",
+ "tetraleaf-validate",
+]
+
+[[package]]
+name = "tetraleaf-spike-plane-wave"
+version = "0.0.0"
+dependencies = [
+ "tetraleaf-math",
+ "tetraleaf-ref",
+ "tetraleaf-simd",
+ "tetraleaf-tables",
+]
+
+[[package]]
+name = "tetraleaf-spike-pw-quadrature"
+version = "0.0.0"
+dependencies = [
+ "num-complex",
+ "rayon",
+ "tetraleaf-ref",
+ "tetraleaf-spike-plane-wave",
+ "tetraleaf-tables",
+]
+
+[[package]]
+name = "tetraleaf-spike-radial"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "tetraleaf-spike-rotation-blocks"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "tetraleaf-math",
+]
+
+[[package]]
+name = "tetraleaf-spike-truncation"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "tetraleaf-tables"
+version = "0.1.0-dev"
+dependencies = [
+ "num-traits",
+ "tetraleaf-math",
+ "tetraleaf-ref",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tetraleaf-validate"
+version = "0.1.0-dev"
+dependencies = [
+ "mpi",
+ "tetraleaf-exec",
+ "tetraleaf-math",
+ "tetraleaf-octree",
+ "tetraleaf-ref",
+ "tetraleaf-simd",
+ "tetraleaf-tables",
 ]
 
 [[package]]

@@ -4,7 +4,7 @@
 //! ```text
 //! OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 BLIS_NUM_THREADS=1 \
 //!     VECLIB_MAXIMUM_THREADS=1 RAYON_NUM_THREADS=1 \
-//!     cargo run --release -p nd-fmm-spike-device-arith --features cpu,metal -- \
+//!     cargo run --release -p tetraleaf-spike-device-arith --features cpu,metal -- \
 //!     [--backends metal,cuda,cpu] [--sections primitives,compiler,domain,p2p,cpu-p2p,leafops,dipoles] [--quick]
 //! ```
 //!
@@ -15,14 +15,14 @@
 
 use std::time::Instant;
 
-use nd_fmm_simd::P2pKernel;
-use nd_fmm_spike_device_arith::backend::{Backend, describe, keep_ptx, supports_f64};
-use nd_fmm_spike_device_arith::real::Real;
-use nd_fmm_spike_device_arith::{
+use tetraleaf_simd::P2pKernel;
+use tetraleaf_spike_device_arith::backend::{Backend, describe, keep_ptx, supports_f64};
+use tetraleaf_spike_device_arith::real::Real;
+use tetraleaf_spike_device_arith::{
     compiler, cpu_p2p, dipoles, domain, leafops, p2p, pairs, primitives,
 };
-use nd_fmm_validate::bench::{cores, cpu_model, performance_cores, target, toolchain};
-use nd_fmm_validate::p2p_kernels::{Form, Kernel, W1_SEED, W1_TARGETS, check, oracles, passes, w1};
+use tetraleaf_validate::bench::{cores, cpu_model, performance_cores, target, toolchain};
+use tetraleaf_validate::p2p_kernels::{Form, Kernel, W1_SEED, W1_TARGETS, check, oracles, passes, w1};
 
 /// The sizes of a run.
 struct Sizes {
@@ -259,13 +259,13 @@ fn domain_for<T: Real>(client: &cubecl::prelude::Client, backend: Backend, sizes
 
 /// The coincident-pair rule of the production dipole P2P (Phase 6 T8d) on the pairs of the
 /// §3.13 check, with moments.
-fn dipoles_for<T: Real + nd_fmm_kernels::DeviceFloat>(
-    device: &mut nd_fmm_kernels::Device,
+fn dipoles_for<T: Real + tetraleaf_kernels::DeviceFloat>(
+    device: &mut tetraleaf_kernels::Device,
     backend: Backend,
     sizes: &Sizes,
 ) -> bool {
     let mut ok = true;
-    let layout = nd_fmm_kernels::p2p::P2pLayout::default_for(device.info());
+    let layout = tetraleaf_kernels::p2p::P2pLayout::default_for(device.info());
     for (label, list, seed) in [
         (
             "adversarial",
@@ -309,13 +309,13 @@ fn p2p_for<T: Real>(client: &cubecl::prelude::Client, backend: Backend, sizes: &
     let pairs = p2p::domain_pairs::<T>(sizes.term_pairs, 1, 3);
     let reference = p2p::reference_terms(&pairs);
     println!(
-        "Pair terms against `nd_fmm_ref::p2p` ({} pairs over the kernel domain; gradient over r² ≥ {}), \
+        "Pair terms against `tetraleaf_ref::p2p` ({} pairs over the kernel domain; gradient over r² ≥ {}), \
          and sums against `direct_sum` on W1 (worst over n_t ∈ {:?}, {} sets each, with gradients; \
          relative to the term magnitudes; the reference's own error in brackets):\n",
         pairs.len(),
         if T::BITS == 24 { "2^-84" } else { "2^-108" },
         sizes.leaf_sizes,
-        nd_fmm_validate::p2p_kernels::CHECKED_SETS
+        tetraleaf_validate::p2p_kernels::CHECKED_SETS
     );
     println!(
         "| backend | precision | candidate | φ term (u_T) | ∇φ term (u_T) | φ, ∇φ term, nonzero |dₖ| ≥ 2^-53 (u_T) | φ sum | ∇φ sum | sum check |"
@@ -328,8 +328,8 @@ fn p2p_for<T: Real>(client: &cubecl::prelude::Client, backend: Backend, sizes: &
         for &n_t in &sizes.leaf_sizes {
             let (a, r) = p2p::leaf_check::<T>(client, backend, c, n_t);
             pass &= passes::<T>(a, r);
-            acc = nd_fmm_validate::p2p_kernels::Accuracy::worst(acc, a);
-            refacc = nd_fmm_validate::p2p_kernels::Accuracy::worst(refacc, r);
+            acc = tetraleaf_validate::p2p_kernels::Accuracy::worst(acc, a);
+            refacc = tetraleaf_validate::p2p_kernels::Accuracy::worst(refacc, r);
         }
         keep_ptx(&format!("p2p {} {}", T::NAME, c.name()));
         ok &= pass;
@@ -392,7 +392,7 @@ fn p2p_for<T: Real>(client: &cubecl::prelude::Client, backend: Backend, sizes: &
 }
 
 /// One cell of the CPU-runtime comparison: (seconds per launch at 1 and 12 units, and of
-/// `nd-fmm-simd` at 1 and 12 threads), or `None` if the direct-sum check failed.
+/// `tetraleaf-simd` at 1 and 12 threads), or `None` if the direct-sum check failed.
 fn cpu_cell<T: Real>(
     client: &cubecl::prelude::Client,
     n_t: usize,
@@ -424,7 +424,7 @@ fn cpu_cell<T: Real>(
     }
     let (same, total) =
         cpu_p2p::identical_to_simd(client, P2pKernel::<T>::detect(), checked, gradients);
-    eprintln!("    bit-identical to nd-fmm-simd: {same} of {total}");
+    eprintln!("    bit-identical to tetraleaf-simd: {same} of {total}");
     identical.0 += same;
     identical.1 += total;
     let device = cpu_p2p::upload(client, &pool);
@@ -455,7 +455,7 @@ fn cpu_p2p_for<T: Real>(
     );
     let mut identical = (0, 0);
     println!(
-        "| precision | output | n_t | CPU runtime 1 unit (Gpairs/s) | nd-fmm-simd 1 thread | ratio (time) | CPU runtime 12 units | nd-fmm-simd 12 threads | ratio (time) |"
+        "| precision | output | n_t | CPU runtime 1 unit (Gpairs/s) | tetraleaf-simd 1 thread | ratio (time) | CPU runtime 12 units | tetraleaf-simd 12 threads | ratio (time) |"
     );
     println!("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
     for gradients in [false, true] {
@@ -483,7 +483,7 @@ fn cpu_p2p_for<T: Real>(
         }
     }
     println!(
-        "\n{}: outputs bit-identical to `nd-fmm-simd` ({}) on the checked sets of every cell: {} of {}.\n",
+        "\n{}: outputs bit-identical to `tetraleaf-simd` ({}) on the checked sets of every cell: {} of {}.\n",
         T::NAME,
         P2pKernel::<T>::detect().isa(),
         identical.0,
@@ -626,11 +626,11 @@ fn main() {
             }
         }
         if has("cpu-p2p") && b == Backend::Cpu {
-            section("CPU-shaped P2P on the CPU runtime against nd-fmm-simd");
+            section("CPU-shaped P2P on the CPU runtime against tetraleaf-simd");
             println!(
                 "W1 gathered, {} target leaves per launch (the 64-set pool cycled); 1 unit against `P2pKernel::detect()` ({}) \
                  on one thread, 12 units against it on 12 rayon threads; kernel compilation excluded; median of 15 \
-                 batches of at least 20 ms. Ratio = CPU-runtime time / nd-fmm-simd time.\n",
+                 batches of at least 20 ms. Ratio = CPU-runtime time / tetraleaf-simd time.\n",
                 o.sizes.cpu_leaves,
                 P2pKernel::<f32>::detect().isa()
             );
@@ -660,14 +660,14 @@ fn main() {
                 b.name()
             ));
             let kind = match b {
-                Backend::Cpu => nd_fmm_kernels::BackendKind::Cpu,
-                Backend::Metal => nd_fmm_kernels::BackendKind::Metal,
-                Backend::Cuda => nd_fmm_kernels::BackendKind::Cuda,
+                Backend::Cpu => tetraleaf_kernels::BackendKind::Cpu,
+                Backend::Metal => tetraleaf_kernels::BackendKind::Metal,
+                Backend::Cuda => tetraleaf_kernels::BackendKind::Cuda,
             };
-            let mut device = nd_fmm_kernels::Device::open(kind)
+            let mut device = tetraleaf_kernels::Device::open(kind)
                 .unwrap_or_else(|e| panic!("cannot open {kind}: {e}"));
             println!(
-                "`nd_fmm_kernels::p2p::p2p` with `SourceKind::Dipoles` and gradients on {}, one row per \
+                "`tetraleaf_kernels::p2p::p2p` with `SourceKind::Dipoles` and gradients on {}, one row per \
                  pair, moments uniform in [−1, 1)³; coincident pairs must add exactly zero, the others \
                  (in f32 from r² = 2^-79) be finite and within 32 u_T (φ̂, relative to |d_t| / r²) and \
                  176 u_T (ĝ, relative to |d_t| / r³) of `p2p_dipoles` on the host's ŷ and r̂ d̂:\n",

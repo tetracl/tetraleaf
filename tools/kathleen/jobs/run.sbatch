@@ -3,7 +3,7 @@
 # (Phase 5N T1). One node, `singlenode`, unless the submission says otherwise (at most 4
 # nodes, in `small`; Phase 5S T0).
 #
-#     tools/kathleen/submit.sh run.sbatch 'cargo test -p nd-fmm-exec' 'du -sh target'
+#     tools/kathleen/submit.sh run.sbatch 'cargo test -p tetraleaf-exec' 'du -sh target'
 #     tools/kathleen/submit.sh --qos=small --nodes=4 --time=00:30:00 -- run.sbatch 'srun hostname'
 #
 # For the commands the other job scripts do not cover. Never on the login node: a build

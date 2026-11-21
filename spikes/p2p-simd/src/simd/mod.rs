@@ -6,7 +6,7 @@
 //! `kernels` and `rsqrt_study` enable. Callers must run on a CPU with the ISA of the
 //! vector type, and pointers must be valid for the lanes read or written.
 
-use nd_fmm_math::RealScalar;
+use tetraleaf_math::RealScalar;
 
 #[cfg(target_arch = "x86_64")]
 pub mod avx2;

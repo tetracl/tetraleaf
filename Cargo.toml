@@ -1,31 +1,31 @@
 [workspace]
 # Keep "2"; moving to "3" (MSRV-aware resolution) is a separate decision.
 resolver = "2"
-members = ["fmm-plan", "octree", "fmm-math", "fmm-ref", "fmm-validate", "fmm-tables", "fmm-exec", "fmm-simd", "fmm-kernels", "fmm-bench"]
+members = ["tetraleaf-plan", "tetraleaf-octree", "tetraleaf-math", "tetraleaf-ref", "tetraleaf-validate", "tetraleaf-tables", "tetraleaf-exec", "tetraleaf-simd", "tetraleaf-kernels", "tetraleaf-bench"]
 # The spikes are a workspace of their own (spikes/Cargo.toml, with its own lock file; Helmholtz
 # CHA.1), built by hand from spikes/ and never by this workspace's checks.
 exclude = ["spikes"]
-# Without default-members every member is built; nd-fmm-kernels is a member only, so the
+# Without default-members every member is built; tetraleaf-kernels is a member only, so the
 # default checks build it without a backend.
-default-members = ["octree", "fmm-plan", "fmm-math", "fmm-ref", "fmm-validate", "fmm-tables", "fmm-exec", "fmm-simd", "fmm-bench"]
+default-members = ["tetraleaf-octree", "tetraleaf-plan", "tetraleaf-math", "tetraleaf-ref", "tetraleaf-validate", "tetraleaf-tables", "tetraleaf-exec", "tetraleaf-simd", "tetraleaf-bench"]
 
-# Every crate but octree/ inherits from this; octree/ keeps its own fields.
+# Every crate but tetraleaf-octree/ inherits from this; tetraleaf-octree/ keeps its own fields.
 [workspace.package]
 edition = "2024"
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/tbetcke/fmm"
-repository = "https://github.com/tbetcke/fmm"
+homepage = "https://github.com/tetracl/tetraleaf"
+repository = "https://github.com/tetracl/tetraleaf"
 
 [workspace.dependencies]
 num-traits = "0.2"
-# Helmholtz CH1.2b: the complex type of nd-fmm-math (re-exported as nd_fmm_math::Complex),
+# Helmholtz CH1.2b: the complex type of tetraleaf-math (re-exported as tetraleaf_math::Complex),
 # signed off by the user on 2026-10-30; already in the lock file through rlst.
 num-complex = "0.4"
 thiserror = "2"
 proptest = "1"
 approx = "0.5"
 serde_json = "1"
-# Pinned exactly; only nd-fmm-kernels and spikes/ may use CubeCL (spikes/Cargo.toml repeats
+# Pinned exactly; only tetraleaf-kernels and spikes/ may use CubeCL (spikes/Cargo.toml repeats
 # these three pins; move them together). 0.11.0 is a release
 # (2026-10-06), the first after the pre-release 0.11.0-pre.4 that Phase 4 T2 chose on
 # 2026-10-03 because it runs f64 on CUDA, which 0.10.0 disabled; moved in Phase 5S T1s.
@@ -36,27 +36,27 @@ serde_json = "1"
 cubecl = { version = "=0.11.0", default-features = false, features = ["std", "stdlib"] }
 cubek-matmul = { version = "=0.3.0", default-features = false, features = ["std", "multi-level"] }
 cubek-std = { version = "=0.3.0", default-features = false }
-nd-fmm-math = { path = "fmm-math" }
-nd-fmm-ref = { path = "fmm-ref" }
-nd-fmm-tables = { path = "fmm-tables" }
+tetraleaf-math = { path = "tetraleaf-math" }
+tetraleaf-ref = { path = "tetraleaf-ref" }
+tetraleaf-tables = { path = "tetraleaf-tables" }
 # Phase 4: every CubeCL kernel. A member, not a default member (signed off with T4).
-nd-fmm-kernels = { path = "fmm-kernels" }
-# Phase 3, at the versions octree/ uses. rlst is never given the "mpi" feature here;
-# the crates that need it (nd-octree, nd-fmm-plan) enable it themselves.
+tetraleaf-kernels = { path = "tetraleaf-kernels" }
+# Phase 3, at the versions tetraleaf-octree/ uses. rlst is never given the "mpi" feature here;
+# the crates that need it (tetraleaf-octree, tetraleaf-plan) enable it themselves.
 mpi = { version = "0.8.2", features = ["derive"] }
 rlst = "0.12.0"
 rand_chacha = "0.10"
-# Host threading of the Laplace FMM (Phase 3 T10); nd-fmm-exec only.
+# Host threading of the Laplace FMM (Phase 3 T10); tetraleaf-exec only.
 rayon = "1"
-# octree/ does not use these entries yet (a separate decision).
-nd-octree = { path = "octree" }
-nd-fmm-plan = { path = "fmm-plan" }
-nd-fmm-exec = { path = "fmm-exec" }
-# Phase 3S: hand-written SIMD kernels of the host path (nd-fmm-exec, nd-fmm-validate).
-nd-fmm-simd = { path = "fmm-simd" }
-# Development tooling; no library crate may depend on it (fmm-validate/CLAUDE.md). The
+# tetraleaf-octree/ does not use these entries yet (a separate decision).
+tetraleaf-octree = { path = "tetraleaf-octree" }
+tetraleaf-plan = { path = "tetraleaf-plan" }
+tetraleaf-exec = { path = "tetraleaf-exec" }
+# Phase 3S: hand-written SIMD kernels of the host path (tetraleaf-exec, tetraleaf-validate).
+tetraleaf-simd = { path = "tetraleaf-simd" }
+# Development tooling; no library crate may depend on it (tetraleaf-validate/CLAUDE.md). The
 # Phase 3S T7 spike example `compare` takes its P2P workloads.
-nd-fmm-validate = { path = "fmm-validate" }
+tetraleaf-validate = { path = "tetraleaf-validate" }
 # Phase 4S T6: the one-command benchmark (tools/bench/run.sh); a binary, no crate
 # depends on it.
-nd-fmm-bench = { path = "fmm-bench" }
+tetraleaf-bench = { path = "tetraleaf-bench" }

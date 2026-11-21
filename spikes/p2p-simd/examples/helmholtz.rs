@@ -1,9 +1,9 @@
 //! The cost per pair of the Helmholtz P2P (Helmholtz CH3.4b) against Laplace's and Yukawa's,
-//! for `nd-fmm-simd` and for green-kernels' Helmholtz kernel. Prints Markdown on stdout and
+//! for `tetraleaf-simd` and for green-kernels' Helmholtz kernel. Prints Markdown on stdout and
 //! progress on stderr.
 //!
-//! The inputs are the W1 cells of `nd-fmm-validate`'s `p2p_kernels` example
-//! (`nd_fmm_validate::p2p_kernels`, docs/design/simd-p2p.md §8.2): a target leaf of n_t
+//! The inputs are the W1 cells of `tetraleaf-validate`'s `p2p_kernels` example
+//! (`tetraleaf_validate::p2p_kernels`, docs/design/simd-p2p.md §8.2): a target leaf of n_t
 //! points in [−1, 1]³ (leaf-scaled, leaf width 2) and the 27 leaves of its 3 × 3 × 3
 //! block, per-pair (27 calls) and gathered (one call), in f32 and f64, with the potential
 //! only and with gradients. k is in the same leaf-scaled units (`--k`, default 1, so Re(k)
@@ -22,7 +22,7 @@
 //! order. "complex q / Laplace" and "complex q / Yukawa" are the time per pair of the
 //! complex-charge Helmholtz kernel over the Laplace and Yukawa kernels of the same code on
 //! the same cell. The complex-charge kernels are measured against
-//! `nd_fmm_ref::helmholtz::p2p::direct_sum` on the first four sets of the cell, and so is
+//! `tetraleaf_ref::helmholtz::p2p::direct_sum` on the first four sets of the cell, and so is
 //! the reference `p2p` (untimed). green-kernels' output is multiplied by 4π; its gradient
 //! is ∂/∂x like ours and its kernel e^{ikr}/r, which the example checks on one pair before it
 //! measures (the convention check of proposal §5.7). The kernels have no branch on the
@@ -31,7 +31,7 @@
 //! ```text
 //! OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 BLIS_NUM_THREADS=1 \
 //!     VECLIB_MAXIMUM_THREADS=1 RAYON_NUM_THREADS=1 \
-//!     cargo run --release -p nd-fmm-spike-p2p-simd --example helmholtz [-- --quick] [--k k] [--im d]
+//!     cargo run --release -p tetraleaf-spike-p2p-simd --example helmholtz [-- --quick] [--k k] [--im d]
 //! ```
 //!
 //! Timings are reported, never asserted.
@@ -40,11 +40,11 @@ use green_kernels::helmholtz_3d::Helmholtz3dKernel;
 use green_kernels::laplace_3d::Laplace3dKernel;
 use green_kernels::traits::Kernel as _;
 use green_kernels::types::GreenKernelEvalType;
-use nd_fmm_math::{Complex, RealScalar};
-use nd_fmm_ref::helmholtz::p2p::{direct_sum, p2p};
-use nd_fmm_simd::{HelmholtzCharges, Isa, P2pKernel, SimdScalar};
-use nd_fmm_validate::bench::{cores, cpu_model, performance_cores, target, toolchain};
-use nd_fmm_validate::p2p_kernels::{
+use tetraleaf_math::{Complex, RealScalar};
+use tetraleaf_ref::helmholtz::p2p::{direct_sum, p2p};
+use tetraleaf_simd::{HelmholtzCharges, Isa, P2pKernel, SimdScalar};
+use tetraleaf_validate::bench::{cores, cpu_model, performance_cores, target, toolchain};
+use tetraleaf_validate::p2p_kernels::{
     CHECKED_SETS, Cell, Form, Set, W1_TARGETS, pairs_per_second, precision_name,
 };
 
@@ -134,7 +134,7 @@ enum Variant {
 /// The kernels timed on a cell.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Code {
-    /// `nd-fmm-simd` on an ISA.
+    /// `tetraleaf-simd` on an ISA.
     Ours(Isa),
     /// green-kernels.
     Green,
@@ -143,8 +143,8 @@ enum Code {
 impl Code {
     fn name(self) -> String {
         match self {
-            Code::Ours(isa) if isa == Isa::detect() => format!("nd-fmm-simd {isa} (default)"),
-            Code::Ours(isa) => format!("nd-fmm-simd {isa}"),
+            Code::Ours(isa) if isa == Isa::detect() => format!("tetraleaf-simd {isa} (default)"),
+            Code::Ours(isa) => format!("tetraleaf-simd {isa}"),
             Code::Green => "green-kernels".into(),
         }
     }
@@ -584,7 +584,7 @@ fn print_header(quick: bool, re_k: f64, im_k: f64, convention: &str) {
     println!("| target | {} |", target());
     println!("| toolchain | {} |", toolchain());
     println!(
-        "| nd-fmm-simd | default `P2pKernel::detect()` = {}; ISAs available: {} |",
+        "| tetraleaf-simd | default `P2pKernel::detect()` = {}; ISAs available: {} |",
         Isa::detect(),
         Isa::available()
             .map(|isa| isa.to_string())

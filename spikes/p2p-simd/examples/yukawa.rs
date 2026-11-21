@@ -1,9 +1,9 @@
 //! The cost per pair of the Yukawa P2P (Helmholtz CH2.4b) against Laplace's, for
-//! `nd-fmm-simd` and for green-kernels' modified Helmholtz kernel. Prints Markdown on
+//! `tetraleaf-simd` and for green-kernels' modified Helmholtz kernel. Prints Markdown on
 //! stdout and progress on stderr.
 //!
-//! The inputs are the W1 cells of `nd-fmm-validate`'s `p2p_kernels` example
-//! (`nd_fmm_validate::p2p_kernels`, docs/design/simd-p2p.md §8.2): a target leaf of n_t
+//! The inputs are the W1 cells of `tetraleaf-validate`'s `p2p_kernels` example
+//! (`tetraleaf_validate::p2p_kernels`, docs/design/simd-p2p.md §8.2): a target leaf of n_t
 //! points in [−1, 1]³ (leaf-scaled, leaf width 2) and the 27 leaves of its 3 × 3 × 3
 //! block, per-pair (27 calls) and gathered (one call), in f32 and f64, with the potential
 //! only and with gradients. κ is in the same leaf-scaled units (`--kappa`, default 1, so
@@ -17,7 +17,7 @@
 //!
 //! "Yukawa / Laplace" is the time per pair of the Yukawa kernel over the Laplace kernel of
 //! the same code on the same cell. The Yukawa kernels are measured against
-//! `nd_fmm_ref::helmholtz::p2p::direct_sum_yukawa` on the first four sets of the cell, and
+//! `tetraleaf_ref::helmholtz::p2p::direct_sum_yukawa` on the first four sets of the cell, and
 //! so is the reference `p2p_yukawa` (untimed). green-kernels' output is multiplied by 4π
 //! and split as in `compare`; its gradient is ∂/∂x like ours, which the example checks
 //! on one pair before it measures (the convention check of proposal §5.7). The
@@ -26,7 +26,7 @@
 //! ```text
 //! OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 BLIS_NUM_THREADS=1 \
 //!     VECLIB_MAXIMUM_THREADS=1 RAYON_NUM_THREADS=1 \
-//!     cargo run --release -p nd-fmm-spike-p2p-simd --example yukawa [-- --quick] [--kappa κ]
+//!     cargo run --release -p tetraleaf-spike-p2p-simd --example yukawa [-- --quick] [--kappa κ]
 //! ```
 //!
 //! Timings are reported, never asserted.
@@ -35,11 +35,11 @@ use green_kernels::laplace_3d::Laplace3dKernel;
 use green_kernels::modified_helmholtz_3d::ModifiedHelmholtz3dKernel;
 use green_kernels::traits::Kernel as _;
 use green_kernels::types::GreenKernelEvalType;
-use nd_fmm_math::RealScalar;
-use nd_fmm_ref::helmholtz::p2p::{direct_sum_yukawa, p2p_yukawa};
-use nd_fmm_simd::{Isa, P2pKernel, SimdScalar};
-use nd_fmm_validate::bench::{cores, cpu_model, performance_cores, target, toolchain};
-use nd_fmm_validate::p2p_kernels::{
+use tetraleaf_math::RealScalar;
+use tetraleaf_ref::helmholtz::p2p::{direct_sum_yukawa, p2p_yukawa};
+use tetraleaf_simd::{Isa, P2pKernel, SimdScalar};
+use tetraleaf_validate::bench::{cores, cpu_model, performance_cores, target, toolchain};
+use tetraleaf_validate::p2p_kernels::{
     CHECKED_SETS, Cell, Form, Set, W1_TARGETS, pairs_per_second, precision_name,
 };
 
@@ -99,7 +99,7 @@ green_impl!(f64);
 /// The kernels timed on a cell.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Code {
-    /// `nd-fmm-simd` on an ISA.
+    /// `tetraleaf-simd` on an ISA.
     Ours(Isa),
     /// green-kernels.
     Green,
@@ -108,8 +108,8 @@ enum Code {
 impl Code {
     fn name(self) -> String {
         match self {
-            Code::Ours(isa) if isa == Isa::detect() => format!("nd-fmm-simd {isa} (default)"),
-            Code::Ours(isa) => format!("nd-fmm-simd {isa}"),
+            Code::Ours(isa) if isa == Isa::detect() => format!("tetraleaf-simd {isa} (default)"),
+            Code::Ours(isa) => format!("tetraleaf-simd {isa}"),
             Code::Green => "green-kernels".into(),
         }
     }
@@ -450,7 +450,7 @@ fn print_header(quick: bool, kappa: f64, convention: &str) {
     println!("| target | {} |", target());
     println!("| toolchain | {} |", toolchain());
     println!(
-        "| nd-fmm-simd | default `P2pKernel::detect()` = {}; ISAs available: {} |",
+        "| tetraleaf-simd | default `P2pKernel::detect()` = {}; ISAs available: {} |",
         Isa::detect(),
         Isa::available()
             .map(|isa| isa.to_string())

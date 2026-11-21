@@ -3,7 +3,7 @@
 `CONVENTION_VERSION = 4` .
 
 This file is the single source of truth for basis functions, phases, storage and
-scaling in the `nd-fmm-*` crates. Code cites it as `CONVENTIONS §3.x`. Any change to
+scaling in the `tetraleaf-*` crates. Code cites it as `CONVENTIONS §3.x`. Any change to
 §3.1–§3.8, §3.11, §3.12 or §3.15 (but for its "Exponential M2L") bumps
 `CONVENTION_VERSION`, which invalidates committed fixtures and cached operator tables.
 §3.13 describes in-memory data only, and §3.14 and §3.15's "Exponential M2L" are
@@ -25,7 +25,7 @@ smaller. Phase 0 tasks T3 and T4 re-verify against independent high-precision fi
 
 ## 3.1 Kernel
 
-All operators expand 1/|x − y|. The factor 1/(4π) is applied once, by `nd-fmm-exec`
+All operators expand 1/|x − y|. The factor 1/(4π) is applied once, by `tetraleaf-exec`
 when producing output, never inside operators or tables.
 
 ## 3.2 Coordinates
@@ -175,7 +175,7 @@ For charges and dipoles at the same points the coefficients add.
   unchanged: |u| ≤ √3 for regular and |u| ≥ 2 for irregular harmonics.
 - *Verification.* `tools/fixtures/gen_dipoles.py` computes the coefficients from the
   definitions of §3.3 by directional differences at 120 digits, and the direct sum in
-  closed form, into `fmm-ref/fixtures/dipoles.json`; while drafting, the expansions were
+  closed form, into `tetraleaf-ref/fixtures/dipoles.json`; while drafting, the expansions were
   checked against the dipole potential in mpmath (relative error 1e-26 at p = 30).
 
 ## 3.8 Rotations
@@ -239,10 +239,10 @@ code that implements it in the same pull request.
 §3.14 (Phase 6 T13) is not included either: it adds an approximate operator beside §3.11
 and changes no quantity of §3.1–§3.12; no committed fixture depends on it, and its tables
 are built at every `Tables` build, never cached (they take milliseconds). A change to
-§3.14 changes `nd_fmm_tables::plane_wave` in the same pull request. The same holds for
+§3.14 changes `tetraleaf_tables::plane_wave` in the same pull request. The same holds for
 §3.15's "Exponential M2L" (Helmholtz CH6.1c; excluded at version 4, Helmholtz CH1.3d2): an
 approximate M2L beside RCR whose tables are built per FMM and never cached; a change to it
-changes `nd_fmm_tables::helmholtz::plane_wave` in the same pull request.
+changes `tetraleaf_tables::helmholtz::plane_wave` in the same pull request.
 
 ## 3.11 Translation operators
 
@@ -283,7 +283,7 @@ I_n^m(\mathbf{x}+\mathbf{a}) = \sum_{k=0}^{\infty}\sum_{l=-k}^{k} (-1)^k\, \over
 ```
 
 The irregular gradient ladder (derived in the doc comment of
-`nd_fmm_math::harmonics::irregular_grad` from the separation identity and the ladder of
+`tetraleaf_math::harmonics::irregular_grad` from the separation identity and the ladder of
 §3.4) reads −∂z Iₖˡ = Iₖ₊₁ˡ, (∂x − i∂y) Iₖˡ = Iₖ₊₁ˡ⁻¹ and −(∂x + i∂y) Iₖˡ = Iₖ₊₁ˡ⁺¹,
 for all |l| ≤ k. So the constant-coefficient operator
 Oₙᵐ = (−(∂x + i∂y))ᵐ (−∂z)ⁿ⁻ᵐ for m ≥ 0, and (∂x − i∂y)^|m| (−∂z)^(n−|m|) for m < 0,
@@ -511,12 +511,12 @@ the axis values Rₖ⁰(s e_z), Iₖ⁰(±s e_z) only through the coaxial forms.
 
 ## 3.12 Box geometry and operator tables
 
-The precomputed tables of `nd-fmm-tables` encode the geometry of an octree level and
+The precomputed tables of `tetraleaf-tables` encode the geometry of an octree level and
 are stored in a fixed layout. This section states both, and the action of the cube
 symmetry group on coefficients that the symmetry-reduced M2L tables use. It builds on
 real storage (§3.6), the scaling (§3.7), rotations (§3.8) and the translations of §3.11.
-The octant and offset orders restate those of `nd_octree::morton` and
-`nd_fmm_plan::interaction_manager`, which crates without MPI cannot import; code that
+The octant and offset orders restate those of `tetraleaf_octree::morton` and
+`tetraleaf_plan::interaction_manager`, which crates without MPI cannot import; code that
 uses both must agree with them.
 
 ### Domain and levels
@@ -554,7 +554,7 @@ r_\text{child} = r_\text{parent} / 2
 ### V-list offsets
 
 - The offset of a V-list pair is d = index(target) − index(source), in the index units
-  of their common level, as the V-list view of `nd-fmm-plan` (`lists::VList`) groups
+  of their common level, as the V-list view of `tetraleaf-plan` (`lists::VList`) groups
   its pairs by it. It lies in 𝒟 = {−3..3}³ \ {−1..1}³, which has 7³ − 3³ = 316 elements.
 - The offsets are ordered lexicographically in (d_x, d_y, d_z), as `V_LIST_DIRECTIONS`
   is. The position of d in this order is its table index:
@@ -757,7 +757,7 @@ random points and coefficients:
 
 ## 3.13 Leaf data and relative geometry
 
-The per-leaf chunks of `nd-fmm-plan` hold source data, target input and target output
+The per-leaf chunks of `tetraleaf-plan` hold source data, target input and target output
 (docs/phase3/README.md, requirement 4). This section fixes their layout for the Laplace
 kernel and how one box sees the geometry of another. It builds on the kernel (§3.1),
 real storage (§3.6), the scaling (§3.7), the L2P and M2P forms of §3.11 and the domain,
@@ -899,7 +899,7 @@ u_0 u_1 … u_(n−1) q_0 q_1 … q_(n−1)        u_j = (x, y, z) of point j
   leaf's own key, so a received chunk needs no transformation.
 
 **Dipole sources** (Phase 6 T8; §3.7, "Dipole sources"). The source type is fixed for
-an FMM (`nd_fmm_exec::operator::SourceType`, docs/design/optimisation.md §7.1):
+an FMM (`tetraleaf_exec::operator::SourceType`, docs/design/optimisation.md §7.1):
 
 ```text
 Charges            4n values   u_0 … u_(n−1)  q_0 … q_(n−1)                (as above)
@@ -967,7 +967,7 @@ section) is applied to each vector alike.
 
 ### Operators in scaled coordinates
 
-A `nd_fmm_ref::Frame` (C, R) maps a point p to (p − C) / R (`Frame::scaled`); `leaf::l2p`
+A `tetraleaf_ref::Frame` (C, R) maps a point p to (p − C) / R (`Frame::scaled`); `leaf::l2p`
 and `leaf::m2p` multiply by 1/R and, for the gradient, 1/R² (§3.11, "L2P and M2P").
 Each operator passes:
 
@@ -1031,7 +1031,7 @@ and wherever the domain lies, in place of the ε |c| / r_l of a floating-point s
 A source and a target at the same point x lie in the same leaf, because
 `points_to_morton` maps a point to its key by its coordinates alone. They get the same
 u bit for bit, and for s = t P2P passes the stored u_s unchanged, so the exact-coincidence
-rule of `nd_fmm_ref::p2p` still excludes the pair.
+rule of `tetraleaf_ref::p2p` still excludes the pair.
 
 This assumes that sources and targets in one leaf are loaded with the same formula from
 the same f64 coordinates: the same a, w and key, the same operation order and the same
@@ -1043,12 +1043,12 @@ T. Two consequences, both below the resolution of T in the leaf:
 
 ### Fast kernels
 
-The vectorised P2P kernels of `nd-fmm-simd` (docs/design/simd-p2p.md) exclude a pair by
+The vectorised P2P kernels of `tetraleaf-simd` (docs/design/simd-p2p.md) exclude a pair by
 r² = 0 instead. They take the inputs of `p2p::p2p` (u_t, and ŷ as formed above, u_s
 itself for s = t) and compute in T each component dₖ = fl(u_t,k − ŷₖ) by one
 subtraction, then r² = d₀² + d₁² + d₂² with the two additions in any order and each
 square rounded or fused into an fma. A pair with r² = 0 contributes nothing.
-`nd_fmm_ref::p2p` keeps the exact-coincidence rule. On leaf-scaled data the two rules
+`tetraleaf_ref::p2p` keeps the exact-coincidence rule. On leaf-scaled data the two rules
 agree. With G_k = 2⁻ᵏ ℤ, the dyadic rationals whose denominator divides 2ᵏ:
 
 - **Rounding keeps a grid.** For z ∈ G_k, with 2⁻ᵏ no smaller than the smallest
@@ -1074,7 +1074,7 @@ agree. With G_k = 2⁻ᵏ ℤ, the dyadic rationals whose denominator divides 2�
   with or without fma, r² ≥ 2⁻¹⁰⁸ unless all three dₖ vanish, and r² = 0 if they do.
 
 So on leaf-scaled data r² = 0 if and only if u_t == ŷ in all three components, which
-is the rule of `nd_fmm_ref::p2p` on the same inputs, with both consequences listed
+is the rule of `tetraleaf_ref::p2p` on the same inputs, with both consequences listed
 above. Every nonzero r² is at least 2⁻¹⁰⁸: a normal number in f32 (smallest normal
 2⁻¹²⁶) with a margin of 2¹⁸, and in f64 by far.
 
@@ -1134,7 +1134,7 @@ changes no fixture and no table, and does not bump `CONVENTION_VERSION` (§3.10)
 
 ### Device kernels
 
-The device kernels of `nd-fmm-kernels` (CubeCL) take the inputs of "Fast kernels" and
+The device kernels of `tetraleaf-kernels` (CubeCL) take the inputs of "Fast kernels" and
 exclude a pair by r² = 0 too. Their compilers need not keep IEEE semantics. Phase 4 T3
 measured the backends on the Apple M3 Max with CubeCL 0.11.0-pre.4: the CubeCL CPU
 runtime (LLVM; f32 and f64) and Metal through wgpu-msl (f32). Phase 4S T3 measured CUDA
@@ -1231,8 +1231,8 @@ adds its charges first and then its moments, as the host does.
   outside them on a backend that flushes.
 - *P2M and P2L* with dipoles take d̂ / r̂(t|s) as d̂ · 2^(l_t − l_s), a product by a power of
   two, exact unless it flushes; like the charges' leaf operators they agree with
-  `nd_fmm_ref::leaf` to rounding, not bit for bit.
-- *Verification.* `nd-fmm-kernels`' `tests/kernels/p2p/dipoles.rs` (pair terms over the
+  `tetraleaf_ref::leaf` to rounding, not bit for bit.
+- *Verification.* `tetraleaf-kernels`' `tests/kernels/p2p/dipoles.rs` (pair terms over the
   domain with moments from 2⁻⁴⁰ to 1 in magnitude and the flushing threshold, sums,
   coincident pairs, domain ends; measured at most 9.4 u_T and 29.0 u_T on the CPU runtime
   and 9.4 u_T and 21.7 u_T on Metal), and `spikes/device-arith`, section `dipoles`: the
@@ -1250,13 +1250,13 @@ changes no fixture and no table, and does not bump `CONVENTION_VERSION` (§3.10)
 \nabla\phi(\mathbf{x}) = \frac{\hat{\mathbf{g}}}{4\pi r_t^2}
 ```
 
-with r_t = w / 2^(l_t+1), exact in f64. `nd-fmm-exec` applies both once, when producing
+with r_t = w / 2^(l_t+1), exact in f64. `tetraleaf-exec` applies both once, when producing
 output (§3.1). No operator, table or chunk contains 1/(4π) or r_t.
 
 ### Verification
 
 `tools/fixtures/check_leaf_geometry.py` checks, with seeded random keys and points, in
-exact rationals, in IEEE doubles that reproduce `nd_octree` operation by operation, and
+exact rationals, in IEEE doubles that reproduce `tetraleaf_octree` operation by operation, and
 in mpmath at 40 digits:
 
 - the integer centres against the midpoint of `morton::physical_box` and the centre of
@@ -1289,7 +1289,7 @@ rationals:
   ĉ + r̂ u_s ≈ 0, in a dyadic domain at the origin, a dyadic, a generic and a far domain;
 - seeded random pairs on levels 0–16 in a dyadic, a generic and a far domain, with
   duplicated points in the self pairs;
-- in both: ŷ and dₖ in G₅₄ and G₅₃, r² = 0 exactly when the rule of `nd_fmm_ref::p2p`
+- in both: ŷ and dₖ in G₅₄ and G₅₃, r² = 0 exactly when the rule of `tetraleaf_ref::p2p`
   skips the pair, with r² formed as the reference forms it and with fma in two orders,
   and every nonzero r² at least 2⁻¹⁰⁶;
 - the largest r² at the far corners of corner neighbours on all three levels, against
@@ -1308,9 +1308,9 @@ Phase 6 T13 (C6.5) adds M2L by plane waves with merge and shift (Greengard and R
 1997, Acta Numerica 6; Cheng, Greengard and Rokhlin 1999, J. Comput. Phys. 155; the scheme
 of FMM3D's `lfmm3d`), an approximate operator beside the exact M2L of §3.11. It changes no
 quantity of §3.1–§3.13: its input is a scaled multipole (§3.7) and its output is added to
-a scaled local, both in the storage of §3.6. `nd_fmm_tables::plane_wave` implements it;
+a scaled local, both in the storage of §3.6. `tetraleaf_tables::plane_wave` implements it;
 the derivation was checked numerically in Phase 6 T10 (`spikes/plane-wave`) and is tested
-against `nd_fmm_ref::direct::m2l` on levels 2, 9 and 16.
+against `tetraleaf_ref::direct::m2l` on levels 2, 9 and 16.
 
 ### Box widths
 
@@ -1337,7 +1337,7 @@ e^{-\lambda_k z + i\lambda_k (x\cos\alpha_j + y\sin\alpha_j)}, \quad \alpha_j = 
 
 with the s nodes λₖ, weights wₖ, α counts Nₖ and Fourier counts Fₖ of FMM3D's tables for
 separation 1 (`src/Laplace/lwtsexp_sep1.f` of FMM3D v2.1.0, NIST's, with its notice kept
-in `nd_fmm_tables::plane_wave::quadrature_data`), valid for 1 ≤ z ≤ 4 and
+in `tetraleaf_tables::plane_wave::quadrature_data`), valid for 1 ≤ z ≤ 4 and
 x² + y² ≤ 32 (a V pair whose offset along its direction, below, is 2 or 3 boxes). Here
 Nₖ' = Nₖ + (Nₖ mod 2), even, replaces Nₖ, and at degree p the orders 0 ≤ m < Fₖ' =
 min(Fₖ, p + 1) are kept. The degree's s is `nodes_for_degree(p)`: the fewest nodes whose
@@ -1470,7 +1470,7 @@ G_k(\mathbf{x}, \mathbf{y}) = \frac{e^{ik|\mathbf{x}-\mathbf{y}|}}{4\pi|\mathbf{
   The gradient is taken with respect to the target x. As k → 0 both reduce to §3.1 and
   §3.13: φ = q/(4πr) and ∇φ = −q (x − y)/(4πr³). FMM3D 2.1.0 computes exactly this φ and
   ∇φ (`hfmm3d_s_c_g`, `hfmm3d_st_c_g`, `h3ddirectcg`, with k = `zk`; Helmholtz CH1.4,
-  fmm-validate/results/helmholtz-ch1-4.md). FMM3D drops a pair when |x − y| < thresh, with
+  tetraleaf-validate/results/helmholtz-ch1-4.md). FMM3D drops a pair when |x − y| < thresh, with
   thresh = 2⁻⁵¹ times the root box width in its FMM, and its direct routines take thresh
   from the caller; §3.13 drops exact coincidences only.
 - **The series.** For |y| < |x| about a common centre:
@@ -1481,7 +1481,7 @@ G_k(\mathbf{x}, \mathbf{y}) = \frac{e^{ik|\mathbf{x}-\mathbf{y}|}}{4\pi|\mathbf{
 ```
 
 - **Where the factors go.** As for Laplace (§3.1), 1/(4π) is applied once, by
-  `nd-fmm-exec`, when it produces the output: every operator accumulates the potential of
+  `tetraleaf-exec`, when it produces the output: every operator accumulates the potential of
   e^{ikr}/r, written φ̃ = 4πφ below, P2P and the expansions alike. The factor 4π ik is
   applied by the three operators where a far-field contribution crosses from a singular
   to a regular representation: **M2L** (in its (S|R) step), **M2P** and **P2L**. Each
@@ -1577,8 +1577,8 @@ kρ = k̂ (ρ/r) is unchanged, and so:
 - a local's coefficients are r times their values in the original unit (P2L's factor is
   4π ik̂), and the local represents r φ̃.
 
-**On a tree** (Helmholtz CH3.1a; `nd_fmm_tables::helmholtz` and
-`nd_fmm_exec::helmholtz::operator`, "Levels and units"), level l works in the units of its
+**On a tree** (Helmholtz CH3.1a; `tetraleaf_tables::helmholtz` and
+`tetraleaf_exec::helmholtz::operator`, "Levels and units"), level l works in the units of its
 own boxes: half-width r_l = 1, centres two apart, circumradius √3, wavenumber
 k̂_l = k r_l. A box of level l
 holds its expansions in those units, so it represents r_l φ̃, as a leaf's chunk holds r φ̃
@@ -1697,7 +1697,7 @@ The plane-wave M2L of §3.14 for the Helmholtz family on low-frequency levels (H
 CH6.1c; proposal §5.3), excluded from `CONVENTION_VERSION` as §3.14 is (§3.10): an
 approximate operator beside the RCR M2L above, whose input is a stored multipole and whose
 output is added to a stored local.
-`nd_fmm_tables::helmholtz::plane_wave` implements it and its tests check it against RCR
+`tetraleaf_tables::helmholtz::plane_wave` implements it and its tests check it against RCR
 on every V offset; `tools/fixtures/check_3_15_plane_wave.py` checks the identities below
 in mpmath.
 
@@ -1711,8 +1711,8 @@ e^{i\kappa\hat{\mathbf s}\cdot\mathbf u} = e^{-\lambda u_z + i t (u_x\cos\alpha 
 ```
 
 - **The quadrature** is a level's (λₖ, wₖ, Nₖ, Fₖ), FMM3D's tables at the domain of κ
-  (`nd_fmm_tables::helmholtz::plane_wave::quadrature`, Helmholtz CH6.1a, the counts its own)
-  or `nd_fmm_ref`'s generator (CH6.1b), with
+  (`tetraleaf_tables::helmholtz::plane_wave::quadrature`, Helmholtz CH6.1a, the counts its own)
+  or `tetraleaf_ref`'s generator (CH6.1b), with
   e^{iκ|u|}/|u| ≈ Σₖ (wₖ/Nₖ) Σ_{j<Nₖ} e^{iκŝₖⱼ·u}, αⱼ = 2πj/Nₖ, on 1 ≤ u_z ≤ 4,
   |u_x|, |u_y| ≤ 4: a V pair whose offset along its direction is 2 or 3 boxes, as in §3.14.
   Its error is absolute, in box widths. **Fₖ is node k's largest order**: a source keeps
@@ -1732,7 +1732,7 @@ e^{i\kappa\hat{\mathbf s}\cdot\mathbf u}
   Y_n^{±m}(ŝ) = κ⁻ⁿ c_{nm} 𝒫̄_n^m(iλ, t; κ²) {cos mα, sin mα}, where
   c_{nm} = √((2 − δ_{m0})(2n + 1)/(4π)) and 𝒫̄_n^m(z, ρ; r²) = rⁿ P̄_n^m(z/r) is the solid
   form of the normalised Legendre function of "Angular basis", a polynomial in z, ρ and r²
-  (its recursion in `nd_fmm_tables::helmholtz::plane_wave::pair::harmonic_factors`). On the
+  (its recursion in `tetraleaf_tables::helmholtz::plane_wave::pair::harmonic_factors`). On the
   target side, e^{iκŝ·u} = 4π Σₙ iⁿ jₙ(κ|u|) Σₘ Y_n^m(ŝ) Y_n^m(û).
 - **The factors.** With the stored form M = e^β sⁿ M̂ and L̂ = e^β sⁿ L of "Radial
   functions and scaling", and sⁿ folded into the arguments (homogeneity), node k has
@@ -1791,7 +1791,7 @@ B_k(m) = \sum_{n=m}^{p} P_k(n, m)\, \hat M_n^{-m}
 
 The diagonal form of the M2L on high-frequency levels (proposal §3.6, §5.4; spike S6 of
 Helmholtz CH0.6, whose proposal this is; Helmholtz CH1.3d1, CH1.3d2).
-`nd_fmm_ref::helmholtz::diagonal` implements it, the trusted path of the fast forms, and
+`tetraleaf_ref::helmholtz::diagonal` implements it, the trusted path of the fast forms, and
 `tools/fixtures/check_3_15.py` checks the identities below. It computes the M2L of
 "Coaxial translations" another way, from a stored multipole to a stored local of the same
 degree p (the form is square): exactly in exact arithmetic, so its error is rounding, which
@@ -1823,7 +1823,7 @@ L_n^m = 4\pi ik\; i^n \int_{S^2} Y_n^m(\hat{\mathbf s})\, T(\hat{\mathbf s})\, F
   index i N_φ + j, the direction ŝᵢⱼ = (sin θᵢ cos φⱼ, sin θᵢ sin φⱼ, cos θᵢ) and the
   weight wᵢ 2π/N_φ. The rule is exact for spherical polynomials of degree ≤ 4P − 4 = 4p,
   the degree of Yₙᵐ T F above. N_φ is a per-level choice (proposal §6.7: sizes suited to
-  an FFT on the host or the device); `nd-fmm-ref` takes the smallest, 4P − 3 rounded up
+  an FFT on the host or the device); `tetraleaf-ref` takes the smallest, 4P − 3 rounded up
   to a multiple of 4, which is 4P, and a fast form records the N_φ it uses.
   The nodes are symmetric (u_{2p−i} = −uᵢ). Nodes, weights and azimuths are computed in
   extended precision and rounded once.
@@ -1851,7 +1851,7 @@ L̂ₙᵐ  += sⁿ iⁿ Σᵢⱼ wᵢ (2π/N_φ) Yₙᵐ(ŝᵢⱼ) G(ŝᵢⱼ)  
 - **Not fixed here**: the signature buffers' layout in memory (interleaved complex or split
   planes, the alignment per box, chunks), as the leaf chunks (§3.13) are not; the fast
   transforms (the φ step as a product or an FFT, the device's); how T̂ is computed in
-  extended precision (sample by sample, as `nd-fmm-ref` does with hₗ by the upward
+  extended precision (sample by sample, as `tetraleaf-ref` does with hₗ by the upward
   recursion and Pₗ by the three-term recurrence, or interpolated in ŝ · t̂ from an
   extended-precision table, proposal §5.4); the choice per level and class. CH4.1, CH4.2,
   CH4.3 and CH7.x fix them in their crates' documentation; a change to them does not bump
@@ -1870,8 +1870,8 @@ Tested so far, by the spikes:
 - the degrees p_l of S7 (spikes/truncation/results/summary.md) and the two-point check
   and fixtures of CH1.4.
 
-`nd-fmm-math` (CH1.2) and `nd-fmm-ref` (CH1.3) state the ranges of their own tests, as
-§3.9 does for Laplace. The diagonal form of "Signatures" is tested in `nd-fmm-ref`
+`tetraleaf-math` (CH1.2) and `tetraleaf-ref` (CH1.3) state the ranges of their own tests, as
+§3.9 does for Laplace. The diagonal form of "Signatures" is tested in `tetraleaf-ref`
 (CH1.3d1) for real k at k a 2.83–54 and p 7–82, for weakly damped k (Im k = Re k/10) at
 k a = 8, and in f32 at k a ≈ 16, p = 30 (the reference's own test, not the f32 scope);
 complex k beyond weak damping and Yukawa are not tested.
@@ -1886,7 +1886,7 @@ complex k beyond weak damping and Yukawa are not tested.
   per vector: Re φ over the targets, then Im φ; with gradients, the Re ∇φ triples
   (x, y, z) point-major, then the Im ∇φ triples.
 - **Leaf chunks** (in memory, as §3.13) are fixed by CH3.0 and are not versioned.
-- **Fixtures.** `fmm-ref/fixtures/helmholtz_fmm3d.json` holds FMM3D's values of φ and ∇φ
+- **Fixtures.** `tetraleaf-ref/fixtures/helmholtz_fmm3d.json` holds FMM3D's values of φ and ∇φ
   (`h3ddirectcg`, FMM3D 2.1.0) for real, complex and imaginary k and for real and complex
   charges, each checked against the kernel above at 30 digits
   (`tools/fixtures/gen_helmholtz_fmm3d.py`).
@@ -1920,6 +1920,6 @@ for real, complex and imaginary k and real and complex charges:
   giving r φ̃; L2L from a parent's units to a child's with the factor ½, and P2L from a
   coarser leaf with its charges times r_t/r_s, against the direct sum.
 
-`nd-fmm-math` (CH1.2) confirms these identities in its own tests, and `nd-fmm-ref` (CH1.3)
+`tetraleaf-math` (CH1.2) confirms these identities in its own tests, and `tetraleaf-ref` (CH1.3)
 the addition theorems, the limit k → 0, Yukawa two ways and the direct sum against the
 fixtures.

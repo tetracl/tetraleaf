@@ -2,13 +2,13 @@
 //! derivative, at the arguments and orders of the operators. Prints a Markdown table for
 //! SPIKE_REPORT.md.
 //!
-//! `cargo run -p nd-fmm-spike-radial --release --example time`
+//! `cargo run -p tetraleaf-spike-radial --release --example time`
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use nd_fmm_spike_radial::complex::C64;
-use nd_fmm_spike_radial::radial::{bessel_j, hankel, modified_i, modified_k};
+use tetraleaf_spike_radial::complex::C64;
+use tetraleaf_spike_radial::radial::{bessel_j, hankel, modified_i, modified_k};
 
 /// Median of 15 runs of `reps` calls, in nanoseconds per call.
 fn median(reps: usize, mut f: impl FnMut()) -> f64 {

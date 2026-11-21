@@ -3,7 +3,7 @@
 # (docs/helmholtz/tasks/CH6.1e.md, "Machine runs"), from the repository root after the
 # example was built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch6-1e-runs.sh <out-dir> <stage…>
 #
 # Stages: `scan` (CH3.1c's matrix, `--m2l planewave-scan`: Rotation, then each level with a

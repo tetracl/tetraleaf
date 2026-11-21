@@ -4,7 +4,7 @@
 #
 #     tools/kathleen/submit.sh launcher.sbatch
 #
-# On an nd-octree MPI example (built in debug by mpi.sbatch, or here):
+# On an tetraleaf-octree MPI example (built in debug by mpi.sbatch, or here):
 #   - the start-up wall time at 2 x 40 ranks, three launches each, of `mpirun` inside
 #     the allocation and of `srun --mpi=pmix`, with the bindings printed once each;
 #   - the transport Open MPI 4.1.6 selects between the nodes and within one, from the
@@ -19,7 +19,7 @@
 cd "$SLURM_SUBMIT_DIR" && . tools/kathleen/jobs/lib.sh
 
 exe=target/debug/examples/test_mpi_global_bounding_box
-step build 'cargo build -p nd-octree --example test_mpi_global_bounding_box'
+step build 'cargo build -p tetraleaf-octree --example test_mpi_global_bounding_box'
 step srun-mpi-list 'srun --mpi=list'
 step bindings-mpirun "timeout 300 mpirun -n 80 --bind-to core --map-by core --report-bindings $exe 2>&1 | grep -E 'MCW rank (0|19|20|39|40|79) ' | sort -u"
 step bindings-srun "timeout 300 srun --mpi=pmix -n 80 --ntasks-per-node=40 --cpu-bind=verbose,cores $exe 2>&1 | grep -iE 'cpu.bind|mask' | sort -u | head -n 12"

@@ -5,9 +5,9 @@
 use std::collections::BTreeMap;
 
 use mpi::traits::CommunicatorCollectives;
-use nd_fmm_plan::interaction_manager::V_LIST_DIRECTIONS;
-use nd_fmm_plan::plan::Plan;
-use nd_octree::{MortonKey, Octree, morton};
+use tetraleaf_plan::interaction_manager::V_LIST_DIRECTIONS;
+use tetraleaf_plan::plan::Plan;
+use tetraleaf_octree::{MortonKey, Octree, morton};
 
 /// The squared distances |t|²/w² of the V-list offsets, ascending: 15 distance classes.
 pub const DISTANCES: [i64; 15] = [4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 17, 18, 19, 22, 27];

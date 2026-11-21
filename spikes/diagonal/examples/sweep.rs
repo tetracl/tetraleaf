@@ -3,7 +3,7 @@
 //! placement and variant, as rows of a CSV file.
 //!
 //! ```text
-//! cargo run -p nd-fmm-spike-diagonal --release --example sweep -- \
+//! cargo run -p tetraleaf-spike-diagonal --release --example sweep -- \
 //!     [--kinds real,complex0.1,complex1] [--ka 2.83,4,...] [--threads N] \
 //!     [--shard i/n] [--out spikes/diagonal/results/runs.csv] [--list] [--p p] \
 //!     [--classes i,j,...]
@@ -18,11 +18,11 @@ use std::collections::{BTreeSet, HashSet};
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Write};
 
-use nd_fmm_spike_diagonal::classes::classes;
-use nd_fmm_spike_diagonal::rules::{EPSILONS, S7Table, calibrated, formula};
-use nd_fmm_spike_diagonal::run::{Band, Config, VARIANTS, run_unit};
-use nd_fmm_spike_truncation::chain::Kind;
-use nd_fmm_spike_truncation::geometry::Placement;
+use tetraleaf_spike_diagonal::classes::classes;
+use tetraleaf_spike_diagonal::rules::{EPSILONS, S7Table, calibrated, formula};
+use tetraleaf_spike_diagonal::run::{Band, Config, VARIANTS, run_unit};
+use tetraleaf_spike_truncation::chain::Kind;
+use tetraleaf_spike_truncation::geometry::Placement;
 
 /// The k a of the sweep: S7's half-octave grid 2^{j/2}, j = 3..17, and 400.
 fn ka_grid() -> Vec<f64> {

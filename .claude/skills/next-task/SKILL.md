@@ -105,7 +105,7 @@ Started <YYYY-MM-DD> on `tbetcke/h-<id>`. Roadmap: <the line>. Proposal: §10 <I
 <crates and files; public API; tables; conventions (none, or a proposal for sign-off)>
 
 ## Tests that prove it
-<each against its trusted path (fixtures, identities, nd-fmm-ref, the direct sum, FMM3D
+<each against its trusted path (fixtures, identities, tetraleaf-ref, the direct sum, FMM3D
 fixtures, the one-rank run), with the tolerance or bit identity, threads and ranks>
 
 ## Checks
@@ -142,11 +142,11 @@ Two rules for "Tests that prove it" and "Machine runs" (from the H6 gate,
 
 Stop and ask, with the plan, before going on if the plan:
 - changes code on Laplace's paths (constraint 1 of proposal §2: the host drivers, tables and
-  layouts, `nd-fmm-simd`, `nd-fmm-kernels`' Laplace kernels, `nd-octree`, `nd-fmm-plan`) or a
+  layouts, `tetraleaf-simd`, `tetraleaf-kernels`' Laplace kernels, `tetraleaf-octree`, `tetraleaf-plan`) or a
   Laplace default;
 - changes `docs/CONVENTIONS.md` (only CH1.1 does, and only as a proposal for sign-off);
 - adds or moves a dependency or a pin;
-- changes `nd-fmm-plan`'s interface;
+- changes `tetraleaf-plan`'s interface;
 - departs from the proposal's acceptance criterion or from a signed-off decision;
 - needs a larger Kathleen job than `tools/kathleen/README.md` allows.
 
@@ -172,7 +172,7 @@ Otherwise go on without asking.
   neither lock file.
 - Measurements: release builds, the BLAS thread variables at 1, the machine and ranks ×
   threads named (on Kathleen also the nodes, binding and job id), no timing asserted in a
-  test; the report at the path the plan names (`fmm-validate/results/helmholtz-<id>.md`
+  test; the report at the path the plan names (`tetraleaf-validate/results/helmholtz-<id>.md`
   unless the task says otherwise).
 
 ## 6. Verify

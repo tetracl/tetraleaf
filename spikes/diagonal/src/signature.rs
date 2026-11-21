@@ -1,7 +1,7 @@
 //! S → F and F → R in any precision (proposal §5.4).
 //!
 //! With the kernel G(x, y) = e^{ik|x−y|}/(4π|x−y|) = ik Σₙ jₙ hₙ Σₘ Yₙᵐ Yₙᵐ of S7
-//! (`nd_fmm_spike_truncation::chain`), multipoles Mₙᵐ = Σ q jₙ(k|y − c_s|) Yₙᵐ(y − c_s)
+//! (`tetraleaf_spike_truncation::chain`), multipoles Mₙᵐ = Σ q jₙ(k|y − c_s|) Yₙᵐ(y − c_s)
 //! and locals evaluated as φ = ik Σ Lₙᵐ jₙ(k|x − c_t|) Yₙᵐ(x − c_t), the identity
 //!
 //! G(x, y) = (ik/16π²) ∫ e^{ikŝ·(x − c_t)} T(ŝ) e^{−ikŝ·(y − c_s)} dŝ,
@@ -19,9 +19,9 @@
 //! default), O(p N_φ) per ring.
 
 use crate::grid::{Tables, tri};
-use nd_fmm_spike_truncation::complex::Complex;
-use nd_fmm_spike_truncation::harmonics::idx;
-use nd_fmm_spike_truncation::real::Real;
+use tetraleaf_spike_truncation::complex::Complex;
+use tetraleaf_spike_truncation::harmonics::idx;
+use tetraleaf_spike_truncation::real::Real;
 
 /// z iᵏ, exactly.
 #[inline(always)]

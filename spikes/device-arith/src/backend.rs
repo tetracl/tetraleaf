@@ -7,7 +7,7 @@ use cubecl::prelude::*;
 pub enum Backend {
     /// The CubeCL CPU runtime (LLVM JIT).
     Cpu,
-    /// wgpu with the MSL compiler (the `metal` feature of `nd-fmm-kernels`).
+    /// wgpu with the MSL compiler (the `metal` feature of `tetraleaf-kernels`).
     Metal,
     /// CUDA through CubeCL's default LLVM NVPTX path (run on locust's H100, Phase 4S T3).
     Cuda,

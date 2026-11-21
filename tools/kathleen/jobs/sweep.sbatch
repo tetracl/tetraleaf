@@ -38,7 +38,7 @@ export OUT=${OUT:-$FMM_KATHLEEN_ROOT/logs/scaling-$SLURM_JOB_ID}
 mkdir -p "$OUT"
 echo "=== output of the launches: $OUT"
 
-step build 'cargo build --release -p nd-fmm-validate --example scaling --example p2p_kernels --example p2p_fmm'
+step build 'cargo build --release -p tetraleaf-validate --example scaling --example p2p_kernels --example p2p_fmm'
 for sweep in "$@"; do
     case "$sweep" in
     p2p)

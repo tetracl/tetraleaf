@@ -3,7 +3,7 @@
 # FMM3D under the defaults (docs/helmholtz/tasks/CH4.0e.md, "Machine runs"), from the
 # repository root after
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy --example helmholtz_fmm3d
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy --example helmholtz_fmm3d
 #     tools/helmholtz/ch4-0e-runs.sh <out-dir> <stage…>
 #
 # Ours runs `helmholtz_accuracy` at the library's defaults as they stand after CH4.0d3

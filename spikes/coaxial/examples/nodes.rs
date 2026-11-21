@@ -2,12 +2,12 @@
 //! N = p + 10, 20, 40, 60 against N = 2p + 200, M2L at d = 2 and √27 and M2M, real and
 //! strongly damped k (Im k = Re k). Prints a Markdown table for SPIKE_REPORT.md §2.2.
 //!
-//! `cargo run -p nd-fmm-spike-coaxial --release --example nodes`
+//! `cargo run -p tetraleaf-spike-coaxial --release --example nodes`
 
-use nd_fmm_spike_coaxial::complex::C64;
-use nd_fmm_spike_coaxial::config::{degree, m2l_kt, scale};
-use nd_fmm_spike_coaxial::metric::{compare, m2l_weights, m2m_weights};
-use nd_fmm_spike_coaxial::projection::{Dense, regular_regular, singular_regular};
+use tetraleaf_spike_coaxial::complex::C64;
+use tetraleaf_spike_coaxial::config::{degree, m2l_kt, scale};
+use tetraleaf_spike_coaxial::metric::{compare, m2l_weights, m2m_weights};
+use tetraleaf_spike_coaxial::projection::{Dense, regular_regular, singular_regular};
 
 const EXTRA: [usize; 4] = [10, 20, 40, 60];
 

@@ -12,7 +12,7 @@
 #   mpi             .github/scripts/run-mpi-tests.sh, built in debug as in CI, at 2, 4 and 8
 #                   ranks and at one rank per core of the job (80 on 2 nodes), with
 #                   `mpirun --bind-to core` (RUN_TIMEOUT per launch, 900 s here)
-#   invariance      rank-count invariance (nd-fmm-validate's `scaling --invariance`, release)
+#   invariance      rank-count invariance (tetraleaf-validate's `scaling --invariance`, release)
 #                   at one rank per core of the job against P/k for k of INV_FACTORS (on 2
 #                   nodes 80 against 40, 20 and 10; on 4 nodes 160 against 80, 40 and 20):
 #                   the cube and the Plummer sphere in f64 at p = 8 with Rotation and with
@@ -70,7 +70,7 @@ for part in $parts; do
         step "mpi-2-4-8-$cores" "MPIRUN_FLAGS='--bind-to core' .github/scripts/run-mpi-tests.sh run $list 2 4 8 $cores"
         ;;
     invariance)
-        step scaling-build "cargo build --release -p nd-fmm-validate --example scaling"
+        step scaling-build "cargo build --release -p tetraleaf-validate --example scaling"
         for run in cube:f64:8:rotation plummer:f64:8:rotation cube:f32:3:dense \
             cube:f64:8:planewave plummer:f64:8:planewave; do
             IFS=: read -r dist precision p strategy <<<"$run"
@@ -79,12 +79,12 @@ for part in $parts; do
         done
         ;;
     smoke)
-        step scaling-build "cargo build --release -p nd-fmm-validate --example scaling"
+        step scaling-build "cargo build --release -p tetraleaf-validate --example scaling"
         step "smoke-$((2 * nodes))x20" \
             "timeout $LAUNCH_TIMEOUT mpirun -n $((2 * nodes)) --map-by ppr:1:socket:PE=20 --bind-to core --report-bindings $scaling --dist cube --n 1000000 --precision f64 --p 3 --threads 20 --overlap both --errors 8 --reference --evals 2"
         ;;
     large)
-        step scaling-build "cargo build --release -p nd-fmm-validate --example scaling"
+        step scaling-build "cargo build --release -p tetraleaf-validate --example scaling"
         quarter=$((cores / 4))
         for run in f64:8 f32:3; do
             precision=${run%%:*} p=${run##*:}
@@ -96,7 +96,7 @@ for part in $parts; do
         done
         ;;
     oversubscribed)
-        step scaling-build "cargo build --release -p nd-fmm-validate --example scaling"
+        step scaling-build "cargo build --release -p tetraleaf-validate --example scaling"
         ranks=$((160 * nodes))
         step "oversubscribed-invariance-cube-f64-p8-$ranks-k8" \
             "timeout $LAUNCH_TIMEOUT mpirun -n $ranks --oversubscribe --map-by ppr:160:node --bind-to none -x PSM2_SHAREDCONTEXTS=1 $scaling --dist cube --n $INV_N --precision f64 --p 8 --strategy rotation --overlap both --invariance 8"

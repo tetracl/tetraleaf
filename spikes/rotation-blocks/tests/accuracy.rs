@@ -1,12 +1,12 @@
 //! The acceptance tests of CH0.1 (docs/helmholtz/tasks/CH0.1.md, "Tests that prove it").
 //! Tests 1, 2, 5 and 6 are ignored in debug builds' default runs; run them all with
-//! `cargo test -p nd-fmm-spike-rotation-blocks --release -- --include-ignored`.
+//! `cargo test -p tetraleaf-spike-rotation-blocks --release -- --include-ignored`.
 
-use nd_fmm_math::rotation::{block_range, blocks_len, euler_zyz};
-use nd_fmm_math::{Layout, harmonics};
-use nd_fmm_spike_rotation_blocks::conjugated::{conjugated_blocks, n_ratios};
-use nd_fmm_spike_rotation_blocks::entry;
-use nd_fmm_spike_rotation_blocks::gd::{
+use tetraleaf_math::rotation::{block_range, blocks_len, euler_zyz};
+use tetraleaf_math::{Layout, harmonics};
+use tetraleaf_spike_rotation_blocks::conjugated::{conjugated_blocks, n_ratios};
+use tetraleaf_spike_rotation_blocks::entry;
+use tetraleaf_spike_rotation_blocks::gd::{
     Scratch, compact_blocks_len, compact_offset, euler_blocks, expand, matmul, y_blocks,
 };
 
@@ -137,9 +137,9 @@ fn blocks_are_orthogonal_to_degree_1000() {
 }
 
 /// Test 3: the GD blocks of z-y-z rotations against N Dⁿ N⁻¹ from
-/// `nd_fmm_math::rotation::blocks`, p ≤ 30, absolute 1e-13.
+/// `tetraleaf_math::rotation::blocks`, p ≤ 30, absolute 1e-13.
 #[test]
-fn agrees_with_conjugated_nd_fmm_math_blocks_to_degree_30() {
+fn agrees_with_conjugated_tetraleaf_math_blocks_to_degree_30() {
     let p = 30;
     let mut triples: Vec<[f64; 3]> = angles().into_iter().map(|b| [0.0, b, 0.0]).collect();
     triples.extend([

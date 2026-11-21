@@ -1,26 +1,26 @@
 //! The acceptance tests of CH0.8a (docs/helmholtz/tasks/CH0.8a.md, "Tests that prove it").
 //! `trees` owns the one MPI initialisation of this executable; the others need no MPI.
-//! Run them with `cargo test -p nd-fmm-spike-census --release`.
+//! Run them with `cargo test -p tetraleaf-spike-census --release`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::f64::consts::PI;
 
 use mpi::traits::Communicator;
-use nd_fmm_plan::interaction_manager::V_LIST_DIRECTIONS;
-use nd_fmm_spike_census::census::{
+use tetraleaf_plan::interaction_manager::V_LIST_DIRECTIONS;
+use tetraleaf_spike_census::census::{
     Census, DISTANCES, NCLASSES, NDIST, distance_class, reflection_classes,
 };
-use nd_fmm_spike_census::model::{
+use tetraleaf_spike_census::model::{
     bound, coaxial_entries, conversion_cost, degree, hankel_abs, level_ka, n_phi_host, passing,
     rotation_block_reals, signature_len, width,
 };
-use nd_fmm_spike_census::tree::{
+use tetraleaf_spike_census::tree::{
     DEEPEST, fine_keys, octree_of_points, octree_with_width, width_level,
 };
-use nd_fmm_spike_census::workloads::Workload;
-use nd_fmm_validate::fmm_accuracy::Distribution;
-use nd_octree::octree::KeyType;
-use nd_octree::{MortonKey, Octree, morton};
+use tetraleaf_spike_census::workloads::Workload;
+use tetraleaf_validate::fmm_accuracy::Distribution;
+use tetraleaf_octree::octree::KeyType;
+use tetraleaf_octree::{MortonKey, Octree, morton};
 
 const MIB: f64 = 1024.0 * 1024.0;
 
@@ -49,7 +49,7 @@ fn adjacent(a: MortonKey, b: MortonKey) -> bool {
 }
 
 /// The counts of `census` recomputed by brute force from the list definitions of
-/// `nd_fmm_plan::interaction_manager`, over every key of the one-rank tree.
+/// `tetraleaf_plan::interaction_manager`, over every key of the one-rank tree.
 fn check_against_brute_force<C: mpi::traits::CommunicatorCollectives>(
     name: &str,
     tree: &Octree<'_, C>,
@@ -238,7 +238,7 @@ fn trees() {
     assert_eq!(comm.size(), 1, "the census runs on one rank");
     let n = 128;
 
-    // Test 1: no width limit reproduces nd-octree's own tree, bit for bit.
+    // Test 1: no width limit reproduces tetraleaf-octree's own tree, bit for bit.
     let mut cases: Vec<(Workload, f64)> = vec![
         (Workload::W1, 50.0),
         (Workload::W2, 50.0),

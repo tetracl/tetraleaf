@@ -23,7 +23,7 @@ fastest, with m̂ and the exact columns per read.
 
 `rule` reads the `ch3-2d` launches (one thread) of each directory and evaluates, per case, the
 rule with the term at the constants of `MIN_COLUMNS` (which mirror
-`nd_fmm_exec::helmholtz::auto_batched_min_columns`) and without it (CH3.2d's rule) on the
+`tetraleaf_exec::helmholtz::auto_batched_min_columns`) and without it (CH3.2d's rule) on the
 measured per-level times: a level runs Batched where the rule says so and Batched ran there
 (its tables fit the budget), else Rotation, each at its time in the Rotation and the
 Batched run (the mean of the two launches); the evaluation is Rotation's with its M2L
@@ -234,7 +234,7 @@ def fmm(machines):
               f"{r['spread']:.2f} | {losses} |")
 
 
-# `auto_batched_max_degree` and `auto_batched_min_columns` of nd-fmm-exec, by (ISA, planes).
+# `auto_batched_max_degree` and `auto_batched_min_columns` of tetraleaf-exec, by (ISA, planes).
 MAX_DEGREE = {("avx512", 1): 15, ("avx512", 2): 15, ("avx2", 1): 12, ("avx2", 2): 11,
               ("neon", 1): 12, ("neon", 2): 10}
 MIN_COLUMNS = {

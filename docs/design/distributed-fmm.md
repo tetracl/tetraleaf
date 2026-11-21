@@ -31,7 +31,7 @@ change before they make one:
    distributed tree has leaves the one-rank tree does not: in 15 of 24 measured
    configurations at 4 and 8 ranks. **The partition is also poor**: the busiest rank
    holds 1.25 times the mean number of points at 2 ranks, about 2.0 at 8, and up to 14
-   at 72 (§3.1). Both come from `nd-octree`'s coarse tree, not from the FMM.
+   at 72 (§3.1). Both come from `tetraleaf-octree`'s coarse tree, not from the FMM.
 2. **With the same tree, a multi-rank result differs from the one-rank result only in
    the order of the near and X rows.** Every multipole agrees bit for bit, and so does
    every local without an X row (§5.2). The measured difference is 2–7 u_T relative L2
@@ -39,7 +39,7 @@ change before they make one:
 
 The design therefore proposes:
 
-- **`nd-octree` (T4, §3).** A coarse tree built top-down by weight from the root, whose
+- **`tetraleaf-octree` (T4, §3).** A coarse tree built top-down by weight from the root, whose
   blocks are always nodes of the one-rank tree. The leaves are then the one-rank leaves
   on every rank count and for every input distribution. This was replayed on all 48
   measured configurations. Blocks are weighted by points, not distinct keys; a
@@ -49,10 +49,10 @@ The design therefore proposes:
   costs about nothing more; its cost is downstream: finer blocks mean more `Global` boxes,
   whose locals every rank computes. That is negligible up to 16 ranks but up to 6 fair
   shares of M2L work at 72 ranks and N = 10⁵ (simulated, §3.6), so the design pairs O1
-  with **P2**, an `nd-fmm-plan` change by which a rank computes only the `Global` locals
+  with **P2**, an `tetraleaf-plan` change by which a rank computes only the `Global` locals
   its own blocks descend from (bit for bit the same values). At 16–72 ranks points also
   stop balancing M2L work (up to 1.5× at N = 10⁶); a work weight is left to Phase 6.
-- **`nd-fmm-plan` (T5, §4, §5).** `Redistribution` as redesign §9, with (key, position) on
+- **`tetraleaf-plan` (T5, §4, §5).** `Redistribution` as redesign §9, with (key, position) on
   the wire, the order within a leaf (origin rank, origin position), `_into` variants and no
   cheap path (an all-to-all-v with only local data costs under 1 µs, measured). Near and
   X rows ordered by the entry's (level, key) instead of its leaf index. On one rank that
@@ -86,8 +86,8 @@ the replicated top tree that Phase 5 keeps grows like P. At 8,192 ranks every ra
 do about three times its useful work in redundant M2M, receive 170 MB per evaluation in
 the coarse gather, and hold 1.5 GB of replicated coefficients (*model*). §14 plans the
 replacement as a scale-out phase after Phase 5: a locally essential top tree in
-`nd-octree` (the larger octree change), an owned top tree with an order-preserving
-reduction in `nd-fmm-plan`, a work-weighted cut, and validation at scale by rank-count
+`tetraleaf-octree` (the larger octree change), an owned top tree with an order-preserving
+reduction in `tetraleaf-plan`, a work-weighted cut, and validation at scale by rank-count
 invariance. It also sets the constraints Phase 5 keeps so that this extends it.
 
 §13 lists the questions for sign-off with a recommendation each.
@@ -96,8 +96,8 @@ invariance. It also sets the constraints Phase 5 keeps so that this extends it.
 
 ### 1.1 What exists on several ranks today
 
-**`nd-octree`** (`Octree::new`, octree/src/octree.rs; the private
-octree/src/octree/implementation.rs):
+**`tetraleaf-octree`** (`Octree::new`, tetraleaf-octree/src/octree.rs; the private
+tetraleaf-octree/src/octree/implementation.rs):
 
 | Step | Function | What it does on several ranks |
 | --- | --- | --- |
@@ -113,8 +113,8 @@ octree/src/octree/implementation.rs):
 Lookups: `owner_rank(key)` (O(log P), no communication), `local_leaf(key)`,
 `lookup_leaves(keys)` (collective).
 
-**`nd-fmm-plan`**:
-- `Plan::new` (fmm-plan/src/plan.rs): two all-reduces (level count, validity). Builds
+**`tetraleaf-plan`**:
+- `Plan::new` (tetraleaf-plan/src/plan.rs): two all-reduces (level count, validity). Builds
   `BoxIndex` (every held key, local, `Global` and ghost, Morton order per level) and the
   `LeafNumbering` (local leaves by (level, key), then the ghost leaves a U- or X-row
   names, by key; redesign §3.3).
@@ -133,7 +133,7 @@ Lookups: `owner_rank(key)` (O(log P), no communication), `local_leaf(key)`,
   3 `upward_global` (gather, then the global M2M), 4 `exchange_multipoles` (levels
   0..=L), 5 `downward`, 6 `evaluate_leaves`.
 
-**`nd-fmm-exec`** (`FmmBuilder::build`, fmm-exec/src/fmm.rs):
+**`tetraleaf-exec`** (`FmmBuilder::build`, tetraleaf-exec/src/fmm.rs):
 
 | Step | What | Collectives |
 | --- | --- | --- |
@@ -158,7 +158,7 @@ constructor ends with an all-reduce that agrees the layout (exchange.rs, module 
 
 **How.** A throwaway program in the session's scratch directory (`t1measure`, not
 committed), built in release against this workspace (`Cargo.lock` copied). Every rank
-draws the same global point set (`nd_fmm_validate::fmm_accuracy::Distribution`, seed
+draws the same global point set (`tetraleaf_validate::fmm_accuracy::Distribution`, seed
 `0xc32`: the cube [−1, 1)³, the Plummer sphere a = 0.1, the five Gaussian clusters; and
 a "coincident" set: the cube with 20% of the points on 100 positions, 200 or 2,000 each).
 It passes its share to `Octree::new` exactly as `Fmm::build` does (the keys of its
@@ -345,18 +345,18 @@ index. `test_some` also reads the statuses by request index, not by completion s
 
 ### 1.3 What `IndexFmm` checked, and where each check lives after T2
 
-| Check (fmm-plan/tests/mpi_regressions.rs, src/*_tests.rs) | What it proved | After T2 |
+| Check (tetraleaf-plan/tests/mpi_regressions.rs, src/*_tests.rs) | What it proved | After T2 |
 | --- | --- | --- |
 | counts of one: every leaf receives every leaf index once, on the per-pair, row and grouping paths | the evaluator's data flow covers every (source leaf, target leaf) pair exactly once, through the exchanges and the global levels | pair coverage: the recording operator ("every oracle pair issued exactly once", call order, groupings) on every scenario and rank count; values through the exchanges: the Laplace FMM against the one-rank FMM (§5, bit for bit) and the direct sum in `tests/mpi_exec.rs` (T6) |
 | variable counts `hash(key) % 5`, count check, every path | the variable-count layouts of the stores and the source exchange | the exchange checks (sources with `hash(key) % 5` counts, real points), unchanged; the Laplace FMM on every scenario |
 | second evaluation bit-identical | `reset` and determinism | a second evaluation of the recording operator (or a minimal value operator in the test file), T2; `tests/mpi_exec.rs` repeatability |
-| paths agree (per pair, rows, groupings) | the `PerPair` adapter | `fmm-exec/tests/mpi_exec.rs` "batched against per-pair" (`LaplaceOperator` against `PerPair<LaplaceOperator>`, bit for bit) |
-| `examples/test_index_fmm.rs` (weekly, 3 ranks) | the above at 3 ranks | the multi-rank CI job (T3) and the weekly run of `nd-fmm-exec`'s registered examples |
+| paths agree (per pair, rows, groupings) | the `PerPair` adapter | `tetraleaf-exec/tests/mpi_exec.rs` "batched against per-pair" (`LaplaceOperator` against `PerPair<LaplaceOperator>`, bit for bit) |
+| `examples/test_index_fmm.rs` (weekly, 3 ranks) | the above at 3 ranks | the multi-rank CI job (T3) and the weekly run of `tetraleaf-exec`'s registered examples |
 | `src/index_fmm_tests.rs`, `src/evaluator_tests.rs` (serial) | the index operators; the passes on ghost-free trees | evaluator passes: `evaluator_tests.rs` with the recording operator (T2) |
 
-The one gap: inside `nd-fmm-plan` no test then carries values through the exchanges.
+The one gap: inside `tetraleaf-plan` no test then carries values through the exchanges.
 §6's events, checked by the recording operator (T7), and the shadow check close it for
-the data movements. §10 keeps one value-carrying check in `nd-fmm-plan`.
+the data movements. §10 keeps one value-carrying check in `tetraleaf-plan`.
 
 ## 2. Requirements
 
@@ -369,21 +369,21 @@ to change (§13, question 1).
 | 2 | Equal to one rank within a derived tolerance; errors against the direct sum match | **Proposed change:** with O1 (§3) and P1 (§5), the host path on P ranks equals the one-rank `Fmm` over the union of every rank's points in rank order **bit for bit** (measured on a scratch copy, §5.3). Between input distributions, and if P1 is rejected, relative L2 ≤ 100 u_T for φ and ∇φ: 1.1e-14 (f64), 6.0e-6 (f32), derived in §5.4. The device against the host on the same ranks: Phase 4's bounds (T8) |
 | 3 | Deterministic for fixed input, ranks and settings, every thread count; overlap changes no bit | every movement is an exact copy, every sum has a fixed order (§5.1); overlap is order-preserving (§8.1); device tuning decided once (§7.6) |
 | 4 | Collective discipline; errors agreed before the next collective; no hang | §9.1 lists every collective with what empty ranks do; input errors ride on existing agreements; one new all-reduce per build (device errors after the device operator is built, every backend) and, on the device path with P > 1, one per evaluation (§7.5) |
-| 5 | Kernel-agnostic plan | `Redistribution` moves opaque payloads; the hook names stores and index lists, not Laplace; overlap is in the evaluator; tested with the recording operator in `nd-fmm-plan` and with Laplace in `nd-fmm-exec` (§10) |
+| 5 | Kernel-agnostic plan | `Redistribution` moves opaque payloads; the hook names stores and index lists, not Laplace; overlap is in the evaluator; tested with the recording operator in `tetraleaf-plan` and with Laplace in `tetraleaf-exec` (§10) |
 | 6 | Safe | scoped rsmpi point-to-point (§8.4); no `unsafe`, no FFI, no rlst change; avoids rsmpi's broken `RequestCollection::test_some` (§1.2) |
 | 7 | Minimal device traffic: exactly what each exchange sends and receives, packed, plus the one-rank minimum | **Refined:** the source exchange's sent chunks are written on the host (coordinates at build, the charges by `Fmm`), so nothing is downloaded for it; everything else as stated. Formula in §7.2 |
 | 8 | Memory per rank N/P plus the ghost layer; the replicated part stated | §9.2: per rank 2 n_c s K + (7 + o) s N/P + …, with K = local + ghost + replicated boxes; the replicated part grows linearly in P and dominates the coefficient memory beyond P ≈ √(N/4,700) (*model*); measured, 92% of the held boxes at 72 ranks for N = 10⁶ |
 | 9 | Tested on what can run: 1, 2, 4 (CI), 1, 2, 4, 8 by hand on both machines | §10; nothing here needs more |
 | 10 | Measured, never asserted | §11 |
 
-## 3. Partition and `nd-octree`
+## 3. Partition and `tetraleaf-octree`
 
 ### 3.1 What the partition costs today
 
 §1.2 measured it: the busiest rank holds 1.25× the mean points at 2 ranks on the
 uniform cube, 1.5× at 4, 2.0× at 8, up to 14× at 72 (clusters). The leaves differ from
 the one-rank tree in 15 of 24 configurations at 4 and 8 ranks, and the partition changes
-with the input distribution. Six causes, all in octree/src/octree/implementation.rs:
+with the input distribution. Six causes, all in tetraleaf-octree/src/octree/implementation.rs:
 
 1. **The cut rule overshoots.** `partition_blocks` gives rank p the blocks that *start*
    before total (p + 1)/P. With equal blocks whose prefix weight falls just short of the
@@ -649,7 +649,7 @@ What it shows:
   the replicated data of §9.2 (the coarse gather, the held boxes), which grow with the
   blocks.
 
-**P2. Each rank computes only the `Global` locals its own blocks need** (`nd-fmm-plan`).
+**P2. Each rank computes only the `Global` locals its own blocks need** (`tetraleaf-plan`).
 A rank's locals depend only on the locals of their ancestors: L2L runs parent to child,
 and L2P, M2P and P2P act on local leaves only. In `Plan::from_key_types`, which knows the
 rank's own coarse blocks, a `Global` box that is not an ancestor of one of them gets
@@ -729,7 +729,7 @@ replacement.
 
 ### 4.1 API
 
-Redesign §9, refined. In `nd_fmm_plan::redistribute`, kernel-agnostic:
+Redesign §9, refined. In `tetraleaf_plan::redistribute`, kernel-agnostic:
 
 ```rust
 /// Routing of items (points) to the ranks that own their leaves, and back (C5.1).
@@ -886,7 +886,7 @@ of the crate say so.
 | P2P scratch (`max_leaf_points`) | no: all-reduced | none |
 | the output scaling | no: the same division on the owner | none |
 
-**P1. Near and X rows ordered by the entry leaf's (level, key)** (`nd-fmm-plan`,
+**P1. Near and X rows ordered by the entry leaf's (level, key)** (`tetraleaf-plan`,
 `PartialLevel::finish` in plan.rs: sort each row by `(leaves.level(j), leaves.key(j))`
 instead of `j`). On one rank the local leaves are numbered by (level, key), so the rows
 do not change and one-rank results stay bit for bit. On several ranks a ghost leaf sits
@@ -970,7 +970,7 @@ of this task, at the limit of its one-minute budget, so T6 adds nothing at one r
 
 ### 6.1 Every host read and write of the evaluator, on several ranks
 
-Re-derived from fmm-plan/src/evaluator.rs and exchange.rs (device-path §4.2 did it for
+Re-derived from tetraleaf-plan/src/evaluator.rs and exchange.rs (device-path §4.2 did it for
 one rank):
 
 | Stage | Function | Reads from the host stores | Writes into the host stores |
@@ -984,7 +984,7 @@ one rank):
 A store with the wrong layout makes an exchange take part with default values and then
 panic; it writes nothing. Everything else that touches the stores is the caller's
 (`sources_mut`, `local_sources_mut`, `target_input_mut`, `local_target_inputs_mut`) or
-an operator call, which writes only its batch's output. Nothing else in `nd-fmm-plan`
+an operator call, which writes only its batch's output. Nothing else in `tetraleaf-plan`
 reads or writes a store.
 
 ### 6.2 The events
@@ -1066,7 +1066,7 @@ Firing an event is a match on an enum and a call per stage: 6 + L events per eva
 
 ### 6.4 The shadow check without `IndexFmm`
 
-In `fmm-exec/tests/` (test code, not a public type), `Shadow` wraps `LaplaceOperator`:
+In `tetraleaf-exec/tests/` (test code, not a public type), `Shadow` wraps `LaplaceOperator`:
 - it owns its five stores, laid out as the evaluator's (`LevelBuffers::from_index`,
   `LeafStore::new` with the evaluator's counts, ghost leaves included);
 - every level call runs the wrapped operator on a batch rebuilt from its own stores:
@@ -1087,7 +1087,7 @@ In `fmm-exec/tests/` (test code, not a public type), `Shadow` wraps `LaplaceOper
 
 The test drives `Evaluator` directly (the `Fmm` builds its own operator): the points of
 each `tests/mpi_exec.rs` scenario through T5's `Redistribution` and
-`nd_fmm_exec::geometry::leaf_coordinates`, one evaluator with `LaplaceOperator` and one
+`tetraleaf_exec::geometry::leaf_coordinates`, one evaluator with `LaplaceOperator` and one
 with `Shadow`, the same tables, `max_leaf_points` and P2P kernel. The shadow's target
 output equals the plain evaluator's bit for bit at 1, 2 and 4 ranks. With the events
 ignored it differs on 2 ranks in a scenario with ghosts, and the test asserts that.
@@ -1107,7 +1107,7 @@ wait.
 
 ### 7.1 What `DeviceOperator` does at each event
 
-Checked against fmm-exec/src/device.rs and fmm.rs; **one correction to the briefs** (T1,
+Checked against tetraleaf-exec/src/device.rs and fmm.rs; **one correction to the briefs** (T1,
 T8): the host source chunks do **not** hold this evaluation's charges when P2M, P2L and
 P2P all run on the device (`host_sources` is false, Phase 4S T9: "the charge load …
 skips the host's source store"). The device copy is current, the host's charges are not.
@@ -1158,14 +1158,14 @@ seconds at this size (§1.2).
 
 ### 7.3 Kernels and device memory
 
-- **Gather**: `nd_fmm_kernels::movement::gather_columns`, one launch over the whole
+- **Gather**: `tetraleaf_kernels::movement::gather_columns`, one launch over the whole
   multipole buffer with global column indices where every level has the same size
   (Laplace: n_c on every level), otherwise one launch per level. It exists.
 - **Scatter**: a new `movement::scatter_columns` (assignment, distinct columns, the
   pattern of `scatter_values` with columns of n values). `scatter_add_columns` into
   slots that `Reset` zeroed would give the same values except a −0.0 received becomes
   +0.0, which breaks the bit identity of the host fallback. One kernel and its tests in
-  `nd-fmm-kernels` (allowed by the README's scope for T8).
+  `tetraleaf-kernels` (allowed by the README's scope for T8).
 - **Memory added** per rank: the packed send buffer (B_o + Σ S_l) n_c s, the coarse
   receive buffer B_r n_c s, one receive buffer of max_l R_l n_c s reused per level (one
   stream orders an upload after the scatter that read the buffer before it), and the
@@ -1176,7 +1176,7 @@ seconds at this size (§1.2).
 ### 7.4 A device per rank
 
 - `Fmm::build` splits the communicator once (`split_shared`) and records the local rank
-  in `DeviceReport`. Both machines have one GPU, and `nd_fmm_kernels::Device::open` takes
+  in `DeviceReport`. Both machines have one GPU, and `tetraleaf_kernels::Device::open` takes
   no index: every rank opens the default device. A `Device::open_index` belongs to the
   first multi-GPU node, not to Phase 5 (a correction to T8's brief, which asks for the
   local rank modulo the device count).
@@ -1220,7 +1220,7 @@ on one rank. Two runs with the same cache then give the same bits (requirement 3
 After §7.1–§7.3 the ghost data never stage through a host copy of a device store: the
 packed buffers are the exchanges' own, the host holds them only between the download
 and MPI. On unified memory (the M3 Max; GH200's coherent NVLink-C2C) the copies could
-be avoided by mapping, which CubeCL 0.11.0-pre.4 does not offer through `nd-fmm-kernels`;
+be avoided by mapping, which CubeCL 0.11.0-pre.4 does not offer through `tetraleaf-kernels`;
 at 2–5 MB per evaluation (*model*, §7.2) it is not worth a kernel-crate API in Phase 5.
 Nothing more is proposed.
 
@@ -1439,12 +1439,12 @@ in f64 (*model*, §14.2). §14 plans the change.
 
 | Layer | Task | Where | Ranks | Oracle |
 | --- | --- | --- | --- | --- |
-| partition and leaves | T4 | `nd-octree` unit tests; `examples/test_mpi_weighted_partition.rs` (registered); the existing examples | unit; 1 and 3 (existing), 2, 4, 8 (new) | the one-rank tree (gathered leaves, key for key); per-rank weight within 1 + w_max/(W/P) of the mean (§3.2, O3) on the four workloads |
-| lists, exchanges, recording operator | T2, T5 (P1, P2), T7 (events), T9 (non-blocking) | `nd-fmm-plan` `tests/mpi_regressions.rs` | 1, 2, 4 (CI), 8 by hand | the list oracle (with P2, a `Global` box that is not an ancestor of an own block has empty rows; the oracle expects that); the exchange checks; the recording operator (pairs once each, call order, groupings, events) |
+| partition and leaves | T4 | `tetraleaf-octree` unit tests; `examples/test_mpi_weighted_partition.rs` (registered); the existing examples | unit; 1 and 3 (existing), 2, 4, 8 (new) | the one-rank tree (gathered leaves, key for key); per-rank weight within 1 + w_max/(W/P) of the mean (§3.2, O3) on the four workloads |
+| lists, exchanges, recording operator | T2, T5 (P1, P2), T7 (events), T9 (non-blocking) | `tetraleaf-plan` `tests/mpi_regressions.rs` | 1, 2, 4 (CI), 8 by hand | the list oracle (with P2, a `Global` box that is not an ancestor of an own block has empty rows; the oracle expects that); the exchange checks; the recording operator (pairs once each, call order, groupings, events) |
 | a count FMM (kept value check) | T2 | `tests/mpi_regressions.rs`: a kernel-free operator in which every multipole, local and output counts source points (P2M adds 1 per point, every other kind adds its input); every target's output equals the global number of sources, exactly | 1, 2, 4 | the global source count; a second evaluation bit for bit |
 | redistribution round trips | T5 | `src/redistribute_tests.rs`; `tests/mpi_regressions.rs` | unit; 1, 2, 4, 8 | the owner (`local_leaf`), the identity of forward then backward, the order within leaves |
-| multi-rank `Fmm` against one rank | T6 | `fmm-exec/tests/mpi_exec.rs`, every scenario; the ignored gate `tests/multi_rank.rs` | 1, 2, 4 (CI), 8 by hand; gate 2, 4, 8 | **bit for bit** the one-rank `Fmm` over the union in rank order (P > 1); two input distributions within 100 u_T; `direct_sum` as before |
-| the shadow check | T7 | `fmm-exec/tests/` (Evaluator-driven, §6.4) | 1, 2, 4; 8 by hand | the plain `LaplaceOperator` evaluator, bit for bit; differs with the events ignored |
+| multi-rank `Fmm` against one rank | T6 | `tetraleaf-exec/tests/mpi_exec.rs`, every scenario; the ignored gate `tests/multi_rank.rs` | 1, 2, 4 (CI), 8 by hand; gate 2, 4, 8 | **bit for bit** the one-rank `Fmm` over the union in rank order (P > 1); two input distributions within 100 u_T; `direct_sum` as before |
+| the shadow check | T7 | `tetraleaf-exec/tests/` (Evaluator-driven, §6.4) | 1, 2, 4; 8 by hand | the plain `LaplaceOperator` evaluator, bit for bit; differs with the events ignored |
 | the device on several ranks | T8 | `tests/mpi_exec.rs` (CPU runtime), `tests/device_fmm.rs` or a new executable (ignored), `tests/device_metal.rs`, `tests/device_cuda.rs` | 1, 2, 4 | the host fallback bit for bit the host path on the same ranks; the default within Phase 4's FMM bounds of the host on the same ranks; the transfers of §7.2; an injected error agreed on every rank |
 | overlap against blocking | T9 | `tests/mpi_regressions.rs` (exchanges), `tests/mpi_exec.rs` (every scenario with `overlap(true)`) | 1, 2, 4, 8; a 100-evaluation stress at 8 | the blocking path, bit for bit |
 | ignored gates | T6, T8 | release, own executables | 2, 4, 8 | as their rows |
@@ -1518,15 +1518,15 @@ For T10, which measures and reports; no number here is a target.
 
 | Task | Modules | Tests | Brief change proposed |
 | --- | --- | --- | --- |
-| T2 | `fmm-plan/src/{lib, index_fmm (removed), evaluator_tests}.rs`, `tests/mpi_regressions.rs`, `Cargo.toml` | as the brief, plus the count FMM of §10.1 | the count FMM as the kept value check (the brief allows "a minimal operator in the test file"; this design asks for it) |
+| T2 | `tetraleaf-plan/src/{lib, index_fmm (removed), evaluator_tests}.rs`, `tests/mpi_regressions.rs`, `Cargo.toml` | as the brief, plus the count FMM of §10.1 | the count FMM as the kept value check (the brief allows "a minimal operator in the test file"; this design asks for it) |
 | T3 | `.github/workflows/run-tests.yml` | as the brief | measure again after T6 (the references at P > 1) before fixing the budget |
-| T4 | `octree/src/octree.rs` (`OctreeOptions`, `PartitionWeight`), `octree/src/octree/implementation.rs` (coarse tree by weight, the cut, empty ranges, bounds, the root as a block); `examples/test_mpi_weighted_partition.rs` | §3.4 | (a) **the defaults change on several ranks** (O1–O4; one rank unchanged), against "the defaults keep today's behaviour"; (b) the weights need not travel through the parallel sort: each round counts the input keys per block; (c) no agreed error and no `Result` from `Octree::new`: ranks without blocks (O4) replace the panic; (d) acceptance adds: the leaves equal the one-rank leaves |
-| T5 | `fmm-plan/src/redistribute.rs` (+ `redistribute_tests.rs`), `plan.rs` (P1, P2), `operator.rs` and `evaluator.rs` docs (the accumulation rule's wording; the zero locals of pruned `Global` boxes) | §10.1 | (a) add P1, with a check that rows are in (level, key) order; (b) add P2, each in its own commit, with the one-rank plan unchanged and every `tests/mpi_exec.rs` output bit for bit at 1 and 2 ranks before and after; (c) a payload of the wrong length takes part and panics (the exchanges' pattern), no agreement per call; (d) the API of §4.1 (`max_per_item`, `_into`, `nsent`, `nreceived`) |
-| T6 | `fmm-exec/src/fmm.rs` (§4.4), `tests/mpi_exec.rs`, a new `tests/multi_rank.rs`, `nd-fmm-validate` `fmm_accuracy` | §10.1 | (a) the multi-rank check is bit for bit against the union-in-rank-order reference, and within 100 u_T between two distributions; (b) `FmmError::Redistribution` replaces `PointsNotOwned`; (c) "a tiny problem on more ranks than the coarse tree has blocks" runs (one block, the other ranks empty), and `single leaf` runs on every rank count |
-| T7 | `fmm-plan/src/{operator, evaluator, exchange}.rs`; the recording operator; the shadow in `fmm-exec/tests/` | §6.4 | (a) one `SendMultipoles` before the coarse gather covers the coarse blocks and every level's sends (no separate coarse "send"); (b) `CoarseExchange::{sent_blocks, received_blocks}`; (c) the shadow drives `Evaluator` directly, since `Fmm` takes no custom operator |
-| T8 | `fmm-exec/src/{device, fmm}.rs`; `fmm-kernels/src/movement.rs` (`scatter_columns`) | §10.1 | (a) correction: the host source chunks do not hold the charges with every source kind on the device; `Fmm` writes the sent leaves' charges; (b) correction: `Device::open` takes no index, every rank opens the one device; (c) the transfer formula of §7.2, two syncs; (d) the device operator is built after `Evaluator::new` and swapped in |
-| T9 | `fmm-plan/src/{exchange, evaluator}.rs`; `fmm-exec/src/fmm.rs` (`FmmBuilder::overlap`, `StageTimings`) | §10.1 | (a) the multipole exchange is posted before the coarse gather, not only behind the coarser downward levels; (b) the coarse gather stays blocking; (c) `Request::test`/`wait`, not `RequestCollection::test_some` (rsmpi defect); (d) the criterion of §8.6; (e) no device part |
-| T10 | `nd-fmm-validate` (`scaling`), results, design documents | as the brief | report the gather's imbalance wait separately, the replicated part of §9.2 at 64–72 ranks, memory by formula (`/proc/self/status` on locust), and per rank the M2L and P2P work against the time at 16–72 ranks, the input to question 12; the harness generates points per rank by index and checks rank-count invariance; one oversubscribed run on locust at 256 and 512 ranks for correctness and memory (§14.5) |
+| T4 | `tetraleaf-octree/src/octree.rs` (`OctreeOptions`, `PartitionWeight`), `tetraleaf-octree/src/octree/implementation.rs` (coarse tree by weight, the cut, empty ranges, bounds, the root as a block); `examples/test_mpi_weighted_partition.rs` | §3.4 | (a) **the defaults change on several ranks** (O1–O4; one rank unchanged), against "the defaults keep today's behaviour"; (b) the weights need not travel through the parallel sort: each round counts the input keys per block; (c) no agreed error and no `Result` from `Octree::new`: ranks without blocks (O4) replace the panic; (d) acceptance adds: the leaves equal the one-rank leaves |
+| T5 | `tetraleaf-plan/src/redistribute.rs` (+ `redistribute_tests.rs`), `plan.rs` (P1, P2), `operator.rs` and `evaluator.rs` docs (the accumulation rule's wording; the zero locals of pruned `Global` boxes) | §10.1 | (a) add P1, with a check that rows are in (level, key) order; (b) add P2, each in its own commit, with the one-rank plan unchanged and every `tests/mpi_exec.rs` output bit for bit at 1 and 2 ranks before and after; (c) a payload of the wrong length takes part and panics (the exchanges' pattern), no agreement per call; (d) the API of §4.1 (`max_per_item`, `_into`, `nsent`, `nreceived`) |
+| T6 | `tetraleaf-exec/src/fmm.rs` (§4.4), `tests/mpi_exec.rs`, a new `tests/multi_rank.rs`, `tetraleaf-validate` `fmm_accuracy` | §10.1 | (a) the multi-rank check is bit for bit against the union-in-rank-order reference, and within 100 u_T between two distributions; (b) `FmmError::Redistribution` replaces `PointsNotOwned`; (c) "a tiny problem on more ranks than the coarse tree has blocks" runs (one block, the other ranks empty), and `single leaf` runs on every rank count |
+| T7 | `tetraleaf-plan/src/{operator, evaluator, exchange}.rs`; the recording operator; the shadow in `tetraleaf-exec/tests/` | §6.4 | (a) one `SendMultipoles` before the coarse gather covers the coarse blocks and every level's sends (no separate coarse "send"); (b) `CoarseExchange::{sent_blocks, received_blocks}`; (c) the shadow drives `Evaluator` directly, since `Fmm` takes no custom operator |
+| T8 | `tetraleaf-exec/src/{device, fmm}.rs`; `tetraleaf-kernels/src/movement.rs` (`scatter_columns`) | §10.1 | (a) correction: the host source chunks do not hold the charges with every source kind on the device; `Fmm` writes the sent leaves' charges; (b) correction: `Device::open` takes no index, every rank opens the one device; (c) the transfer formula of §7.2, two syncs; (d) the device operator is built after `Evaluator::new` and swapped in |
+| T9 | `tetraleaf-plan/src/{exchange, evaluator}.rs`; `tetraleaf-exec/src/fmm.rs` (`FmmBuilder::overlap`, `StageTimings`) | §10.1 | (a) the multipole exchange is posted before the coarse gather, not only behind the coarser downward levels; (b) the coarse gather stays blocking; (c) `Request::test`/`wait`, not `RequestCollection::test_some` (rsmpi defect); (d) the criterion of §8.6; (e) no device part |
+| T10 | `tetraleaf-validate` (`scaling`), results, design documents | as the brief | report the gather's imbalance wait separately, the replicated part of §9.2 at 64–72 ranks, memory by formula (`/proc/self/status` on locust), and per rank the M2L and P2P work against the time at 16–72 ranks, the input to question 12; the harness generates points per rank by index and checks rank-count invariance; one oversubscribed run on locust at 256 and 512 ranks for correctness and memory (§14.5) |
 
 **Facts in the briefs that this design found to differ** (not changed in the briefs; for
 the sign-off):
@@ -1537,7 +1537,7 @@ the sign-off):
   measured, 3 points on 8 ranks build; a small `max_level` reaches it. Under O1 small
   problems would reach it routinely, which is why O4 removes it.
 - T8: "the index from the rank's position on its node … modulo the device count":
-  `nd_fmm_kernels::Device::open` takes no index; both machines have one GPU.
+  `tetraleaf_kernels::Device::open` takes no index; both machines have one GPU.
 - README "Non-blocking communication": rsmpi 0.8.2's `RequestCollection::test_some`,
   `test_any` and `wait_some` panic once every request has completed; use `Request::test`,
   `wait`, `test_all` or `wait_all`.
@@ -1551,7 +1551,7 @@ answers as decisions 1 and 6–13.
 | # | Question | Recommendation |
 | --- | --- | --- |
 | 1 | The requirements and tolerances (README decision 1) | Accept 1–10, with: requirement 2 — bit for bit the one-rank `Fmm` over the union in rank order on the host path (with O1 and P1), and 100 u_T relative L2 (1.1e-14 f64, 6.0e-6 f32) between input distributions and if P1 is rejected (the device against the host on the same ranks within Phase 4's bounds); requirement 7 — the source exchange's sends need no download (§7.1); requirement 8 — the replicated part grows linearly in P, and is stated (§9.2) |
-| 2 | Each `nd-octree` change (decision 6) | Accept O1 (coarse tree by weight from the root, blocks are nodes of the one-rank tree, k = 8 with P2, question 11), O2 (points as the default weight), O3 (the nearest-boundary cut), O4 (ranks without blocks instead of the panic); O5: no new lookup. Defaults change on several ranks; one rank unchanged (§3) |
+| 2 | Each `tetraleaf-octree` change (decision 6) | Accept O1 (coarse tree by weight from the root, blocks are nodes of the one-rank tree, k = 8 with P2, question 11), O2 (points as the default weight), O3 (the nearest-boundary cut), O4 (ranks without blocks instead of the panic); O5: no new lookup. Defaults change on several ranks; one rank unchanged (§3) |
 | 3 | The tolerance of requirement 2, and the order within leaves (decision 7) | Bit for bit with O1 and P1 (P1: near and X rows by the entry's (level, key), in T5); 100 u_T otherwise; order within a leaf (origin rank, origin position); no rank-count-independent point order (§4.3, §5) |
 | 4 | The redistribution API and the cheap path (decision 8) | §4.1: (key, position) on the wire, `_into` variants, `max_per_item` agreed at `new`, a wrong payload length takes part and panics; **no cheap path** (0.2–0.8 µs measured) |
 | 5 | The hook's events and the shadow check | Six events (§6.2), the multipole "send" once before the coarse gather; `CoarseExchange::{sent_blocks, received_blocks}`; the shadow drives `Evaluator` directly, no new public constructor (§6.4) |
@@ -1563,7 +1563,7 @@ answers as decisions 1 and 6–13.
 | 11 | (new) The replicated global pass: P2 | Accept P2 in T5: a rank computes only the `Global` locals its own blocks descend from; bit for bit the same values; removes up to 6 fair shares of repeated M2L work at 72 ranks (§3.6). The global M2M stays whole |
 | 12 | (new) The partition weight at 16–72 ranks | Points (O2) for Phase 5, which meets the 2–8-rank gates; at 16–72 ranks they leave M2L work 1.05–1.51 of the mean at N = 10⁶ (§3.5). A second cut by modelled work, after the leaves are known, is a Phase 6 candidate, decided by T10's per-rank work |
 | 13 | (new) The top tree (§3.7, §14.4 S2) | Phase 5 keeps the replicated top tree with P2: about 5% of an evaluation at N = 10⁶ on 72 ranks (*model*). It does not scale beyond one node; its replacement, an owned top tree with an order-preserving reduction and a fixed-size replicated top, is the scale-out phase's second package |
-| 14 | (new) Cluster scale: the scale-out plan (§14) | Accept §14 as the direction: Phase 5 keeps §14.5's constraints (no new P-growing per-rank structure; P2 written for S2; the harness's per-rank point generation and rank-count invariance; an oversubscribed locust run at 256–512 ranks). A scale-out phase follows Phase 5, ahead of the Phase 6 list: S1 (locally essential top tree, `nd-octree` and `nd-fmm-plan`), S2, S7, S3, then S4–S5 as measured. It wants a cluster (README decision 2 revisited); without one it is accepted on oversubscribed one-node runs and estimated scaling, marked as such (§14.5) |
+| 14 | (new) Cluster scale: the scale-out plan (§14) | Accept §14 as the direction: Phase 5 keeps §14.5's constraints (no new P-growing per-rank structure; P2 written for S2; the harness's per-rank point generation and rank-count invariance; an oversubscribed locust run at 256–512 ranks). A scale-out phase follows Phase 5, ahead of the Phase 6 list: S1 (locally essential top tree, `tetraleaf-octree` and `tetraleaf-plan`), S2, S7, S3, then S4–S5 as measured. It wants a cluster (README decision 2 revisited); without one it is accepted on oversubscribed one-node runs and estimated scaling, marked as such (§14.5) |
 
 Further choices made here, listed so that they can be overruled:
 - the refinement factor k = 8 (`with_block_refinement`), from §3.2's and §3.6's
@@ -1666,7 +1666,7 @@ redistribution.
 Each package keeps the results of every rank count bit for bit the one-rank results
 (requirement 2 as proposed) and the determinism of requirement 3.
 
-**S1. A locally essential top tree** (`nd-octree`, `nd-fmm-plan`; the larger octree
+**S1. A locally essential top tree** (`tetraleaf-octree`, `tetraleaf-plan`; the larger octree
 change). Today the ghost-children layer replicates every coarse block on every rank, and
 `generate_all_keys` gathers to every rank the `Global` keys and every key adjacent to one,
 with children. Instead each rank holds:
@@ -1683,7 +1683,7 @@ by the check that every listed key is held. Collectives: the all-gathers of
 (one sparse exchange). Effect (*model*, 8,192 ranks): held top-tree boxes from about
 1.2 × 10⁶ to about 10³ per rank.
 
-**S2. An owned top tree** (`nd-fmm-plan`). Every `Global` box gets an owner (the rank of
+**S2. An owned top tree** (`tetraleaf-plan`). Every `Global` box gets an owner (the rank of
 its first descendant block: descendants of a box are a contiguous range of ranks). Upward:
 the owners of the children send their exact multipoles to the parent's owner, which adds
 them **by octant**, so every `Global` multipole has the one-rank bits; one round per
@@ -1704,7 +1704,7 @@ the replicated top (fixed); the gather from 170 MB to a few MB; bit for bit unch
 hook (§6) gains events for the reduction's sends and receives; overlap posts the
 reduction's levels as their children complete.
 
-**S3. A work-weighted cut** (`nd-octree`, `nd-fmm-exec`). §3.5 and §3.6: at 16–72 ranks
+**S3. A work-weighted cut** (`tetraleaf-octree`, `tetraleaf-exec`). §3.5 and §3.6: at 16–72 ranks
 points leave M2L work 1.05–1.51 of the mean at N = 10⁶; it grows with P at fixed N.
 Because the leaves do not depend on the cut (O1), a second cut is possible after the
 local refinement: each rank refines its blocks (`create_local_tree`, no communication),
@@ -1715,7 +1715,7 @@ The cost constants come from per-kind timings (`StageTimings::kinds`, Phase 4S T
 per machine, precision and p. The simulation's 50/50 mix of points and M2L work already
 reached 1.10–1.20 on both at N = 10⁶ on 72 ranks.
 
-**S4. Construction at scale** (`nd-octree`; only if measured at ≥ 1,024 ranks to need
+**S4. Construction at scale** (`tetraleaf-octree`; only if measured at ≥ 1,024 ranks to need
 it). The sample sort (`parsort`, 4 samples per rank) runs twice per `Octree::new` and
 balances its intermediate ranges only roughly; its all-to-all is O(P). An alternative
 the design keeps in reserve: route the input keys straight to the O1 blocks' owners
@@ -1735,7 +1735,7 @@ neighbourhood exchange or a fixed-size all-gather.
 the core count. One rank per socket or NUMA domain with threads (the host path is
 threaded and bit-identical for every thread count, C3.5) divides it by the threads per
 rank, and is the configuration the benchmarks should favour on clusters. On GPU nodes,
-one rank per GPU; `nd_fmm_kernels::Device::open` then needs an index (multi-GPU nodes;
+one rank per GPU; `tetraleaf_kernels::Device::open` then needs an index (multi-GPU nodes;
 §7.4).
 
 **S7. Validation at scale.** No one-rank reference exists for N = 10⁹. With O1, P1, P2
@@ -1827,7 +1827,7 @@ number is *measured* (the machine, ranks × threads and build named) or marked *
 **Every multi-rank figure is one node over shared memory**: the Apple M3 Max at up to 12
 ranks × threads (16 once, labelled) and locust's 72 Grace cores at up to 72 (256 and 512
 oversubscribed, never timed). None is inter-node scaling. The full tables are in
-`fmm-validate/results/phase5-m3max.md` and `fmm-validate/results/phase5-gh200.md`, and
+`tetraleaf-validate/results/phase5-m3max.md` and `tetraleaf-validate/results/phase5-gh200.md`, and
 laplace-fmm-plan.md §7, Phase 5, carries the status per component.
 
 ### 15.1 Decisions as taken
@@ -1905,7 +1905,7 @@ Added at the end of Phase 5N (2026-10-11; docs/phase5n/, laplace-fmm-plan.md §7
   builds the tables first. No shared-memory window was built (decision 6); the batched host
   M2L (C6.6) stays the deep fix.
 - **Inter-node scaling: a first look at 2 nodes** (Kathleen, Omni-Path, PSM2; T2,
-  `fmm-validate/results/phase5n-kathleen.md` §7–§9; at most 2 nodes per job, the user's cap).
+  `tetraleaf-validate/results/phase5n-kathleen.md` §7–§9; at most 2 nodes per job, the user's cap).
   From 1 to 2 nodes the efficiency is 0.99–1.04 at N = 10⁷ (5·10⁶ points per node) and
   0.84–0.99 at N = 10⁶ with 40 ranks per node. The blocking exchanges move 0.27–0.86 GB/s
   per rank at 2 × 40 ranks and 0.42–0.81 GB/s on one node × 40: the cost is the node's
@@ -1922,7 +1922,7 @@ Added at the end of Phase 5N (2026-10-11; docs/phase5n/, laplace-fmm-plan.md §7
 
 Added at the end of Phase 5S (T9, 2026-10-15; docs/phase5s/, laplace-fmm-plan.md §7,
 Phase 5S; the full outcome in [scale-out.md](scale-out.md) §13, the scaling report
-`fmm-validate/results/phase5s-kathleen.md`). §14's packages were built and measured on
+`tetraleaf-validate/results/phase5s-kathleen.md`). §14's packages were built and measured on
 Kathleen at 1, 2 and 4 nodes (40–160 ranks timed, 640 oversubscribed counted) and on locust
 (to 72 timed, 512 counted):
 - **The replicated top tree is gone** (§14.2): a rank holds its locally essential set H

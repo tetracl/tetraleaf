@@ -3,7 +3,7 @@
 //! correctly rounded host reference.
 
 use cubecl::prelude::*;
-use nd_fmm_validate::SplitMix64;
+use tetraleaf_validate::SplitMix64;
 
 use crate::backend::{Backend, read};
 use crate::real::Real;

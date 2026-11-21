@@ -1,5 +1,5 @@
 //! The acceptance test of the spike (docs/phase6/T10-plane-wave-spike.md, "Tests that
-//! define done"): the plane-wave level M2L against `nd_fmm_ref::direct::m2l` within the
+//! define done"): the plane-wave level M2L against `tetraleaf_ref::direct::m2l` within the
 //! quadrature's error.
 //!
 //! Error measure: the potential r φ of each local at 4 random points of every target box
@@ -10,11 +10,11 @@
 //! Fourier modes and the truncation of the local at p. Direct and merge-and-shift
 //! translation agree to rounding (relative 1e-12 of the largest potential).
 
-use nd_fmm_math::{Layout, harmonics};
-use nd_fmm_ref::{Frame, Workspace, direct};
-use nd_fmm_spike_plane_wave::geometry::Level;
-use nd_fmm_spike_plane_wave::planewave::{LevelPlan, PlaneWave, Scratch, Translation, level_m2l};
-use nd_fmm_spike_plane_wave::quadrature::Quadrature;
+use tetraleaf_math::{Layout, harmonics};
+use tetraleaf_ref::{Frame, Workspace, direct};
+use tetraleaf_spike_plane_wave::geometry::Level;
+use tetraleaf_spike_plane_wave::planewave::{LevelPlan, PlaneWave, Scratch, Translation, level_m2l};
+use tetraleaf_spike_plane_wave::quadrature::Quadrature;
 
 /// A small xorshift generator; the test needs no statistics, only spread.
 struct Rng(u64);
@@ -113,7 +113,7 @@ fn check(level: Level, p: usize, q: Quadrature, seed: u64) -> Outcome {
     let prob = problem(level, p, seed);
     let n = (p + 1) * (p + 1);
     let pairs = level.pairs();
-    // The reference: nd_fmm_ref's direct M2L over every V pair.
+    // The reference: tetraleaf_ref's direct M2L over every V pair.
     let mut reference = vec![0.0; level.boxes() * n];
     let mut ws = Workspace::new(p);
     for pair in &pairs {
@@ -194,7 +194,7 @@ fn level_m2l_within_the_quadrature_error() {
 /// Level 3 and every p of the workloads: every quadrature from s = 6 until the
 /// plane-wave error is at most 0.1× the M2L truncation error (the matched quadrature of
 /// SPIKE_REPORT.md), and the model's choices (β = 0.1 and 1), each within the bound.
-/// Release: `cargo test -p nd-fmm-spike-plane-wave --release -- --ignored --nocapture`.
+/// Release: `cargo test -p tetraleaf-spike-plane-wave --release -- --ignored --nocapture`.
 #[test]
 #[ignore = "release: level 3, p = 3 to 18"]
 fn level_3_every_p() {

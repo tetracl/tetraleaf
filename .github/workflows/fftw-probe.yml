@@ -3,7 +3,7 @@ name: 🧪 fftw-probe
 # The runner's FFTW as RLST sees it (Helmholtz CHR.4, proposal §10): tools/fftw/probe.sh
 # prints pkg-config's versions, both libraries' version strings with their SIMD suffixes,
 # and runs RLST's own tests with `fftw_system`, `fftw_determinism` included, in a copy
-# outside the workspace. It tests RLST and the runner's FFTW, not nd-fmm, so it runs on the
+# outside the workspace. It tests RLST and the runner's FFTW, not tetraleaf, so it runs on the
 # pull requests that change the probe, and by hand; tools/ci/machine.md records its result.
 
 on:

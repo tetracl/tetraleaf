@@ -9,7 +9,7 @@
 # most 0.1× the M2L truncation error: tests/accuracy.rs, level_3_every_p) and with the
 # model's β = 0.1 choice; the baselines once per p. Build first, from spikes/ (the spikes'
 # workspace since Helmholtz CHA.1; the binary is the root's target/spikes/release/examples/level):
-#   cargo build --release -p nd-fmm-spike-plane-wave --example level
+#   cargo build --release -p tetraleaf-spike-plane-wave --example level
 set -eu
 k=${1:?usage: sweep.sh K [LEVEL]}
 level=${2:-4}

@@ -1,0 +1,53 @@
+[package]
+name = "tetraleaf-exec"
+version = "0.1.0-dev"
+description = "The Laplace FMM of tetraleaf on tetraleaf-plan: box geometry, operators and the user-facing FMM."
+readme = "README.md"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "tetraleaf_exec"
+
+# The device path (Phase 4, docs/design/device-path.md §3.4). No feature is on by
+# default, so the host path builds without CubeCL.
+[features]
+default = []
+# The device operator and the device backends' settings, through tetraleaf-kernels.
+gpu = ["dep:tetraleaf-kernels"]
+# The CubeCL CPU runtime; its build downloads the tracel-llvm bundle.
+cpu = ["gpu", "tetraleaf-kernels/cpu"]
+# Metal (wgpu with the MSL compiler): f32 only, run outside the macOS sandbox.
+metal = ["gpu", "tetraleaf-kernels/metal"]
+# CUDA: f32 and f64; type-checked in CI, run by hand on locust's H100 (Phase 4S).
+cuda = ["gpu", "tetraleaf-kernels/cuda"]
+
+[dependencies]
+tetraleaf-math = { workspace = true }
+tetraleaf-ref = { workspace = true }
+tetraleaf-tables = { workspace = true }
+tetraleaf-plan = { workspace = true }
+tetraleaf-simd = { workspace = true }
+tetraleaf-octree = { workspace = true }
+mpi = { workspace = true }
+rlst = { workspace = true }
+rayon = { workspace = true }
+thiserror = { workspace = true }
+tetraleaf-kernels = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+# How to call the FMM: build, evaluate several charge vectors, check against the direct
+# sum. Registered for the weekly `run-examples` job (3 ranks), where every rank passes
+# its own points and the FMM moves them to the ranks that own their leaves (Phase 5 T6).
+[[example]]
+name = "basic_evaluation"
+
+[package.metadata.example.basic_evaluation.templated-examples]
+command = "mpirun -n {{NPROCESSES}}"
+
+# No `unsafe` in any target of this crate (root CLAUDE.md, "Working rules"; Helmholtz CHA.2).
+[lints.rust]
+unsafe_code = "forbid"

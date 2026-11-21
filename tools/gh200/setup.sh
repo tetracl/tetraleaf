@@ -34,7 +34,7 @@ SPACK_COMMIT=3e19345b6e12f5ff1b874f4059622fc6a1fd804a
 # spack/spack-packages at the head of releases/v2026.06 (tag v2026.06.0), the branch
 # spack v1.2.2 uses by default. Also in spack.yaml (`repos:`).
 SPACK_PACKAGES_COMMIT=d4f7c711a6a42f1c4d551c8fd10fce9a11340a81
-REPOSITORY=https://github.com/tbetcke/fmm.git
+REPOSITORY=https://github.com/tetracl/tetraleaf.git
 
 die() {
     printf 'setup.sh: %s\n' "$*" >&2

@@ -21,7 +21,7 @@ run without it: the after-plan rule's assumption). `summary` prints per case and
 rule after the plan (each directory's launches, `reverse-` ones in the reverse order) the raised
 levels' measured change summed over those whose plan changed (V pairs or near interactions), the predicted change, the evaluation's change, the second plan's
 seconds and the errors over the run without it. No timing is asserted; the numbers go into
-fmm-validate/results/helmholtz-ch4-3b2b.md.
+tetraleaf-validate/results/helmholtz-ch4-3b2b.md.
 """
 
 import pathlib
