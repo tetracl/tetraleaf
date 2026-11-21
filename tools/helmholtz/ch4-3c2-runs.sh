@@ -15,7 +15,9 @@
 #   (x = 54.1), kD = 500 levels 2–4 (x = 108.3, 54.1, 27.1), kD = 1000 levels 2–4
 #   (x = 216.5, 108.3, 54.1); `scans-cube-1000` the last two alone, one launch per level
 #   (the stage `scans-cube` runs about 55 s per degree at kD = 250 and does not reach
-#   kD = 1000's levels 3 and 4 within a 6 h job);
+#   kD = 1000's levels 3 and 4 within a 6 h job); `scans-cube-small` the cube at N = 10⁴,
+#   kD = 500 level 2 and kD = 1000 levels 2 and 3 (at N = 10⁵ kD = 1000 costs about 760 s
+#   per degree);
 # - `scans-w1`: the same on W1 at kD = 250 level 2 (x = 54.1) and kD = 500 levels 2 and 3
 #   (x = 108.3, 54.1);
 # - `verify-matrix`: CH3.1c's matrix and CH3.3's held-out cases (`helmholtz_accuracy`)
@@ -75,6 +77,15 @@ scans-cube-1000)
     launch cube-1000-l3 helmholtz_calibrate "${C[@]}" --level 3
     launch cube-1000-l4 helmholtz_calibrate "${C[@]}" --level 4
     ;;
+scans-cube-small)
+    # The cube at N = 10⁴: kD = 500 level 2 (x = 108.3, against N = 10⁵'s scan), then
+    # kD = 1000 levels 2 and 3 (x = 216.5, 108.3); at N = 10⁵ kD = 1000 costs about 760 s
+    # per degree (job 653806).
+    C=(--workload w4-cube:10000 "${SCAN[@]}")
+    launch cube10k-500-l2 helmholtz_calibrate "${C[@]}" --kd 500 --level 2
+    launch cube10k-1000-l2 helmholtz_calibrate "${C[@]}" --kd 1000 --level 2
+    launch cube10k-1000-l3 helmholtz_calibrate "${C[@]}" --kd 1000 --level 3
+    ;;
 scans-w1)
     launch w1-250 helmholtz_calibrate --workload w1 "${SCAN[@]}" --kd 250 --level 2
     launch w1-500 helmholtz_calibrate --workload w1 "${SCAN[@]}" --kd 500 --min-x 50
@@ -126,7 +137,7 @@ verify-w1)
     done
     ;;
 *)
-    echo "usage: $0 scans-cube|scans-cube-1000|scans-w1|verify-matrix|verify-w1 <out-dir>" >&2
+    echo "usage: $0 scans-cube|scans-cube-1000|scans-cube-small|scans-w1|verify-matrix|verify-w1 <out-dir>" >&2
     exit 2
     ;;
 esac
