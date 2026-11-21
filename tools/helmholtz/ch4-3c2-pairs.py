@@ -5,7 +5,7 @@ curves (`spikes/truncation/results/c1_curves.csv`: the one-level chain in extend
 precision, per real k a on the half-octave grid and degree p, the worst error over the 316
 offsets and three placements, φ and ∇φ, relative ℓ2 per pair).
 
-    tools/helmholtz/ch4-3c2-pairs.py <points> [--rule name=gamma,alpha,beta,c,a,b,d …]
+    tools/helmholtz/ch4-3c2-pairs.py <points> [--rule name=gamma,alpha,beta,c,a,b,d[,cap] …]
 
 <points> is a file of lines `x eps p` (the FMM's measured degree at ε/2 at x =
 Re(k) a_l; other lines are skipped) or `point:` lines of `helmholtz_calibrate`'s scans
@@ -35,16 +35,21 @@ def up(v):
 
 
 class Rule:
-    def __init__(self, name, gamma, alpha, beta, c, a=0.0, b=0.0, d=0.0):
+    def __init__(self, name, gamma, alpha, beta, c, a=0.0, b=0.0, d=0.0, cap=None):
         self.name = name
         self.k = (gamma, alpha, beta, c, a, b, d)
+        self.cap = cap
 
     def degree(self, x, eps):
+        """As `DegreeRule::degree`: the excess at least 0, the branch at most the cap's."""
         gamma, alpha, beta, c, a, b, d = self.k
         big_l = math.log10(1 / eps)
         plateau = up((gamma * big_l + alpha) * big_l + beta)
-        excess = c * math.log(1 / eps) ** (2 / 3) + a * big_l + b
-        return max(plateau, up(x + excess * x ** (1 / 3) + d))
+        excess = max(0.0, c * math.log(1 / eps) ** (2 / 3) + a * big_l + b)
+        branch = x + excess * x ** (1 / 3) + d
+        if self.cap is not None:
+            branch = min(branch, x + self.cap * math.log(1 / eps) ** (2 / 3) * x ** (1 / 3))
+        return max(plateau, up(branch))
 
 
 def load_curves():
