@@ -73,9 +73,13 @@ What the items mean here:
   As built: the branch ⌈x + max(0, C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉ (fields `c, a, b,
   d`; `DegreeRule::gd` for a = b = d = 0); the fit compares (A), (B) = (A) + d and (C) = (B) with
   C free, each also capped at CH3.3's rule on 4 ≤ x ≤ 512 at the decades of D1, since (B) and (C)
-  uncapped raise the degree by one at x = 10–27, 10⁻⁸ (the costly lower levels). The default is
+  uncapped raise the degree by one at x = 10–27, 10⁻⁸ (the costly lower levels). The fit is
   (C) capped: C = 2.30, a = −0.75, b = −5.73, d = 3. The excess is clamped at 0: the fitted e(ε)
-  is negative above ε ≈ 2 · 10⁻³, outside D1.
+  is negative above ε ≈ 2 · 10⁻³, outside D1. After the constant density's failure (below) the
+  default is the fit raised by 2 (d = 5) and capped by CH3.3's branch everywhere
+  (`DegreeRule::cap`, the high branch min(own, x + 0.80 (ln 1/ε)^{2/3} x^{1/3})): the user's
+  suggestion on 2026-11-21 (raise level 2's degree slightly, at a small cost in time) applied to
+  every level above the plateau, since the rule knows x, not levels.
 - `tetraleaf-validate`: `helmholtz_calibration`'s fit of the new branch (grids over the branch's
   constants, least total excess over the points above the plateau, covering every point);
   `helmholtz_calibrate fit` printing CH3.3's rule and the refit against each point;
@@ -174,16 +178,23 @@ Kathleen, `singlenode`, one rank × 40 threads, BLAS threads 1, release; jobs th
   charges only; the constant density on W1's sphere adds the boxes' errors coherently and needs
   more at every level. The refit as fitted is not acceptable.
 
+- The rule (d = 5, capped): the offset study (job 663585: W1, constant density, kD = 250, 500,
+  1000, d = 5, 7, 9 uncapped) found d = 5 enough (at most 0.60 ε); the capped rule verified (jobs
+  663586, 663587): the matrix's 174 runs within ε (at most 0.64 ε), W1 at kD = 250, 500 and 1000
+  with the three densities within ε (at most 0.94 ε, ∇φ of the constant density at kD = 500,
+  10⁻⁸; CH3.3's rule 0.91 ε there). Pair evidence: at most 4.6 ε at k a = 45 … 256. Over the 150
+  points the rule's total excess is 367 (CH3.3's 556, the fit's 188). The report is
+  `tetraleaf-validate/results/helmholtz-ch4-3c2.md`.
+
 ## Pending runs
-- Kathleen job 663560 (`run.sbatch`, singlenode, 6 h): `ch4-3c2-runs.sh verify-matrix` into
-  `/scratch/scratch/ucahtbe/fmm/runs/ch4-3c2/verify-matrix`. Decides the acceptance ≤ ε on CH3.1c's
-  matrix and CH3.3's held-out cases, Rotation and the defaults, with CH3.3's rule beside.
-- Kathleen job 663561 (`verify-w1`, singlenode, 6 h, queued behind 653806): W1 at kD = 500
-  and 1000, the three densities, Rotation and the default, 10⁻⁸ … 10⁻³. Decides the acceptance
-  ≤ ε at x = 108 and 216 under the refit.
+- None: every run of the plan finished; the same-node times (§7 of the report) are in the report.
 
 ## Open questions
 - The refit fails the constant density (above): rescan with the worst density and refit, a
-  margin, or keep CH3.3's rule? (asked 2026-11-21)
+  margin, or keep CH3.3's rule? Asked 2026-11-21; the user suggested raising level 2's degree
+  slightly and accepting a small cost in time. Answered by the raise of 2 on every level above
+  the plateau, capped by CH3.3's rule (above).
+- For sign-off (the report §8): adopt the rule; amend the proposal's §3.5; scan the constant
+  density in a later calibration.
 - The proposal's §3.5 states CH3.3's rule as the calibrated one: amended only on the sign-off
   of the refit (the PR's question).

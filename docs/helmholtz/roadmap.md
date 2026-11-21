@@ -11,9 +11,10 @@ Status (2026-11-21): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 202
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
 item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1, CH4.3b2a, CH4.3b2b, CH4.3b2d (signed off 2026-11-21:
 the raised levels' V crossover priced per box before the plan, one plan, `VRaisedPrice::PerBox` the
-default) and CH4.3c1 (C₀ = 200 confirmed at p ≥ 72 against a double-double reference); CH4.3c was
-split into CH4.3c1 and CH4.3c2. Next CH4.3c2 (the degrees refit), then CH4.3b2c (the form by
-default; it needs CH4.3c2 since CH4.3c1), then CH4.3d and CH4.3e; CH4.2d off the list; the FFT
+default) and CH4.3c1 (C₀ = 200 confirmed at p ≥ 72 against a double-double reference); CH4.3c2
+(the high-frequency degrees refitted, raised by 2 for the constant density and capped by CH3.3's
+rule) waits for its sign-off. The project was renamed tetraleaf on 2026-11-21. Next CH4.3b2c (the
+form by default, on the refitted degrees), then CH4.3d and CH4.3e; CH4.2d off the list; the FFT
 track stays item 11. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7,
 CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
 (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
@@ -823,11 +824,12 @@ task's full line is in its record or report and its progress entry
   was the f64 references' rounding (RCR 290–3,345 u). FMM evidence CH4.3a's (no decision moves).
   *Sign-off:* 2026-11-21 on #246, the user: "Both questions as recommended.": C₀ = 200 kept;
   CH4.3c2 a *Need* of CH4.3b2c.
-- [ ] **CH4.3c2 The high-frequency degrees refit.** *Done when:* (review 2026-11-19, A8) the
-  refit of the high-frequency degrees searches downward at x ≥ 54 (levels 2–4 carry 0.6–1.0 % of
-  the error on W1 at kD = 1000, 10⁻⁸), the excess p − x refitted in L (proposal §3.5; CH3.3's
-  report §6 names the branch x + (a L + b) x^{1/3}); pair evidence and FMM evidence, both; the
-  rule for sign-off. *Needs:* CH4.3a. *Machines:* Kathleen. *Sign-off:* the rule.
+- [x] **CH4.3c2 The high-frequency degrees refit.** Report: `tetraleaf-validate/results/helmholtz-ch4-3c2.md`;
+  record `docs/helmholtz/tasks/CH4.3c2.md`. Level scans from ⌊x⌋ − 2 to x = 216; the branch's
+  excess refitted linear in L, raised by 2 for W1's constant density (the random-charge fit missed
+  it, 2.6 ε) and capped by CH3.3's branch: 4–10 degrees below CH3.3's rule at x ≥ 43 at 10⁻³, 0–3
+  at 10⁻⁸; every case within ε (174 matrix runs, W1 at kD = 250–1000 with three densities).
+  *Sign-off:* pending (the report's questions 1–3).
 - [ ] **CH4.3d The transfer function's length.** *Done when:* (S6 §6) whether a shorter
   transfer function (⌈3(P − 1)/2⌉, whose rounding stays far below 2P − 2's at k a 6–45, S6's
   report §6) earns a truncation analysis; (review 2026-11-12, M8) the excess-bandwidth length
