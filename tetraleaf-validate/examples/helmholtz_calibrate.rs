@@ -29,8 +29,8 @@
 //! - **`refit [files…]`** (no MPI; Helmholtz CH4.3c2): the high-frequency branch refitted with
 //!   CH3.3's plateau kept, over CH3.3's level points (`helmholtz_calibration::CH3_3_LEVELS`)
 //!   and the `point: level` lines of the files with x above `PLATEAU_X`, in the forms of
-//!   `fit_branch` (A: ⌈x + (a L + b) x^{1/3}⌉; B: with an offset d; C: ⌈x + (C (ln 1/ε)^{2/3}
-//!   + a L + b) x^{1/3} + d⌉), B and C also capped at CH3.3's rule on `cap_grid`; prints each
+//!   `fit_branch` (A: ⌈x + (a L + b) x^{1/3}⌉; B: with an offset d; C: with C (ln 1/ε)^{2/3}
+//!   added to the excess too), B and C also capped at CH3.3's rule on `cap_grid`; prints each
 //!   rule's constants, whether it covers every point, its total excess, and every point
 //!   against each rule.
 //!
