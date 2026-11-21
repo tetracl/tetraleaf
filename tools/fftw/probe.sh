@@ -28,7 +28,7 @@ set -u
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 
 # On locust (the environment of tools/gh200/ exists), activate it unless it is active.
-if [ -z "${FMM_GH200_ENV:-}" ] && [ -d /data/ucahtbe/envs/fmm-gh200 ]; then
+if [ -z "${TETRALEAF_GH200_ENV:-}" ] && [ -d /data/ucahtbe/envs/fmm-gh200 ]; then
     # env.sh and spack's activation are not written for `set -u`.
     set +u
     . "$root/tools/gh200/env.sh"

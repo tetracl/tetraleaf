@@ -7,7 +7,7 @@
 docs/CONVENTIONS.md §3.15 ("Radial functions and scaling"), Helmholtz CH1.2b.
 
 Spike S3's reference (spikes/radial/tools/reference.py, whose sets and rows these are,
-value for value), with the header of the other fmm-math fixtures. The four families and
+value for value), with the header of the other tetraleaf-math fixtures. The four families and
 their derivatives, with the scaling of §3.15:
 
     j^_n  = e^(-|Im z|) j_n(z) / s^n          h^_n = e^(Im z) h_n(z) s^n,   h = h^(1)
@@ -40,7 +40,7 @@ For j and j' each row also carries the oscillation envelope the tests measure ag
 the same scaling times max(|j_n|, |h_n|) where n < |z| (j_n has real zeros there), and
 |j_n| elsewhere; likewise for j' with h'.
 
-Writes fmm-math/fixtures/helmholtz_radial.json; `--check` regenerates in memory and fails
+Writes tetraleaf-math/fixtures/helmholtz_radial.json; `--check` regenerates in memory and fails
 unless the committed file matches byte for byte. See tools/fixtures/README.md.
 
 Run from the repository root:  uv run tools/fixtures/gen_helmholtz_radial.py [--check]
@@ -59,7 +59,7 @@ if mpmath.__version__ != "1.4.1":
     sys.exit(f"needs mpmath 1.4.1, found {mpmath.__version__}")
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "fmm-math" / "fixtures" / "helmholtz_radial.json"
+OUT = ROOT / "tetraleaf-math" / "fixtures" / "helmholtz_radial.json"
 CONVENTIONS = ROOT / "docs" / "CONVENTIONS.md"
 GENERATOR_VERSION = 1
 SEED = 20261027

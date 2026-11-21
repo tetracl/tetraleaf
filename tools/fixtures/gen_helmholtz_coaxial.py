@@ -7,7 +7,7 @@
 family, docs/CONVENTIONS.md §3.15 ("Coaxial translations"), Helmholtz CH1.2c.
 
 Spike S2's reference (spikes/coaxial/tools/reference.py, whose sets and entries these are,
-value for value), with the header of the other fmm-math fixtures and each set's geometry
+value for value), with the header of the other tetraleaf-math fixtures and each set's geometry
 as fields. Basis: the real orthonormal harmonics Y_n^m of §3.15 (cos in slot +m, sin in
 slot -m, no Condon-Shortley phase, sum_m Y_n^m(x) Y_n^m(y) = (2n + 1)/(4 pi) P_n(x.y)) and
 F_n^m(r) = f_n(k r) Y_n^m(r^), f = j (regular) or h = h^(1) (singular). The coaxial
@@ -43,7 +43,7 @@ level's boxes; z and s are the f64 values S2's sweep uses. The sets: k a in {0.0
 at the child shift t = a/2 (p_child -> p_parent) and M2L at d = 2 and sqrt(27) box widths
 (p -> p). Each set records k for a = 1, t and a besides z and s.
 
-Writes fmm-math/fixtures/helmholtz_coaxial.json; `--check` regenerates in memory and
+Writes tetraleaf-math/fixtures/helmholtz_coaxial.json; `--check` regenerates in memory and
 fails unless the committed file matches byte for byte. See tools/fixtures/README.md.
 
 Run from the repository root:  uv run tools/fixtures/gen_helmholtz_coaxial.py [--check]
@@ -63,7 +63,7 @@ if mpmath.__version__ != "1.4.1":
     sys.exit(f"needs mpmath 1.4.1, found {mpmath.__version__}")
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "fmm-math" / "fixtures" / "helmholtz_coaxial.json"
+OUT = ROOT / "tetraleaf-math" / "fixtures" / "helmholtz_coaxial.json"
 CONVENTIONS = ROOT / "docs" / "CONVENTIONS.md"
 GENERATOR_VERSION = 1
 SEED = 20261027

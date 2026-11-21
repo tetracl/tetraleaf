@@ -16,7 +16,7 @@
 #             tests in release
 # Every test that initialises MPI runs as a singleton here; the multi-rank tests are
 # mpi.sbatch. Each command is a step: a failure is reported and the job carries on.
-#SBATCH --job-name=fmm-check
+#SBATCH --job-name=tetraleaf-check
 #SBATCH --partition=kathleen
 #SBATCH --qos=singlenode
 #SBATCH --nodes=1

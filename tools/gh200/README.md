@@ -32,13 +32,13 @@ The scripts are POSIX `sh`, apart from `setup.sh` (bash).
 | spack | v1.2.2 (`3e19345b`) | `setup.sh` |
 | package repository | spack/spack-packages `d4f7c711` (`releases/v2026.06`, tag v2026.06.0) | `setup.sh`, `spack.yaml` (`repos:`), checked to agree |
 | every package | hashes | `spack.lock` |
-| Rust | 1.99.0 with rustfmt and clippy, through rustup | `env.sh` (`FMM_GH200_RUST`, exported as `RUSTUP_TOOLCHAIN`) |
+| Rust | 1.99.0 with rustfmt and clippy, through rustup | `env.sh` (`TETRALEAF_GH200_RUST`, exported as `RUSTUP_TOOLCHAIN`) |
 | target | `neoverse_v2` (gcc 11.4.1 has `-mcpu=neoverse-v2`) | `spack.yaml` |
 
 Rust comes from rustup, not spack (Phase 4S decision 1): at the pinned package
 repository spack's newest `rust` is 1.96.0 (1.97.1 on `develop`), and the current stable
 was 1.99.0. There is no `rust-toolchain.toml` in the repository: CI floats on stable.
-When CI's stable moves, change `FMM_GH200_RUST` and rerun `setup.sh`.
+When CI's stable moves, change `TETRALEAF_GH200_RUST` and rerun `setup.sh`.
 
 ## The linker
 
@@ -206,7 +206,7 @@ The node and its one GPU are shared:
 lock disagree) and installs. Into a fresh prefix:
 
 ```sh
-FMM_GH200_ROOT=/data/ucahtbe/<other> FMM_GH200_SOURCE_CACHE=/data/ucahtbe/spack-sources \
+TETRALEAF_GH200_ROOT=/data/ucahtbe/<other> TETRALEAF_GH200_SOURCE_CACHE=/data/ucahtbe/spack-sources \
     tools/gh200/setup.sh
 ```
 

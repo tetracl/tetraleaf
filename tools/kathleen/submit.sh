@@ -12,27 +12,27 @@
 # Run it on the M3 Max after tools/kathleen/sync.sh. <job> is a file in
 # tools/kathleen/jobs/. It submits the job from the branch's tree on Kathleen (so the job
 # runs in that tree, SLURM_SUBMIT_DIR) with its output in the root's logs/
-# (<job name>-<job id>.out), then polls `sacct` every FMM_KATHLEEN_POLL seconds (default
+# (<job name>-<job id>.out), then polls `sacct` every TETRALEAF_KATHLEEN_POLL seconds (default
 # 30) until the job has ended, printing a line when its state changes. At the end it
 # prints the job's submit, start and end times, its wait and run time, its state and
-# exit code, the output file's path, and the output's last FMM_KATHLEEN_TAIL lines
+# exit code, the output file's path, and the output's last TETRALEAF_KATHLEEN_TAIL lines
 # (default 40). It exits 0 if the job completed with exit code 0.
 #
 # Interrupting it does not cancel the job: `ssh kathleen scancel <id>` does.
 #
-# FMM_KATHLEEN_HOST, FMM_KATHLEEN_DIR and FMM_KATHLEEN_ROOT override the host, the tree
+# TETRALEAF_KATHLEEN_HOST, TETRALEAF_KATHLEEN_DIR and TETRALEAF_KATHLEEN_ROOT override the host, the tree
 # and the root. ssh reads ~/.ssh, which the Claude Code sandbox denies: run it outside
 # the sandbox.
 
 set -eu
 
-host=${FMM_KATHLEEN_HOST:-kathleen}
-root=${FMM_KATHLEEN_ROOT:-/scratch/scratch/ucahtbe/fmm}
+host=${TETRALEAF_KATHLEEN_HOST:-kathleen}
+root=${TETRALEAF_KATHLEEN_ROOT:-/scratch/scratch/ucahtbe/fmm}
 branch=$(git rev-parse --abbrev-ref HEAD)
 [ "$branch" != HEAD ] || branch=detached-$(git rev-parse --short HEAD)
-dir=${FMM_KATHLEEN_DIR:-$root/src/$(printf '%s' "$branch" | tr '/' '_')}
-poll=${FMM_KATHLEEN_POLL:-30}
-tail_lines=${FMM_KATHLEEN_TAIL:-40}
+dir=${TETRALEAF_KATHLEEN_DIR:-$root/src/$(printf '%s' "$branch" | tr '/' '_')}
+poll=${TETRALEAF_KATHLEEN_POLL:-30}
+tail_lines=${TETRALEAF_KATHLEEN_TAIL:-40}
 
 # sbatch options, when the first argument is one, up to `--` (a job argument may hold a
 # `--` of its own).

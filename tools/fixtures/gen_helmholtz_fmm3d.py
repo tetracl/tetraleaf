@@ -3,9 +3,9 @@
 # requires-python = ">=3.9"
 # dependencies = ["mpmath==1.4.1"]
 # ///
-"""FMM3D's Helmholtz direct sum as fixtures for nd-fmm-ref (Helmholtz CH1.4).
+"""FMM3D's Helmholtz direct sum as fixtures for tetraleaf-ref (Helmholtz CH1.4).
 
-Writes fmm-ref/fixtures/helmholtz_fmm3d.json: the potential and gradient of
+Writes tetraleaf-ref/fixtures/helmholtz_fmm3d.json: the potential and gradient of
 G_k(x, y) = e^{ik|x - y|}/(4 pi |x - y|) (CONVENTIONS §3.15, "Kernel and factors";
 drafted in CH1.4, adopted in CH1.1) as FMM3D 2.1.0's direct routine `h3ddirectcg`
 computes them, through tools/fmm3d/driver.f90's `helmholtz` mode, for
@@ -66,7 +66,7 @@ WAVENUMBERS = [
     ("imaginary k = 25i", "imaginary", complex(0, 25)),
 ]
 FMM3D_RELEASE = "v2.1.0"
-OUT = ROOT / "fmm-ref" / "fixtures" / "helmholtz_fmm3d.json"
+OUT = ROOT / "tetraleaf-ref" / "fixtures" / "helmholtz_fmm3d.json"
 
 
 def fmt(x):

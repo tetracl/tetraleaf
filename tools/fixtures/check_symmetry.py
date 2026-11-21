@@ -11,7 +11,7 @@ of check_translations.py (the §3.11 forms, imported, not copied):
   - offsets: the 316 V-list offsets in lexicographic (x, y, z) order, none in {-1..1}^3,
     and the closed-form table index of §3.12 round-trips;
   - geometry: box centres and half-widths from the Morton index (as
-    nd_octree::morton::physical_box computes them), the child octant index
+    tetraleaf_octree::morton::physical_box computes them), the child octant index
     o = 4x + 2y + z from the bits of a Morton key (as morton::child_index reads them),
     the child centre c + r_child s_o and the M2L shift 2 r_l d, all in exact rationals;
   - group: the 48 signed permutations in the enumeration order of §3.12, 24 proper,
@@ -99,7 +99,7 @@ def check_offsets(rng):
 
 
 # ---------------------------------------------------------------------------------------
-# Box geometry (§3.12) in exact rationals, with the Morton bit layout of nd_octree:
+# Box geometry (§3.12) in exact rationals, with the Morton bit layout of tetraleaf_octree:
 # per level a triple of bits (x << 2) | (y << 1) | z, the root level most significant.
 
 

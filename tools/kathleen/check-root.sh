@@ -7,7 +7,7 @@
 # Run it on a Kathleen login node, inside the environment or not. It lists every file
 # and directory under the real home directory (from the password database, not $HOME,
 # which env.sh moves) and under the real Scratch (/scratch/scratch/$USER) outside the
-# root that is newer than the marker setup.sh wrote, $FMM_KATHLEEN_ROOT/.root-marker,
+# root that is newer than the marker setup.sh wrote, $TETRALEAF_KATHLEEN_ROOT/.root-marker,
 # and what this user owns, newer than it, in the login node's /tmp, /var/tmp and
 # /dev/shm. Compute nodes' /dev/shm and /tmp are RAM and per job; the job scripts report
 # and remove their own directory there (jobs/lib.sh). Expected: nothing, apart from what
@@ -18,7 +18,7 @@
 
 set -u
 
-root=${FMM_KATHLEEN_ROOT:-/scratch/scratch/ucahtbe/fmm}
+root=${TETRALEAF_KATHLEEN_ROOT:-/scratch/scratch/ucahtbe/fmm}
 marker=$root/.root-marker
 user=$(id -un)
 home=$(getent passwd "$user" | cut -d: -f6)

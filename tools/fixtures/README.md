@@ -1,25 +1,25 @@
 # Fixture tools
 
-High-precision reference values for `nd-fmm-math`, generated here and committed in
-`fmm-math/fixtures/`. Fixtures are never edited by hand; regenerate them with the
+High-precision reference values for `tetraleaf-math`, generated here and committed in
+`tetraleaf-math/fixtures/`. Fixtures are never edited by hand; regenerate them with the
 scripts below.
 
 | Script | Purpose | Needs |
 | --- | --- | --- |
-| `gen_harmonics.py` | writes `fmm-math/fixtures/harmonics_{A,B,C}.json` | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
-| `gen_dipoles.py` | writes `fmm-ref/fixtures/dipoles.json`: the dipole P2M and P2L coefficients and the dipole direct sum of CONVENTIONS §3.7, "Dipole sources" (Phase 6 T8) | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
+| `gen_harmonics.py` | writes `tetraleaf-math/fixtures/harmonics_{A,B,C}.json` | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
+| `gen_dipoles.py` | writes `tetraleaf-ref/fixtures/dipoles.json`: the dipole P2M and P2L coefficients and the dipole direct sum of CONVENTIONS §3.7, "Dipole sources" (Phase 6 T8) | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
 | `crosscheck_scipy.py` | independent double-precision second opinion on the conventions and the fixtures | Python ≥ 3.9, `numpy`, `scipy` |
 | `check_translations.py` | high-precision check of the translation operators of CONVENTIONS §3.11; writes nothing | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
 | `check_symmetry.py` | high-precision check of the box geometry and cube symmetry rules of CONVENTIONS §3.12; writes nothing | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
 | `check_leaf_geometry.py` | exact and high-precision check of the leaf data and relative box geometry of CONVENTIONS §3.13; writes nothing | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
-| `plane_wave_quadrature.sh` | writes `fmm-tables/src/plane_wave/quadrature_data.rs`: FMM3D's plane-wave quadratures for separation 1 (NIST's `lwtsexp_sep1.f` of FMM3D v2.1.0, with its notice; Phase 6 T13, from the spike of T10) | POSIX `sh`, `awk`, `sed`; FMM3D's source (`tools/fmm3d/build.sh fetch`) |
-| `helmholtz_pw_quadrature.sh` | writes `fmm-tables/src/helmholtz/plane_wave/hwts_iprec{1,2,3}.txt`: FMM3D's quadratures of the Helmholtz exponential M2L at iprec 1–3, per domain its rectangle, type, stated error, nodes and weights (NIST's `hwts_3d_iprec*.txt` of FMM3D v2.1.0, with their notice and a dated change note; Helmholtz CH6.1a) | POSIX `sh`, `awk`; FMM3D's source unpacked by `spikes/pw-quadrature/tools/fetch.sh` |
-| `gen_helmholtz_fmm3d.py` | writes `fmm-ref/fixtures/helmholtz_fmm3d.json`: FMM3D 2.1.0's Helmholtz direct sum (`h3ddirectcg`) for real, complex and imaginary k and real and complex charges, every value checked against the kernel of CONVENTIONS §3.15 in mpmath, with FMM3D's two-point check (Helmholtz CH1.4) | Python ≥ 3.9, `mpmath==1.4.1` (pinned); FMM3D built by `tools/fmm3d/build.sh` (`FMM3D_ROOT`) |
-| `gen_helmholtz_angular.py` | writes `fmm-math/fixtures/helmholtz_angular.json`: the real orthonormal harmonics with ∂θ and (1/sin θ) ∂φ, and sampled entries of the y-rotation blocks, to degree 1000 (CONVENTIONS §3.15; Helmholtz CH1.2a) | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
+| `plane_wave_quadrature.sh` | writes `tetraleaf-tables/src/plane_wave/quadrature_data.rs`: FMM3D's plane-wave quadratures for separation 1 (NIST's `lwtsexp_sep1.f` of FMM3D v2.1.0, with its notice; Phase 6 T13, from the spike of T10) | POSIX `sh`, `awk`, `sed`; FMM3D's source (`tools/fmm3d/build.sh fetch`) |
+| `helmholtz_pw_quadrature.sh` | writes `tetraleaf-tables/src/helmholtz/plane_wave/hwts_iprec{1,2,3}.txt`: FMM3D's quadratures of the Helmholtz exponential M2L at iprec 1–3, per domain its rectangle, type, stated error, nodes and weights (NIST's `hwts_3d_iprec*.txt` of FMM3D v2.1.0, with their notice and a dated change note; Helmholtz CH6.1a) | POSIX `sh`, `awk`; FMM3D's source unpacked by `spikes/pw-quadrature/tools/fetch.sh` |
+| `gen_helmholtz_fmm3d.py` | writes `tetraleaf-ref/fixtures/helmholtz_fmm3d.json`: FMM3D 2.1.0's Helmholtz direct sum (`h3ddirectcg`) for real, complex and imaginary k and real and complex charges, every value checked against the kernel of CONVENTIONS §3.15 in mpmath, with FMM3D's two-point check (Helmholtz CH1.4) | Python ≥ 3.9, `mpmath==1.4.1` (pinned); FMM3D built by `tools/fmm3d/build.sh` (`FMM3D_ROOT`) |
+| `gen_helmholtz_angular.py` | writes `tetraleaf-math/fixtures/helmholtz_angular.json`: the real orthonormal harmonics with ∂θ and (1/sin θ) ∂φ, and sampled entries of the y-rotation blocks, to degree 1000 (CONVENTIONS §3.15; Helmholtz CH1.2a) | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
 | `check_3_15.py` | high-precision check of the identities of the Helmholtz family, CONVENTIONS §3.15 (Helmholtz CH1.1); writes nothing | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
 | `check_p2p_domain.py` | exact check of the coincident-pair rule and the domain of r² of fast P2P kernels, CONVENTIONS §3.13 "Fast kernels"; writes nothing | Python ≥ 3.9, `mpmath==1.4.1` (pinned, through `check_leaf_geometry.py`) |
-| `gen_helmholtz_radial.py` | writes `fmm-math/fixtures/helmholtz_radial.json`: the scaled radial functions ĵₙ, ĥₙ, îₙ, k̂ₙ and their derivatives on every operator's range, spike S3's sets (CONVENTIONS §3.15; Helmholtz CH1.2b) | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
-| `gen_helmholtz_coaxial.py` | writes `fmm-math/fixtures/helmholtz_coaxial.json`: sampled entries of the coaxial coefficients (R|R) = (S|S) and (S|R) in the stored normalisation, spike S2's sets (CONVENTIONS §3.15; Helmholtz CH1.2c) | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
+| `gen_helmholtz_radial.py` | writes `tetraleaf-math/fixtures/helmholtz_radial.json`: the scaled radial functions ĵₙ, ĥₙ, îₙ, k̂ₙ and their derivatives on every operator's range, spike S3's sets (CONVENTIONS §3.15; Helmholtz CH1.2b) | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
+| `gen_helmholtz_coaxial.py` | writes `tetraleaf-math/fixtures/helmholtz_coaxial.json`: sampled entries of the coaxial coefficients (R|R) = (S|S) and (S|R) in the stored normalisation, spike S2's sets (CONVENTIONS §3.15; Helmholtz CH1.2c) | Python ≥ 3.9, `mpmath==1.4.1` (pinned) |
 
 All scripts declare their dependencies inline (PEP 723), so with
 [uv](https://docs.astral.sh/uv/) no environment needs to be set up. Run them from the
@@ -70,7 +70,7 @@ coefficients are directional derivatives of the definitions of §3.3 by central
 differences at 120 digits, verified by a second step size; the direct sum is the closed
 form, its gradient verified against differences of the potential. Regenerate it when
 `CONVENTION_VERSION` changes (it is written into the header) or the generator changes
-(bump its `GENERATOR_VERSION`). `nd-fmm-ref`'s `tests/dipoles/fixtures.rs` reads it.
+(bump its `GENERATOR_VERSION`). `tetraleaf-ref`'s `tests/dipoles/fixtures.rs` reads it.
 
 The Helmholtz FMM3D fixture (CH1.4) comes from FMM3D's own code, so it needs FMM3D
 built outside the repository (tools/fmm3d/README.md). It takes about 25 seconds:
@@ -90,7 +90,7 @@ in mpmath at 30 digits; generation fails above 10⁻¹³. It also has the raw tw
 convention they identify. FMM3D's sums differ in their last bits between compilers, so
 `--check` compares the values to 10⁻¹³ relative, not the bytes. It also says whether the
 file is byte-identical, which it is on the machine and compiler that wrote it.
-`nd-fmm-ref` reads it from CH1.3 on.
+`tetraleaf-ref` reads it from CH1.3 on.
 
 The Helmholtz angular fixture (CH1.2a) regenerates byte-identically, in about a minute
 and a half:
@@ -107,7 +107,7 @@ which must agree to 10⁻³⁰, the ∂θ ladder checked against mpmath's deriva
 "rotation": spike S1's 54 sets of y-rotation block entries (degrees 10 to 1000, six
 polar angles), from Wigner's sum, value for value those of
 `spikes/rotation-blocks/fixtures/reference.json`. Regenerate it when `CONVENTION_VERSION`
-changes or the generator changes (bump its `GENERATOR_VERSION`). `nd-fmm-math`'s
+changes or the generator changes (bump its `GENERATOR_VERSION`). `tetraleaf-math`'s
 `tests/orthonormal/fixtures.rs` reads it.
 
 The Helmholtz radial fixture (CH1.2b) regenerates byte-identically, in about two
@@ -128,7 +128,7 @@ sums; every value at 40 and 80 digits, which must agree to 10⁻³⁰, after a c
 closed forms, the relations at z = ix and the Wronskians. z and s are decimal strings of
 doubles; the values plain JSON numbers, 0 below 10⁻³⁰⁰. Regenerate it when
 `CONVENTION_VERSION` changes or the generator changes (bump its `GENERATOR_VERSION`).
-`nd-fmm-math`'s `tests/radial/fixtures.rs` reads it.
+`tetraleaf-math`'s `tests/radial/fixtures.rs` reads it.
 
 The Helmholtz coaxial fixture (CH1.2c) regenerates byte-identically, in about four
 minutes:
@@ -146,7 +146,7 @@ d = 2 and √27 box widths. Each coefficient comes from the Gaunt sum at two pre
 digits apart, which must agree to 10⁻²⁵, after a check of the addition theorems at n ≤ 6
 (5·10⁻⁴⁹). The values carry §3.15's stored normalisation; each set records k (for a = 1),
 t, a, z = k t and s. Regenerate it when `CONVENTION_VERSION` changes or the generator
-changes (bump its `GENERATOR_VERSION`). `nd-fmm-math`'s `tests/coaxial/` reads it.
+changes (bump its `GENERATOR_VERSION`). `tetraleaf-math`'s `tests/coaxial/` reads it.
 
 ## What the fixtures contain
 
@@ -232,7 +232,7 @@ charges it checks, and prints the worst error of:
 Coefficients are compared per degree in the orthonormal weighting of CONVENTIONS §3.8
 (Nₘ for multipoles, Nₘ/Sₘ for locals), potentials relative to the sum of term
 magnitudes. Dⁿ is fitted from its definition Rₙ(Qx) = Dⁿ Rₙ(x) at random points, not
-taken from `nd-fmm-math`. The script exits non-zero on any failure and takes about
+taken from `tetraleaf-math`. The script exits non-zero on any failure and takes about
 half a minute.
 
 ## Symmetry check
@@ -307,7 +307,7 @@ uv run tools/fixtures/check_p2p_domain.py
 
 checks the claims of CONVENTIONS §3.13, "Fast kernels": that a fast P2P kernel, which
 skips a pair when r² = 0, skips exactly the pairs that the exact-coincidence rule of
-`nd_fmm_ref::p2p` skips on leaf-scaled data, and that every nonzero r² lies in the kernel
+`tetraleaf_ref::p2p` skips on leaf-scaled data, and that every nonzero r² lies in the kernel
 domain [2⁻¹⁰⁸, 2⁷]. The stored values come from `check_leaf_geometry.py`'s emulation of
 `points_to_morton` and of the f64 formula of §3.13, cast to f32. ŷ, dₖ and r² are formed
 operation by operation in T: an f32 operation as the f32 rounding of the f64 result

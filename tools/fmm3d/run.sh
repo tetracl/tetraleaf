@@ -65,7 +65,7 @@
 #
 # Environment:
 #   FMM3D_ROOT  where tools/fmm3d/build.sh installed FMM3D (as there: on Kathleen
-#               $FMM_KATHLEEN_ROOT/fmm3d, on locust /data/ucahtbe/fmm3d, else required)
+#               $TETRALEAF_KATHLEEN_ROOT/fmm3d, on locust /data/ucahtbe/fmm3d, else required)
 #   PROBLEMS    the problem files (default $FMM3D_ROOT/problems)
 #   OUT         the output directory (default bench-results/fmm3d-<host>-<date>; on
 #               Kathleen tools/kathleen/jobs/fmm3d.sbatch sets the root's logs/)
@@ -105,8 +105,8 @@ root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 
 if [ -z "${FMM3D_ROOT:-}" ]; then
-    if [ -n "${FMM_KATHLEEN_ROOT:-}" ]; then
-        FMM3D_ROOT=$FMM_KATHLEEN_ROOT/fmm3d
+    if [ -n "${TETRALEAF_KATHLEEN_ROOT:-}" ]; then
+        FMM3D_ROOT=$TETRALEAF_KATHLEEN_ROOT/fmm3d
     elif [ -d /data/ucahtbe ]; then
         FMM3D_ROOT=/data/ucahtbe/fmm3d
     else

@@ -1068,7 +1068,7 @@ same reference, on one node, precomputation reported apart:
 tag (the latest at T9, recorded) and builds its Fortran library with OpenMP outside the
 repository: the M3 Max with Homebrew's `gfortran` (installed: `/opt/homebrew/bin/gfortran`,
 GCC 16) and FMM3D's macOS `make.inc`; Kathleen with the `compilers/gcc/12.3.0` module's
-gfortran, under `$FMM_KATHLEEN_ROOT/fmm3d`, built in a job; locust with the system or a
+gfortran, under `$TETRALEAF_KATHLEEN_ROOT/fmm3d`, built in a job; locust with the system or a
 spack gfortran under `/data/ucahtbe/fmm3d`. The driver is a small Fortran program
 (FMM3D's own language, no binding layer) that reads the problem file, calls the
 sources-only interface with charges and gradients (`lfmm3d_s_c_g` and its vectorised

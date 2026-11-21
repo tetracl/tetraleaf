@@ -5,7 +5,7 @@
 # ///
 """High-precision fixtures for the dipole operators of docs/CONVENTIONS.md §3.7.
 
-Writes fmm-ref/fixtures/dipoles.json (Phase 6 T8, C6.4): for point dipoles of moment d
+Writes tetraleaf-ref/fixtures/dipoles.json (Phase 6 T8, C6.4): for point dipoles of moment d
 at y, whose potential is d . grad_y 1/|x - y| = d . (x - y)/|x - y|^3 (§3.7, "Dipole
 sources"),
   - "p2m": the scaled multipole coefficients sum_j (d_j / r) . grad conj R_n^m(u_j),
@@ -13,7 +13,7 @@ sources"),
   - "p2l": the scaled local coefficients sum_j (d_j / r) . grad conj I_n^m(u_j), the
     same frames, sources at 2 <= |u| <= 8 (§3.9);
   - "direct": the potential and gradient of the dipoles at targets in and near the
-    cube of the sources, against which nd_fmm_ref::p2p::direct_sum_dipoles and the
+    cube of the sources, against which tetraleaf_ref::p2p::direct_sum_dipoles and the
     dipole P2P are tested.
 
 The coefficients come from the definitions of §3.3 (gen_harmonics.harmonics), with the
@@ -50,10 +50,10 @@ SOURCES = 5
 DIRECT_SOURCES = 20
 DIRECT_TARGETS = 10
 
-OUT = gh.ROOT / "fmm-ref" / "fixtures" / "dipoles.json"
+OUT = gh.ROOT / "tetraleaf-ref" / "fixtures" / "dipoles.json"
 
 # Frames (centre, radius): the unit frame, a generic one, and a deep leaf far from the
-# origin, as in the leaf tests of nd-fmm-ref. Every input is a double.
+# origin, as in the leaf tests of tetraleaf-ref. Every input is a double.
 FRAMES = [
     ([0.0, 0.0, 0.0], 1.0),
     ([0.3125, -0.21875, 0.6875], 0.37),

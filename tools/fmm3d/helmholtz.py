@@ -39,7 +39,7 @@ OUTPUT_MAGIC = b"NDFMMHO1"
 def default_driver():
     root = os.environ.get("FMM3D_ROOT")
     if not root:
-        kathleen = os.environ.get("FMM_KATHLEEN_ROOT")
+        kathleen = os.environ.get("TETRALEAF_KATHLEEN_ROOT")
         if kathleen:
             root = os.path.join(kathleen, "fmm3d")
         elif os.path.isdir("/data/ucahtbe"):

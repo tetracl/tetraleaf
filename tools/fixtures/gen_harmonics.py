@@ -5,7 +5,7 @@
 # ///
 """High-precision fixtures for the solid harmonics of docs/CONVENTIONS.md.
 
-Writes fmm-math/fixtures/harmonics_{A,B,C}.json: regular harmonics R_n^m and irregular
+Writes tetraleaf-math/fixtures/harmonics_{A,B,C}.json: regular harmonics R_n^m and irregular
 harmonics I_n^m (CONVENTIONS §3.3) and their Cartesian gradients, in the real storage
 order of §3.6, at seeded random points in the ranges of §3.9. Set C holds irregular
 values only (no gradients), up to the degree 2p that M2L needs (§3.9, §3.11).
@@ -50,7 +50,7 @@ MAX_TOTAL_BYTES = 3_500_000
 
 ROOT = Path(__file__).resolve().parents[2]
 CONVENTIONS = ROOT / "docs" / "CONVENTIONS.md"
-OUT_DIR = ROOT / "fmm-math" / "fixtures"
+OUT_DIR = ROOT / "tetraleaf-math" / "fixtures"
 
 # Ranges of CONVENTIONS §3.9: regular harmonics inside the box's sphere, irregular ones
 # well separated; for set C the scaled M2L shifts |c' - c| / r in [4, 6 sqrt(3)].

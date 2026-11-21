@@ -8,7 +8,7 @@
 # (tools/kathleen/submit.sh submits from the tree that tools/kathleen/sync.sh copied).
 # This file then
 #   - sources tools/kathleen/env.sh (module purge and the pinned modules; TMPDIR is
-#     /dev/shm/fmm-$USER-$SLURM_JOB_ID, in RAM: the nodes are diskless);
+#     /dev/shm/tetraleaf-$USER-$SLURM_JOB_ID, in RAM: the nodes are diskless);
 #   - creates that TMPDIR on every node of the job, and at exit prints its size per node
 #     and removes it (README.md, "Temporary files"). Slurm resets TMPDIR to /tmp inside
 #     every srun step, so processes that srun or mpirun start (MPI ranks) write their
@@ -28,9 +28,9 @@ set -uo pipefail
 
 . tools/kathleen/env.sh
 
-_fmm_job_start=$(date +%s)
-_fmm_job_steps=
-_fmm_job_failed=0
+_tetraleaf_job_start=$(date +%s)
+_tetraleaf_job_steps=
+_tetraleaf_job_failed=0
 
 # One line of facts per item, at the top of the output.
 printf '=== job %s (%s), QoS %s, %s node(s): %s; submitted from %s\n' \
@@ -54,11 +54,11 @@ else
 fi
 
 # The first hardware thread of every physical core (0-39 on Kathleen).
-_fmm_job_cores=$(lscpu -p=CPU,CORE | grep -v '^#' | sort -t, -k2,2n -u | cut -d, -f1 |
+_tetraleaf_job_cores=$(lscpu -p=CPU,CORE | grep -v '^#' | sort -t, -k2,2n -u | cut -d, -f1 |
     sort -n | paste -sd, -)
-taskset -cp "$_fmm_job_cores" $$ >/dev/null
+taskset -cp "$_tetraleaf_job_cores" $$ >/dev/null
 printf '=== batch shell bound to %s CPUs: %s\n' \
-    "$(printf '%s\n' "$_fmm_job_cores" | tr ',' '\n' | wc -l)" "$(taskset -cp $$ | sed 's/.*: //')"
+    "$(printf '%s\n' "$_tetraleaf_job_cores" | tr ',' '\n' | wc -l)" "$(taskset -cp $$ | sed 's/.*: //')"
 
 # step <name> <command...>: runs the command (through bash -c when it is one string with
 # shell syntax), times it and records the result.
@@ -78,19 +78,19 @@ step() {
     seconds=$(printf '%d.%03d' $(((end - start) / 1000000000)) $((((end - start) / 1000000) % 1000)))
     if [ "$status" -eq 0 ]; then
         printf '=== step %s: passed in %s s\n' "$name" "$seconds"
-        _fmm_job_steps+="| $name | passed | $seconds |"$'\n'
+        _tetraleaf_job_steps+="| $name | passed | $seconds |"$'\n'
     else
         printf '=== step %s: FAILED (exit %d) in %s s\n' "$name" "$status" "$seconds"
-        _fmm_job_steps+="| $name | failed (exit $status) | $seconds |"$'\n'
-        _fmm_job_failed=$((_fmm_job_failed + 1))
+        _tetraleaf_job_steps+="| $name | failed (exit $status) | $seconds |"$'\n'
+        _tetraleaf_job_failed=$((_tetraleaf_job_failed + 1))
     fi
 }
 
 # On one node, with the job's TMPDIR as $1: its size; what this user created in /tmp
 # since the stamp (listed, then removed); then the directory itself. Refuses any path
 # that is not a per-job directory in /dev/shm.
-_fmm_job_cleanup='
-case "$1" in /dev/shm/fmm-*-[0-9]*) ;; *) echo "cleanup: refusing $1"; exit 1 ;; esac
+_tetraleaf_job_cleanup='
+case "$1" in /dev/shm/tetraleaf-*-[0-9]*) ;; *) echo "cleanup: refusing $1"; exit 1 ;; esac
 printf "%s: TMPDIR %s\n" "$(hostname -s)" "$(du -sh "$1" 2>/dev/null | cut -f1)"
 if [ -e "$1/.job-start" ]; then
     find /tmp -mindepth 1 -maxdepth 1 -user "$(id -u)" -newer "$1/.job-start" \
@@ -98,21 +98,21 @@ if [ -e "$1/.job-start" ]; then
 fi
 rm -rf "$1"'
 
-_fmm_job_end() {
+_tetraleaf_job_end() {
     local status=$?
     printf '\n=== TMPDIR %s at the end, and what this job created in /tmp, per node:\n' "$TMPDIR"
     if [ "$SLURM_JOB_NUM_NODES" -gt 1 ]; then
-        on_every_node bash -c "$_fmm_job_cleanup" _ "$TMPDIR"
+        on_every_node bash -c "$_tetraleaf_job_cleanup" _ "$TMPDIR"
     else
-        bash -c "$_fmm_job_cleanup" _ "$TMPDIR"
+        bash -c "$_tetraleaf_job_cleanup" _ "$TMPDIR"
     fi
     printf '\n=== steps of job %s\n| step | result | seconds |\n| --- | --- | ---: |\n%s' \
-        "$SLURM_JOB_ID" "$_fmm_job_steps"
+        "$SLURM_JOB_ID" "$_tetraleaf_job_steps"
     printf '=== end %s, %d s in the job; %d step(s) failed\n' "$(date -Iseconds)" \
-        $(($(date +%s) - _fmm_job_start)) "$_fmm_job_failed"
-    if [ "$_fmm_job_failed" -gt 0 ] && [ "$status" -eq 0 ]; then
+        $(($(date +%s) - _tetraleaf_job_start)) "$_tetraleaf_job_failed"
+    if [ "$_tetraleaf_job_failed" -gt 0 ] && [ "$status" -eq 0 ]; then
         status=1
     fi
     exit "$status"
 }
-trap _fmm_job_end EXIT
+trap _tetraleaf_job_end EXIT

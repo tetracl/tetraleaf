@@ -6,7 +6,7 @@
 #
 # Run it on locust from a copy of the repository (tools/gh200/sync.sh puts one at
 # /data/ucahtbe/fmm/<branch>). In order, it:
-#   1. creates the layout under FMM_GH200_ROOT (default /data/ucahtbe; README.md);
+#   1. creates the layout under TETRALEAF_GH200_ROOT (default /data/ucahtbe; README.md);
 #   2. writes the home marker that check-home.sh compares against (first run only);
 #   3. clones spack at the pinned tag and writes its user configuration;
 #   4. creates the environment envs/fmm-gh200 from spack.yaml and spack.lock and
@@ -16,13 +16,13 @@
 #   6. clones the repository (public, https, read-only) into fmm/repo.
 # Every step is skipped when already done, so a second run only checks.
 #
-# It refuses to run unless FMM_GH200_ROOT is /data/ucahtbe or below it, and it writes
+# It refuses to run unless TETRALEAF_GH200_ROOT is /data/ucahtbe or below it, and it writes
 # nowhere else: HOME, TMPDIR and every cache point there (env.sh). The exception is
 # outside its control: NVIDIA's CUDA installer writes /tmp/cuda-installer.log,
 # /var/tmp/dnf-$USER-* and /tmp/hsperfdata_$USER while it runs; spack's cuda package
 # deletes the first, this script the others (check-home.sh looks for all three).
 #
-# FMM_GH200_SOURCE_CACHE (default $FMM_GH200_ROOT/spack-sources) lets a second prefix
+# TETRALEAF_GH200_SOURCE_CACHE (default $TETRALEAF_GH200_ROOT/spack-sources) lets a second prefix
 # reuse the first one's downloaded sources.
 
 set -euo pipefail
@@ -51,18 +51,18 @@ esac
 
 here=$(cd "$(dirname "$0")" && pwd)
 [ -d /data/ucahtbe ] || die "/data/ucahtbe does not exist"
-root=${FMM_GH200_ROOT:-/data/ucahtbe}
+root=${TETRALEAF_GH200_ROOT:-/data/ucahtbe}
 case "$root" in
 /data/ucahtbe | /data/ucahtbe/*) ;;
-*) die "FMM_GH200_ROOT=$root is not under /data/ucahtbe" ;;
+*) die "TETRALEAF_GH200_ROOT=$root is not under /data/ucahtbe" ;;
 esac
 grep -q "commit: $SPACK_PACKAGES_COMMIT" "$here/spack.yaml" ||
     die "spack.yaml does not pin spack-packages at $SPACK_PACKAGES_COMMIT"
 
 # The variables only: HOME, TMPDIR, CARGO_HOME, SPACK_* and the rest point under $root.
-export FMM_GH200_ROOT=$root
-FMM_GH200_SETUP=1 . "$here/env.sh"
-source_cache=${FMM_GH200_SOURCE_CACHE:-$root/spack-sources}
+export TETRALEAF_GH200_ROOT=$root
+TETRALEAF_GH200_SETUP=1 . "$here/env.sh"
+source_cache=${TETRALEAF_GH200_SOURCE_CACHE:-$root/spack-sources}
 spack=$SPACK_ROOT/bin/spack
 
 step "layout under $root"
@@ -111,25 +111,25 @@ repos:
 EOF
 "$spack" --version
 
-step "spack environment $FMM_GH200_ENV"
-if [ ! -f "$FMM_GH200_ENV/spack.yaml" ]; then
-    "$spack" env create -d "$FMM_GH200_ENV" "$here/spack.yaml"
+step "spack environment $TETRALEAF_GH200_ENV"
+if [ ! -f "$TETRALEAF_GH200_ENV/spack.yaml" ]; then
+    "$spack" env create -d "$TETRALEAF_GH200_ENV" "$here/spack.yaml"
 fi
-cp "$here/spack.yaml" "$FMM_GH200_ENV/spack.yaml"
+cp "$here/spack.yaml" "$TETRALEAF_GH200_ENV/spack.yaml"
 if [ "$update_lock" = 1 ]; then
-    rm -f "$FMM_GH200_ENV/spack.lock"
-    time "$spack" -e "$FMM_GH200_ENV" concretize --fresh
+    rm -f "$TETRALEAF_GH200_ENV/spack.lock"
+    time "$spack" -e "$TETRALEAF_GH200_ENV" concretize --fresh
 else
     [ -f "$here/spack.lock" ] || die "no spack.lock beside spack.yaml; run with --update-lock"
-    cp "$here/spack.lock" "$FMM_GH200_ENV/spack.lock"
+    cp "$here/spack.lock" "$TETRALEAF_GH200_ENV/spack.lock"
     # With the lock in place this concretises nothing; if it changed the lock, the
     # manifest and the lock disagree.
-    "$spack" -e "$FMM_GH200_ENV" concretize
-    cmp -s "$here/spack.lock" "$FMM_GH200_ENV/spack.lock" ||
+    "$spack" -e "$TETRALEAF_GH200_ENV" concretize
+    cmp -s "$here/spack.lock" "$TETRALEAF_GH200_ENV/spack.lock" ||
         die "spack.yaml and spack.lock disagree; regenerate the lock with --update-lock"
 fi
-time "$spack" -e "$FMM_GH200_ENV" install --fail-fast
-"$spack" -e "$FMM_GH200_ENV" find --long
+time "$spack" -e "$TETRALEAF_GH200_ENV" install --fail-fast
+"$spack" -e "$TETRALEAF_GH200_ENV" find --long
 
 # NVIDIA's CUDA runfile installer, which spack's cuda package runs, also writes outside
 # $root: its `dnf list --installed nvidia-driver` leaves /var/tmp/dnf-$USER-*, and an
@@ -141,7 +141,7 @@ if [ "/tmp/hsperfdata_$(id -un)" -nt "$run_stamp" ]; then
     rmdir "/tmp/hsperfdata_$(id -un)" 2>/dev/null || true
 fi
 
-step "Rust $FMM_GH200_RUST"
+step "Rust $TETRALEAF_GH200_RUST"
 if [ ! -x "$CARGO_HOME/bin/rustup" ]; then
     triple=$(uname -m)-unknown-linux-gnu
     url=https://static.rust-lang.org/rustup/dist/$triple/rustup-init
@@ -154,7 +154,7 @@ if [ ! -x "$CARGO_HOME/bin/rustup" ]; then
         --default-toolchain none
     rm -f "$TMPDIR/rustup-init"
 fi
-"$CARGO_HOME/bin/rustup" toolchain install "$FMM_GH200_RUST" --profile minimal \
+"$CARGO_HOME/bin/rustup" toolchain install "$TETRALEAF_GH200_RUST" --profile minimal \
     --component rustfmt --component clippy
 "$CARGO_HOME/bin/rustc" --version
 
@@ -166,6 +166,6 @@ git -C "$root/fmm/repo" log -1 --format='fmm/repo at %h (%cs) %s'
 
 step "done"
 if [ "$update_lock" = 1 ]; then
-    echo "new lock: $FMM_GH200_ENV/spack.lock; copy it to tools/gh200/spack.lock"
+    echo "new lock: $TETRALEAF_GH200_ENV/spack.lock; copy it to tools/gh200/spack.lock"
 fi
 echo "next: . tools/gh200/env.sh"

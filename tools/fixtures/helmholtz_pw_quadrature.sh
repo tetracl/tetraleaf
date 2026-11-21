@@ -1,5 +1,5 @@
 #!/bin/sh
-# Writes fmm-tables/src/helmholtz/plane_wave/hwts_iprec{1,2,3}.txt (nd-fmm-tables,
+# Writes tetraleaf-tables/src/helmholtz/plane_wave/hwts_iprec{1,2,3}.txt (tetraleaf-tables,
 # Helmholtz CH6.1a) from FMM3D's quadratures of its Helmholtz exponential M2L
 # (src/Helmholtz/hwts_3d_iprec{1,2,3}.txt of the FMM3D release that tools/fmm3d/build.sh
 # pins, v2.1.0): per domain its index, quadrature type, rectangle in κ = k w, the error the
@@ -13,7 +13,7 @@
 #   tools/fixtures/helmholtz_pw_quadrature.sh "$(spikes/pw-quadrature/tools/fetch.sh)"
 set -eu
 src=${1:?usage: helmholtz_pw_quadrature.sh path/to/FMM3D/src/Helmholtz}
-out=fmm-tables/src/helmholtz/plane_wave
+out=tetraleaf-tables/src/helmholtz/plane_wave
 mkdir -p "$out"
 for p in 1 2 3; do
     f="$src/hwts_3d_iprec$p.txt"

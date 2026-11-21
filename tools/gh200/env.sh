@@ -10,40 +10,40 @@
 # toolkit on the paths, sets every BLAS thread variable to 1 and RUST_MIN_STACK, and
 # prints a one-line summary on stderr. Sourcing it twice is harmless.
 #
-# FMM_GH200_ROOT moves everything to another directory under /data/ucahtbe (setup.sh
+# TETRALEAF_GH200_ROOT moves everything to another directory under /data/ucahtbe (setup.sh
 # uses that to rebuild into a second prefix). setup.sh sources this file with
-# FMM_GH200_SETUP=1, which sets the variables only: no activation, no summary.
+# TETRALEAF_GH200_SETUP=1, which sets the variables only: no activation, no summary.
 
 # --- Pins -----------------------------------------------------------------------
 # The Rust toolchain (decision 1: rustup, because spack's newest `rust` was older than
 # the current stable). Keep it at the development machine's (the M6's) `rustc --version`
 # and CI's stable.
-FMM_GH200_RUST=1.99.0
+TETRALEAF_GH200_RUST=1.99.0
 
 # --- Layout ---------------------------------------------------------------------
-FMM_GH200_ROOT=${FMM_GH200_ROOT:-/data/ucahtbe}
-FMM_GH200_ENV=$FMM_GH200_ROOT/envs/fmm-gh200
-FMM_GH200_VIEW=$FMM_GH200_ENV/.spack-env/view
-export FMM_GH200_ROOT FMM_GH200_ENV FMM_GH200_VIEW FMM_GH200_RUST
+TETRALEAF_GH200_ROOT=${TETRALEAF_GH200_ROOT:-/data/ucahtbe}
+TETRALEAF_GH200_ENV=$TETRALEAF_GH200_ROOT/envs/fmm-gh200
+TETRALEAF_GH200_VIEW=$TETRALEAF_GH200_ENV/.spack-env/view
+export TETRALEAF_GH200_ROOT TETRALEAF_GH200_ENV TETRALEAF_GH200_VIEW TETRALEAF_GH200_RUST
 
 # A stand-in HOME, so that what resolves its paths from HOME alone (the tracel-llvm
 # bundle's download cache, $HOME/.cache/tracel; git; pip; the shells) stays here too.
-export HOME="$FMM_GH200_ROOT/home"
-export XDG_CACHE_HOME="$FMM_GH200_ROOT/cache"
+export HOME="$TETRALEAF_GH200_ROOT/home"
+export XDG_CACHE_HOME="$TETRALEAF_GH200_ROOT/cache"
 # The tracel-llvm bundle installs into $XDG_DATA_HOME/tracel (dirs::data_local_dir).
-export XDG_DATA_HOME="$FMM_GH200_ROOT/share"
-export XDG_CONFIG_HOME="$FMM_GH200_ROOT/config"
-export XDG_STATE_HOME="$FMM_GH200_ROOT/state"
+export XDG_DATA_HOME="$TETRALEAF_GH200_ROOT/share"
+export XDG_CONFIG_HOME="$TETRALEAF_GH200_ROOT/config"
+export XDG_STATE_HOME="$TETRALEAF_GH200_ROOT/state"
 # Temporary files: cargo, rustc, nvcc, spack, Open MPI's session directories.
-export TMPDIR="$FMM_GH200_ROOT/tmp"
+export TMPDIR="$TETRALEAF_GH200_ROOT/tmp"
 # The CUDA driver's PTX JIT cache (default ~/.nv/ComputeCache).
-export CUDA_CACHE_PATH="$FMM_GH200_ROOT/nv"
-export CARGO_HOME="$FMM_GH200_ROOT/rust/cargo"
-export RUSTUP_HOME="$FMM_GH200_ROOT/rust/rustup"
-export RUSTUP_TOOLCHAIN="$FMM_GH200_RUST"
-export SPACK_ROOT="$FMM_GH200_ROOT/spack"
-export SPACK_USER_CONFIG_PATH="$FMM_GH200_ROOT/spack-config"
-export SPACK_USER_CACHE_PATH="$FMM_GH200_ROOT/spack-cache"
+export CUDA_CACHE_PATH="$TETRALEAF_GH200_ROOT/nv"
+export CARGO_HOME="$TETRALEAF_GH200_ROOT/rust/cargo"
+export RUSTUP_HOME="$TETRALEAF_GH200_ROOT/rust/rustup"
+export RUSTUP_TOOLCHAIN="$TETRALEAF_GH200_RUST"
+export SPACK_ROOT="$TETRALEAF_GH200_ROOT/spack"
+export SPACK_USER_CONFIG_PATH="$TETRALEAF_GH200_ROOT/spack-config"
+export SPACK_USER_CACHE_PATH="$TETRALEAF_GH200_ROOT/spack-cache"
 export PIP_CACHE_DIR="$XDG_CACHE_HOME/pip"
 
 # Every BLAS (and OpenMP) thread variable to 1 (Phase 4S, "Timing").
@@ -68,54 +68,54 @@ export OMPI_MCA_shmem_mmap_backing_file_base_dir="$TMPDIR"
 # runtime or CUDA fails with undefined LLVMOrc* and LLVM_InitializeNative* symbols.
 # lld does not depend on the order. The gcc-ld directory holds rustup's `ld.lld`
 # wrapper around rust-lld. Measured on 2026-10-05 (Phase 4S T1).
-_fmm_gh200_triple=$(uname -m)-unknown-linux-gnu
-CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-Clink-arg=-fuse-ld=lld -Clink-arg=-B$RUSTUP_HOME/toolchains/$FMM_GH200_RUST-$_fmm_gh200_triple/lib/rustlib/$_fmm_gh200_triple/bin/gcc-ld"
+_tetraleaf_gh200_triple=$(uname -m)-unknown-linux-gnu
+CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-Clink-arg=-fuse-ld=lld -Clink-arg=-B$RUSTUP_HOME/toolchains/$TETRALEAF_GH200_RUST-$_tetraleaf_gh200_triple/lib/rustlib/$_tetraleaf_gh200_triple/bin/gcc-ld"
 export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS
-unset _fmm_gh200_triple
+unset _tetraleaf_gh200_triple
 
 # Prepends a directory to a colon-separated variable, once.
-_fmm_gh200_prepend() {
-    eval "_fmm_old=\${$1:-}"
-    case ":$_fmm_old:" in
+_tetraleaf_gh200_prepend() {
+    eval "_tetraleaf_old=\${$1:-}"
+    case ":$_tetraleaf_old:" in
     *":$2:"*) ;;
-    *) eval "export $1=\"$2\${_fmm_old:+:\$_fmm_old}\"" ;;
+    *) eval "export $1=\"$2\${_tetraleaf_old:+:\$_tetraleaf_old}\"" ;;
     esac
-    unset _fmm_old
+    unset _tetraleaf_old
 }
 
-_fmm_gh200_prepend PATH "$SPACK_ROOT/bin"
-_fmm_gh200_prepend PATH "$CARGO_HOME/bin"
+_tetraleaf_gh200_prepend PATH "$SPACK_ROOT/bin"
+_tetraleaf_gh200_prepend PATH "$CARGO_HOME/bin"
 
-if [ "${FMM_GH200_SETUP:-0}" != 1 ]; then
-    if [ -f "$FMM_GH200_ENV/spack.lock" ] && [ -x "$SPACK_ROOT/bin/spack" ]; then
+if [ "${TETRALEAF_GH200_SETUP:-0}" != 1 ]; then
+    if [ -f "$TETRALEAF_GH200_ENV/spack.lock" ] && [ -x "$SPACK_ROOT/bin/spack" ]; then
         # The activation puts the view's bin on PATH and sets CUDA_HOME (the cuda
         # package's run environment).
-        eval "$("$SPACK_ROOT/bin/spack" env activate --sh -d "$FMM_GH200_ENV")"
+        eval "$("$SPACK_ROOT/bin/spack" env activate --sh -d "$TETRALEAF_GH200_ENV")"
         # Spack's activation does not add library and pkg-config directories; do it here.
-        _fmm_gh200_prepend PATH "$FMM_GH200_VIEW/bin"
-        _fmm_gh200_prepend LD_LIBRARY_PATH "$FMM_GH200_VIEW/lib64"
-        _fmm_gh200_prepend LD_LIBRARY_PATH "$FMM_GH200_VIEW/lib"
-        _fmm_gh200_prepend PKG_CONFIG_PATH "$FMM_GH200_VIEW/share/pkgconfig"
-        _fmm_gh200_prepend PKG_CONFIG_PATH "$FMM_GH200_VIEW/lib64/pkgconfig"
-        _fmm_gh200_prepend PKG_CONFIG_PATH "$FMM_GH200_VIEW/lib/pkgconfig"
-        _fmm_gh200_prepend CMAKE_PREFIX_PATH "$FMM_GH200_VIEW"
+        _tetraleaf_gh200_prepend PATH "$TETRALEAF_GH200_VIEW/bin"
+        _tetraleaf_gh200_prepend LD_LIBRARY_PATH "$TETRALEAF_GH200_VIEW/lib64"
+        _tetraleaf_gh200_prepend LD_LIBRARY_PATH "$TETRALEAF_GH200_VIEW/lib"
+        _tetraleaf_gh200_prepend PKG_CONFIG_PATH "$TETRALEAF_GH200_VIEW/share/pkgconfig"
+        _tetraleaf_gh200_prepend PKG_CONFIG_PATH "$TETRALEAF_GH200_VIEW/lib64/pkgconfig"
+        _tetraleaf_gh200_prepend PKG_CONFIG_PATH "$TETRALEAF_GH200_VIEW/lib/pkgconfig"
+        _tetraleaf_gh200_prepend CMAKE_PREFIX_PATH "$TETRALEAF_GH200_VIEW"
         # cudarc's build script reads the toolkit version from `nvcc --version` and,
         # without nvcc, silently assumes CUDA 13.4. nvcc is on PATH through the view;
         # CUDARC_CUDA_VERSION states the version as well (it takes precedence).
-        export CUDA_HOME="${CUDA_HOME:-$FMM_GH200_VIEW}"
+        export CUDA_HOME="${CUDA_HOME:-$TETRALEAF_GH200_VIEW}"
         export CUDA_PATH="$CUDA_HOME"
         export CUDARC_CUDA_VERSION=12060
         # bindgen's libclang: the system clang 17.0.6, the `llvm` external of spack.yaml.
         export LIBCLANG_PATH=/usr/lib64
 
-        printf 'fmm-gh200: root %s; HOME %s; env %s; %s, linked by rust-lld; %s; nvcc %s (CUDARC_CUDA_VERSION %s); LIBCLANG_PATH %s\n' \
-            "$FMM_GH200_ROOT" "$HOME" "$FMM_GH200_ENV" \
+        printf 'tetraleaf-gh200: root %s; HOME %s; env %s; %s, linked by rust-lld; %s; nvcc %s (CUDARC_CUDA_VERSION %s); LIBCLANG_PATH %s\n' \
+            "$TETRALEAF_GH200_ROOT" "$HOME" "$TETRALEAF_GH200_ENV" \
             "$(rustc --version 2>/dev/null || echo 'rustc missing')" \
             "$(mpirun --version 2>/dev/null | head -n 1 || echo 'mpirun missing')" \
             "$(nvcc --version 2>/dev/null | sed -n 's/.*release \([0-9.]*\).*/\1/p' || true)" \
             "$CUDARC_CUDA_VERSION" "$LIBCLANG_PATH" >&2
     else
-        printf 'fmm-gh200: no environment at %s; run tools/gh200/setup.sh first\n' \
-            "$FMM_GH200_ENV" >&2
+        printf 'tetraleaf-gh200: no environment at %s; run tools/gh200/setup.sh first\n' \
+            "$TETRALEAF_GH200_ENV" >&2
     fi
 fi

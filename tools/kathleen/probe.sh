@@ -11,7 +11,7 @@
 # than 2 nodes (docs/phase5n/README.md, "Working on Kathleen"; the first probe on
 # 2026-10-10 also submitted one 4-node `small` job, cancelled when the cap was set).
 #
-# On Kathleen it writes only under ~/Scratch/fmm-probe/ (FMM_PROBE_DIR overrides): the
+# On Kathleen it writes only under ~/Scratch/fmm-probe/ (TETRALEAF_PROBE_DIR overrides): the
 # job file, the jobs' output, and
 #     submissions.txt   one line per job: round, shape, job id, submit time (epoch, ISO)
 #     estimates.txt     per submission: `sbatch --test-only`, the queue depth by QoS
@@ -40,7 +40,7 @@
 
 set -eu
 
-dir=${FMM_PROBE_DIR:-$HOME/Scratch/fmm-probe}
+dir=${TETRALEAF_PROBE_DIR:-$HOME/Scratch/fmm-probe}
 max_pending=43200 # seconds: cancel a probe job pending for longer than 12 hours
 
 # The job file of one shape: write_job <name> <qos> <nodes>.
@@ -64,7 +64,7 @@ record_queue() {
     {
         echo "== $1 $(date -Iseconds)"
         echo "-- sbatch --test-only"
-        sbatch --test-only "$dir/fmm-probe-2n.sh" 2>&1 || true
+        sbatch --test-only "$dir/tetraleaf-probe-2n.sh" 2>&1 || true
         echo "-- pending jobs by QoS"
         squeue -h -t PD -o %q | sort | uniq -c
         echo "-- running jobs by QoS"
@@ -76,7 +76,7 @@ record_queue() {
 
 submit() {
     mkdir -p "$dir"
-    write_job fmm-probe-2n test 2
+    write_job tetraleaf-probe-2n test 2
     last=0
     [ ! -s "$dir/submissions.txt" ] || last=$(cut -d ' ' -f 1 "$dir/submissions.txt" | sort -n | tail -n 1)
     round=$((last + 1))
@@ -87,7 +87,7 @@ submit() {
             tee -a "$dir/estimates.txt"
         return 0
     fi
-    id=$(sbatch --parsable "$dir/fmm-probe-2n.sh")
+    id=$(sbatch --parsable "$dir/tetraleaf-probe-2n.sh")
     now=$(date +%s)
     echo "$round probe-2n $id $now $(date -d "@$now" -Iseconds)" >>"$dir/submissions.txt"
     echo "round $round: submitted probe-2n as $id"
@@ -101,7 +101,7 @@ submit() {
 
 # The ids of the probe jobs still in the queue, one per line.
 queued() {
-    squeue -h -u "$USER" -o '%i %j %T %V' | awk '$2 ~ /^fmm-probe-/'
+    squeue -h -u "$USER" -o '%i %j %T %V' | awk '$2 ~ /^tetraleaf-probe-/'
 }
 
 cancel_stale() {
@@ -141,7 +141,7 @@ summary() {
     done | tee "$dir/waits.txt" | awk 'BEGIN { print "JobID Name QOS Nodes Submit Wait(s) Elapsed State" } { print }' |
         column -t
     echo
-    for shape in fmm-probe-2n fmm-probe-4n; do
+    for shape in tetraleaf-probe-2n tetraleaf-probe-4n; do
         awk -v s="$shape" '$2 == s && $6 != "-" { print $6 }' "$dir/waits.txt" | sort -n |
             awk -v s="$shape" '{ w[NR] = $1 }
                 END {
