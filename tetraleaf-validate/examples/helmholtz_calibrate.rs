@@ -28,10 +28,11 @@
 //!   against S7.
 //! - **`refit [files…]`** (no MPI; Helmholtz CH4.3c2): the high-frequency branch refitted with
 //!   CH3.3's plateau kept, over CH3.3's level points (`helmholtz_calibration::CH3_3_LEVELS`)
-//!   and the `point: level` lines of the files with x above `PLATEAU_X`, in both forms of
-//!   `fit_branch` (A: ⌈x + (a L + b) x^{1/3}⌉; B: with an offset d); prints each rule's
-//!   constants, whether it covers every point, its total excess, and every point against
-//!   CH3.3's rule, A and B.
+//!   and the `point: level` lines of the files with x above `PLATEAU_X`, in the forms of
+//!   `fit_branch` (A: ⌈x + (a L + b) x^{1/3}⌉; B: with an offset d; C: ⌈x + (C (ln 1/ε)^{2/3}
+//!   + a L + b) x^{1/3} + d⌉), B and C also capped at CH3.3's rule on `cap_grid`; prints each
+//!   rule's constants, whether it covers every point, its total excess, and every point
+//!   against each rule.
 //!
 //! Options of the scans: `--workload w` (as `helmholtz_accuracy`: `w1`, `w2`, `w3`,
 //! `w3:<n>`, `w4-<distribution>:<n>`), `--kd x,…`, `--kim y`, `--eps e,…` (default
@@ -548,8 +549,14 @@ fn refit_files(files: &[String]) {
             .sum::<i64>()
     };
     let mut rules = vec![("CH3.3", ch3_3)];
-    for (name, form) in [("A", BranchForm::Linear), ("B", BranchForm::LinearOffset)] {
-        match fit_branch(&points, &ch3_3, form) {
+    for (name, form, cap) in [
+        ("A", BranchForm::Linear, None),
+        ("B", BranchForm::LinearOffset, None),
+        ("C", BranchForm::Full, None),
+        ("B ≤ CH3.3", BranchForm::LinearOffset, Some(&ch3_3)),
+        ("C ≤ CH3.3", BranchForm::Full, Some(&ch3_3)),
+    ] {
+        match fit_branch(&points, &ch3_3, form, cap) {
             Some(rule) => rules.push((name, rule)),
             None => println!("form {name}: no rule fits"),
         }
