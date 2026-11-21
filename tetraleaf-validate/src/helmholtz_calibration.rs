@@ -25,6 +25,10 @@
 //!   the low-frequency plateau and the high-frequency branch. [`fit_plateau`] fits γ, α
 //!   and β to the plateau points, [`fit_high`] fits C to the points the plateau does not cover,
 //!   and [`covers`] checks that the rule is at least every point's degree.
+//! - **The branch refitted** (Helmholtz CH4.3c2). [`fit_branch`] fits the branch
+//!   ⌈x + (C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉ in one of the [`BranchForm`]s beside a
+//!   given plateau, optionally at most a cap's rule on [`cap_grid`]; [`CH3_3_LEVELS`] are
+//!   CH3.3's level points as data.
 
 use tetraleaf_exec::helmholtz::DegreeRule;
 
@@ -286,10 +290,11 @@ impl BranchForm {
 }
 
 /// The (x, ε) on which [`fit_branch`] holds a cap: x = 4 · 2^{k/16} for k = 0 … 112 (4 to
-/// 512) and ε = 10⁻³ … 10⁻⁸ (D1's range), at the decades. Between them a capped rule may
-/// exceed the cap: CH4.3c2's by one degree at 2 of the 5,763 points of the same x and
+/// 512) and ε = 10⁻³ … 10⁻⁸ (D1's range), at the decades. Between them a rule fitted under
+/// a cap may exceed it: CH4.3c2's fit by one degree at 2 of the 5,763 points of the same x and
 /// ε = 10^{−j/10}, j = 30 … 80; holding the cap there too raised the fit's degrees at
-/// x = 216 by 2–4 (Helmholtz CH4.3c2's report).
+/// x = 216 by 2–4. The default rule takes CH3.3's branch as its `DegreeRule::cap` instead, at
+/// most CH3.3's everywhere (Helmholtz CH4.3c2's report).
 pub fn cap_grid() -> Vec<(f64, f64)> {
     (0..=112)
         .flat_map(|k| {
@@ -590,6 +595,37 @@ mod tests {
             fit_branch(&[], &DegreeRule::CH3_3, BranchForm::Linear, None),
             None
         );
+    }
+
+    /// The full form recovers a rule of its form on the grid (no excess at the points), and a
+    /// fit under a cap stays at or below the cap on [`cap_grid`] while it covers the points.
+    #[test]
+    fn the_full_form_and_the_cap() {
+        let xs = [5.4, 10.8, 21.7, 43.3, 64.9, 108.3, 216.5];
+        let plateau = DegreeRule::CH3_3;
+        let truth = DegreeRule {
+            c: 1.8,
+            a: -0.4,
+            b: -5.18,
+            d: 3.5,
+            ..plateau
+        };
+        let points = level_points(&truth, &xs);
+        let full = fit_branch(&points, &plateau, BranchForm::Full, None).unwrap();
+        assert!(covers(&full, &points), "{full:?}");
+        for p in &points {
+            assert_eq!(full.degree(p.x, p.epsilon), p.degree, "{full:?}: {p:?}");
+        }
+        let points = ch3_3_level_points();
+        let capped =
+            fit_branch(&points, &plateau, BranchForm::LinearOffset, Some(&plateau)).unwrap();
+        assert!(covers(&capped, &points), "{capped:?}");
+        for (x, epsilon) in cap_grid() {
+            assert!(
+                capped.degree(x, epsilon) <= plateau.degree(x, epsilon),
+                "{capped:?} at x = {x}, ε = {epsilon:e}"
+            );
+        }
     }
 
     #[test]

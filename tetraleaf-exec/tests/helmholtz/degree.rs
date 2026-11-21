@@ -179,7 +179,7 @@ fn the_calibrated_rule_is_at_most_s7s_and_monotone() {
 
 /// The refit's cap (Helmholtz CH4.3c2): the default at or below CH3.3's rule everywhere on
 /// 4 ≤ x ≤ 512 and 10⁻⁸ ≤ ε ≤ 10⁻³ by tenths of a decade, equal to it at x ≤ 7, and below it
-/// at x ≥ 43 by 1–3 degrees at 10⁻⁸ and 5–10 at 10⁻³.
+/// at x ≥ 43 by 0–3 degrees at 10⁻⁸ and 4–10 at 10⁻³.
 #[test]
 fn the_calibrated_rule_is_at_most_ch3_3s() {
     for k in 0..=112 {
@@ -234,6 +234,27 @@ fn the_high_branch_is_never_below_x() {
 fn ch3_3s_rule_is_kept() {
     let rule = DegreeRule::CH3_3;
     assert_eq!(rule, DegreeRule::gd(0.30, 0.25, 2.60, 0.80));
+    // CH3.3's formula as it stood before CH4.3c2, restated: max(⌈0.30 L² + 0.25 L + 2.60⌉,
+    // ⌈x + 0.80 (ln 1/ε)^{2/3} x^{1/3}⌉), the ceilings forgiving 10⁻⁹; the same degrees on the
+    // tests' grid.
+    let before = |x: f64, epsilon: f64| {
+        let l = (1.0 / epsilon).log10();
+        let up = |v: f64| (v - 1e-9).ceil().max(0.0) as usize;
+        up((0.30 * l + 0.25) * l + 2.60).max(up(x + 0.80
+            * (1.0 / epsilon).ln().powf(2.0 / 3.0)
+            * x.cbrt()))
+    };
+    for j in -30..=36 {
+        let x = 2f64.powf(f64::from(j) / 4.0);
+        for i in 30..=100 {
+            let epsilon = 10f64.powf(-f64::from(i) / 10.0);
+            assert_eq!(
+                rule.degree(x, epsilon),
+                before(x, epsilon),
+                "x = {x}, ε = {epsilon:e}"
+            );
+        }
+    }
     // kD = 100 on the unit cube at 10⁻⁶ (the module example): 35 and 22, the refit's too (the
     // cap binds there).
     let x = 100.0 * 3f64.sqrt() / 8.0;

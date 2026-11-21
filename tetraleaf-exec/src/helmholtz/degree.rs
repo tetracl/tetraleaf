@@ -21,7 +21,8 @@
 //! ∇φ over 1,000 sampled targets within ε/2, on W1, W3 and W4 of proposal §9.1, one level
 //! scanned at a time (the plateau on trees with every level at x ≤ 2.2, all levels together),
 //! over 0.14 ≤ x ≤ 65 and 10⁻⁸ ≤ ε ≤ 10⁻³ (the plateau to 10⁻¹⁰; CH3.3), and at x = 54,
-//! 108 and 216 on W1 and the cube (CH4.3c2); the rule is at least every measured degree. That is the range the rule is measured on, D1's 10⁻⁸ ≤ ε ≤ 10⁻³
+//! 108 and 216 on W1 and the cube (CH4.3c2); the rule is at least every measured degree.
+//! That is the range the rule is measured on, D1's 10⁻⁸ ≤ ε ≤ 10⁻³
 //! (Helmholtz CH4.0c, review 2026-11-12 M6); outside it the rule is an extrapolation. Below
 //! 10⁻⁸ the constant density on W1 at kD = 100 misses ε in ℓ2, 1.5× at 10⁻⁹ and 3.4× at
 //! 10⁻¹⁰, all from level 2 on the high-frequency branch (CH4.0b, report §4), although the
@@ -49,9 +50,10 @@
 //! excess that covers every measured degree (d = 3 then), raised by 2 (d = 5) and capped by
 //! CH3.3's branch ([`DegreeRule::CH3_3`]). The fit on random charges missed ε on W1 with the
 //! constant density, whose boxes' errors add coherently (2.6 ε at kD = 1000, 10⁻⁸); 2 more
-//! degrees keep it within 0.60 ε at kD = 250, 500 and 1000 over 10⁻⁸ … 10⁻³, and the cap
-//! keeps every degree at most CH3.3's. The rule is CH3.3's at x ≤ 7 and within one of it to
-//! x ≈ 14; at x = 216 it is 224 … 248 against 234 … 251 (10⁻³ … 10⁻⁸), at x = 108 116 … 134
+//! degrees kept it within 0.60 ε at kD = 250, 500 and 1000 over 10⁻⁸ … 10⁻³, and with the cap,
+//! which keeps every degree at most CH3.3's, within 0.94 ε (∇φ at kD = 500, 10⁻⁸; CH3.3's
+//! rule 0.91 ε there). The rule is CH3.3's at x ≤ 7 and within one of it to
+//! x ≈ 14; at x = 216 it is 224 … 248 against 234 … 251 (10⁻³ … 10⁻⁸), at x = 108.25 115 … 134
 //! against 123 … 135, covering every measured degree. Spike S7's per-pair worst case at the
 //! rule's degrees stays within the largest the FMM's measured degrees reach at x ≥ 43 on
 //! k a = 45 … 256. The FMM's errors under it are checked on CH3.1c's matrix, CH3.3's held-out
@@ -198,7 +200,8 @@ pub fn s7_degree(k: &Wavenumber, circumradius: f64, epsilon: f64) -> usize {
 
 /// A degree rule (module documentation): a low-frequency plateau and a high-frequency branch,
 /// p(x, ε) = max(⌈γ L² + α L + β⌉, ⌈x + (C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉) at
-/// x = Re(k) a and L = log₁₀(1/ε), the branch at most x + cap (ln 1/ε)^{2/3} x^{1/3} with a cap. S7's shape (Helmholtz CH3.1a) and CH3.3's calibration have
+/// x = Re(k) a and L = log₁₀(1/ε), the branch at most x + cap (ln 1/ε)^{2/3} x^{1/3} with a
+/// cap. S7's shape (Helmholtz CH3.1a) and CH3.3's calibration have
 /// a = b = d = 0 ([`DegreeRule::gd`]); S7's closed form is γ = 0, α = 6, β = −2, C = 1 up to the
 /// ceilings, which here forgive 10⁻⁹, so that a value an integer up to rounding
 /// (α log₁₀(10⁶) with α a multiple of 0.05) stays that integer. The branch's excess over x

@@ -825,10 +825,8 @@ task's full line is in its record or report and its progress entry
   *Sign-off:* 2026-11-21 on #246, the user: "Both questions as recommended.": C₀ = 200 kept;
   CH4.3c2 a *Need* of CH4.3b2c.
 - [x] **CH4.3c2 The high-frequency degrees refit.** Report: `tetraleaf-validate/results/helmholtz-ch4-3c2.md`;
-  record `docs/helmholtz/tasks/CH4.3c2.md`. Level scans from ⌊x⌋ − 2 to x = 216; the branch's
-  excess refitted linear in L, raised by 2 for W1's constant density (the random-charge fit missed
-  it, 2.6 ε) and capped by CH3.3's branch: 4–10 degrees below CH3.3's rule at x ≥ 43 at 10⁻³, 0–3
-  at 10⁻⁸; every case within ε (174 matrix runs, W1 at kD = 250–1000 with three densities).
+  record `docs/helmholtz/tasks/CH4.3c2.md`. The branch refitted linear in L to x = 216, +2 for W1's
+  constant density, capped by CH3.3's: 4–10 degrees lower at 10⁻³, 0–3 at 10⁻⁸; all within ε.
   *Sign-off:* pending (the report's questions 1–3).
 - [ ] **CH4.3d The transfer function's length.** *Done when:* (S6 §6) whether a shorter
   transfer function (⌈3(P − 1)/2⌉, whose rounding stays far below 2P − 2's at k a 6–45, S6's

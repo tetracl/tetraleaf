@@ -4260,7 +4260,7 @@ request, using this template:
     `tetraleaf-validate/results/helmholtz-ch4-3c2.md`; record `docs/helmholtz/tasks/CH4.3c2.md`.
 - Measurements (Kathleen, one node per job, 1 × 40; jobs and nodes in the report §9):
   - level scans from ⌊x⌋ − 2 (random charges) at x = 27, 54, 108 and 216 on W1 and W4's cube
-    (N = 10⁵, and 10⁴ for kD = 1000): p − x = 4–28 over 10⁻³ … 10⁻⁸ where CH3.3's rule gives
+    (N = 10⁵, and 10⁴ for kD = 1000): p − x = 1.5–28 over 10⁻³ … 10⁻⁸ where CH3.3's rule gives
     12–35; the workloads within 1–2 degrees of each other at one x;
   - the fit over 150 points (CH3.3's 96, 54 new) at most CH3.3's rule at the decades: total excess
     188 against CH3.3's 556; S7's worst pair within the FMM's at k a = 45 … 256;

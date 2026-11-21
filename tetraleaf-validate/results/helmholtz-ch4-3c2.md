@@ -25,7 +25,7 @@ never asserted.
    `DegreeRule::CH3_3`). It equals CH3.3's rule at x ≤ 7 and lies below it at x ≥ 43 by 4–10
    degrees at 10⁻³ and 0–3 at 10⁻⁸ (x = 216: 224 … 248 against 234 … 251).
 2. **Downward scans at x ≥ 54** (random charges, from ⌊x⌋ − 2): at x = 54, 108 and 216 the FMM
-   needs p − x = 4–28 over 10⁻³ … 10⁻⁸ where CH3.3's rule gives 12–35, the excess about
+   needs p − x = 1.5–28 over 10⁻³ … 10⁻⁸ where CH3.3's rule gives 12–35, the excess about
    linear in L (§2). The fit covering all 150 measured points (CH3.3's 96, this task's 54) over-
    resolves them by 188 degrees in all, against CH3.3's rule's 556 (§3).
 3. **The constant density needs more.** That fit (offset d = 3) missed ε on W1 with the
@@ -35,7 +35,7 @@ never asserted.
    (§4). Two more degrees (d = 5) bring it within 0.60 ε at kD = 250, 500 and 1000; with the
    cap (§3) the rule over-resolves the 150 points by 367 and keeps it within 0.94 ε (§6).
 4. **Pair evidence.** S7's worst pair at the rule's degree is at most 4.6 ε at k a = 45 … 256,
-   within the 7–42 ε the worst pair reaches at the degrees the FMM confirmed (§5).
+   within the 5.6–42 ε the worst pair reaches at the degrees the FMM confirmed (§5).
 5. **FMM evidence.** Every case is within ε: CH3.1c's matrix and CH3.3's held-out cases (174
    runs, Rotation and the defaults; at most 0.64 ε, CH3.3's rule 0.64 ε), and W1 at kD = 250, 500
    and 1000 with the random charges, the plane wave's trace and the constant density at 10⁻⁸,
@@ -57,8 +57,9 @@ below both rules makes the measured degree the smallest that suffices (A8's poin
 
 The scans (`tools/helmholtz/ch4-3c2-runs.sh`): W1 at kD = 250 level 2 and kD = 500 levels 2 and 3
 (job 653797); W4's cube at N = 10⁵ at kD = 250 level 2 and kD = 500 levels 2–4 (job 653796). At
-N = 10⁵ the cube costs about 760 s per degree at kD = 1000 (job 653806, cancelled before its
-first ε completed), so x = 216 and a second x = 108 were scanned on the cube at N = 10⁴ (job
+N = 10⁵ the cube costs about 760 s per degree at kD = 1000 (job 653806, level 3, x = 108,
+cancelled after 4 h with 10⁻³ … 10⁻⁵ settled: 111, 116 and 120, within the other workloads';
+not in the fit), so x = 216 and a second x = 108 were scanned on the cube at N = 10⁴ (job
 653817; its last launch, a third x = 108, cancelled). W1 at kD = 1000 is not scanned (about
 10 min per degree, CH4.0c §2.3): the verification of §6 stands for it.
 
@@ -70,7 +71,7 @@ The smallest degree meeting ε/2, the largest over the workloads at one x:
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | 27.1 | cube 10⁵ (500, 4) | 32 | 34 | 37 | 39 | 41 | 44 | 36–44 | 34–44 |
 | 54.1 | W1 (250, 2; 500, 3), cube 10⁵ (250, 2; 500, 3) | 58 | 62 | 65 | 68 | 71 | 74 | 66–76 | 61–76 |
-| 108.3 | W1 (500, 2), cube 10⁵ and 10⁴ (500, 2) | 112 | 117 | 121 | 126 | 129 | 132 | 123–135 | 116–134 |
+| 108.3 | W1 (500, 2), cube 10⁵ and 10⁴ (500, 2) | 112 | 117 | 121 | 126 | 129 | 132 | 123–135 | 115–134 |
 | 216.5 | cube 10⁴ (1000, 2) | 218 | 225 | 230 | 235 | 240 | 244 | 234–251 | 224–248 |
 
 At one x the workloads agree within 1–2 degrees (x = 54: W1 57–74, the cube 58–74; x = 108: W1
@@ -130,7 +131,7 @@ The fit's offset raised by Δ, uncapped (job 663585), Rotation, φ, ∇φ / ε a
 
 | Δ (d) | kD = 250 | kD = 500 | kD = 1000 |
 | --- | --- | --- | --- |
-| +2 (5) | 0.12, 0.19 | 0.10, 0.36 | 0.60, 0.54 |
+| +2 (5) | 0.12, 0.19 | 0.11, 0.36 | 0.60, 0.54 |
 | +4 (7) | 0.03, 0.06 | 0.03, 0.25 | 0.27, 0.16 |
 | +6 (9) | 0.01, 0.04 | 0.01, 0.24 | 0.13, 0.06 |
 
@@ -148,12 +149,12 @@ The fit's offset raised by Δ, uncapped (job 663585), Rotation, φ, ∇φ / ε a
 | 10⁻³ | 19.1 | 3.0 | 6.4 |
 | 10⁻⁴ | 25.9 | 2.4 | 6.4 |
 | 10⁻⁵ | 25.6 | 2.4 | 8.5 |
-| 10⁻⁶ | 27.2 | 2.2 | 7.7 |
+| 10⁻⁶ | 27.2 | 2.2 | 9.3 |
 | 10⁻⁷ | 42.3 | 2.8 | 10.0 |
 | 10⁻⁸ | 33.9 | 4.6 | 18.5 |
 
 The FMM needs less than the worst pair: at its measured degrees (random charges) the worst pair is
-7–42 ε, with no trend in x. The rule's stays within that at every grid k a and ε, as the fit's
+5.6–42 ε, with no trend in x. The rule's stays within that at every grid k a and ε, as the fit's
 did; the fit's FMM failure on the constant density (§4) was not visible to this measure, which
 guards the extrapolation to k a = 256 and is coarse (one degree moves the per-pair error about
 2×). Under CH3.3's rule the worst pair is 0.03–1.8 ε.
@@ -271,8 +272,10 @@ spread in brackets where above 2 %):
 
 The levels whose degrees fall are the top ones (V pairs: level 2 2,504, level 3 12,216 at
 kD = 1000), so the saving is a modest part of the evaluation; at 10⁻⁸ the 1–3 degrees are within
-the runs' spread. The build (12–13 s at kD = 1000, the tables and the plan) is the same under both
-rules. The earlier runs of §6 ran the two rules on different nodes and are not compared.
+the runs' spread. The build (25.6–27.5 s at kD = 1000 on this node, the tables and the plan) is
+the same under both rules. This node ran slower than job 663587's (the evaluation at 10⁻³ 31.3
+against 27.8 s, the build 26 against 12–13 s); the ratios hold, the rules alternated on one
+node. The earlier runs of §6 ran the two rules on different nodes and are not compared.
 
 ## 8. Questions for sign-off
 

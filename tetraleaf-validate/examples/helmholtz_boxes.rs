@@ -110,7 +110,8 @@ fn arguments() -> Arguments {
              [--density random|planewave|constant] [--charges real|complex] [--eps e] \
              [--m2l rotation|default] [--study single|levels] [--margin m] [--offset x,y,z] \
              [--leaf-size n|uniform] [--raise-factor f] [--worst n] [--per-box s] \
-             [--full-max n] [--rule calibrated|ch3-3|γ,α,β,C,a,b,d[,cap]] [--threads t]; got {args:?}"
+             [--full-max n] [--rule calibrated|ch3-3|γ,α,β,C,a,b,d[,cap]] [--threads t]; \
+             got {args:?}"
         );
         std::process::exit(2);
     };
@@ -633,8 +634,9 @@ fn main() {
     let mut raised: Option<Vec<Option<Errors>>> = None;
     if args.levels {
         let wavenumber = Wavenumber::new(args.kd, args.kim).expect("a valid wavenumber");
+        let rule = args.degree_rule.unwrap_or(DegreeRule::CALIBRATED);
         let tight = Degrees::Tolerance(eps * args.raise_factor)
-            .resolve(&wavenumber, &base.run.domain, base.run.row.levels)
+            .resolve_with(&rule, &wavenumber, &base.run.domain, base.run.row.levels)
             .expect("a valid tolerance");
         let degrees = base.run.row.degrees.clone();
         let mut parts = vec![None; degrees.len()];

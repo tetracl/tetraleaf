@@ -151,8 +151,8 @@ Kathleen, `singlenode`, one rank × 40 threads, BLAS threads 1, release; jobs th
 - Scans (Kathleen jobs 653796 `scans-cube`, cancelled after its kD = 500 launch; 653797
   `scans-w1`; 653806 `scans-cube-1000`; 653817 `scans-cube-small`; the cube at N = 10⁵ costs 760 s per
   degree at kD = 1000, so x = 216 and kD = 1000's x = 108 were scanned on the cube at N = 10⁴,
-  `scans-cube-small`; 653806, the N = 10⁵ cube at kD = 1000 level 3, ends at its time limit with
-  part of its ε, and 653817's last launch, kD = 1000 level 3 on the N = 10⁴ cube, a cross-check
+  `scans-cube-small`; 653806, the N = 10⁵ cube at kD = 1000 level 3, was cancelled after 4 h
+  with 10⁻³ … 10⁻⁵ settled (111, 116, 120), and 653817's last launch, kD = 1000 level 3 on the N = 10⁴ cube, a cross-check
   of x = 108 that three workloads measured, was cancelled for the verification's slot). Measured
   at ε/2, 10⁻³ … 10⁻⁸: x = 54.1: 58, 62, 65, 68, 71, 74 (largest of four workloads); x = 108.3:
   112, 117, 121, 126, 129, 132 (three); x = 216.5: 218, 225, 230, 235, 240, 244; x = 27.1: 32, 34,
