@@ -9,7 +9,7 @@
 #     the allocation and of `srun --mpi=pmix`, with the bindings printed once each;
 #   - the transport Open MPI 4.1.6 selects between the nodes and within one, from the
 #     PML/MTL/BTL selection messages (verbosity 10) of a two-rank run each way.
-#SBATCH --job-name=fmm-launcher
+#SBATCH --job-name=tetraleaf-launcher
 #SBATCH --partition=kathleen
 #SBATCH --qos=test
 #SBATCH --nodes=2

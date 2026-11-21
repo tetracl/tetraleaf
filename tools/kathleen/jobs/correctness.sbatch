@@ -38,7 +38,7 @@
 # ends with the table of its steps, one per launch: result and wall time. A step fails if
 # its launch fails or, for the invariance launches, if any value differs (the example exits
 # with status 1 on every rank). Raw output stays in the root's logs/, never in a tree.
-#SBATCH --job-name=fmm-correctness
+#SBATCH --job-name=tetraleaf-correctness
 #SBATCH --partition=kathleen
 #SBATCH --qos=test
 #SBATCH --nodes=2

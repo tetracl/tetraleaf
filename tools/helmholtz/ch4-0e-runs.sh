@@ -44,8 +44,8 @@ target=${CARGO_TARGET_DIR:-target}/release/examples
 A=$target/helmholtz_accuracy
 F=$target/helmholtz_fmm3d
 if [ -z "${FMM3D_ROOT:-}" ]; then
-    if [ -n "${FMM_KATHLEEN_ROOT:-}" ]; then
-        FMM3D_ROOT=$FMM_KATHLEEN_ROOT/fmm3d
+    if [ -n "${TETRALEAF_KATHLEEN_ROOT:-}" ]; then
+        FMM3D_ROOT=$TETRALEAF_KATHLEEN_ROOT/fmm3d
     elif [ -d /data/ucahtbe ]; then
         FMM3D_ROOT=/data/ucahtbe/fmm3d
     else

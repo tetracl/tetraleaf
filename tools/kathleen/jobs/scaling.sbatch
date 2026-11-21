@@ -10,7 +10,7 @@
 #
 # It shows threads, binding and the errors across nodes; its timings are not results
 # (T2 times). The release example is built by build.sbatch (or here).
-#SBATCH --job-name=fmm-scaling
+#SBATCH --job-name=tetraleaf-scaling
 #SBATCH --partition=kathleen
 #SBATCH --qos=test
 #SBATCH --nodes=2

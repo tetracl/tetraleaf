@@ -11,16 +11,16 @@
 # joined by spaces and read by the remote shell (bash), so quote what that shell should
 # see as one word, a pipe or a `;`.
 #
-# FMM_GH200_HOST (default locust) and FMM_GH200_DIR (default the branch's directory)
+# TETRALEAF_GH200_HOST (default locust) and TETRALEAF_GH200_DIR (default the branch's directory)
 # override the target. ssh reads ~/.ssh, which the Claude Code sandbox denies: run it
 # outside the sandbox.
 
 set -eu
 
 [ "$#" -gt 0 ] || { echo "usage: remote.sh <command> [args...]" >&2; exit 2; }
-host=${FMM_GH200_HOST:-locust}
+host=${TETRALEAF_GH200_HOST:-locust}
 branch=$(git rev-parse --abbrev-ref HEAD)
 [ "$branch" != HEAD ] || branch=detached-$(git rev-parse --short HEAD)
-dir=${FMM_GH200_DIR:-/data/ucahtbe/fmm/$branch}
+dir=${TETRALEAF_GH200_DIR:-/data/ucahtbe/fmm/$branch}
 
 exec ssh "$host" "cd '$dir' && . tools/gh200/env.sh && $*"

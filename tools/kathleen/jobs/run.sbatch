@@ -9,7 +9,7 @@
 # For the commands the other job scripts do not cover. Never on the login node: a build
 # or a test is a job (README.md, "The login-node rule"). The allocation has 40 tasks per
 # node, so that an `mpirun` inside a step has a slot per core.
-#SBATCH --job-name=fmm-run
+#SBATCH --job-name=tetraleaf-run
 #SBATCH --partition=kathleen
 #SBATCH --qos=singlenode
 #SBATCH --nodes=1

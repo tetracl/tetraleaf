@@ -14,7 +14,7 @@
 # (`--bind-to core`; Open MPI takes the slots, 40 per node, from Slurm). The launcher is
 # mpirun because run-mpi-tests.sh launches with it; decision 4 (launcher.sbatch) compares
 # srun.
-#SBATCH --job-name=fmm-mpi
+#SBATCH --job-name=tetraleaf-mpi
 #SBATCH --partition=kathleen
 #SBATCH --qos=singlenode
 #SBATCH --nodes=1

@@ -9,7 +9,7 @@
 # registry, the toolchain and the tracel-llvm bundle (`lquota` runs on the login node
 # only). A cold run is the "cold build" of the README; a second run on an unchanged tree
 # is the "warm build".
-#SBATCH --job-name=fmm-build
+#SBATCH --job-name=tetraleaf-build
 #SBATCH --partition=kathleen
 #SBATCH --qos=singlenode
 #SBATCH --nodes=1

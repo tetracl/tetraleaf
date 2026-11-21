@@ -114,7 +114,7 @@ tools/kathleen/submit.sh '--export=ALL,OURS=/scratch/scratch/ucahtbe/fmm/logs/sc
 tools/kathleen/submit.sh --time=02:00:00 -- fmm3d.sbatch build crosscheck
 ```
 
-`fmm3d.sbatch` keeps FMM3D in `$FMM_KATHLEEN_ROOT/fmm3d` and writes the launches to the
+`fmm3d.sbatch` keeps FMM3D in `$TETRALEAF_KATHLEEN_ROOT/fmm3d` and writes the launches to the
 root's `logs/fmm3d/`; `sweep.sbatch` writes ours to `logs/scaling-<job id>/`. A
 `singlenode` job runs at most 6 hours: split our side with `ONLY` (for example
 `ONLY='n10000000-.*r1x1'` for the one-thread runs at N = 10⁷, `ONLY='n(100000|1000000)-|N1-'`

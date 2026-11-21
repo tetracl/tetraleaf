@@ -6,7 +6,7 @@
 #
 # Run it on locust, inside the environment or not. It lists every file and directory
 # under the real home directory (from the password database, not $HOME, which env.sh
-# moves) that is newer than the marker setup.sh wrote, $FMM_GH200_ROOT/.home-marker.
+# moves) that is newer than the marker setup.sh wrote, $TETRALEAF_GH200_ROOT/.home-marker.
 # It also lists what this user owns, newer than the marker, in /tmp, /var/tmp and
 # /dev/shm, where tools write when TMPDIR is not honoured. Expected: nothing, apart
 # from what an interactive login itself writes (the shell history, .ssh).
@@ -15,7 +15,7 @@
 
 set -u
 
-root=${FMM_GH200_ROOT:-/data/ucahtbe}
+root=${TETRALEAF_GH200_ROOT:-/data/ucahtbe}
 marker=$root/.home-marker
 user=$(id -un)
 home=$(getent passwd "$user" | cut -d: -f6)

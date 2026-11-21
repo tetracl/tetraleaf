@@ -25,7 +25,7 @@
 # TIMEOUT) go in as sbatch options, since submit.sh submits from a fresh login shell:
 #
 #     tools/kathleen/submit.sh --qos=test --nodes=2 '--export=ALL,SPLITS=2x20' -- sweep.sbatch nodes-strong
-#SBATCH --job-name=fmm-sweep
+#SBATCH --job-name=tetraleaf-sweep
 #SBATCH --partition=kathleen
 #SBATCH --qos=singlenode
 #SBATCH --nodes=1
@@ -34,7 +34,7 @@
 
 cd "$SLURM_SUBMIT_DIR" && . tools/kathleen/jobs/lib.sh
 
-export OUT=${OUT:-$FMM_KATHLEEN_ROOT/logs/scaling-$SLURM_JOB_ID}
+export OUT=${OUT:-$TETRALEAF_KATHLEEN_ROOT/logs/scaling-$SLURM_JOB_ID}
 mkdir -p "$OUT"
 echo "=== output of the launches: $OUT"
 

@@ -25,7 +25,7 @@
 #
 # A case is `<workload>@<kD>` with the example's workload names. The problem files are
 # written first into <out-dir>/problems/ (`helmholtz_fmm3d problem`). FMM3D_ROOT as for
-# tools/fmm3d/build.sh (on Kathleen $FMM_KATHLEEN_ROOT/fmm3d, on locust /data/ucahtbe/fmm3d);
+# tools/fmm3d/build.sh (on Kathleen $TETRALEAF_KATHLEEN_ROOT/fmm3d, on locust /data/ucahtbe/fmm3d);
 # THREADS (default every core), EPS (default 1e-3,1e-6), TIMEOUT per launch (default 3600 s),
 # ONLY (a regular expression on the launch names). BLAS threads 1. No quiet-machine gate:
 # on the M6 run `check` and `scan` only (accuracy), or wait for the user's go-ahead.
@@ -36,8 +36,8 @@ mkdir -p "$out/problems" "$out/fmm3d"
 export OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 X=${CARGO_TARGET_DIR:-target}/release/examples/helmholtz_fmm3d
 if [ -z "${FMM3D_ROOT:-}" ]; then
-    if [ -n "${FMM_KATHLEEN_ROOT:-}" ]; then
-        FMM3D_ROOT=$FMM_KATHLEEN_ROOT/fmm3d
+    if [ -n "${TETRALEAF_KATHLEEN_ROOT:-}" ]; then
+        FMM3D_ROOT=$TETRALEAF_KATHLEEN_ROOT/fmm3d
     elif [ -d /data/ucahtbe ]; then
         FMM3D_ROOT=/data/ucahtbe/fmm3d
     else

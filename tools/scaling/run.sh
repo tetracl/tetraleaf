@@ -360,7 +360,7 @@ set -eu
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 
-if [ -z "${FMM_GH200_ENV:-}" ] && [ -d /data/ucahtbe/envs/fmm-gh200 ]; then
+if [ -z "${TETRALEAF_GH200_ENV:-}" ] && [ -d /data/ucahtbe/envs/fmm-gh200 ]; then
     set +u
     . "$root/tools/gh200/env.sh"
     set -u

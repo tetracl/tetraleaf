@@ -39,7 +39,7 @@
 # Override with FC, CC and CXX.
 #
 # FMM3D_ROOT, where everything goes (never inside a checkout): on Kathleen
-# $FMM_KATHLEEN_ROOT/fmm3d, on locust /data/ucahtbe/fmm3d, elsewhere it must be set.
+# $TETRALEAF_KATHLEEN_ROOT/fmm3d, on locust /data/ucahtbe/fmm3d, elsewhere it must be set.
 # Nothing of FMM3D is committed: its sources, builds and outputs stay there.
 
 set -eu
@@ -56,8 +56,8 @@ here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo=$(CDPATH='' cd -- "$here/../.." && pwd)
 
 if [ -z "${FMM3D_ROOT:-}" ]; then
-    if [ -n "${FMM_KATHLEEN_ROOT:-}" ]; then
-        FMM3D_ROOT=$FMM_KATHLEEN_ROOT/fmm3d
+    if [ -n "${TETRALEAF_KATHLEEN_ROOT:-}" ]; then
+        FMM3D_ROOT=$TETRALEAF_KATHLEEN_ROOT/fmm3d
     elif [ -d /data/ucahtbe ]; then
         FMM3D_ROOT=/data/ucahtbe/fmm3d
     else

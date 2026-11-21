@@ -43,11 +43,11 @@ The scripts run by `sh` are POSIX `sh`; `setup.sh`, `env.sh` and the job scripts
 
 | What | Pin | Where |
 | --- | --- | --- |
-| Rust | 1.99.0 with rustfmt and clippy, through rustup (the M3 Max's and CI's stable) | `env.sh` (`FMM_KATHLEEN_RUST`, exported as `RUSTUP_TOOLCHAIN`) |
-| modules | `ucl-stack/2026-03`, `compilers/gcc/12.3.0/gcc-12.3.0`, `mpi/openmpi/4.1.6/gcc-12.3.0`, `openblas/0.3.28/gcc-12.3.0`, `fftw/3.3.10/gcc-12.3.0`, `cmake/3.30.5/gcc-12.3.0`, `llvm/17.0.6/gcc-12.3.0-zzkohqr` (hidden; `module avail --all`), `userscripts/2026-03` (UCL's, for `lquota`) | `env.sh` (`FMM_KATHLEEN_MODULES`) |
+| Rust | 1.99.0 with rustfmt and clippy, through rustup (the M3 Max's and CI's stable) | `env.sh` (`TETRALEAF_KATHLEEN_RUST`, exported as `RUSTUP_TOOLCHAIN`) |
+| modules | `ucl-stack/2026-03`, `compilers/gcc/12.3.0/gcc-12.3.0`, `mpi/openmpi/4.1.6/gcc-12.3.0`, `openblas/0.3.28/gcc-12.3.0`, `fftw/3.3.10/gcc-12.3.0`, `cmake/3.30.5/gcc-12.3.0`, `llvm/17.0.6/gcc-12.3.0-zzkohqr` (hidden; `module avail --all`), `userscripts/2026-03` (UCL's, for `lquota`) | `env.sh` (`TETRALEAF_KATHLEEN_MODULES`) |
 
 There is no `rust-toolchain.toml` in the repository: CI floats on stable. When CI's
-stable moves, change `FMM_KATHLEEN_RUST` and rerun `setup.sh`. The stack also has
+stable moves, change `TETRALEAF_KATHLEEN_RUST` and rerun `setup.sh`. The stack also has
 `rust/1.81.0`, too old for Rust 2024 and the workspace; it is not used.
 
 What the build needs from the modules: Open MPI (rsmpi's `mpi-sys` finds it through
@@ -86,7 +86,7 @@ names no purge rule for Scratch.
 The nodes are diskless: `/`, `/tmp` and `/dev/shm` are RAM (95 GB each, from the node's
 192 GB), and Kathleen offers no `$TMPDIR` space (requesting `tmpfs` is refused). Slurm
 sets `TMPDIR=/tmp` in a job. `env.sh` instead uses, inside a job,
-`/dev/shm/fmm-$USER-$SLURM_JOB_ID` for cargo's and rustc's temporary files, and
+`/dev/shm/tetraleaf-$USER-$SLURM_JOB_ID` for cargo's and rustc's temporary files, and
 `OMPI_MCA_orte_tmpdir_base=/dev/shm` for Open MPI 4.1's session directories (and so for
 the shared-memory transport's backing files), never Lustre. `jobs/lib.sh` creates the
 directory on every node of the job and, at exit, prints its size per node and removes
@@ -452,11 +452,11 @@ writes itself.
 
 ```sh
 ssh kathleen 'cd /scratch/scratch/ucahtbe/fmm/src/<branch> &&
-    FMM_KATHLEEN_ROOT=/scratch/scratch/ucahtbe/<other> bash -l tools/kathleen/setup.sh'
+    TETRALEAF_KATHLEEN_ROOT=/scratch/scratch/ucahtbe/<other> bash -l tools/kathleen/setup.sh'
 ```
 
 `setup.sh` refuses a root outside `/scratch/scratch/ucahtbe`. `env.sh` honours
-`FMM_KATHLEEN_ROOT` in a shell on the login node (`FMM_KATHLEEN_ROOT=<other> .
+`TETRALEAF_KATHLEEN_ROOT` in a shell on the login node (`TETRALEAF_KATHLEEN_ROOT=<other> .
 tools/kathleen/env.sh`, then `rustc --version`); `sbatch` passes the submitting shell's
 environment to the job (`--export=ALL`, the default), so a job submitted from such a
 shell uses that root too. `submit.sh` always submits with the default root.
