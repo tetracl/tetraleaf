@@ -827,7 +827,8 @@ task's full line is in its record or report and its progress entry
 - [x] **CH4.3c2 The high-frequency degrees refit.** Report: `tetraleaf-validate/results/helmholtz-ch4-3c2.md`;
   record `docs/helmholtz/tasks/CH4.3c2.md`. The branch refitted linear in L to x = 216, +2 for W1's
   constant density, capped by CH3.3's: 4–10 degrees lower at 10⁻³, 0–3 at 10⁻⁸; all within ε.
-  *Sign-off:* pending (the report's questions 1–3).
+  *Sign-off:* 2026-11-21 on #249, the user: "Merge when green" (question 1, the rule as the
+  default, by the merge); questions 2 (§3.5 amended) and 3 (a constant-density calibration) open.
 - [ ] **CH4.3d The transfer function's length.** *Done when:* (S6 §6) whether a shorter
   transfer function (⌈3(P − 1)/2⌉, whose rounding stays far below 2P − 2's at k a 6–45, S6's
   report §6) earns a truncation analysis; (review 2026-11-12, M8) the excess-bandwidth length

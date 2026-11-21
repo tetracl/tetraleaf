@@ -4279,8 +4279,9 @@ request, using this template:
   the default and workspace tests at opt-level 1, 2,804 passed; the MPI list at 2 and 4 ranks;
   `tests/helmholtz` one rank at opt-level 0 54 s at load 8–13 on the M6). Not run: `cargo deny`
   (no manifest change), Laplace's benchmarks (no Laplace path), 8 ranks (no distributed code).
-- Decisions: the report's questions 1–3, pending: the rule as the default; the proposal's §3.5
-  amended; a later calibration scanning the constant density.
+- Decisions: on #249 the user, 2026-11-21: "Merge when green": question 1, the rule as the
+  default, by the merge. Questions 2 (the proposal's §3.5 amended) and 3 (a later calibration
+  scanning the constant density) not answered; open on the roadmap's line.
 - Laplace: not touched (the Helmholtz degree rule, the validation harness, scripts; the
   `tetraleaf-tables` tests' restated rule relabelled CH3.3's in comments only).
 - The branch was moved onto the tetraleaf rename mid-task (its commits replayed with the new

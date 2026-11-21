@@ -195,6 +195,7 @@ Kathleen, `singlenode`, one rank × 40 threads, BLAS threads 1, release; jobs th
   slightly and accepting a small cost in time. Answered by the raise of 2 on every level above
   the plateau, capped by CH3.3's rule (above).
 - For sign-off (the report §8): adopt the rule; amend the proposal's §3.5; scan the constant
-  density in a later calibration.
+  density in a later calibration. 2026-11-21 on #249, the user: "Merge when green" (question 1
+  by the merge); questions 2 and 3 open.
 - The proposal's §3.5 states CH3.3's rule as the calibrated one: amended only on the sign-off
   of the refit (the PR's question).
