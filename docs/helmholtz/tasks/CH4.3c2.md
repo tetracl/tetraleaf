@@ -162,6 +162,18 @@ Kathleen, `singlenode`, one rank × 40 threads, BLAS threads 1, release; jobs th
   up to 19–42 ε per ε; the default's at k a = 45 … 256 at most 18.5 ε (k a = 128, 10⁻⁸), within
   the FMM's largest at every grid k a and ε.
 
+- Verification (jobs 663560, matrix: 174 runs within ε, at most 0.74 ε; 663562 and 663563, W1):
+  the random charges and the plane wave within ε at kD = 500 and 1000; **the constant density
+  misses ε**: kD = 1000 φ 1.22, 1.03, 2.16, 2.60 ε at 10⁻³, 10⁻⁶, 10⁻⁷, 10⁻⁸ (Rotation and the
+  default alike), kD = 500 ∇φ 1.12 ε at 10⁻⁶ and 1.58 ε at 10⁻⁸. CH3.3's rule on the same cases
+  and code (job 663571): at most 0.46 ε at kD = 1000, 0.91 ε (∇φ, 10⁻⁸) at kD = 500.
+- Per level (job 663572, `helmholtz_boxes --study levels`, kD = 1000, constant, Rotation): at
+  10⁻⁸ level 2 (x = 216, p 246) carries 0.44 of Σ|e|² in φ, level 3 0.14, level 6 0.09 of ∇φ's;
+  level 2 raised to 255 alone halves the error (2.60 → 1.18 ε). At 10⁻³ the error spreads over
+  every level (2: 0.31, 3: 0.22, 4: 0.13, 6–7 0.16–0.26 of ∇φ's). The level scans used random
+  charges only; the constant density on W1's sphere adds the boxes' errors coherently and needs
+  more at every level. The refit as fitted is not acceptable.
+
 ## Pending runs
 - Kathleen job 663560 (`run.sbatch`, singlenode, 6 h): `ch4-3c2-runs.sh verify-matrix` into
   `/scratch/scratch/ucahtbe/fmm/runs/ch4-3c2/verify-matrix`. Decides the acceptance ≤ ε on CH3.1c's
@@ -171,5 +183,7 @@ Kathleen, `singlenode`, one rank × 40 threads, BLAS threads 1, release; jobs th
   ≤ ε at x = 108 and 216 under the refit.
 
 ## Open questions
+- The refit fails the constant density (above): rescan with the worst density and refit, a
+  margin, or keep CH3.3's rule? (asked 2026-11-21)
 - The proposal's §3.5 states CH3.3's rule as the calibrated one: amended only on the sign-off
   of the refit (the PR's question).
