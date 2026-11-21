@@ -1,14 +1,14 @@
-//! The level M2L of `Batched` (Phase 6 T2) and `Rotation`, as `nd-fmm-exec` runs them on
+//! The level M2L of `Batched` (Phase 6 T2) and `Rotation`, as `tetraleaf-exec` runs them on
 //! one rank at one thread: `LaplaceKernels::m2l_block` (blocks of `M2L_BLOCK_TARGETS` = 64
 //! consecutive targets, for each the offsets in index order, one column-kernel call per
 //! offset) and `m2l_target` (target by target, each source's `RotationTables::m2l`).
 
-use nd_fmm_simd::{Isa, MatrixKernel, MulAdd};
-use nd_fmm_tables::{M2lTables, RotationScratch, RotationTables};
+use tetraleaf_simd::{Isa, MatrixKernel, MulAdd};
+use tetraleaf_tables::{M2lTables, RotationScratch, RotationTables};
 
 use crate::geometry::{Level, Pair};
 
-/// Targets per block of the batched M2L (`nd_fmm_exec::operator::M2L_BLOCK_TARGETS`).
+/// Targets per block of the batched M2L (`tetraleaf_exec::operator::M2L_BLOCK_TARGETS`).
 pub const BLOCK: usize = 64;
 
 /// The V pairs grouped by offset index, each group by target: (targets, sources).

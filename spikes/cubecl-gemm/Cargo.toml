@@ -1,5 +1,5 @@
 [package]
-name = "nd-fmm-spike-cubecl-gemm"
+name = "tetraleaf-spike-cubecl-gemm"
 version = "0.0.0"
 description = "Throwaway benchmark: CubeCL GEMM throughput for dense M2L shapes (Phase 0, T6)."
 publish = false

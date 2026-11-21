@@ -2,7 +2,7 @@
 # tools/gh200/remote.sh: runs a command on locust inside the environment (Phase 4S T1).
 # POSIX sh.
 #
-#     tools/gh200/remote.sh cargo test -p nd-fmm-math
+#     tools/gh200/remote.sh cargo test -p tetraleaf-math
 #     tools/gh200/remote.sh 'nvidia-smi; uptime'
 #
 # Run it on the M3 Max, inside the checkout that tools/gh200/sync.sh copied. It runs

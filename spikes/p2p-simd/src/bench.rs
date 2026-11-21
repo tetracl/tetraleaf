@@ -11,7 +11,7 @@ use crate::workloads::{Accuracy, Cell, Form, Oracle, Set, accuracy, w1, w2};
 
 /// What is run.
 pub enum Variant<E> {
-    /// `nd_fmm_ref::p2p::p2p`, the Phase 3 path.
+    /// `tetraleaf_ref::p2p::p2p`, the Phase 3 path.
     Reference,
     /// green-kernels' `evaluate_st`.
     Green,
@@ -69,7 +69,7 @@ fn one<E: Elem + Gk>(
     (pot, g, gk): Outputs<'_, E>,
 ) {
     match v {
-        Variant::Reference => nd_fmm_ref::p2p::p2p(s, q, t, pot, grad.then_some(g)),
+        Variant::Reference => tetraleaf_ref::p2p::p2p(s, q, t, pot, grad.then_some(g)),
         Variant::Green => {
             let n = t.len() * if grad { 4 } else { 1 };
             E::gk(grad, s, q, t, &mut gk[..n]);

@@ -1,5 +1,5 @@
 [package]
-name = "nd-fmm-spike-p2p-simd"
+name = "tetraleaf-spike-p2p-simd"
 version = "0.0.0"
 description = "Throwaway benchmark: SIMD P2P loop orders, inverse square roots and the green-kernels baseline (Phase 3S, T2); the production kernel against green-kernels (T7)."
 publish = false
@@ -8,14 +8,14 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-nd-fmm-math.workspace = true
-nd-fmm-ref.workspace = true
+tetraleaf-math.workspace = true
+tetraleaf-ref.workspace = true
 green-kernels.workspace = true
 pulp.workspace = true
-# T7: the production kernel, and the inputs and measures of nd-fmm-validate's
-# `p2p_kernels` example (nd-fmm-validate links MPI; `compare` never initialises it).
-nd-fmm-simd.workspace = true
-nd-fmm-validate.workspace = true
+# T7: the production kernel, and the inputs and measures of tetraleaf-validate's
+# `p2p_kernels` example (tetraleaf-validate links MPI; `compare` never initialises it).
+tetraleaf-simd.workspace = true
+tetraleaf-validate.workspace = true
 
 # `cargo test` runs the smoke test of `compare`'s core.
 [[example]]

@@ -3,21 +3,21 @@
 //! explicit fma, potential only and with gradients.
 //!
 //! - **Pair terms** ([`pair_errors`]): one term per pair, over pairs spanning the §3.13
-//!   kernel domain, against the term of `nd_fmm_ref::p2p` in u_T (potential relative;
+//!   kernel domain, against the term of `tetraleaf_ref::p2p` in u_T (potential relative;
 //!   each gradient component relative to |q| / r²).
 //! - **Sums** ([`leaf_check`]): a GPU-shaped kernel (one unit per target) over FMM-shaped
 //!   leaf sets, a target leaf and its 26 neighbours mapped as `LaplaceOperator` maps them,
 //!   ŷ = ĉ + r̂ u_s (u_s itself for the leaf itself), against `direct_sum`, relative to the
-//!   term magnitudes ([`nd_fmm_validate::p2p_kernels::accuracy`]).
+//!   term magnitudes ([`tetraleaf_validate::p2p_kernels::accuracy`]).
 //! - **Throughput** ([`leaf_rate`]): the same kernel timed quickly on a GPU, to rank the
 //!   candidates. T6 times the production kernel.
 
 use std::time::Instant;
 
 use cubecl::prelude::*;
-use nd_fmm_validate::SplitMix64;
-use nd_fmm_validate::bench::median_time_per_call;
-use nd_fmm_validate::p2p_kernels::{Accuracy, Form, Kernel, Set, accuracy, check, oracles, w1};
+use tetraleaf_validate::SplitMix64;
+use tetraleaf_validate::bench::median_time_per_call;
+use tetraleaf_validate::p2p_kernels::{Accuracy, Form, Kernel, Set, accuracy, check, oracles, w1};
 
 use crate::backend::{Backend, read, sync};
 use crate::primitives::shape;
@@ -185,14 +185,14 @@ pub struct PairErrors {
     pub pairs: usize,
 }
 
-/// The terms of `nd_fmm_ref::p2p` for each pair: (φ, ∇φ).
+/// The terms of `tetraleaf_ref::p2p` for each pair: (φ, ∇φ).
 pub fn reference_terms<T: Real>(pairs: &[([T; 3], [T; 3], T)]) -> Vec<(T, [T; 3])> {
     pairs
         .iter()
         .map(|(x, y, q)| {
             let mut phi = [T::narrow(0.0)];
             let mut g = [[T::narrow(0.0); 3]];
-            nd_fmm_ref::p2p::p2p(&[*y], &[*q], &[*x], &mut phi, Some(&mut g));
+            tetraleaf_ref::p2p::p2p(&[*y], &[*q], &[*x], &mut phi, Some(&mut g));
             (phi[0], g[0])
         })
         .collect()
@@ -490,7 +490,7 @@ pub fn leaf_check<T: Real>(
     candidate: Candidate,
     n_t: usize,
 ) -> (Accuracy, Accuracy) {
-    let pool = w1::<T>(n_t, nd_fmm_validate::p2p_kernels::W1_SEED);
+    let pool = w1::<T>(n_t, tetraleaf_validate::p2p_kernels::W1_SEED);
     let oracles = oracles(&pool);
     let checked = &pool[..oracles.len()];
     let device = upload_pool(client, checked);
@@ -539,7 +539,7 @@ pub fn leaf_rate<T: Real>(
     gradients: bool,
     leaves: usize,
 ) -> f64 {
-    let pool = w1::<T>(n_t, nd_fmm_validate::p2p_kernels::W1_SEED);
+    let pool = w1::<T>(n_t, tetraleaf_validate::p2p_kernels::W1_SEED);
     let device = upload_pool(client, &pool);
     let total = leaves * n_t;
     let zeros = vec![T::narrow(0.0); 3 * total];

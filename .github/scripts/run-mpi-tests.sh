@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds and runs the MPI-owning test executables and the nd-octree MPI examples at
+# Builds and runs the MPI-owning test executables and the tetraleaf-octree MPI examples at
 # several rank counts, for the run-tests-mpi job (Phase 5 T3). Correctness only: the
 # times it prints are for the job's measurement, never asserted.
 #
@@ -42,26 +42,26 @@ if [ "$(uname -s)" = Darwin ]; then
 fi
 
 # kind, package, target: the MPI-owning test executables (one MPI-initialising test
-# each; fmm-plan/CLAUDE.md, fmm-exec/CLAUDE.md) and the nd-octree MPI examples
-# (octree/CLAUDE.md, "MPI examples"). mpi_threading runs on several ranks too: its
+# each; tetraleaf-plan/CLAUDE.md, tetraleaf-exec/CLAUDE.md) and the tetraleaf-octree MPI examples
+# (tetraleaf-octree/CLAUDE.md, "MPI examples"). mpi_threading runs on several ranks too: its
 # MpiThreading error rides on the agreement all-reduce of `build`'s step 1, which the
 # several-rank run exercises. invariance is the rank-count-invariance check of Phase 5S
 # T2 (P ranks against P/k for every divisor k, bit for bit; docs/design/scale-out.md
 # §5.1, §9.2); test_mpi_locally_essential the held keys and the partition map of T3
 # against brute force (§9.1); helmholtz_fmm the Helmholtz FMM of Helmholtz CH3.1b (the
 # direct sum, threads, PerPair and the one-rank FMM, bit for bit).
-TARGETS="test nd-fmm-plan mpi_regressions
-test nd-fmm-exec mpi_exec
-test nd-fmm-exec mpi_threading
-test nd-fmm-exec invariance
-test nd-fmm-exec helmholtz_fmm
-example nd-octree test_mpi_complete_tree
-example nd-octree test_mpi_global_bounding_box
-example nd-octree test_mpi_leaf_lookup
-example nd-octree test_mpi_vtk
-example nd-octree test_mpi_construction_edge_cases
-example nd-octree test_mpi_weighted_partition
-example nd-octree test_mpi_locally_essential"
+TARGETS="test tetraleaf-plan mpi_regressions
+test tetraleaf-exec mpi_exec
+test tetraleaf-exec mpi_threading
+test tetraleaf-exec invariance
+test tetraleaf-exec helmholtz_fmm
+example tetraleaf-octree test_mpi_complete_tree
+example tetraleaf-octree test_mpi_global_bounding_box
+example tetraleaf-octree test_mpi_leaf_lookup
+example tetraleaf-octree test_mpi_vtk
+example tetraleaf-octree test_mpi_construction_edge_cases
+example tetraleaf-octree test_mpi_weighted_partition
+example tetraleaf-octree test_mpi_locally_essential"
 
 now() {
     python3 -c 'import time; print(f"{time.time():.3f}")'

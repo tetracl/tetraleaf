@@ -2,7 +2,7 @@
 //! (SPIKE_REPORT.md §5), and what the exponential factor saves for Yukawa (§6). Prints
 //! Markdown tables for SPIKE_REPORT.md.
 //!
-//! `cargo run -p nd-fmm-spike-radial --release --example ranges`
+//! `cargo run -p tetraleaf-spike-radial --release --example ranges`
 //!
 //! On a level with |k| a = ka and degree p (proposal §3.5, ε = 10⁻¹⁰), real k, the values
 //! carried are ĵₙ(k a) for n ≤ p (P2M and L2P at the box's radius; the smallest is ĵ_p,
@@ -11,9 +11,9 @@
 //! build, whose entries carry s^{n+n′} (spike S2), so they are left out. Products of a
 //! regular and a singular value do not depend on the scale; their factors do.
 
-use nd_fmm_spike_radial::complex::C64;
-use nd_fmm_spike_radial::radial::{bessel_j, hankel, modified_i, modified_k};
-use nd_fmm_spike_radial::ranges::{EPS, Radius, degree};
+use tetraleaf_spike_radial::complex::C64;
+use tetraleaf_spike_radial::radial::{bessel_j, hankel, modified_i, modified_k};
+use tetraleaf_spike_radial::ranges::{EPS, Radius, degree};
 
 /// The scale candidates: a power scale with one of three radii, or a per-degree scale.
 #[derive(Clone, Copy)]

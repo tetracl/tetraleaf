@@ -2,7 +2,7 @@
 # tools/helmholtz/ch4-0i-runs.sh: the machine runs of Helmholtz CH4.0i, the coarse RCR levels
 # (docs/helmholtz/tasks/CH4.0i.md, "Machine runs"), from the repository root after
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy \
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy \
 #         --example helmholtz_rcr_pair
 #     tools/helmholtz/ch4-0i-runs.sh <out-dir> <stage…>
 #

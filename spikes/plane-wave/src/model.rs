@@ -1,6 +1,6 @@
 //! The cost model of the stop rule (docs/design/optimisation.md §8.2): flops and memory
 //! traffic of plane-wave M2L per box, at the throughputs that T2 measured for `Batched`
-//! and `Rotation` inside the FMM (fmm-validate/results/phase6-m2l.md §5, §6), on the
+//! and `Rotation` inside the FMM (tetraleaf-validate/results/phase6-m2l.md §5, §6), on the
 //! uniform cube at N = 10⁶ (levels 2–5).
 //!
 //! # The work per box (plane-wave M2L, f64; real flops)
@@ -48,7 +48,7 @@
 //! # The GPU (one H100)
 //!
 //! [`gpu_rows`]: the plane waves' flops and traffic on the stage at the device dense
-//! M2L's measured efficiency (fmm-validate/results/phase6-device.md §4.1, the best
+//! M2L's measured efficiency (tetraleaf-validate/results/phase6-device.md §4.1, the best
 //! variant's share of the peak on the largest level) and at 70 % of the HBM bandwidth,
 //! against the dense M2L's measured stage time. A model only: no plane-wave kernel exists.
 

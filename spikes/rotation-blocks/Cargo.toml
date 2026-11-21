@@ -1,5 +1,5 @@
 [package]
-name = "nd-fmm-spike-rotation-blocks"
+name = "tetraleaf-spike-rotation-blocks"
 version = "0.0.0"
 description = "Throwaway study: orthogonal rotation blocks of large degree in the orthonormal real basis by the Gumerov-Duraiswami (2014) recursion (Helmholtz CH0.1, spike S1)."
 publish = false
@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 # The Racah-basis blocks this spike compares with, and the harmonics of the tests.
-nd-fmm-math.workspace = true
+tetraleaf-math.workspace = true
 
 [dev-dependencies]
 # The arbitrary-precision reference, fixtures/reference.json.

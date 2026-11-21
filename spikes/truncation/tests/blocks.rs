@@ -1,15 +1,15 @@
 //! Tests 1–4 and 7–8 of docs/helmholtz/tasks/CH0.7.md: the double-double arithmetic, the
 //! radial functions, the harmonics, the rotations, the geometry and the formula.
 
-use nd_fmm_spike_truncation::calibrate::{formula_p, smallest_passing};
-use nd_fmm_spike_truncation::complex::Complex;
-use nd_fmm_spike_truncation::geometry::{
+use tetraleaf_spike_truncation::calibrate::{formula_p, smallest_passing};
+use tetraleaf_spike_truncation::complex::Complex;
+use tetraleaf_spike_truncation::geometry::{
     Placement, Rng, child_index, children, distances, near_offsets, offsets, points,
 };
-use nd_fmm_spike_truncation::harmonics::{Harmonics, Polar, idx, len};
-use nd_fmm_spike_truncation::radial;
-use nd_fmm_spike_truncation::real::{Dd, Real};
-use nd_fmm_spike_truncation::rotation::{Direction, Rotation, YBlocks};
+use tetraleaf_spike_truncation::harmonics::{Harmonics, Polar, idx, len};
+use tetraleaf_spike_truncation::radial;
+use tetraleaf_spike_truncation::real::{Dd, Real};
+use tetraleaf_spike_truncation::rotation::{Direction, Rotation, YBlocks};
 
 type C = Complex<Dd>;
 
@@ -187,7 +187,7 @@ fn radial_against_s3() {
 fn harmonics_identities() {
     let p = 24;
     let nq = 40;
-    let (xs, ws) = nd_fmm_spike_truncation::coaxial::gauss_legendre::<Dd>(nq);
+    let (xs, ws) = tetraleaf_spike_truncation::coaxial::gauss_legendre::<Dd>(nq);
     let nphi = 2 * p + 2;
     let mut gram = vec![Dd::ZERO; len(p) * len(p)];
     let mut h = Harmonics::<Dd>::new(p);

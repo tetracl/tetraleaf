@@ -19,7 +19,7 @@ of each, and the level's M2L and P2P seconds of each. `summary` prints per case 
 (each directory's launches, `reverse-` ones in the reverse order) the raised levels' M2L and P2P
 seconds summed under each run, `box` against `pair` and against the trusted measure, the
 evaluation of each, the build's plan parts and the errors. No timing is asserted; the numbers go
-into fmm-validate/results/helmholtz-ch4-3b2d.md.
+into tetraleaf-validate/results/helmholtz-ch4-3b2d.md.
 """
 
 import pathlib

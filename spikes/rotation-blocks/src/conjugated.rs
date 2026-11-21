@@ -1,8 +1,8 @@
-//! The Racah-basis blocks of `nd_fmm_math::rotation::blocks` conjugated into the
+//! The Racah-basis blocks of `tetraleaf_math::rotation::blocks` conjugated into the
 //! orthonormal real basis, N Dⁿ N⁻¹ (CONVENTIONS §3.8), the low-degree reference of
 //! proposal §3.2.
 
-use nd_fmm_math::rotation::{block_range, blocks, blocks_len};
+use tetraleaf_math::rotation::{block_range, blocks, blocks_len};
 
 /// The ratios N_a / N_0, a = 0 to n, of degree n: 1 at a = 0, else
 /// √(2 Πₜ₌₁..ₐ (n + t)/(n − t + 1)).
@@ -19,7 +19,7 @@ pub fn n_ratios(n: usize) -> Vec<f64> {
         .collect()
 }
 
-/// N Dⁿ(Q) N⁻¹, n ≤ p, in the layout of `nd_fmm_math::rotation::blocks`.
+/// N Dⁿ(Q) N⁻¹, n ≤ p, in the layout of `tetraleaf_math::rotation::blocks`.
 ///
 /// Entry (i, j) of Dⁿ is multiplied by N_|i| / N_|j|, from [`n_ratios`], so no factorial
 /// is formed. In f64 the

@@ -1,13 +1,13 @@
 //! The acceptance tests of CH0.3 (docs/helmholtz/tasks/CH0.3.md, "Tests that prove it").
 //! The sweeps to order 1460 are `#[ignore]`d, for debug builds; run them all with
-//! `cargo test -p nd-fmm-spike-radial --release -- --include-ignored`.
+//! `cargo test -p tetraleaf-spike-radial --release -- --include-ignored`.
 
 use std::collections::BTreeMap;
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_8};
 
-use nd_fmm_spike_radial::complex::C64;
-use nd_fmm_spike_radial::radial::{bessel_j, hankel, modified_i, modified_k};
-use nd_fmm_spike_radial::ranges::{regular_top, singular_top};
+use tetraleaf_spike_radial::complex::C64;
+use tetraleaf_spike_radial::radial::{bessel_j, hankel, modified_i, modified_k};
+use tetraleaf_spike_radial::ranges::{regular_top, singular_top};
 
 /// Bound on the error against the reference (relative, or relative to the oscillation
 /// envelope for j and j′).

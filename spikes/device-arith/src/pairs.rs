@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use nd_fmm_validate::SplitMix64;
+use tetraleaf_validate::SplitMix64;
 
 use crate::geometry::{
     DEEPEST_LEVEL, Domain, Key, SELF_POSITIONS, domains, locus, relative_frame, targets, u_list,

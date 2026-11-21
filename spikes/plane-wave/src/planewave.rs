@@ -41,7 +41,7 @@
 //! rotated frame: the multipole rotates by K Dⁿ(Q) K and the local back by
 //! K S Dⁿ(Qᵀ) S⁻¹ K (§3.11, "Rotation of coefficients"), Q in [`FRAMES`].
 
-use nd_fmm_math::rotation::{block_range, blocks, blocks_len, to_irregular};
+use tetraleaf_math::rotation::{block_range, blocks, blocks_len, to_irregular};
 
 use crate::geometry::{Direction, Level, Pair, ParentGroups, children};
 use crate::quadrature::Quadrature;

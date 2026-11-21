@@ -4,7 +4,7 @@ The brief of the first review pass of `/milestone-gate` (its step 3), given to o
 as written, after the header the gate fills in (the milestone, `main`'s commit, the earlier
 review files).
 
-You review the repository in the working directory (nd-project/fmm: fast multipole methods
+You review the repository in the working directory (tetracl/tetraleaf: fast multipole methods
 in Rust; the root CLAUDE.md is the map). Do the work yourself; start no subagents.
 
 ## Limits
@@ -24,12 +24,12 @@ normalisation, and rarely. A second reviewer covers the architecture.
 ## Read
 
 Start with what the earlier reviews list as not read (their "Coverage"), then what changed
-since the last one (`git log <its commit>..HEAD -- docs fmm-validate/results spikes`).
+since the last one (`git log <its commit>..HEAD -- docs tetraleaf-validate/results spikes`).
 
 - `docs/CONVENTIONS.md`: every basis function, phase, layout and scaling.
 - `docs/design/*.md`, the proposal `helmholtz-fmm-proposal.md` first.
 - `docs/helmholtz/roadmap.md`, `progress.md`, `tasks/*.md`, `gates/*.md`.
-- The reports: `fmm-validate/results/*.md`, `spikes/*/SPIKE_REPORT.md`, the phase briefs
+- The reports: `tetraleaf-validate/results/*.md`, `spikes/*/SPIKE_REPORT.md`, the phase briefs
   under `docs/phase*/`.
 
 ## Check

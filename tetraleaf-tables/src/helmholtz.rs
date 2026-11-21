@@ -1,0 +1,1306 @@
+//! The RCR tables of the Helmholtz family on the levels of an octree, and the table-driven
+//! M2M, L2L and M2L (CONVENTIONS §3.15, "Rotations" and "Coaxial translations";
+//! docs/design/helmholtz-fmm-proposal.md §5.2, §5.3 Rotation; Helmholtz CH3.1a).
+//!
+//! [`tetraleaf_ref::helmholtz::rcr`] translates an expansion in three steps: it rotates the
+//! input so that the shift t = c′ − c lies on +z (a 2 × 2 rotation per order by −φ, then
+//! the transposed y-block of the polar angle θ), applies the coaxial table per order from
+//! the input's degrees to the output's, and rotates back. It builds the y-blocks and takes
+//! the coaxial table on every call. On an octree level the shifts are fixed, so
+//! [`HelmholtzTables`] precomputes per level what the three steps need: the coaxial
+//! tables with the stored form's factors folded in, and the y-blocks.
+//!
+//! # Levels and units
+//!
+//! Level l works in the units of its own boxes (half-width 1, centres two apart), where
+//! the wavenumber is k̂_l = k r_l, r_l the level's half-width. The tables are built from
+//! k̂₀ = k r₀ of the root and k̂_l = k̂₀ / 2^l, exact in floating point, and level l's
+//! constants are those of `tetraleaf_ref::helmholtz::Level::new(k̂_l, 1)`. In these units:
+//!
+//! | Operator | Level | From | To | Shift t | Degrees |
+//! | --- | --- | --- | --- | --- | --- |
+//! | M2M | the parent's, l | child o of l + 1 | its parent | −s_o (child units) | p_{l+1} → q_l |
+//! | L2L | the child's, l + 1 | the parent on l | child o | s_o (child units) | q_l → p_{l+1} |
+//! | M2L | l ≥ 2 | source | target, offset d | 2d | q_l → q_l |
+//!
+//! with s_o the octant direction ([`octant_direction`]) and d the V-list offset
+//! index(target) − index(source) ([`m2l_offsets`]). The M2M and L2L tables of a level pair
+//! are built in the child's units, as `rcr` builds them from the child's level:
+//! `rcr::m2m_table(p_{l+1}, q_l, child)` and `rcr::l2l_table(q_l, p_{l+1}, child)` with
+//! child = `Level::new(k̂_{l+1}, 1)` and parent = `Level::new(k̂_{l+1}, 2)`.
+//!
+//! Each level has two degrees ([`HelmholtzTables::build_with_m2l_degrees`]; Helmholtz
+//! CH6.1h): its expansions, and its M2L, have degree q_l (the
+//! [`m2l_degree`](HelmholtzTables::m2l_degree)), and the translations between it and its
+//! parent read or fill their first p_l ≤ q_l degrees (the [`degree`](HelmholtzTables::degree)):
+//! the M2M from level l to its parent reads degrees ≤ p_l of the child's expansion and the L2L
+//! into level l fills degrees ≤ p_l of it, the rest of the expansion untouched. So the M2L of
+//! a level can run at a degree above its translations'. [`HelmholtzTables::build`] takes
+//! q_l = p_l, where every expansion is read and filled whole.
+//!
+//! In its own units a box of level l represents r_l φ̃, φ̃ the potential with the factor 4π
+//! of CONVENTIONS §3.15 ("Where the factors go"), as a leaf's chunk does (CONVENTIONS
+//! §3.13; §3.15 "Level units" since Helmholtz CH1.3d2): a multipole by 4π ik̂_l Σ M̂ … hₙ,
+//! whose factor k̂_l = k r_l carries the change of units, and a local by Σ L̂ … jₙ, which
+//! has no such factor. `rcr` translates in one
+//! system of units, so M2M and M2L carry over unchanged, and L2L takes the factor
+//! r_{l+1} / r_l = ½ of the change from the parent's units to the child's: the L2L tables
+//! are ½ times `rcr`'s, exactly (a power of two).
+//!
+//! # The stored form, folded in
+//!
+//! Each table holds per order m the full coefficient of the coaxial step from degree n to
+//! n′, as `rcr`'s module documentation ("Stored form") writes it, formed in f64 as `rcr`
+//! forms it and rounded to T:
+//!
+//! ```text
+//! M2M  Ê_{n′n} · (s_c/s_P)ⁿ s_P^{n−n′}       (Ê of rcr::m2m_table)
+//! L2L  Ê_{n′n} · (s_c/s_P)^{n′} s_P^{n′−n} · ½   (Ê of rcr::l2l_table; ½ above)
+//! M2L  Ê_{n′n} · 4π ik e^{2β − Im(k)|t|}     (Ê of CoaxialTable::m2l at |t| = 2√|d|²)
+//! ```
+//!
+//! For real k (Im k = 0) the M2M and L2L coefficients are real (§3.1): the tables keep
+//! their real parts ([`HelmholtzTables::real_shifts`]) and apply them to each plane of an
+//! expansion, the real shifts of proposal §5.2. Everything else is complex.
+//!
+//! # Shifts and their classes
+//!
+//! The tables are keyed by exact integer classes of the shifts, never by floating-point
+//! values, as [`rotation`]'s are: the 316 V-list offsets d have 15 distinct |d|² (one M2L
+//! coaxial table each), 49 distinct polar angles, keyed by (sgn d_z, d_z²/|d|² as a reduced
+//! fraction), with θ = 0 and π on the axis (one y-block set each), and per offset an
+//! azimuth from (d_x, d_y) divided by their gcd. Each class's values come from its integer
+//! key alone, by correctly rounded square roots and quotients in f64 (IEEE 754), so the
+//! classes and their angles and distances are the same on every machine: |t| = 2√|d|²,
+//! cos θ = sgn(d_z) √(d_z²)/√|d|² and sin θ = √(|d|² − d_z²)/√|d|² of the reduced fraction,
+//! cos φ = a/√(a² + b²) and sin φ = b/√(a² + b²). The octant shifts ±s_o form two polar
+//! classes (cos θ = ±1/√3) and four azimuths.
+//!
+//! `rcr` forms the same angles and distances from the floating-point shift with `hypot`, so
+//! the two can differ in the last bit; shifts of one class can too (θ of (2, 2, 2) and of
+//! (3, 3, 3)). The tables therefore agree with `rcr` to rounding, not bit for bit, and the
+//! tests compare them in the FMM-weighted measure of `tetraleaf-ref`'s translation tests.
+//!
+//! # Blocks and the budget
+//!
+//! The y-blocks of degree p take [`compact_blocks_len`]`(p)` values, about (2/3) p³. The two
+//! polar angles of the octants (cos θ = ±1/√3) serve M2M and L2L of a level pair at degree
+//! max(q_l, p_{l+1}) and are always stored. M2L's blocks, one set per distinct polar angle
+//! at degree q_l, are stored level by level from the finest wherever they fit in what is
+//! left of the byte budget ([`HelmholtzTables::build`]; a level that does not fit is
+//! skipped, and a coarser one may still fit); on the other levels they are formed per call
+//! into the scratch, by the same function from the same angles, so the bits do not
+//! depend on the budget. Both are built in T by
+//! [`y_blocks`] as `rcr` builds them, not in f64: the
+//! blocks formed per call cannot be built in f64 without a second scratch, and the stored
+//! ones must match them.
+//!
+//! Since Helmholtz CH4.0h a build may name the levels whose M2L blocks it stores
+//! ([`TableChoice::block_levels`]: `tetraleaf-exec` names the levels whose M2L is RCR's), and
+//! [`HelmholtzTables::set_m2l_blocks`] stores another levels' set on built tables; the
+//! others neither store blocks nor spend the budget.
+//!
+//! # Parts
+//!
+//! [`HelmholtzTables::build_by`] (Helmholtz CH4.0h) cuts a build into independent parts and
+//! hands them to a caller's [`Parts`]: per level pair the M2M table, the L2L table and the two
+//! octant block sets; per level its 15 M2L tables, one per distance key; per level whose
+//! blocks it stores, one set per polar-angle key. Each part is computed from the build's
+//! inputs alone by the functions of the serial build, so the tables are the same bits on
+//! any map. A build may also leave out the translations and the M2L tables of some levels
+//! ([`TableChoice`]): `dense`, `classes` and `batched` build f64 tables with the M2L of their
+//! own levels alone. [`Serial`] is `build`'s map.
+//!
+//! # Application
+//!
+//! [`HelmholtzTables::m2m`], [`l2l`](HelmholtzTables::l2l) and
+//! [`m2l`](HelmholtzTables::m2l) translate m expansions per box, one after the other, each
+//! of one or two planes of (q_l + 1)² values (real part, then imaginary part) in the layout
+//! of CONVENTIONS §3.6, and add (+=) into the output. The steps restate `rcr`'s private
+//! `translate`, in its order of operations: per plane the 2 × 2 rotations by −φ and the
+//! transposed y-block; per output slot the coaxial sum over the input degrees, a complex
+//! product per term (an input of one plane as Im = 0) or, for the real shifts, a real
+//! product per plane; per plane the y-block and the rotations by φ, then the addition.
+//! This crate otherwise never restates an operator formula; like [`rotation`] and
+//! [`plane_wave`], this module does, and its tests pin it to `rcr` to rounding.
+//!
+//! # Dense
+//!
+//! [`dense`] holds the same M2L as one complex matrix per level and offset, built from these
+//! tables in f64 (Helmholtz CH3.2a); [`batched`] the same matrices in split planes, for the
+//! batched M2L (Helmholtz CH3.2c).
+//!
+//! # The exponential M2L
+//!
+//! [`helmholtz::plane_wave`](self::plane_wave) holds the exponential (plane-wave) M2L of the
+//! low-frequency levels (proposal §5.3; Helmholtz H6): so far its quadratures per level,
+//! FMM3D's tables with counts of their own (Helmholtz CH6.1a).
+//!
+//! [`rotation`]: crate::rotation
+//! [`plane_wave`]: crate::plane_wave
+//!
+//! # Example
+//!
+//! ```
+//! use tetraleaf_math::Complex;
+//! use tetraleaf_ref::Frame;
+//! use tetraleaf_ref::helmholtz::{Level, Workspace, rcr};
+//! use tetraleaf_tables::helmholtz::{DEFAULT_BLOCK_BUDGET, HelmholtzTables};
+//!
+//! // Three levels for k̂₀ = k r₀ = 4 + 0.5i, degrees 0, 0 and 8.
+//! let k0 = Complex::new(4.0, 0.5);
+//! let tables = HelmholtzTables::<f64>::build(k0, &[0, 0, 8], DEFAULT_BLOCK_BUDGET);
+//! let mut scratch = tables.scratch();
+//!
+//! // M2L on level 2 at the offset index 0, d = (−3, −3, −3), against rcr.
+//! let p = 8;
+//! let len = 2 * (p + 1) * (p + 1);
+//! let multipole: Vec<f64> = (0..len).map(|i| 1.0 / (1.0 + i as f64)).collect();
+//! let mut local = vec![0.0; len];
+//! tables.m2l(2, 0, &multipole, 2, &mut local, 1, &mut scratch);
+//!
+//! let level = Level::new(tables.k_hat(2), 1.0);
+//! let (from, to) = (Frame::new([0.0; 3], 1.0), Frame::new([-6.0, -6.0, -6.0], 1.0));
+//! let table = rcr::m2l_table(p, p, &level, &from, &to);
+//! let mut expected = vec![0.0; len];
+//! rcr::m2l(p, p, &level, &from, &to, &table, &mut Workspace::new(p), &multipole, &mut expected);
+//! let largest = expected.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
+//! for (a, b) in local.iter().zip(&expected) {
+//!     assert!((a - b).abs() <= 1e-14 * largest);
+//! }
+//! ```
+
+pub mod batched;
+pub mod classes;
+pub mod dense;
+pub mod diagonal;
+pub mod plane_wave;
+
+use tetraleaf_math::coaxial::CoaxialTable;
+use tetraleaf_math::orthonormal::rotation::{
+    Scratch as BlockScratch, compact_blocks_len, compact_offset, y_blocks,
+};
+use tetraleaf_math::{Complex, Layout, RealScalar};
+use tetraleaf_ref::helmholtz::{Level, rcr};
+
+use crate::geometry::{M2L_OFFSET_COUNT, OCTANT_COUNT, m2l_offsets, octant_direction};
+use crate::parts::{Parts, Serial};
+
+/// The default byte budget of the stored M2L y-blocks, 512 MiB.
+pub const DEFAULT_BLOCK_BUDGET: usize = 512 << 20;
+
+/// The RCR tables of an octree's levels for one wavenumber and the degrees p_l (the
+/// [module documentation](self)).
+#[derive(Clone, Debug)]
+pub struct HelmholtzTables<T: RealScalar> {
+    real_shifts: bool,
+    /// Whether the M2M and L2L tables were built ([`TableChoice::translations`]).
+    translations: bool,
+    levels: Vec<LevelTables<T>>,
+    /// The azimuth and the key of the polar angle of each M2M shift −s_o; L2L's shift s_o
+    /// has the opposite polar angle and azimuth.
+    octants: [(Azimuth<T>, usize); OCTANT_COUNT],
+    /// Per V-list offset: its azimuth, polar-angle key and distance key.
+    offsets: Vec<OffsetKeys<T>>,
+    /// The distinct (cos θ, sin θ) of the 316 shifts, by key.
+    m2l_angles: Vec<(T, T)>,
+    /// The largest degree q_l of any level.
+    p_max: usize,
+}
+
+/// Which tables a build of [`HelmholtzTables`] makes ([`HelmholtzTables::build_by`];
+/// Helmholtz CH4.0h). [`TableChoice::new`] names those of
+/// [`HelmholtzTables::build`]: every table, the M2L blocks within the budget.
+#[derive(Clone, Copy, Debug)]
+pub struct TableChoice<'a> {
+    /// The degree q_l ≥ p_l of each level's expansions and M2L (`None`: the degrees p_l;
+    /// [`HelmholtzTables::build_with_m2l_degrees`]).
+    pub m2l_degrees: Option<&'a [usize]>,
+    /// The byte budget of the stored M2L y-blocks, spent from the finest level up.
+    pub block_budget: usize,
+    /// Whether to build the translations between levels: M2M, L2L and the octant
+    /// blocks. Without them [`m2m`](HelmholtzTables::m2m) and [`l2l`](HelmholtzTables::l2l)
+    /// panic (the M2L tables of Dense, Classes and Batched need none).
+    pub translations: bool,
+    /// The levels with M2L tables, one entry per level (`None`: every level from 2). On
+    /// another level [`m2l`](HelmholtzTables::m2l) panics.
+    pub m2l_levels: Option<&'a [bool]>,
+    /// The levels whose M2L y-blocks may be stored, one entry per level (`None`: every
+    /// level with M2L tables); the others form them per call and spend none of the budget.
+    pub block_levels: Option<&'a [bool]>,
+}
+
+impl TableChoice<'_> {
+    /// Every table, the M2L blocks stored within `block_budget` bytes from the finest level
+    /// up: [`HelmholtzTables::build`]'s choice.
+    pub fn new(block_budget: usize) -> Self {
+        Self {
+            m2l_degrees: None,
+            block_budget,
+            translations: true,
+            m2l_levels: None,
+            block_levels: None,
+        }
+    }
+}
+
+/// A part of a build ([`HelmholtzTables::build_by`]).
+#[derive(Clone, Copy, Debug)]
+enum Task {
+    /// The M2M table from level l + 1 into level l.
+    Up(usize),
+    /// The L2L table from level l into level l + 1.
+    Down(usize),
+    /// The octant blocks of level l's pair of levels, by key.
+    Pair(usize, usize),
+    /// The M2L table of level l for a distance key.
+    M2l(usize, usize),
+    /// The M2L blocks of level l for a polar-angle key.
+    Blocks(usize, usize),
+}
+
+/// A part's result.
+enum Part<T> {
+    Shift(Shift<T>),
+    Blocks(Vec<T>),
+}
+
+impl<T> Part<T> {
+    fn shift(self) -> Shift<T> {
+        match self {
+            Part::Shift(shift) => shift,
+            Part::Blocks(_) => unreachable!("a shift's part"),
+        }
+    }
+
+    fn blocks(self) -> Vec<T> {
+        match self {
+            Part::Blocks(blocks) => blocks,
+            Part::Shift(_) => unreachable!("a blocks' part"),
+        }
+    }
+}
+
+/// The y-blocks of degree p at (cos θ, sin θ) = (c, s), as [`y_blocks`] forms them in T.
+fn blocks<T: RealScalar>(p: usize, c: T, s: T) -> Vec<T> {
+    let mut scratch = BlockScratch::new(p);
+    let mut out = vec![T::zero(); compact_blocks_len(p)];
+    y_blocks(p, c, s, &mut out, &mut scratch);
+    out
+}
+
+/// The levels whose M2L blocks are stored: from the finest level up, each level with M2L
+/// tables that `levels` names (all if `None`) wherever its `angles` sets at its degree fit
+/// in what is left of `budget` bytes; a level that does not fit is skipped, and a coarser
+/// one may still fit.
+fn block_selection(
+    degrees: &[usize],
+    has_m2l: &[bool],
+    levels: Option<&[bool]>,
+    angles: usize,
+    value_bytes: usize,
+    budget: usize,
+) -> Vec<bool> {
+    let mut stored = vec![false; degrees.len()];
+    let mut left = budget;
+    for l in (0..degrees.len()).rev() {
+        if !has_m2l[l] || levels.is_some_and(|m| !m[l]) {
+            continue;
+        }
+        let bytes = angles * compact_blocks_len(degrees[l]) * value_bytes;
+        if bytes > left {
+            continue;
+        }
+        left -= bytes;
+        stored[l] = true;
+    }
+    stored
+}
+
+/// The tables of one level.
+#[derive(Clone, Debug)]
+struct LevelTables<T: RealScalar> {
+    /// k̂_l = k r_l in f64.
+    k_hat: Complex<f64>,
+    /// The degree p_l of the translations to and from the parent level.
+    p: usize,
+    /// The degree q_l ≥ p_l of the expansions and the M2L.
+    q: usize,
+    /// M2M from level l + 1 into this level, and L2L from this level into level l + 1;
+    /// `None` on the finest level.
+    up: Option<Shift<T>>,
+    down: Option<Shift<T>>,
+    /// The y-blocks of the octant angles at max(q_l, p_{l+1}), by key; empty on the finest
+    /// level.
+    pair_blocks: [Vec<T>; 2],
+    /// M2L per distance key; empty on levels 0 and 1.
+    m2l: Vec<Shift<T>>,
+    /// The M2L y-blocks per polar-angle key at q_l, if stored.
+    m2l_blocks: Option<Vec<Vec<T>>>,
+}
+
+/// A coaxial step's coefficients from degrees ≤ p_in to ≤ p_out: per order m the block of
+/// rows n′ = m..=p_out by columns n = m..=p_in, row-major; complex unless real.
+#[derive(Clone, Debug)]
+struct Shift<T> {
+    p_in: usize,
+    p_out: usize,
+    /// The start of each order's block.
+    starts: Vec<usize>,
+    re: Vec<T>,
+    /// Empty for a real step.
+    im: Vec<T>,
+}
+
+/// cos φ and sin φ of a shift (φ = 0 on the axis), as `rcr` forms them.
+#[derive(Clone, Copy, Debug)]
+struct Azimuth<T> {
+    cos: T,
+    sin: T,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct OffsetKeys<T> {
+    azimuth: Azimuth<T>,
+    angle: usize,
+    distance: usize,
+}
+
+/// The caller-owned scratch of the applications: one expansion of two planes at the
+/// largest degree twice, and the y-blocks of one polar angle with their work space.
+///
+/// The y-blocks formed per call are kept with their degree and angle (Helmholtz CH4.0i), so
+/// that the next M2L of the same degree and angle reads them instead of forming them
+/// again: the same function of the same inputs, so the same bits.
+pub struct HelmholtzScratch<T: RealScalar> {
+    rotated: Vec<T>,
+    work: Vec<T>,
+    blocks: Vec<T>,
+    block_scratch: BlockScratch<T>,
+    /// The degree and (cos θ, sin θ) of the blocks in `blocks`, if any.
+    held: Option<(usize, T, T)>,
+}
+
+impl<T: RealScalar> HelmholtzTables<T> {
+    /// Builds the tables of the levels 0..`degrees.len()` for the root's k̂₀ = k r₀ (r₀ the
+    /// root's half-width, in f64) and the degrees p_l, storing M2L's y-blocks level by
+    /// level from the finest wherever they fit in what is left of `block_budget` bytes. M2L tables are
+    /// built on levels ≥ 2 only: no V list lies above level 2.
+    ///
+    /// Building is serial and deterministic ([`build_by`](Self::build_by) runs its parts on a
+    /// caller's threads, the same bits). Its cost is that of the coaxial tables, O(p³) per
+    /// table (a projection where Re(k̂) a > 40, CONVENTIONS §3.15), and of the blocks.
+    ///
+    /// # Panics
+    ///
+    /// Unless k̂₀ is finite and nonzero with Re ≥ 0, Im ≥ 0 and Re > 0 (Yukawa's real path,
+    /// Re k = 0, is not served here), and `degrees` is not empty; and as the coaxial
+    /// builders of `tetraleaf_math::coaxial` (for instance where the (S|R) start column leaves
+    /// the f64 range); and if a coefficient is not finite, as the M2M and L2L power factors
+    /// (s_c/s_P)ⁿ s_P^{n−n′} are where p log₁₀(1/s_P) exceeds about 300 (`rcr`'s limit, its
+    /// module documentation, "Tested range": at ε = 10⁻¹⁰ and S7's degrees from about level
+    /// 14 at kD = 0.1).
+    pub fn build(k_root: Complex<f64>, degrees: &[usize], block_budget: usize) -> Self {
+        Self::build_with_m2l_degrees(k_root, degrees, degrees, block_budget)
+    }
+
+    /// As [`build`](Self::build), with the expansions and the M2L of level l at degree
+    /// q_l = `m2l_degrees[l]` ≥ p_l = `degrees[l]` (module documentation, "Levels and units";
+    /// Helmholtz CH6.1h): the M2M into level l fills degrees ≤ q_l from degrees ≤ p_{l+1} of
+    /// the child's, and the L2L from level l reads degrees ≤ q_l into degrees ≤ p_{l+1} of the
+    /// child's; the M2M out of level l reads, and the L2L into it fills, degrees ≤ p_l. With
+    /// q = p it is `build`, bit for bit.
+    ///
+    /// # Panics
+    ///
+    /// As [`build`](Self::build), and unless `m2l_degrees` has one degree per level, each at
+    /// least the level's degree.
+    pub fn build_with_m2l_degrees(
+        k_root: Complex<f64>,
+        degrees: &[usize],
+        m2l_degrees: &[usize],
+        block_budget: usize,
+    ) -> Self {
+        let choice = TableChoice {
+            m2l_degrees: Some(m2l_degrees),
+            ..TableChoice::new(block_budget)
+        };
+        Self::build_by(k_root, degrees, &choice, &Serial)
+    }
+
+    /// As [`build_with_m2l_degrees`](Self::build_with_m2l_degrees), with the tables that
+    /// `choice` names (Helmholtz CH4.0h): the translations or none, the M2L tables of some
+    /// levels only, the M2L y-blocks of some levels only (the others neither store any nor
+    /// spend the budget), and its parts computed by `parts` ([`Parts`]; module
+    /// documentation, "Parts"). A table it builds is the one `build_with_m2l_degrees` builds,
+    /// bit for bit, whatever the map; with [`TableChoice::new`] and [`Serial`] it is
+    /// `build_with_m2l_degrees` itself.
+    ///
+    /// # Panics
+    ///
+    /// As [`build_with_m2l_degrees`](Self::build_with_m2l_degrees), and unless the level
+    /// masks have one entry per level.
+    pub fn build_by(
+        k_root: Complex<f64>,
+        degrees: &[usize],
+        choice: &TableChoice<'_>,
+        parts: &impl Parts,
+    ) -> Self {
+        let m2l_degrees = choice.m2l_degrees.unwrap_or(degrees);
+        assert!(
+            k_root.re.is_finite() && k_root.im.is_finite(),
+            "k̂₀ must be finite"
+        );
+        assert!(
+            k_root.re > 0.0 && k_root.im >= 0.0,
+            "k̂₀ must have Re > 0 and Im ≥ 0 (Yukawa's real path is not served)"
+        );
+        assert!(!degrees.is_empty(), "no levels");
+        assert!(
+            m2l_degrees.len() == degrees.len()
+                && degrees.iter().zip(m2l_degrees).all(|(p, q)| q >= p),
+            "the M2L degrees {m2l_degrees:?} must be at least the degrees {degrees:?}, one per level"
+        );
+        let nlevels = degrees.len();
+        for mask in [choice.m2l_levels, choice.block_levels]
+            .into_iter()
+            .flatten()
+        {
+            assert_eq!(mask.len(), nlevels, "one entry per level in a level mask");
+        }
+        let real_shifts = k_root.im == 0.0;
+        let k_hat = |l: usize| k_root * (0.5f64).powi(l as i32);
+
+        // The shifts' classes, from their integer directions (module documentation,
+        // "Shifts and their classes"). M2M's shift of octant o is −s_o; key 0 for z > 0.
+        let octants = core::array::from_fn(|o| {
+            let d = octant_direction(o).map(|s| -s);
+            (azimuth(d), usize::from(d[2] < 0))
+        });
+        let octant_angles: [(T, T); 2] = [[1, 1, 1], [1, 1, -1]].map(|d| polar(d).1);
+        let mut m2l_angles: Vec<(PolarKey, (T, T))> = Vec::new();
+        let mut distances: Vec<i64> = Vec::new();
+        let offsets: Vec<OffsetKeys<T>> = m2l_offsets()
+            .iter()
+            .map(|&d| {
+                let (key, value) = polar(d);
+                let angle = find_or_push(&mut m2l_angles, (key, value), |a, b| a.0 == b.0);
+                let squared = d.iter().map(|x| x * x).sum();
+                let distance = find_or_push(&mut distances, squared, |a, b| a == b);
+                OffsetKeys {
+                    azimuth: azimuth(d),
+                    angle,
+                    distance,
+                }
+            })
+            .collect();
+        let m2l_angles: Vec<(T, T)> = m2l_angles.into_iter().map(|(_, v)| v).collect();
+
+        // Which levels have what: M2L tables on levels ≥ 2 (all, or those named), M2L
+        // blocks from the finest level up wherever they fit in what is left of the budget
+        // (a level that does not fit is skipped, and a coarser one may still fit).
+        let has_m2l: Vec<bool> = (0..nlevels)
+            .map(|l| l >= 2 && choice.m2l_levels.is_none_or(|m| m[l]))
+            .collect();
+        let stored = block_selection(
+            m2l_degrees,
+            &has_m2l,
+            choice.block_levels,
+            m2l_angles.len(),
+            size_of::<T>(),
+            choice.block_budget,
+        );
+
+        // The parts, each a function of its own inputs (module documentation, "Parts").
+        let mut tasks: Vec<Task> = Vec::new();
+        for l in 0..nlevels {
+            if choice.translations && l + 1 < nlevels {
+                tasks.extend([
+                    Task::Up(l),
+                    Task::Down(l),
+                    Task::Pair(l, 0),
+                    Task::Pair(l, 1),
+                ]);
+            }
+            if has_m2l[l] {
+                tasks.extend((0..distances.len()).map(|d| Task::M2l(l, d)));
+            }
+            if stored[l] {
+                tasks.extend((0..m2l_angles.len()).map(|a| Task::Blocks(l, a)));
+            }
+        }
+        let part = |i: usize| -> Part<T> {
+            match tasks[i] {
+                Task::Up(l) => {
+                    let (p_parent, p_child) = (m2l_degrees[l], degrees[l + 1]);
+                    let child = Level::new(k_hat(l + 1), 1.0);
+                    let parent = Level::new(k_hat(l + 1), 2.0);
+                    let (sc, sp) = (child.scale(), parent.scale());
+                    let m2m = rcr::m2m_table(p_child, p_parent, &child);
+                    Part::Shift(Shift::new(
+                        p_child,
+                        p_parent,
+                        real_shifts,
+                        |m, n_out, n_in| m2m.get(m, n_out, n_in) * power_ratio(sc, n_in, sp, n_out),
+                    ))
+                }
+                Task::Down(l) => {
+                    let (p_parent, p_child) = (m2l_degrees[l], degrees[l + 1]);
+                    let child = Level::new(k_hat(l + 1), 1.0);
+                    let parent = Level::new(k_hat(l + 1), 2.0);
+                    let (sc, sp) = (child.scale(), parent.scale());
+                    let l2l = rcr::l2l_table(p_parent, p_child, &child);
+                    Part::Shift(Shift::new(
+                        p_parent,
+                        p_child,
+                        real_shifts,
+                        |m, n_out, n_in| {
+                            // ½: the change of units from the parent's to the child's.
+                            l2l.get(m, n_out, n_in) * power_ratio(sc, n_out, sp, n_in) * 0.5
+                        },
+                    ))
+                }
+                Task::Pair(l, key) => {
+                    let degree = m2l_degrees[l].max(degrees[l + 1]);
+                    let (c, s) = octant_angles[key];
+                    Part::Blocks(blocks(degree, c, s))
+                }
+                Task::M2l(l, d) => {
+                    let q = m2l_degrees[l];
+                    let level = Level::new(k_hat(l), 1.0);
+                    let (k, a, s) = (level.k(), level.circumradius(), level.scale());
+                    let beta = level.damping();
+                    // |t| = 2 |d| in the level's units.
+                    let t = 2.0 * (distances[d] as f64).sqrt();
+                    let table = CoaxialTable::m2l(k, t, a, s, q, q);
+                    let factor = four_pi_ik(k) * (beta + beta - k.im * t).exp();
+                    Part::Shift(Shift::new(q, q, false, |m, n_out, n_in| {
+                        table.get(m, n_out, n_in) * factor
+                    }))
+                }
+                Task::Blocks(l, a) => {
+                    let (c, s) = m2l_angles[a];
+                    Part::Blocks(blocks(m2l_degrees[l], c, s))
+                }
+            }
+        };
+        let results = parts.map(tasks.len(), &part);
+        assert_eq!(
+            results.len(),
+            tasks.len(),
+            "the map gives one result per part"
+        );
+        let mut results = results.into_iter();
+
+        // Put together in the parts' order.
+        let levels: Vec<LevelTables<T>> = (0..nlevels)
+            .map(|l| {
+                let (up, down, pair_blocks) = if choice.translations && l + 1 < nlevels {
+                    let up = results.next().map(Part::shift);
+                    let down = results.next().map(Part::shift);
+                    let pair =
+                        [(); 2].map(|()| results.next().map(Part::blocks).unwrap_or_default());
+                    (up, down, pair)
+                } else {
+                    (None, None, [Vec::new(), Vec::new()])
+                };
+                let m2l = if has_m2l[l] {
+                    results
+                        .by_ref()
+                        .take(distances.len())
+                        .map(Part::shift)
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                let m2l_blocks = stored[l].then(|| {
+                    results
+                        .by_ref()
+                        .take(m2l_angles.len())
+                        .map(Part::blocks)
+                        .collect()
+                });
+                LevelTables {
+                    k_hat: k_hat(l),
+                    p: degrees[l],
+                    q: m2l_degrees[l],
+                    up,
+                    down,
+                    pair_blocks,
+                    m2l,
+                    m2l_blocks,
+                }
+            })
+            .collect();
+        assert!(results.next().is_none(), "every part is placed");
+
+        Self {
+            real_shifts,
+            translations: choice.translations,
+            p_max: m2l_degrees.iter().copied().max().unwrap_or(0),
+            levels,
+            octants,
+            offsets,
+            m2l_angles,
+        }
+    }
+
+    /// Stores the M2L y-blocks of the levels `levels` names, from the finest level up
+    /// wherever they fit in `block_budget` bytes, and drops every other level's (Helmholtz
+    /// CH4.0h): the blocks the tables would have had from [`build_by`](Self::build_by) with
+    /// these block levels and budget, a level that keeps its blocks keeping them, the new
+    /// ones computed by `parts`. The applications do not change: a level without stored
+    /// blocks forms them per call, the same bits.
+    ///
+    /// # Panics
+    ///
+    /// Unless `levels` has one entry per level.
+    pub fn set_m2l_blocks(&mut self, levels: &[bool], block_budget: usize, parts: &impl Parts) {
+        assert_eq!(
+            levels.len(),
+            self.nlevels(),
+            "one entry per level in a level mask"
+        );
+        let has_m2l: Vec<bool> = self.levels.iter().map(|l| !l.m2l.is_empty()).collect();
+        let degrees: Vec<usize> = self.levels.iter().map(|l| l.q).collect();
+        let stored = block_selection(
+            &degrees,
+            &has_m2l,
+            Some(levels),
+            self.m2l_angles.len(),
+            size_of::<T>(),
+            block_budget,
+        );
+        let missing: Vec<(usize, usize)> = (0..self.nlevels())
+            .filter(|&l| stored[l] && self.levels[l].m2l_blocks.is_none())
+            .flat_map(|l| (0..self.m2l_angles.len()).map(move |a| (l, a)))
+            .collect();
+        let angles = &self.m2l_angles;
+        let new = parts.map(missing.len(), &|i| {
+            let (l, a) = missing[i];
+            let (c, s) = angles[a];
+            blocks(degrees[l], c, s)
+        });
+        assert_eq!(
+            new.len(),
+            missing.len(),
+            "the map gives one result per part"
+        );
+        let mut new = new.into_iter();
+        for (l, level) in self.levels.iter_mut().enumerate() {
+            if !stored[l] {
+                level.m2l_blocks = None;
+            } else if level.m2l_blocks.is_none() {
+                level.m2l_blocks = Some(new.by_ref().take(angles.len()).collect());
+            }
+        }
+    }
+
+    /// Whether the tables translate between levels (M2M and L2L; not when built with
+    /// [`TableChoice::translations`] off).
+    pub fn has_translations(&self) -> bool {
+        self.translations
+    }
+
+    /// Whether `level` has M2L tables (levels from 2, all unless
+    /// [`TableChoice::m2l_levels`] named some).
+    pub fn has_m2l(&self, level: usize) -> bool {
+        !self.levels[level].m2l.is_empty()
+    }
+
+    /// The number of levels.
+    pub fn nlevels(&self) -> usize {
+        self.levels.len()
+    }
+
+    /// The degree p_l of `level`'s translations to and from its parent level (module
+    /// documentation, "Levels and units"), its expansions' unless
+    /// [`build_with_m2l_degrees`](Self::build_with_m2l_degrees) raised them.
+    pub fn degree(&self, level: usize) -> usize {
+        self.levels[level].p
+    }
+
+    /// The degree q_l ≥ p_l of `level`'s expansions and M2L (Helmholtz CH6.1h).
+    pub fn m2l_degree(&self, level: usize) -> usize {
+        self.levels[level].q
+    }
+
+    /// k̂_l = k r_l of `level`, in f64: the wavenumber in the level's units.
+    pub fn k_hat(&self, level: usize) -> Complex<f64> {
+        self.levels[level].k_hat
+    }
+
+    /// Whether the M2M and L2L coefficients are real (real k), applied to each plane.
+    pub fn real_shifts(&self) -> bool {
+        self.real_shifts
+    }
+
+    /// The number of M2L distance classes |d|² of the 316 offsets, 15, one coaxial table
+    /// each per level (module documentation, "Shifts and their classes").
+    pub fn m2l_distances(&self) -> usize {
+        self.levels.iter().map(|l| l.m2l.len()).max().unwrap_or(0)
+    }
+
+    /// The polar-angle and distance classes of the V-list offset `d` (Helmholtz CH4.0i): M2L
+    /// pairs of one angle use one y-block set and pairs of one distance one coaxial table, so
+    /// a caller may order pairs by them. Panics if d ≥ 316.
+    pub fn m2l_classes(&self, d: usize) -> (usize, usize) {
+        let keys = &self.offsets[d];
+        (keys.angle, keys.distance)
+    }
+
+    /// The number of polar-angle classes of the 316 offsets, 49, one y-block set each.
+    pub fn m2l_polar_angles(&self) -> usize {
+        self.m2l_angles.len()
+    }
+
+    /// Whether `level`'s M2L y-blocks are stored (else formed per call).
+    pub fn m2l_blocks_stored(&self, level: usize) -> bool {
+        self.levels[level].m2l_blocks.is_some()
+    }
+
+    /// The bytes of every table and stored block.
+    pub fn bytes(&self) -> usize {
+        let values: usize = self
+            .levels
+            .iter()
+            .map(|l| {
+                let shifts = l.up.iter().chain(&l.down).chain(&l.m2l);
+                shifts.map(|s| s.re.len() + s.im.len()).sum::<usize>()
+                    + l.pair_blocks.iter().map(Vec::len).sum::<usize>()
+                    + l.m2l_blocks.iter().flatten().map(Vec::len).sum::<usize>()
+            })
+            .sum();
+        values * size_of::<T>()
+    }
+
+    /// A scratch set for the applications on every level.
+    pub fn scratch(&self) -> HelmholtzScratch<T> {
+        let len = Layout::new(self.p_max).len();
+        HelmholtzScratch {
+            rotated: vec![T::zero(); 2 * len],
+            work: vec![T::zero(); 2 * len],
+            blocks: vec![T::zero(); compact_blocks_len(self.p_max)],
+            block_scratch: BlockScratch::new(self.p_max),
+            held: None,
+        }
+    }
+
+    /// M2M: adds the `vectors` multipoles of child `o` (on `level` + 1) to those of its
+    /// parent on `level`, each of `planes` planes (2, or 1 for the real multipoles of real
+    /// k and real charges): degrees ≤ p_{l+1} of the child's into the parent's, each slice's
+    /// expansions at their level's [`m2l_degree`](Self::m2l_degree).
+    ///
+    /// # Panics
+    ///
+    /// If `level` has no child level, o ≥ 8, `planes` is not 1 or 2 (1 only with real
+    /// shifts), or a slice is not `vectors` expansions of `planes` planes at its level's
+    /// [`m2l_degree`](Self::m2l_degree).
+    #[allow(clippy::too_many_arguments)]
+    pub fn m2m(
+        &self,
+        level: usize,
+        o: usize,
+        child: &[T],
+        parent: &mut [T],
+        planes: usize,
+        vectors: usize,
+        scratch: &mut HelmholtzScratch<T>,
+    ) {
+        let tables = &self.levels[level];
+        let shift = tables
+            .up
+            .as_ref()
+            .expect("M2M into the finest level, or tables built without translations");
+        let (azimuth, key) = self.octants[o];
+        self.translate(
+            shift,
+            Blocks::Stored(&tables.pair_blocks[key]),
+            azimuth,
+            (child, planes, self.levels[level + 1].q),
+            (parent, planes, tables.q),
+            vectors,
+            Step3::Add,
+            scratch,
+        );
+    }
+
+    /// L2L: adds the `vectors` locals of the parent on `level` − 1 to those of its child
+    /// `o` on `level`, each of `planes` planes (2, or 1 with real shifts only): the parent's
+    /// into degrees ≤ p_l of the child's, the rest of the child's untouched; each slice's
+    /// expansions at their level's [`m2l_degree`](Self::m2l_degree).
+    ///
+    /// # Panics
+    ///
+    /// If `level` is 0, o ≥ 8, or as [`m2m`](Self::m2m).
+    #[allow(clippy::too_many_arguments)]
+    pub fn l2l(
+        &self,
+        level: usize,
+        o: usize,
+        parent: &[T],
+        child: &mut [T],
+        planes: usize,
+        vectors: usize,
+        scratch: &mut HelmholtzScratch<T>,
+    ) {
+        assert!(level > 0, "L2L into level 0");
+        let tables = &self.levels[level - 1];
+        let shift = tables
+            .down
+            .as_ref()
+            .expect("L2L from a parent level of tables built with translations");
+        // The shift s_o is −(M2M's): the opposite polar angle and azimuth.
+        let (azimuth, key) = self.octants[o];
+        let azimuth = Azimuth {
+            cos: -azimuth.cos,
+            sin: -azimuth.sin,
+        };
+        self.translate(
+            shift,
+            Blocks::Stored(&tables.pair_blocks[1 - key]),
+            azimuth,
+            (parent, planes, tables.q),
+            (child, planes, self.levels[level].q),
+            vectors,
+            Step3::Add,
+            scratch,
+        );
+    }
+
+    /// M2L on `level` ≥ 2 at the V-list offset index `d`: adds the `vectors` multipoles of
+    /// the source, each of `multipole_planes` planes (2, or 1 for real k and real charges),
+    /// translated to the target's complex locals (two planes each).
+    ///
+    /// # Panics
+    ///
+    /// If `level` < 2, d ≥ 316, `multipole_planes` is not 1 or 2, or a slice is not
+    /// `vectors` expansions at the level's [`m2l_degree`](Self::m2l_degree).
+    #[allow(clippy::too_many_arguments)]
+    pub fn m2l(
+        &self,
+        level: usize,
+        d: usize,
+        multipole: &[T],
+        multipole_planes: usize,
+        local: &mut [T],
+        vectors: usize,
+        scratch: &mut HelmholtzScratch<T>,
+    ) {
+        assert!(level >= 2, "no M2L on level {level}");
+        assert!(d < M2L_OFFSET_COUNT, "offset index {d}");
+        let tables = &self.levels[level];
+        assert!(
+            !tables.m2l.is_empty(),
+            "no M2L tables built on level {level}"
+        );
+        let keys = self.offsets[d];
+        let blocks = match &tables.m2l_blocks {
+            Some(blocks) => Blocks::Stored(&blocks[keys.angle]),
+            None => Blocks::PerCall(self.m2l_angles[keys.angle]),
+        };
+        self.translate(
+            &tables.m2l[keys.distance],
+            blocks,
+            keys.azimuth,
+            (multipole, multipole_planes, tables.q),
+            (local, 2, tables.q),
+            vectors,
+            Step3::Add,
+            scratch,
+        );
+    }
+
+    /// The values of `vectors` locals at `level`'s [`m2l_degree`](Self::m2l_degree), two
+    /// planes each, that [`m2l_contribution`](Self::m2l_contribution) writes:
+    /// `vectors` · 2 (q_l + 1)².
+    pub fn m2l_contribution_len(&self, level: usize, vectors: usize) -> usize {
+        vectors * 2 * Layout::new(self.levels[level].q).len()
+    }
+
+    /// [`m2l`](Self::m2l) without its add (Helmholtz CH4.0i): writes the pair's contribution,
+    /// the terms that `m2l` adds to the local, into `contribution` (of
+    /// [`m2l_contribution_len`](Self::m2l_contribution_len) values, the local's layout),
+    /// overwriting what it held. [`add_m2l_contribution`] then adds it to a local:
+    /// the two in turn are `m2l` bit for bit, every value of the contribution computed by
+    /// the same operations and added by the same one rounding. So the contributions of a
+    /// level's pairs may be computed in any order, on any thread, and added to each local in
+    /// its V row's order, with the bits of `m2l` pair after pair.
+    ///
+    /// # Panics
+    ///
+    /// As [`m2l`](Self::m2l), with `contribution` in place of the local.
+    #[allow(clippy::too_many_arguments)]
+    pub fn m2l_contribution(
+        &self,
+        level: usize,
+        d: usize,
+        multipole: &[T],
+        multipole_planes: usize,
+        contribution: &mut [T],
+        vectors: usize,
+        scratch: &mut HelmholtzScratch<T>,
+    ) {
+        assert!(level >= 2, "no M2L on level {level}");
+        assert!(d < M2L_OFFSET_COUNT, "offset index {d}");
+        let tables = &self.levels[level];
+        assert!(
+            !tables.m2l.is_empty(),
+            "no M2L tables built on level {level}"
+        );
+        let keys = self.offsets[d];
+        let blocks = match &tables.m2l_blocks {
+            Some(blocks) => Blocks::Stored(&blocks[keys.angle]),
+            None => Blocks::PerCall(self.m2l_angles[keys.angle]),
+        };
+        self.translate(
+            &tables.m2l[keys.distance],
+            blocks,
+            keys.azimuth,
+            (multipole, multipole_planes, tables.q),
+            (contribution, 2, tables.q),
+            vectors,
+            Step3::Store,
+            scratch,
+        );
+    }
+
+    /// The three steps of the module documentation for `vectors` expansions, each plane of
+    /// the input and the output an expansion of the degree given (at least the shift's), of
+    /// which the shift reads or fills the first degrees: step 3 adds to the output, or with
+    /// [`Step3::Store`] writes it.
+    #[allow(clippy::too_many_arguments)]
+    fn translate(
+        &self,
+        shift: &Shift<T>,
+        blocks: Blocks<'_, T>,
+        azimuth: Azimuth<T>,
+        (input, in_planes, in_degree): (&[T], usize, usize),
+        (output, out_planes, out_degree): (&mut [T], usize, usize),
+        vectors: usize,
+        step3: Step3,
+        scratch: &mut HelmholtzScratch<T>,
+    ) {
+        let real = shift.im.is_empty();
+        assert!(
+            matches!(in_planes, 1 | 2)
+                && (if real {
+                    out_planes == in_planes
+                } else {
+                    out_planes == 2
+                }),
+            "{in_planes} input and {out_planes} output planes for a {} step",
+            if real { "real" } else { "complex" }
+        );
+        let (p_in, p_out) = (shift.p_in, shift.p_out);
+        let (len_in, len_out) = (Layout::new(p_in).len(), Layout::new(p_out).len());
+        // The planes' strides: the expansions' lengths.
+        let (stride_in, stride_out) = (Layout::new(in_degree).len(), Layout::new(out_degree).len());
+        let (size_in, size_out) = (in_planes * stride_in, out_planes * stride_out);
+        assert!(
+            in_degree >= p_in && out_degree >= p_out,
+            "expansions of degree {in_degree} and {out_degree} for a step from {p_in} to {p_out}"
+        );
+        assert_eq!(input.len(), vectors * size_in, "input length");
+        assert_eq!(output.len(), vectors * size_out, "output length");
+        let HelmholtzScratch {
+            rotated,
+            work,
+            blocks: block_buffer,
+            block_scratch,
+            held,
+        } = scratch;
+        let blocks: &[T] = match blocks {
+            Blocks::Stored(blocks) => blocks,
+            Blocks::PerCall((c, s)) => {
+                let p = p_in.max(p_out);
+                let out = &mut block_buffer[..compact_blocks_len(p)];
+                // Formed again unless the scratch holds this degree's and angle's.
+                if *held != Some((p, c, s)) {
+                    // No key while the buffer is being written (a panic leaves none).
+                    *held = None;
+                    y_blocks(p, c, s, out, block_scratch);
+                    *held = Some((p, c, s));
+                }
+                out
+            }
+        };
+        for (input, output) in input
+            .chunks_exact(size_in)
+            .zip(output.chunks_exact_mut(size_out))
+        {
+            // 1. Rotate each plane: z by −φ, then the transposed y-block.
+            for plane in 0..in_planes {
+                let x = &mut work[..len_in];
+                x.copy_from_slice(&input[plane * stride_in..plane * stride_in + len_in]);
+                rotate_z(p_in, azimuth, -T::one(), x);
+                apply_y(
+                    p_in,
+                    blocks,
+                    true,
+                    x,
+                    &mut rotated[plane * len_in..(plane + 1) * len_in],
+                );
+            }
+
+            // 2. The coaxial step, per order, into `work`.
+            let shifted = &mut work[..out_planes * len_out];
+            shifted.fill(T::zero());
+            for n_out in 0..=p_out {
+                for m in 0..=n_out.min(p_in) {
+                    let row = shift.row(m, n_out);
+                    for slot in slots(m) {
+                        let i_out = index(n_out, slot);
+                        let terms = (m..=p_in).map(|n_in| index(n_in, slot));
+                        if real {
+                            for plane in 0..in_planes {
+                                let x = &rotated[plane * len_in..(plane + 1) * len_in];
+                                let mut sum = T::zero();
+                                for (&e, i_in) in shift.re[row.clone()].iter().zip(terms.clone()) {
+                                    sum = sum + e * x[i_in];
+                                }
+                                shifted[plane * len_out + i_out] = sum;
+                            }
+                        } else {
+                            let mut sum = Complex::new(T::zero(), T::zero());
+                            let entries = shift.re[row.clone()].iter().zip(&shift.im[row.clone()]);
+                            for ((&re, &im), i_in) in entries.zip(terms) {
+                                let c = if in_planes == 2 {
+                                    Complex::new(rotated[i_in], rotated[len_in + i_in])
+                                } else {
+                                    Complex::new(rotated[i_in], T::zero())
+                                };
+                                sum = sum + Complex::new(re, im) * c;
+                            }
+                            shifted[i_out] = sum.re;
+                            shifted[len_out + i_out] = sum.im;
+                        }
+                    }
+                }
+            }
+
+            // 3. Rotate back: the y-block, then z by φ, and accumulate.
+            for plane in 0..out_planes {
+                let y = &mut rotated[..len_out];
+                apply_y(
+                    p_out,
+                    blocks,
+                    false,
+                    &shifted[plane * len_out..(plane + 1) * len_out],
+                    y,
+                );
+                rotate_z(p_out, azimuth, T::one(), y);
+                let output = &mut output[plane * stride_out..plane * stride_out + len_out];
+                match step3 {
+                    Step3::Add => add_m2l_contribution(y, output),
+                    Step3::Store => output.copy_from_slice(y),
+                }
+            }
+        }
+    }
+}
+
+impl<T: RealScalar> Shift<T> {
+    /// The step from p_in to p_out with coefficients `entry(m, n′, n)` (f64), rounded to
+    /// T; real steps keep the real parts.
+    fn new(
+        p_in: usize,
+        p_out: usize,
+        real: bool,
+        entry: impl Fn(usize, usize, usize) -> Complex<f64>,
+    ) -> Self {
+        let orders = p_in.min(p_out) + 1;
+        let mut starts = Vec::with_capacity(orders);
+        let (mut re, mut im) = (Vec::new(), Vec::new());
+        for m in 0..orders {
+            starts.push(re.len());
+            for n_out in m..=p_out {
+                for n_in in m..=p_in {
+                    let e = entry(m, n_out, n_in);
+                    assert!(
+                        e.re.is_finite() && e.im.is_finite(),
+                        "the coaxial coefficient of order {m} from degree {n_in} to {n_out} is \
+                         not finite: the degree is too high for the level's power scale"
+                    );
+                    re.push(T::from_f64(e.re));
+                    if !real {
+                        im.push(T::from_f64(e.im));
+                    }
+                }
+            }
+        }
+        Self {
+            p_in,
+            p_out,
+            starts,
+            re,
+            im,
+        }
+    }
+
+    /// The entries of order m and output degree n′ ≥ m, over n = m..=p_in.
+    #[inline]
+    fn row(&self, m: usize, n_out: usize) -> core::ops::Range<usize> {
+        let width = self.p_in + 1 - m;
+        let start = self.starts[m] + (n_out - m) * width;
+        start..start + width
+    }
+}
+
+/// The end of step 3 of an application: add the rotated-back expansion to the output, or
+/// write it there (Helmholtz CH4.0i).
+#[derive(Clone, Copy)]
+enum Step3 {
+    Add,
+    Store,
+}
+
+/// Adds an M2L contribution of [`HelmholtzTables::m2l_contribution`] to a local of the same
+/// length, value by value, `local[i] = local[i] + contribution[i]`: the add with which
+/// [`HelmholtzTables::m2l`] ends (Helmholtz CH4.0i).
+///
+/// # Panics
+///
+/// If the lengths differ.
+#[inline]
+pub fn add_m2l_contribution<T: RealScalar>(contribution: &[T], local: &mut [T]) {
+    assert_eq!(contribution.len(), local.len(), "contribution length");
+    for (o, &v) in local.iter_mut().zip(contribution) {
+        *o = *o + v;
+    }
+}
+
+/// The y-blocks of an application.
+enum Blocks<'a, T> {
+    Stored(&'a [T]),
+    /// cos θ and sin θ, formed per call into the scratch.
+    PerCall((T, T)),
+}
+
+/// The key of a polar-angle class: sgn d_z and the reduced fraction d_z² / |d|².
+type PolarKey = (i64, i64, i64);
+
+/// The polar-angle class of the integer direction d and its (cos θ, sin θ), sin θ ≥ 0: the
+/// key (sgn d_z, d_z² / |d|² as a reduced fraction), the values √(d_z²) / √|d|² with d_z's
+/// sign and √(|d|² − d_z²) / √|d|² of the reduced fraction, formed in f64 (correctly rounded
+/// square roots and quotients, the same on every IEEE 754 machine) and rounded to T.
+fn polar<T: RealScalar>(d: [i64; 3]) -> (PolarKey, (T, T)) {
+    let (z2, r2) = (d[2] * d[2], d.iter().map(|x| x * x).sum::<i64>());
+    let g = gcd(z2, r2);
+    let (num, den) = (z2 / g, r2 / g);
+    let sign = d[2].signum();
+    let root = |x: i64| (x as f64).sqrt();
+    let cos = sign as f64 * (root(num) / root(den));
+    let sin = root(den - num) / root(den);
+    ((sign, num, den), (T::from_f64(cos), T::from_f64(sin)))
+}
+
+/// The azimuth of the integer direction d: with (a, b) = (d_x, d_y) divided by their gcd,
+/// cos φ = a / √(a² + b²) and sin φ = b / √(a² + b²), formed in f64 and rounded to T; φ = 0
+/// on the axis.
+fn azimuth<T: RealScalar>(d: [i64; 3]) -> Azimuth<T> {
+    let g = gcd(d[0].abs(), d[1].abs());
+    if g == 0 {
+        return Azimuth {
+            cos: T::one(),
+            sin: T::zero(),
+        };
+    }
+    let (a, b) = (d[0] / g, d[1] / g);
+    let rho = ((a * a + b * b) as f64).sqrt();
+    Azimuth {
+        cos: T::from_f64(a as f64 / rho),
+        sin: T::from_f64(b as f64 / rho),
+    }
+}
+
+fn gcd(a: i64, b: i64) -> i64 {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
+/// The index of `value` in `values` by `same`, appended if new.
+fn find_or_push<V: Copy>(values: &mut Vec<V>, value: V, same: impl Fn(&V, &V) -> bool) -> usize {
+    match values.iter().position(|v| same(v, &value)) {
+        Some(i) => i,
+        None => {
+            values.push(value);
+            values.len() - 1
+        }
+    }
+}
+
+/// Applies Oⁿ(R_z(σφ)), n ≤ p, in place: for m > 0, with c = cos mσφ and s = sin mσφ,
+/// slot +m ← c x₊ − s x₋ and slot −m ← s x₊ + c x₋ (as `rcr`).
+fn rotate_z<T: RealScalar>(p: usize, azimuth: Azimuth<T>, sigma: T, x: &mut [T]) {
+    let step = (azimuth.cos, sigma * azimuth.sin);
+    let mut phase = (T::one(), T::zero());
+    for m in 1..=p {
+        phase = (
+            phase.0 * step.0 - phase.1 * step.1,
+            phase.1 * step.0 + phase.0 * step.1,
+        );
+        let (c, s) = phase;
+        for n in m..=p {
+            let (plus, minus) = (index(n, m as isize), index(n, -(m as isize)));
+            let (a, b) = (x[plus], x[minus]);
+            x[plus] = c * a - s * b;
+            x[minus] = s * a + c * b;
+        }
+    }
+}
+
+/// `out` = Oⁿ(R_y(θ)) x per degree n ≤ p, or its transpose with `transpose`, from the
+/// compact blocks (cos half over the slots m ≥ 0, sin half over m < 0; as `rcr`).
+fn apply_y<T: RealScalar>(p: usize, blocks: &[T], transpose: bool, x: &[T], out: &mut [T]) {
+    for n in 0..=p {
+        let block = &blocks[compact_offset(n)..compact_offset(n + 1)];
+        let (cos, sin) = block.split_at((n + 1) * (n + 1));
+        for a in 0..=n {
+            let mut sum = T::zero();
+            for b in 0..=n {
+                let e = if transpose {
+                    cos[b * (n + 1) + a]
+                } else {
+                    cos[a * (n + 1) + b]
+                };
+                sum = sum + e * x[index(n, b as isize)];
+            }
+            out[index(n, a as isize)] = sum;
+        }
+        for a in 1..=n {
+            let mut sum = T::zero();
+            for b in 1..=n {
+                let e = if transpose {
+                    sin[(b - 1) * n + (a - 1)]
+                } else {
+                    sin[(a - 1) * n + (b - 1)]
+                };
+                sum = sum + e * x[index(n, -(b as isize))];
+            }
+            out[index(n, -(a as isize))] = sum;
+        }
+    }
+}
+
+/// The slots +m and −m of order m (one slot for m = 0).
+fn slots(m: usize) -> impl Iterator<Item = isize> {
+    let m = m as isize;
+    core::iter::once(m).chain((m > 0).then_some(-m))
+}
+
+/// idx(n, m) of §3.6.
+#[inline]
+fn index(n: usize, m: isize) -> usize {
+    (n * n + n).wrapping_add_signed(m)
+}
+
+/// aⁿ / b^{n′}, formed as (a/b)ⁿ b^{n − n′} (as `rcr`).
+fn power_ratio(a: f64, n: usize, b: f64, n_prime: usize) -> f64 {
+    (a / b).powi(n as i32) * b.powi(n as i32 - n_prime as i32)
+}
+
+/// 4π ik = 4π (−Im k + i Re k) (as `rcr`).
+fn four_pi_ik(k: Complex<f64>) -> Complex<f64> {
+    let c = 4.0 * core::f64::consts::PI;
+    Complex::new(-(c * k.im), c * k.re)
+}

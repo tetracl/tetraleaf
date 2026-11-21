@@ -1,7 +1,7 @@
 //! Phase 3S T2 spike: loop orders, inverse square roots, register blocking and the
 //! green-kernels baseline for the P2P kernel (docs/phase3s/T2-simd-spike.md).
 //!
-//! `cargo run --release -p nd-fmm-spike-p2p-simd [-- --quick]` prints the whole
+//! `cargo run --release -p tetraleaf-spike-p2p-simd [-- --quick]` prints the whole
 //! report as Markdown on stdout (progress on stderr). Timings are reported, never
 //! asserted. Run with every BLAS thread variable set to 1.
 

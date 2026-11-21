@@ -20,14 +20,14 @@
 use std::any::Any;
 use std::time::Instant;
 
-use nd_fmm_spike_truncation::calibrate::parallel_map;
-use nd_fmm_spike_truncation::chain::{self, Field, Kind, Setup, Work, e2p, p2e, rcr};
-use nd_fmm_spike_truncation::complex::Complex;
-use nd_fmm_spike_truncation::geometry::{self, Placement, Rng, dist2};
-use nd_fmm_spike_truncation::harmonics::{Harmonics, Polar, idx, len};
-use nd_fmm_spike_truncation::radial;
-use nd_fmm_spike_truncation::real::{Dd, Real};
-use nd_fmm_spike_truncation::rotation::{Direction, Rotation};
+use tetraleaf_spike_truncation::calibrate::parallel_map;
+use tetraleaf_spike_truncation::chain::{self, Field, Kind, Setup, Work, e2p, p2e, rcr};
+use tetraleaf_spike_truncation::complex::Complex;
+use tetraleaf_spike_truncation::geometry::{self, Placement, Rng, dist2};
+use tetraleaf_spike_truncation::harmonics::{Harmonics, Polar, idx, len};
+use tetraleaf_spike_truncation::radial;
+use tetraleaf_spike_truncation::real::{Dd, Real};
+use tetraleaf_spike_truncation::rotation::{Direction, Rotation};
 
 use crate::classes::{Class, classes};
 use crate::grid::{Grid, round};

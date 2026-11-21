@@ -1,15 +1,15 @@
 //! Time per block set: the Gumerov–Duraiswami y-rotation blocks of degrees 0 to p (one
-//! polar angle, the compact layout) against `nd_fmm_math::rotation::blocks` plus the
+//! polar angle, the compact layout) against `tetraleaf_math::rotation::blocks` plus the
 //! conjugation by N, release, one thread, f64. Prints Markdown for SPIKE_REPORT.md.
 //!
-//! `cargo run -p nd-fmm-spike-rotation-blocks --release --example time`
+//! `cargo run -p tetraleaf-spike-rotation-blocks --release --example time`
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use nd_fmm_math::rotation::{blocks, blocks_len, euler_zyz};
-use nd_fmm_spike_rotation_blocks::conjugated::conjugated_blocks;
-use nd_fmm_spike_rotation_blocks::gd::{Scratch, compact_blocks_len, y_blocks};
+use tetraleaf_math::rotation::{blocks, blocks_len, euler_zyz};
+use tetraleaf_spike_rotation_blocks::conjugated::conjugated_blocks;
+use tetraleaf_spike_rotation_blocks::gd::{Scratch, compact_blocks_len, y_blocks};
 
 /// Median seconds per call over 7 rounds, each long enough (≥ 50 ms) to time.
 fn median(mut f: impl FnMut()) -> f64 {

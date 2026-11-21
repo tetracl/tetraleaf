@@ -1,16 +1,16 @@
 //! The parts of the sweep against their trusted paths: f32, the classes, the bound's
 //! Hankel maximum, the interpolated and the f64-built T, the shared L2P, determinism.
 
-use nd_fmm_spike_diagonal::classes::{class_of, classes};
-use nd_fmm_spike_diagonal::grid::{Grid, round};
-use nd_fmm_spike_diagonal::rules::{EPSILONS, S7Table, calibrated, formula, s7_closed};
-use nd_fmm_spike_diagonal::run::{Config, cloud, l2p_many, run_unit};
-use nd_fmm_spike_diagonal::transfer::{Interp, Transfer, TransferF64, angle, log10_term};
-use nd_fmm_spike_truncation::chain::{Kind, Setup, Work, e2p, p2e};
-use nd_fmm_spike_truncation::complex::Complex;
-use nd_fmm_spike_truncation::geometry::{Placement, dist2, offsets};
-use nd_fmm_spike_truncation::radial;
-use nd_fmm_spike_truncation::real::{Dd, Real};
+use tetraleaf_spike_diagonal::classes::{class_of, classes};
+use tetraleaf_spike_diagonal::grid::{Grid, round};
+use tetraleaf_spike_diagonal::rules::{EPSILONS, S7Table, calibrated, formula, s7_closed};
+use tetraleaf_spike_diagonal::run::{Config, cloud, l2p_many, run_unit};
+use tetraleaf_spike_diagonal::transfer::{Interp, Transfer, TransferF64, angle, log10_term};
+use tetraleaf_spike_truncation::chain::{Kind, Setup, Work, e2p, p2e};
+use tetraleaf_spike_truncation::complex::Complex;
+use tetraleaf_spike_truncation::geometry::{Placement, dist2, offsets};
+use tetraleaf_spike_truncation::radial;
+use tetraleaf_spike_truncation::real::{Dd, Real};
 
 #[test]
 fn f32_real_matches_std() {

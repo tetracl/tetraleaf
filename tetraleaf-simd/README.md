@@ -1,0 +1,1 @@
+Hand-written SIMD kernels for the host path of the tetraleaf fast multipole method: P2P on aarch64 NEON, x86_64 AVX2 + FMA and x86_64 AVX-512F, with a scalar fallback and runtime instruction-set dispatch.

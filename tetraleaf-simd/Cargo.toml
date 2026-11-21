@@ -1,0 +1,19 @@
+[package]
+name = "tetraleaf-simd"
+version = "0.1.0-dev"
+description = "Hand-written SIMD kernels for the host path of the tetraleaf FMM: P2P on NEON and AVX2 + FMA, with a scalar fallback and runtime dispatch."
+readme = "README.md"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "tetraleaf_simd"
+
+[dependencies]
+tetraleaf-math = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tetraleaf-ref = { workspace = true }
+proptest = { workspace = true }

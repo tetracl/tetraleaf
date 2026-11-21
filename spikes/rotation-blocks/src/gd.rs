@@ -278,14 +278,14 @@ pub fn matmul(w: usize, a: &[f64], b: &[f64], out: &mut [f64]) {
 }
 
 /// Full blocks Oⁿ(Q), n ≤ p, of Q = R_z(α) R_y(β) R_z(γ) (z-y-z, as
-/// `nd_fmm_math::rotation::euler_zyz`), in the layout of
-/// `nd_fmm_math::rotation::blocks`, 0 ≤ β ≤ π. Built as Oⁿ(R_z(α)) Oⁿ(R_y(β)) Oⁿ(R_z(γ)),
+/// `tetraleaf_math::rotation::euler_zyz`), in the layout of
+/// `tetraleaf_math::rotation::blocks`, 0 ≤ β ≤ π. Built as Oⁿ(R_z(α)) Oⁿ(R_y(β)) Oⁿ(R_z(γ)),
 /// for comparisons; it allocates.
 pub fn euler_blocks(p: usize, alpha: f64, beta: f64, gamma: f64) -> Vec<f64> {
     let (s, x) = beta.sin_cos();
     let mut compact = vec![0.0; compact_blocks_len(p)];
     y_blocks(p, x, s, &mut compact, &mut Scratch::new(p));
-    let mut out = Vec::with_capacity(nd_fmm_math::rotation::blocks_len(p));
+    let mut out = Vec::with_capacity(tetraleaf_math::rotation::blocks_len(p));
     for n in 0..=p {
         let w = 2 * n + 1;
         let (mut y, mut za, mut zg, mut t, mut o) = (

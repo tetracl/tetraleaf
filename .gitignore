@@ -25,8 +25,8 @@ target
 # Written by tools/gh200/sync.sh (the source revision copied to locust)
 .source-revision
 
-# Reports of tools/bench/run.sh (nd-fmm-bench); phase reports are copied by hand into
-# fmm-bench/results/
+# Reports of tools/bench/run.sh (tetraleaf-bench); phase reports are copied by hand into
+# tetraleaf-bench/results/
 bench-results/
 
 # Python bytecode of the tools scripts

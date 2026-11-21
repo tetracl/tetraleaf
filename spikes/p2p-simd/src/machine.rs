@@ -1,5 +1,5 @@
 //! The machine description of the report. `cpu_model`, `cores`, `target` and the
-//! timing loop are copies of `nd_fmm_validate::bench` (Phase 3), so that the spike
+//! timing loop are copies of `tetraleaf_validate::bench` (Phase 3), so that the spike
 //! does not depend on MPI.
 
 use std::time::Duration;
@@ -11,7 +11,7 @@ pub const BATCHES: usize = 15;
 pub const MIN_BATCH: Duration = Duration::from_millis(20);
 
 /// Median time per call, in seconds, over [`BATCHES`] batches of at least
-/// [`MIN_BATCH`] (`nd_fmm_validate::bench::median_time_per_call`).
+/// [`MIN_BATCH`] (`tetraleaf_validate::bench::median_time_per_call`).
 pub fn median_time_per_call(mut batch: impl FnMut(usize) -> Duration) -> f64 {
     let mut calls = 1;
     while batch(calls) < MIN_BATCH {

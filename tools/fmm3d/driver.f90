@@ -4,7 +4,7 @@
 !
 !     fmm3d_driver PROBLEM PREFIX EPS[,EPS...] CALLS WARMUP VEC [FULL]
 !
-! PROBLEM is a problem file of `nd-fmm-bench --write-problem` (fmm-bench/src/problem.rs:
+! PROBLEM is a problem file of `tetraleaf-bench --write-problem` (tetraleaf-bench/src/problem.rs:
 ! the points and m charge vectors of a `scaling` workload, the sampled targets, the
 ! direct sum there). For every EPS in the list (FMM3D's requested precision; the tokens
 ! name the output files) the driver
@@ -15,14 +15,14 @@
 !   2. runs WARMUP untimed calls, then CALLS timed calls of the sources-only charge
 !      interface with gradients, `lfmm3d_s_c_g`, one per charge vector 1 ... CALLS
 !      (CALLS <= m); with CALLS = m it writes φ and ∇φ at the sampled targets to
-!      PREFIX-eps<EPS>.out (fmm-bench/src/problem.rs, "The output file");
+!      PREFIX-eps<EPS>.out (tetraleaf-bench/src/problem.rs, "The output file");
 !      with FULL = 1 (and CALLS = m) also φ and ∇φ at every point to
-!      PREFIX-eps<EPS>.full.out (the full output file of fmm-bench/src/problem.rs), for
-!      the cross-check of the two codes' outputs (`nd-fmm-bench --compare`);
+!      PREFIX-eps<EPS>.full.out (the full output file of tetraleaf-bench/src/problem.rs), for
+!      the cross-check of the two codes' outputs (`tetraleaf-bench --compare`);
 !   3. with VEC = 1, one timed call of the vectorised interface `lfmm3d_s_c_g_vec` with
 !      nd = m densities, written to PREFIX-eps<EPS>.vec.out.
 ! It prints one `fmm3d:` line of key=value fields per EPS (the times in seconds by
-! `omp_get_wtime`, the threads `omp_get_max_threads`); `nd-fmm-bench --check-output`
+! `omp_get_wtime`, the threads `omp_get_max_threads`); `tetraleaf-bench --check-output`
 ! measures the output files.
 !
 ! The normalisation is checked first, on two unit charges at distance 1: CONVENTIONS §3.1

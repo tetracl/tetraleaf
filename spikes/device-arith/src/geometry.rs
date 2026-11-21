@@ -7,7 +7,7 @@
 //! f64 in the order of §3.13 ("Leaf-scaled coordinates") and then rounded to T, and the
 //! relative frames come from integer centres ("Relative frames").
 
-use nd_fmm_validate::SplitMix64;
+use tetraleaf_validate::SplitMix64;
 
 /// The deepest level of the octree.
 pub const DEEPEST_LEVEL: u32 = 16;
@@ -41,7 +41,7 @@ pub fn relative_frame(s: Key, t: Key) -> ([f64; 3], f64) {
     (c, 2f64.powi(t.level as i32 - s.level as i32))
 }
 
-/// A cubic domain as `nd_fmm_exec::geometry::Domain` sees it: the box `lo`, `hi` that
+/// A cubic domain as `tetraleaf_exec::geometry::Domain` sees it: the box `lo`, `hi` that
 /// `points_to_morton` uses (one side per axis), and the side w = max_k fl(hi_k − lo_k).
 #[derive(Clone, Debug)]
 pub struct Domain {
@@ -204,7 +204,7 @@ fn from_ordered(n: i64) -> f64 {
     }
 }
 
-/// The bounding box of points, as `nd_octree::octree::compute_global_bounding_box` forms it
+/// The bounding box of points, as `tetraleaf_octree::octree::compute_global_bounding_box` forms it
 /// on one rank.
 fn bounding_box(points: &[[f64; 3]]) -> ([f64; 3], [f64; 3]) {
     let lo: [f64; 3] =

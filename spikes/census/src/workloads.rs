@@ -2,8 +2,8 @@
 
 use std::f64::consts::PI;
 
-use nd_fmm_validate::SplitMix64;
-use nd_fmm_validate::fmm_accuracy::Distribution;
+use tetraleaf_validate::SplitMix64;
+use tetraleaf_validate::fmm_accuracy::Distribution;
 
 /// The margin that keeps every point strictly inside the root cube.
 const MARGIN: f64 = 1e-9;

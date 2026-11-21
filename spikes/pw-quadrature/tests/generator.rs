@@ -1,9 +1,9 @@
 //! The generator against the kernel: on the region grid, at seeded points off the grid
 //! (the compression was fitted on the grid), and in the chain.
 
-use nd_fmm_spike_pw_quadrature::generator::{self, generate};
-use nd_fmm_spike_pw_quadrature::region::{Grid, Pairs, SplitMix};
-use nd_fmm_spike_pw_quadrature::{C, kernel};
+use tetraleaf_spike_pw_quadrature::generator::{self, generate};
+use tetraleaf_spike_pw_quadrature::region::{Grid, Pairs, SplitMix};
+use tetraleaf_spike_pw_quadrature::{C, kernel};
 
 fn check(kw: C, eps: f64) {
     let q = generate(kw, eps);
@@ -46,7 +46,7 @@ fn meets_eps() {
 }
 
 /// The plan's full set (slow unoptimised): `cargo test --release -p
-/// nd-fmm-spike-pw-quadrature -- --ignored`.
+/// tetraleaf-spike-pw-quadrature -- --ignored`.
 #[test]
 #[ignore = "slow in the dev profile; run with --release"]
 fn meets_eps_everywhere() {
@@ -88,7 +88,7 @@ fn panels_converge() {
             .zip(&r.lambda)
             .zip(&r.weight)
             .map(|((&t, &l), &w)| {
-                w * (-l * z).exp() * nd_fmm_spike_pw_quadrature::bessel::j_all(t * rho, 0)[0]
+                w * (-l * z).exp() * tetraleaf_spike_pw_quadrature::bessel::j_all(t * rho, 0)[0]
             })
             .sum()
     };

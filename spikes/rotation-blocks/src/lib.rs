@@ -7,13 +7,13 @@
 //! νₘ = √((n + |m|)! (n − |m|)!). These are the real orthonormal harmonics without the
 //! Condon–Shortley phase, up to a factor per degree, which a rotation block does not see.
 //! The block Oⁿ(Q) satisfies Yₙ(Qx) = Oⁿ(Q) Yₙ(x) and equals N Dⁿ(Q) N⁻¹ for the blocks
-//! Dⁿ of `nd_fmm_math::rotation::blocks`.
+//! Dⁿ of `tetraleaf_math::rotation::blocks`.
 //!
 //! - [`legendre`]: P̄ₙᵐ(cos β) = √((n − m)!/(n + m)!) Pₙᵐ(cos β) to any degree, without
 //!   underflow of the start values;
 //! - [`gd`]: the y-rotation blocks Oⁿ(R_y(β)) by the Gumerov–Duraiswami recursion, in a
 //!   compact layout (a cos half and a sin half), and full blocks of z-y-z rotations;
-//! - [`conjugated`]: N Dⁿ N⁻¹ from `nd_fmm_math::rotation::blocks`, for comparison.
+//! - [`conjugated`]: N Dⁿ N⁻¹ from `tetraleaf_math::rotation::blocks`, for comparison.
 //!
 //! SPIKE_REPORT.md has the method, the measurements and the answers.
 
@@ -23,7 +23,7 @@ pub mod legendre;
 
 /// Index of slot (i, j), −n ≤ i, j ≤ n, of a row-major (2n + 1) × (2n + 1) block whose
 /// rows and columns run over the slots m = −n to n, the layout of
-/// `nd_fmm_math::rotation::blocks`.
+/// `tetraleaf_math::rotation::blocks`.
 #[inline]
 pub fn entry(n: usize, i: isize, j: isize) -> usize {
     let n = n as isize;

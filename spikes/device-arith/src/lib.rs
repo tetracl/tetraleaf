@@ -20,7 +20,7 @@ mod smoke {
     use crate::backend::Backend;
     use crate::real::Real;
     use crate::{cpu_p2p, domain, p2p, pairs, primitives};
-    use nd_fmm_validate::p2p_kernels::{Form, Kernel, W1_SEED, check, oracles, passes, w1};
+    use tetraleaf_validate::p2p_kernels::{Form, Kernel, W1_SEED, check, oracles, passes, w1};
 
     /// The CPU runtime's `sqrt` and divisions are correctly rounded and its inverse square
     /// roots within 1.5 u_T (fl(1/fl(√x)); CubeCL polyfills `inverse_sqrt` so on LLVM).

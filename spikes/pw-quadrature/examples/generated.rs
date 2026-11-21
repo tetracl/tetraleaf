@@ -1,14 +1,14 @@
-//! The generator of `nd_fmm_ref::helmholtz::plane_wave` (Helmholtz CH6.1b) against this
+//! The generator of `tetraleaf_ref::helmholtz::plane_wave` (Helmholtz CH6.1b) against this
 //! spike's `generator::generate`, bit for bit: every λₖ, tₖ, wₖ, Nₖ and Fₖ at the κ and ε of
 //! `tests/generator.rs` (`meets_eps` and `meets_eps_everywhere`).
 //!
-//! `cargo run --release -p nd-fmm-spike-pw-quadrature --example generated`
+//! `cargo run --release -p tetraleaf-spike-pw-quadrature --example generated`
 //!
-//! (The spike's `C` is `num_complex::Complex64`, the type nd-fmm-math re-exports.)
+//! (The spike's `C` is `num_complex::Complex64`, the type tetraleaf-math re-exports.)
 
-use nd_fmm_ref::helmholtz::plane_wave as port;
-use nd_fmm_spike_pw_quadrature::C;
-use nd_fmm_spike_pw_quadrature::generator::generate;
+use tetraleaf_ref::helmholtz::plane_wave as port;
+use tetraleaf_spike_pw_quadrature::C;
+use tetraleaf_spike_pw_quadrature::generator::generate;
 
 fn main() {
     let pi = core::f64::consts::PI;

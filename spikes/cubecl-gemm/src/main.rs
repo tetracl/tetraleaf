@@ -4,7 +4,7 @@
 //! checked against a plain-Rust f64 reference (relative 1e-12 for f64, 1e-5 for f32).
 //! See docs/phase0/T6-cubecl-gemm-spike.md and SPIKE_REPORT.md.
 //!
-//! Usage: `cargo run -p nd-fmm-spike-cubecl-gemm --release -- [options]`
+//! Usage: `cargo run -p tetraleaf-spike-cubecl-gemm --release -- [options]`
 //!
 //! - `--backends metal,cpu,cuda` (default: every backend compiled in)
 //! - `--p 4,8,12,16` and `--b 1000,10000,100000` (defaults as shown)

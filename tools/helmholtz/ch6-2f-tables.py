@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """tools/helmholtz/ch6-2f-tables.py: the tables of Helmholtz CH6.2f's report
-(fmm-validate/results/helmholtz-ch6-2f.md) from the outputs of tools/helmholtz/ch6-2f-runs.sh.
+(tetraleaf-validate/results/helmholtz-ch6-2f.md) from the outputs of tools/helmholtz/ch6-2f-runs.sh.
 
     tools/helmholtz/ch6-2f-tables.py <machine>=<out-dir> …
 

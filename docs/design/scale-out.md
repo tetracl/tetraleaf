@@ -23,7 +23,7 @@ Companion documents, cited by section:
   and decision 6, §7 the evaluator);
 - **device-path**: [device-path.md](device-path.md) (§14, the device on several ranks);
 - **README**: [docs/phase5s/README.md](../phase5s/README.md); **T0**:
-  `fmm-validate/results/phase5n-kathleen.md`, "Phase 5S, T0: four nodes" (S0.1–S0.12).
+  `tetraleaf-validate/results/phase5n-kathleen.md`, "Phase 5S, T0: four nodes" (S0.1–S0.12).
 
 Every number is *measured*, with machine, nodes, ranks × threads, job id and command
 (Appendix A), or marked *model*. "Oversubscribed" runs are counted, never timed.
@@ -82,8 +82,8 @@ Measured with the Phase 5 code, on Kathleen at 40–160 ranks (1–4 nodes) with
 
 ### 1.1 What the code does on several ranks
 
-**`Octree::new`** (octree/src/octree.rs; the private module
-octree/src/octree/implementation.rs). In order: `linearize` sorts every input key with
+**`Octree::new`** (tetraleaf-octree/src/octree.rs; the private module
+tetraleaf-octree/src/octree/implementation.rs). In order: `linearize` sorts every input key with
 rlst's sample sort `parallel_sort::parsort` and removes ancestors across rank
 boundaries (`communicate_back`); `compute_coarse_tree` builds the coarse tree by weight
 from the root (O1: one all-reduce of two counts per block per round, then a serial 2:1
@@ -107,7 +107,7 @@ lower bounds (`coarse_tree_bounds`); the replicated coarse tree itself is droppe
 - every key also goes point-to-point to the owners of its other same-level neighbour
   cells (one all-to-all-v), as the one-cell halo, with its children under the layer.
 
-**`Plan::new`** (fmm-plan/src/plan.rs) numbers every held key (`BoxIndex`), applies the
+**`Plan::new`** (tetraleaf-plan/src/plan.rs) numbers every held key (`BoxIndex`), applies the
 list rule (`interaction_manager::key_lists`) to every non-ghost key, `Global` keys
 included, and checks that every list entry, every child of a non-ghost interior key and
 every own block is held (redesign §3.5, decision 6: "every coarse block held"). P2
@@ -115,10 +115,10 @@ every own block is held (redesign §3.5, decision 6: "every coarse block held").
 ancestor of an own block, but its lists are still resolved, so its neighbourhood must
 be held.
 
-**`CoarseExchange`** (fmm-plan/src/exchange.rs) gathers every rank's block multipoles to
+**`CoarseExchange`** (tetraleaf-plan/src/exchange.rs) gathers every rank's block multipoles to
 every rank in every evaluation (`all_gather_varcount_into`, built with an all-gather of
 counts and an all-gather-v of every block key), and **`upward_global`**
-(fmm-plan/src/evaluator.rs) runs the M2M of every `Global` box on every rank, deepest
+(tetraleaf-plan/src/evaluator.rs) runs the M2M of every `Global` box on every rank, deepest
 level first. The downward pass forms only the locals of the rank's own ancestors (P2).
 
 ### 1.2 Every collective that grows with P
@@ -298,7 +298,7 @@ this design meets each. Proposed changes are sign-off questions (§12, question 
 | 4 | Bounded per-rank cost at fixed N/P | Held boxes: the locally essential set (§3) plus the replicated top (§4.3); the remaining O(P) items and their sizes at 10²–10⁴ ranks are §8.2's table. **Proposed change:** T4 holds the top-tree keys (every block and every ancestor of one, about 1.15 B) until T5 removes them, so C5S.2's bound is met by T4 on the locally essential part and by T5/T6 on the total (§3.7, §11) |
 | 5 | No per-evaluation cost growing with P | The coarse gather and the global M2M go (§4). What remains per evaluation: neighbourhood exchanges, S2's reduction rounds, one all-gather of fixed size (§4.3), and the two `MPI_Alltoallv` of the redistribution, whose O(P) argument arrays S5 replaces by point-to-point on the build's routes (§7.2). **Measured caveat:** the owners' fan-out of top-tree multipoles below the replicated top is bounded by P/K, not by a constant (§4.3); fixed K holds it to the phase's targets |
 | 6 | Collective discipline | Every new exchange is built and run on every rank, empty ranks with empty lists; the push exchange of S1, S2's reduction and the replicated top are scoped point-to-point or collectives entered by all; errors agreed with the existing build all-reduces (§8.1) |
-| 7 | Kernel-agnostic and safe | S1, S2, S5 live in `nd-octree` and `nd-fmm-plan` and use the recording and shadow operators; S3's constants live in `nd-fmm-exec`, the octree receives weights. Every new exchange uses safe rsmpi calls (scoped requests, `immediate_*`), which rsmpi 0.8.2 has (§7.2) |
+| 7 | Kernel-agnostic and safe | S1, S2, S5 live in `tetraleaf-octree` and `tetraleaf-plan` and use the recording and shadow operators; S3's constants live in `tetraleaf-exec`, the octree receives weights. Every new exchange uses safe rsmpi calls (scoped requests, `immediate_*`), which rsmpi 0.8.2 has (§7.2) |
 | 8 | Hook, device and overlap | Three new `HostData` events (§4.5); the device mirrors them with packed buffers; the sync count grows from at most 2 to at most 2 + r_s, r_s the reduction levels at which the rank sends (§4.5). Overlap order-preserving (§4.6) |
 | 9 | Tested on what can run | §9: CI at 1, 2, 4 ranks; by hand at 8 (M3 Max, locust); Kathleen at 2 nodes routinely, 4 at most |
 | 10 | Measured, never asserted | §10: every time beyond 160 ranks is a *model* with its inputs |
@@ -415,7 +415,7 @@ of them forms (P2) and whose multipole its owner forms (S2). A top-tree key that
 a shared ancestor is a ghost of its owner. **`with_ghost_children` keeps its name**: it
 asks for H's closure (children of the interior same-level neighbours of S) and no longer
 replicates blocks; the docs of both change, no variant is added. Renaming `Global` to
-`Shared` would touch `nd-fmm-plan`, `nd-fmm-exec` and `nd-fmm-validate` for no
+`Shared` would touch `tetraleaf-plan`, `tetraleaf-exec` and `tetraleaf-validate` for no
 behavioural gain (§12, question 2).
 
 ### 3.4 `Plan::new` over H
@@ -432,7 +432,7 @@ exchanges over the ghosts the rows name. The checks change:
   `CoarseExchange::new` through its closing all-reduce (`UnheldKey`), **goes**: only
   shared ancestors are `Global` now, and the coarse gather goes in T5 (§3.7 for T4).
 
-### 3.5 API (`nd-octree`, `nd-fmm-plan`)
+### 3.5 API (`tetraleaf-octree`, `tetraleaf-plan`)
 
 ```rust
 /// The coarse blocks and their owners, replicated on every rank as keys (Phase 5S S1;
@@ -465,7 +465,7 @@ impl<C: CommunicatorCollectives> Octree<'_, C> {
 ```
 
 `Plan` gains nothing public for S1; `PlanError::CoarseBlock` stays (own blocks).
-`nd_fmm_validate::scaling`'s held-box split (the private `held_boxes`, today local,
+`tetraleaf_validate::scaling`'s held-box split (the private `held_boxes`, today local,
 ghost and `Global`) reports own, halo, shared ancestors, other top keys and the
 replicated top (§4.3).
 
@@ -628,7 +628,7 @@ by level; `downward`; the leaves.
 
 ### 4.5 Events and the device
 
-Three new `HostData` events (`nd-fmm-plan`), names for sign-off (§12, question 4):
+Three new `HostData` events (`tetraleaf-plan`), names for sign-off (§12, question 4):
 
 | Event | When | Lists |
 | --- | --- | --- |
@@ -814,8 +814,8 @@ shows:
    near interactions need the ghost leaves' source counts, which the source exchange's
    build delivers; the octree records the keys per leaf, with multiplicity, so the
    counts exist before the points move), weighs them with the constants, and passes one
-   weight per own block to `nd-octree`.
-2. **The cut in `nd-octree`.** `Octree::repartition(&self, weights: &[f64]) -> Octree`:
+   weight per own block to `tetraleaf-octree`.
+2. **The cut in `tetraleaf-octree`.** `Octree::repartition(&self, weights: &[f64]) -> Octree`:
    one all-gather-v of the block weights (B values, counts from the map), the
    nearest-boundary cut by weight (O3), the leaves of the moved blocks sent to their new
    owners (one all-to-all-v), H and the leaf bits rebuilt (§3.3). The coarse tree, the
@@ -827,7 +827,7 @@ shows:
    tree does (more blocks, more shared ancestors), which T7's brief forbids, hence a
    sign-off question. Without it the cut stays at about 1 + w_max/2, 1.05–1.11 at 512
    ranks.
-4. **The constants** live in `nd-fmm-exec`: a table per strategy, precision and p
+4. **The constants** live in `tetraleaf-exec`: a table per strategy, precision and p
    (measured on Kathleen by a calibration example with `kind_timings`), and
    `FmmBuilder::cost_model` to override it. Only their ratios move the cut, and only the
    partition depends on them: a wrong constant costs balance, never a bit. The cut does
@@ -974,7 +974,7 @@ costs about 2 P α_v when every peer is visited: with α_v = α_a, 0.76 ms at 1,
 
 ### 7.3 T8: the triggers on the final structure (addendum, 2026-10-13)
 
-T8 (docs/phase5s/T8-construction-and-collectives.md; fmm-validate/results/phase5s-t8.md)
+T8 (docs/phase5s/T8-construction-and-collectives.md; tetraleaf-validate/results/phase5s-t8.md)
 measured S4, S5 and S8 (the fan-out below R, added by T5) on main at e788576 (T3a, T3,
 T5–T7). It used locust at 8–72 ranks (timed) and 128–512 (counted), and Kathleen at
 40–160 ranks (timed) and 320–640 (counted; job 604012, 1.99 node-hours). Counts and
@@ -1027,7 +1027,7 @@ with 19–30 non-blocking barriers new. *Model* at 10⁴ ranks: 2.1–2.7 % of a
   §9.3). `tools/kathleen/env.sh` sets it for every Kathleen job (correctness: job
   604023).
 
-**S8, built (T8s, 2026-10-14; fmm-validate/results/phase5s-t8s.md).** Every box of the
+**S8, built (T8s, 2026-10-14; tetraleaf-validate/results/phase5s-t8s.md).** Every box of the
 multipole exchange with more than F = 8 readers goes along a tree of its readers fixed at
 build, copies only, the output bit for bit:
 - **The rule** (signed off on 2026-10-14, the report's §3): per owner and level, the readers of
@@ -1081,7 +1081,7 @@ existing validity all-reduces of `Octree::new`, `Evaluator::new` and `Fmm::build
 evaluation, against Phase 5: the coarse gather (all-gather-v of B n_c s) is replaced by
 r neighbour exchanges and one all-gather-v of fixed size.
 
-T8s (S8, the forwarding tree; fmm-validate/results/phase5s-t8s.md) changes the multipole
+T8s (S8, the forwarding tree; tetraleaf-validate/results/phase5s-t8s.md) changes the multipole
 exchange's build: a communicator duplicate and two sparse exchanges (each a message per
 rank with data, a non-blocking barrier and an all-reduce) replace one rlst ghost build per
 level (each a consensus round, two graph creations and two neighbour all-to-alls); its
@@ -1154,13 +1154,13 @@ measures the model's inputs (held keys, buffers) on the same runs.
 
 | Layer | Task | Where | Ranks | Oracle |
 | --- | --- | --- | --- | --- |
-| rank-count invariance | T2 | `nd-fmm-exec`: a new MPI-owning test executable `tests/invariance.rs`, registered in `run-mpi-tests.sh` (keeps `mpi_exec`'s one-minute debug budget); `nd-fmm-validate`: `scaling --invariance k` | 1, 2, 4 (CI); 8 by hand; P/8 at scale | P ranks against P/k, bit for bit, by index (§5.1) |
-| S4 key routing | T3a | `nd-octree` unit tests of the histogram rounds and the routing; the MPI examples | unit; 1–8 | the Phase 5 octree, key by key (leaves, blocks, every key, `KeyType`) |
-| the partition map and H | T3 | `nd-octree` unit tests (owners and kinds at block boundaries, above the blocks, the root, empty ranks); a new registered MPI example `test_mpi_locally_essential` | unit; 1, 2, 3, 4, 8; CI at 2, 4 | brute force on the gathered tree at small N: every key a row of S, a halo or a parent-child step names is in H, H ⊆ the closure of §3.1; the leaves and the partition unchanged; held-set sizes printed old against new |
-| the plan over H | T4 | `nd-fmm-plan` `tests/mpi_regressions.rs` (scenarios unchanged) | 1, 2, 4 (CI), 8 by hand | the list oracle over S (pruned rows no longer exist); every listed key held; the exchange checks; the recording operator: every pair once, the same calls and groupings; a minimality check (nothing held outside H ∪ T) |
+| rank-count invariance | T2 | `tetraleaf-exec`: a new MPI-owning test executable `tests/invariance.rs`, registered in `run-mpi-tests.sh` (keeps `mpi_exec`'s one-minute debug budget); `tetraleaf-validate`: `scaling --invariance k` | 1, 2, 4 (CI); 8 by hand; P/8 at scale | P ranks against P/k, bit for bit, by index (§5.1) |
+| S4 key routing | T3a | `tetraleaf-octree` unit tests of the histogram rounds and the routing; the MPI examples | unit; 1–8 | the Phase 5 octree, key by key (leaves, blocks, every key, `KeyType`) |
+| the partition map and H | T3 | `tetraleaf-octree` unit tests (owners and kinds at block boundaries, above the blocks, the root, empty ranks); a new registered MPI example `test_mpi_locally_essential` | unit; 1, 2, 3, 4, 8; CI at 2, 4 | brute force on the gathered tree at small N: every key a row of S, a halo or a parent-child step names is in H, H ⊆ the closure of §3.1; the leaves and the partition unchanged; held-set sizes printed old against new |
+| the plan over H | T4 | `tetraleaf-plan` `tests/mpi_regressions.rs` (scenarios unchanged) | 1, 2, 4 (CI), 8 by hand | the list oracle over S (pruned rows no longer exist); every listed key held; the exchange checks; the recording operator: every pair once, the same calls and groupings; a minimality check (nothing held outside H ∪ T) |
 | the owned top tree | T5 | `mpi_regressions`; `overlap_stress` | 1, 2, 4 (CI); 8 | every top-tree multipole bit for bit against the one-rank tree's by key (a per-pair test operator whose values mix, as `Mixer` does, so a wrong order shows); the reduction's messages sent equal received over the ranks; every needed multipole received once; R the same on every rank; overlap bit for bit |
 | `Fmm` and the device | T6 | `mpi_exec` (every scenario, the shadow check, the device scenarios on the CPU runtime), `multi_rank` (ignored), `device_ranks` | 1, 2, 4 (CI); 8; gate 2, 4, 8 | the one-rank `Fmm` in rank order, 0 values differing; the shadow bit for bit with the new events, different without them; every device transfer equal to the extended formula (§4.5) |
-| the second cut | T7 | `nd-octree` example (leaves unchanged against the first cut); `mpi_exec` with the cut on; T2's invariance | 1, 2, 4 (CI); 8 | key by key; bit for bit |
+| the second cut | T7 | `tetraleaf-octree` example (leaves unchanged against the first cut); `mpi_exec` with the cut on; T2's invariance | 1, 2, 4 (CI); 8 | key by key; bit for bit |
 | S5 | T8 | `mpi_regressions` (the redistribution's point-to-point forward and backward against the all-to-all-v, bit for bit) | 1, 2, 4 | the blocking path |
 
 ### 9.2 CI and what runs by hand
@@ -1330,16 +1330,16 @@ model (§10.2) with α_e and β_e at the stated alternatives.
 
 | Task | Modules | Tests | Brief change proposed |
 | --- | --- | --- | --- |
-| T2 | `fmm-exec/tests/invariance.rs` (new, registered in `.github/scripts/run-mpi-tests.sh`); `nd_fmm_validate::scaling` (`--invariance k`, `--reference` refused above 2 × 10⁷, an input of index ranges for N > 10⁹); `tools/kathleen/jobs/` (the correctness job) | §9.1 | (a) **the invariance check names the strategy** (`Auto` resolves by ranks per node, §5.1); (b) its own executable rather than an `mpi_exec` scenario, for `mpi_exec`'s one-minute debug budget |
-| T1s (scheduled 2026-10-11) | `Cargo.toml` pins (rlst 0.10.0, CubeCL 0.11.0), `octree/Cargo.toml`, the ports, the live docs | the full checks, host bit for bit, device within bounds | **new brief** docs/phase5s/T1s-dependency-upgrade.md, added at the user's request; before T2 |
-| T3a (scheduled 2026-10-11) | `octree/src/octree/implementation.rs` (`linearize`, `balance`: S4's routing), the MPI examples | §9.1 | **new brief** docs/phase5s/T3a-octree-key-routing.md, added at the user's request; T8 keeps S5 |
-| T3 | `octree/src/octree.rs` (`PartitionMap`, `Octree::partition_map`, `KeyType` and `with_ghost_children` docs), `implementation.rs` (`generate_all_keys` over H, the leaf-bit all-gather, the push); `examples/test_mpi_locally_essential.rs` | §9.1 | (a) the map's owner of a key above the blocks is S2's (first descendant block); (b) the old path is removed, not kept behind an option; the brute-force example is the comparison |
-| T4 | `fmm-plan/src/plan.rs` (H ∪ T, no list resolution for non-shared `Global` keys), `exchange.rs` (`MultipoleExchange` over ghosts incl. top-tree ghosts), `nd_fmm_validate::scaling::held_boxes` | §9.1 | **acceptance**: held boxes bounded on H; H ∪ T reported, T removed in T5 (§3.7, question 1) |
-| T5 | `fmm-plan/src/exchange.rs` (the reduction's exchanges, R; `CoarseExchange` removed), `evaluator.rs` (`upward_global`, `far_field`), `operator.rs` (three events), `plan.rs` (owned `m2m_global` rows, T ∖ (H ∪ R) dropped) | §9.1 | (a) **R by readers with a cap, not a level L_r** (§4.3, question 3); (b) the reduction stops at level 2; (c) `SendMultipoles` moves after the all-gather of R |
-| T6 | `fmm-exec/src/fmm.rs` (`StageTimings`: `reduction`, `replicated_top`; `exchange_traffic`), `device.rs` (three events, the formula, 2 + r_s syncs), `tests/device_common`, `nd_fmm_validate::scaling` | §9.1 | the sync count changes from 2 to 2 + r_s (§4.5) |
-| T7 | `nd-octree` (`Octree::repartition`), `fmm-exec/src/fmm.rs` (counts per block, the cost table, `FmmBuilder::cost_model`, the second cut), a calibration example | §9.1 | (a) **the weights come from the plan, not from the local refinement** (§6.3); (b) the target 1.10 needs blocks refined by cost (question 5) or reads 1.12 |
-| T8 | `fmm-plan/src/redistribute.rs` (point-to-point forward and backward); NBX only if its trigger fires | §9.1 | S4 moved to T3a; T8 keeps S5 and re-measures S4 |
-| T9 | `nd_fmm_validate`, results, design documents, `tools/scaling/run.sh` (the clusters in `nodes-strong`/`nodes-large`) | as the brief | the clusters added to the sweeps (T0 ran the cube and the Plummer sphere) |
+| T2 | `tetraleaf-exec/tests/invariance.rs` (new, registered in `.github/scripts/run-mpi-tests.sh`); `tetraleaf_validate::scaling` (`--invariance k`, `--reference` refused above 2 × 10⁷, an input of index ranges for N > 10⁹); `tools/kathleen/jobs/` (the correctness job) | §9.1 | (a) **the invariance check names the strategy** (`Auto` resolves by ranks per node, §5.1); (b) its own executable rather than an `mpi_exec` scenario, for `mpi_exec`'s one-minute debug budget |
+| T1s (scheduled 2026-10-11) | `Cargo.toml` pins (rlst 0.10.0, CubeCL 0.11.0), `tetraleaf-octree/Cargo.toml`, the ports, the live docs | the full checks, host bit for bit, device within bounds | **new brief** docs/phase5s/T1s-dependency-upgrade.md, added at the user's request; before T2 |
+| T3a (scheduled 2026-10-11) | `tetraleaf-octree/src/octree/implementation.rs` (`linearize`, `balance`: S4's routing), the MPI examples | §9.1 | **new brief** docs/phase5s/T3a-octree-key-routing.md, added at the user's request; T8 keeps S5 |
+| T3 | `tetraleaf-octree/src/octree.rs` (`PartitionMap`, `Octree::partition_map`, `KeyType` and `with_ghost_children` docs), `implementation.rs` (`generate_all_keys` over H, the leaf-bit all-gather, the push); `examples/test_mpi_locally_essential.rs` | §9.1 | (a) the map's owner of a key above the blocks is S2's (first descendant block); (b) the old path is removed, not kept behind an option; the brute-force example is the comparison |
+| T4 | `tetraleaf-plan/src/plan.rs` (H ∪ T, no list resolution for non-shared `Global` keys), `exchange.rs` (`MultipoleExchange` over ghosts incl. top-tree ghosts), `tetraleaf_validate::scaling::held_boxes` | §9.1 | **acceptance**: held boxes bounded on H; H ∪ T reported, T removed in T5 (§3.7, question 1) |
+| T5 | `tetraleaf-plan/src/exchange.rs` (the reduction's exchanges, R; `CoarseExchange` removed), `evaluator.rs` (`upward_global`, `far_field`), `operator.rs` (three events), `plan.rs` (owned `m2m_global` rows, T ∖ (H ∪ R) dropped) | §9.1 | (a) **R by readers with a cap, not a level L_r** (§4.3, question 3); (b) the reduction stops at level 2; (c) `SendMultipoles` moves after the all-gather of R |
+| T6 | `tetraleaf-exec/src/fmm.rs` (`StageTimings`: `reduction`, `replicated_top`; `exchange_traffic`), `device.rs` (three events, the formula, 2 + r_s syncs), `tests/device_common`, `tetraleaf_validate::scaling` | §9.1 | the sync count changes from 2 to 2 + r_s (§4.5) |
+| T7 | `tetraleaf-octree` (`Octree::repartition`), `tetraleaf-exec/src/fmm.rs` (counts per block, the cost table, `FmmBuilder::cost_model`, the second cut), a calibration example | §9.1 | (a) **the weights come from the plan, not from the local refinement** (§6.3); (b) the target 1.10 needs blocks refined by cost (question 5) or reads 1.12 |
+| T8 | `tetraleaf-plan/src/redistribute.rs` (point-to-point forward and backward); NBX only if its trigger fires | §9.1 | S4 moved to T3a; T8 keeps S5 and re-measures S4 |
+| T9 | `tetraleaf_validate`, results, design documents, `tools/scaling/run.sh` (the clusters in `nodes-strong`/`nodes-large`) | as the brief | the clusters added to the sweeps (T0 ran the cube and the Plummer sphere) |
 
 **Facts in the briefs that this design found to differ** (not changed in the briefs):
 - README, T3, T5: "the replicated top above L_r … a few thousand boxes, fixed": a top by
@@ -1380,8 +1380,8 @@ Phase 5. The sections above stay as signed off; this one records what T2–T8s b
 it differs from them, the measured numbers that replace this document's models, and what
 is left. Every number is *measured* (the machine, nodes, ranks × threads and job named in
 the reports) or marked *model*; oversubscribed runs are counted, never timed. The reports:
-`fmm-validate/results/phase5s-t2.md` … `phase5s-t8s.md` (one per task) and
-`fmm-validate/results/phase5s-kathleen.md` (T9, the scaling report).
+`tetraleaf-validate/results/phase5s-t2.md` … `phase5s-t8s.md` (one per task) and
+`tetraleaf-validate/results/phase5s-kathleen.md` (T9, the scaling report).
 
 ### 13.1 Decisions as taken
 
@@ -1434,14 +1434,14 @@ the reports) or marked *model*; oversubscribed runs are counted, never timed. Th
 ## Appendix A. How the numbers were measured
 
 **The probe** (throwaway, in the session's scratch directory, not committed, as the
-brief allows): one Rust binary with path dependencies on this tree's `nd-octree`,
-`nd-fmm-plan`, `nd-fmm-exec` and `nd-fmm-validate` at `7fa691e` (main after T0, #97),
+brief allows): one Rust binary with path dependencies on this tree's `tetraleaf-octree`,
+`tetraleaf-plan`, `tetraleaf-exec` and `tetraleaf-validate` at `7fa691e` (main after T0, #97),
 built in release on each machine. For a `scaling` workload (`Workload::new(dist, n)`,
 the random share, the domain by `compute_global_bounding_box`, the keys of sources and
 targets as `Fmm` passes them, `max_level` 16, 64 points per leaf, the ghost-children
 layer) it:
 1. replays `Octree::new` step by step with the private functions of
-   octree/src/octree/implementation.rs copied, a barrier before each step, the time, the
+   tetraleaf-octree/src/octree/implementation.rs copied, a barrier before each step, the time, the
    bytes the step's data collectives move, its O(P) count bytes, and the peak resident
    size during the step (`VmHWM`, reset through `/proc/self/clear_refs` before each
    step); the replay's leaves, blocks and key map equal `Octree::new`'s on every run (a

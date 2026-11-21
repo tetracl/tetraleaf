@@ -2,16 +2,16 @@
 //! harmonics recursion (C4.3) or the GEMM (C4.4, C4.5) beyond their tolerances?
 //!
 //! - Regular and irregular solid harmonics to degree p, the recursion of
-//!   `nd_fmm_math::harmonics::{regular, irregular}` (CONVENTIONS §3.5) ported operation by
-//!   operation, one unit per point, against `nd-fmm-math` in the same precision and in f64.
-//! - y ← y + A x per column in the order of `nd_fmm_tables::MatrixSet::apply` (for each
+//!   `tetraleaf_math::harmonics::{regular, irregular}` (CONVENTIONS §3.5) ported operation by
+//!   operation, one unit per point, against `tetraleaf-math` in the same precision and in f64.
+//! - y ← y + A x per column in the order of `tetraleaf_tables::MatrixSet::apply` (for each
 //!   output yᵣ, k increasing), against `apply` (unfused) and against the same order with
 //!   every multiply–add fused on the host.
 
 use cubecl::prelude::*;
-use nd_fmm_math::{Layout, harmonics};
-use nd_fmm_tables::MatrixSet;
-use nd_fmm_validate::SplitMix64;
+use tetraleaf_math::{Layout, harmonics};
+use tetraleaf_tables::MatrixSet;
+use tetraleaf_validate::SplitMix64;
 
 use crate::backend::{Backend, read};
 use crate::real::Real;
@@ -97,11 +97,11 @@ fn harmonics_kernel<F: Float>(
 /// The harmonics comparison of one kind and precision.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HarmonicsResult {
-    /// Values bit-identical to `nd-fmm-math` in the same precision, and their count.
+    /// Values bit-identical to `tetraleaf-math` in the same precision, and their count.
     pub identical: usize,
     /// All values.
     pub values: usize,
-    /// The largest difference from `nd-fmm-math` in T, per point and degree relative to the
+    /// The largest difference from `tetraleaf-math` in T, per point and degree relative to the
     /// largest value of that degree at that point, in u_T.
     pub vs_host: f64,
     /// [`HarmonicsResult::vs_host`] over the (point, degree) cells whose largest value is at
@@ -110,7 +110,7 @@ pub struct HarmonicsResult {
     pub vs_host_normal: f64,
     /// Values of the host in T that are nonzero and below the normal range.
     pub subnormal: usize,
-    /// The same against `nd-fmm-math` in f64, for the device and for the host in T.
+    /// The same against `tetraleaf-math` in f64, for the device and for the host in T.
     pub device_vs_f64: f64,
     /// See [`HarmonicsResult::device_vs_f64`].
     pub host_vs_f64: f64,
@@ -133,7 +133,7 @@ fn harmonic_points<T: Real>(count: usize, irregular: bool, seed: u64) -> Vec<[T;
         .collect()
 }
 
-/// Degree-p harmonics on the device against `nd-fmm-math`.
+/// Degree-p harmonics on the device against `tetraleaf-math`.
 pub fn harmonics<T: Real>(
     client: &Client,
     backend: Backend,

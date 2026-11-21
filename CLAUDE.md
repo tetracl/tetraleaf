@@ -1,15 +1,18 @@
-# nd-project/fmm
+# tetraleaf (tetracl/tetraleaf)
 
-Fast multipole methods in Rust. Workspace crates: octree (distributed octree),
-fmm-plan (nd-fmm-plan), the nd-fmm-* transfer-operator crates, and fmm-bench
-(nd-fmm-bench, the one-command benchmark; Phase 4S T6). Each crate has its own CLAUDE.md
-for crate-specific rules; everything here applies to all of them.
+Fast multipole methods in Rust. Workspace crates: tetraleaf-octree (distributed octree),
+tetraleaf-plan, the tetraleaf-* transfer-operator crates, and tetraleaf-bench (the
+one-command benchmark; Phase 4S T6). Each crate has its own CLAUDE.md for crate-specific
+rules; everything here applies to all of them. The project was nd-project/fmm with crates
+nd-fmm-* and nd-octree in directories fmm-* and octree/ until 2026-11-21; the records
+(progress log, task plans, reports, reviews, phase briefs) keep those names
+(docs/design/workspace-structure.md, "The tetraleaf rename").
 
 ## Source of truth
 - docs/CONVENTIONS.md defines every basis function, phase, storage layout and scaling.
   Never change a convention in code; propose changes in the PR description instead.
 - Cite conventions in doc comments as `CONVENTIONS §3.x`.
-- CONVENTION_VERSION in nd-fmm-math must match the file.
+- CONVENTION_VERSION in tetraleaf-math must match the file.
 - Current work: the Helmholtz-family FMM. Design docs/design/helmholtz-fmm-proposal.md
   (draft 0.8); its tasks, decisions and their order docs/helmholtz/roadmap.md; the log
   docs/helmholtz/progress.md; each task's plan docs/helmholtz/tasks/<ID>.md. Run it with
@@ -66,31 +69,31 @@ Slash commands in `.claude/skills/`, for the Helmholtz work:
   CI rejects unformatted code, and mechanical edits (renames, `sed`) easily break
   import ordering.
 - Tests first: write the acceptance tests from the task brief, then the implementation.
-- Every fast path is tested against a slower trusted path (fixtures, identities, nd-fmm-ref).
+- Every fast path is tested against a slower trusted path (fixtures, identities, tetraleaf-ref).
 - Numeric code is generic over `T: RealScalar`; no allocation in hot loops. This does
-  not apply to nd-fmm-plan, whose `FmmOperator::Value` is deliberately generic, not
+  not apply to tetraleaf-plan, whose `FmmOperator::Value` is deliberately generic, not
   bound to `RealScalar` (its test operators use `u32`).
-- New dependencies of new crates only through [workspace.dependencies]; octree/
+- New dependencies of new crates only through [workspace.dependencies]; tetraleaf-octree/
   declares its own directly until migrated (a separate decision). CubeCL only
-  in nd-fmm-kernels and spikes/; it is pinned to `=0.11.0` (matmul: `cubek-matmul`
+  in tetraleaf-kernels and spikes/; it is pinned to `=0.11.0` (matmul: `cubek-matmul`
   `=0.3.0`, with `cubek-std` `=0.3.0`) in [workspace.dependencies] (repeated in
   spikes/Cargo.toml's; move both together), the release (Phase 5S
   T1s) after the pre-release `=0.11.0-pre.4` chosen on 2026-10-03 for f64 on CUDA; see
   spikes/cubecl-gemm/SPIKE_REPORT.md.
-- `unsafe` only in nd-fmm-simd's `arch` modules and its ISA dispatch, in
-  nd-fmm-kernels, and in spikes/. Every block carries a `// SAFETY:` comment and
-  every public function stays safe; all other crates, nd-fmm-exec included, are free
+- `unsafe` only in tetraleaf-simd's `arch` modules and its ISA dispatch, in
+  tetraleaf-kernels, and in spikes/. Every block carries a `// SAFETY:` comment and
+  every public function stays safe; all other crates, tetraleaf-exec included, are free
   of `unsafe` but for the one exception below (docs/design/simd-p2p.md §5.4). The
   compiler enforces it (Helmholtz CHA.2): `[lints.rust] unsafe_code = "forbid"` in the
-  `Cargo.toml` of nd-octree, nd-fmm-math, -ref, -tables, -exec, -validate and -bench,
-  `"deny"` in nd-fmm-plan's, every target of the package. The one exception, `#[allow(unsafe_code)]` in its file with its reason: the
-  counting allocator of `fmm-plan/examples/plan_build_cost.rs`. A new crate free of `unsafe`
+  `Cargo.toml` of tetraleaf-octree, tetraleaf-math, -ref, -tables, -exec, -validate and -bench,
+  `"deny"` in tetraleaf-plan's, every target of the package. The one exception, `#[allow(unsafe_code)]` in its file with its reason: the
+  counting allocator of `tetraleaf-plan/examples/plan_build_cost.rs`. A new crate free of `unsafe`
   gets the `forbid` table; an exception in a `forbid` crate means moving it to `deny`.
 - Document every public item; follow the crate's existing rustdoc style.
 
 ## Layout
-- New crates: directories fmm-<name>, packages nd-fmm-<name>, library names
-  nd_fmm_<name>. octree/ (package nd-octree, lib nd_octree) predates this rule.
+- New crates: directories tetraleaf-<name>, packages tetraleaf-<name>, library names
+  tetraleaf_<name>.
 - Fixtures live in <crate>/fixtures/ and are regenerated only by tools/fixtures/.
 - spikes/ is a workspace of its own (`spikes/Cargo.toml`, Helmholtz CHA.1), excluded from
   the root workspace: no check of the root builds it, and CI never does. Build a spike by
@@ -160,52 +163,52 @@ the variable (with its own `CARGO_TARGET_DIR`, to keep both builds) to run what 
 A newer push to a pull request cancels the older run of the workflow (`concurrency`);
 pushes to `main` always finish.
 
-A second job, `run-tests-simd`, runs nd-fmm-simd alone, without MPI, on an x86_64
+A second job, `run-tests-simd`, runs tetraleaf-simd alone, without MPI, on an x86_64
 (`ubuntu-latest`) and an arm64 (`ubuntu-24.04-arm`) runner: it prints the CPU, then
 
 ```sh
-cargo clippy -p nd-fmm-simd --all-targets -- -D warnings
-cargo test -p nd-fmm-simd -- --show-output
-cargo test -p nd-fmm-simd --release -- --ignored --show-output
+cargo clippy -p tetraleaf-simd --all-targets -- -D warnings
+cargo test -p tetraleaf-simd -- --show-output
+cargo test -p tetraleaf-simd --release -- --ignored --show-output
 ```
 
 A third job, `run-tests-kernels` (Phase 4 T4, kept at its sign-off on 2026-10-03), runs
-nd-fmm-kernels alone on the CubeCL CPU runtime on `ubuntu-latest`, with the cargo
+tetraleaf-kernels alone on the CubeCL CPU runtime on `ubuntu-latest`, with the cargo
 registry, the target directory and the `tracel-llvm` bundle cached. Since Phase 4S T2
-(decision 6) it also type-checks CUDA, never runs it; for the nd-fmm-exec check it
+(decision 6) it also type-checks CUDA, never runs it; for the tetraleaf-exec check it
 installs MPI and libclang, and its tests still run without MPI:
 
 ```sh
-cargo clippy -p nd-fmm-kernels --all-targets --features cpu -- -D warnings
-cargo check -p nd-fmm-kernels --features cuda
-cargo check -p nd-fmm-exec --features cuda
-cargo test -p nd-fmm-exec --features cpu --release --no-run
-cargo test -p nd-fmm-kernels --features cpu --release -- --show-output
-RUST_MIN_STACK=8388608 cargo test -p nd-fmm-exec --features cpu --release --test operator device_
+cargo clippy -p tetraleaf-kernels --all-targets --features cpu -- -D warnings
+cargo check -p tetraleaf-kernels --features cuda
+cargo check -p tetraleaf-exec --features cuda
+cargo test -p tetraleaf-exec --features cpu --release --no-run
+cargo test -p tetraleaf-kernels --features cpu --release -- --show-output
+RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec --features cpu --release --test operator device_
 ```
 
-The last two lines on nd-fmm-exec were added at the H1 gate (review 2026-11-19, T4). They
-build nd-fmm-exec's device-path tests on every pull request and run the device operator
+The last two lines on tetraleaf-exec were added at the H1 gate (review 2026-11-19, T4). They
+build tetraleaf-exec's device-path tests on every pull request and run the device operator
 tests, which need no MPI initialisation. The other device tests stay checks by hand
-(`fmm-exec/CLAUDE.md`).
+(`tetraleaf-exec/CLAUDE.md`).
 
 Its one test run (since Phase 4S T10) sets `CUBECL_DEBUG_LOG`, and the next step prints
-the kernel compile times from that log with `fmm-kernels/tools/compile_times.awk`.
+the kernel compile times from that log with `tetraleaf-kernels/tools/compile_times.awk`.
 A fourth job, `run-tests-mpi` (Phase 5 T3; README decision 4), runs the MPI test
-executables and the nd-octree MPI examples at 2 and at 4 ranks on `ubuntu-latest`, one
+executables and the tetraleaf-octree MPI examples at 2 and at 4 ranks on `ubuntu-latest`, one
 job per rank count in parallel since 2026-10-31 (`run-tests-mpi (2 ranks)`,
 `run-tests-mpi (4 ranks)`), for correctness only, never timings, never ignored or release
 tests and never more than 4 ranks. `.github/scripts/run-mpi-tests.sh` builds them in the
 dev profile (at opt-level 1, above) without running them
-(`cargo test -p … --test … --no-run`, `cargo build -p nd-octree --example …`), takes
+(`cargo test -p … --test … --no-run`, `cargo build -p tetraleaf-octree --example …`), takes
 their paths from cargo's `--message-format=json` output, and launches each under
 `timeout` (900 s since Phase 6 T11, 600 s since Phase 6 T2; 300 s before, which a slow
 runner exceeded with `mpi_exec` at 4 ranks), the tests with `--test-threads=1 --nocapture`, with
 `RUST_MIN_STACK=8388608` and the BLAS thread variables at 1; the run steps have their own
-`timeout-minutes`. It covers `nd-fmm-plan`'s `mpi_regressions`, `nd-fmm-exec`'s
+`timeout-minutes`. It covers `tetraleaf-plan`'s `mpi_regressions`, `tetraleaf-exec`'s
 `mpi_exec`, `mpi_threading`, `invariance` (rank-count invariance, Phase 5S T2) and
 `helmholtz_fmm` (the Helmholtz FMM, Helmholtz CH3.1b), and the
-seven registered nd-octree examples (`test_mpi_locally_essential` since Phase 5S T3). The runner's 4 vCPUs are 2 cores, so the ranks
+seven registered tetraleaf-octree examples (`test_mpi_locally_essential` since Phase 5S T3). The runner's 4 vCPUs are 2 cores, so the ranks
 oversubscribe (`OMPI_MCA_rmaps_base_oversubscribe=1` for Open MPI 4,
 `PRTE_MCA_rmaps_default_mapping_policy=:oversubscribe` for Open MPI 5, which
 ubuntu-latest has had since it moved to 26.04); it needs no interface flags. By hand, the same script runs a list at any rank count
@@ -235,15 +238,15 @@ GitHub issues, one per milestone, on every push to `main` that changes the roadm
 (`tools/roadmap/sync_issues.py --apply`, tools/roadmap/README.md). The roadmap is the
 source of truth; edits made in the issues are overwritten.
 
-nd-fmm-kernels is a workspace member, not a default member: the default and
+tetraleaf-kernels is a workspace member, not a default member: the default and
 `--workspace` checks build it without a backend. For a change to it, also run
 
 ```sh
-cargo clippy -p nd-fmm-kernels --all-targets --features cpu,metal -- -D warnings
-cargo check -p nd-fmm-kernels --features cuda   # CUDA: type-checked here, run on locust
-cargo test -p nd-fmm-kernels --features cpu --release -- --show-output
+cargo clippy -p tetraleaf-kernels --all-targets --features cpu,metal -- -D warnings
+cargo check -p tetraleaf-kernels --features cuda   # CUDA: type-checked here, run on locust
+cargo test -p tetraleaf-kernels --features cpu --release -- --show-output
 # By hand on the development Mac, outside the sandbox (Metal has no adapter inside it):
-cargo test -p nd-fmm-kernels --release --features metal -- --ignored --show-output
+cargo test -p tetraleaf-kernels --release --features metal -- --ignored --show-output
 ```
 
 Before finishing any task, also run the stricter
@@ -253,33 +256,33 @@ cargo clippy --workspace --all-targets -- -D warnings
 RUST_MIN_STACK=8388608 cargo test --workspace
 ```
 
-For a change to nd-fmm-simd, also clippy the other architecture's code, after
+For a change to tetraleaf-simd, also clippy the other architecture's code, after
 `rustup target add <other>` (`x86_64-apple-darwin` on Apple silicon,
 `aarch64-unknown-linux-gnu` on x86_64 Linux):
 
 ```sh
-cargo clippy -p nd-fmm-simd --all-targets --target <other> -- -D warnings
+cargo clippy -p tetraleaf-simd --all-targets --target <other> -- -D warnings
 ```
 
 On locust (by hand, Phase 4S): after `tools/gh200/sync.sh`, the checks above that are
 not Metal run there too, each as `tools/gh200/remote.sh '<command>'`; Linux needs no
 loopback flags for `mpirun`. The CUDA tests are `#[ignore]`d and run there by hand;
-for nd-fmm-kernels (Phase 4S T2) and nd-fmm-exec (Phase 4S T4; `tests/device_cuda.rs`,
+for tetraleaf-kernels (Phase 4S T2) and tetraleaf-exec (Phase 4S T4; `tests/device_cuda.rs`,
 the CUDA blocks of the ignored gates and the operator tests):
 
 ```sh
-cargo test -p nd-fmm-kernels --release --features cpu,cuda -- --include-ignored --show-output
-cargo clippy -p nd-fmm-kernels --all-targets --features cpu,cuda -- -D warnings
-cargo clippy -p nd-fmm-exec --all-targets --features cpu,cuda -- -D warnings
-RUST_MIN_STACK=8388608 cargo test -p nd-fmm-exec --features cuda --release
-RUST_MIN_STACK=8388608 cargo test -p nd-fmm-exec --features cuda --release -- --ignored
+cargo test -p tetraleaf-kernels --release --features cpu,cuda -- --include-ignored --show-output
+cargo clippy -p tetraleaf-kernels --all-targets --features cpu,cuda -- -D warnings
+cargo clippy -p tetraleaf-exec --all-targets --features cpu,cuda -- -D warnings
+RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec --features cuda --release
+RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec --features cuda --release -- --ignored
 ```
 
 On Kathleen (by hand, in jobs, Phase 5N): after `tools/kathleen/sync.sh`, the CPU-side
 checks above run as Slurm jobs, never on the login node (tools/kathleen/README.md):
 
 ```sh
-tools/kathleen/submit.sh build.sbatch                       # build, nd-fmm-math tests
+tools/kathleen/submit.sh build.sbatch                       # build, tetraleaf-math tests
 tools/kathleen/submit.sh check.sbatch                       # root, strict, simd, kernels
 tools/kathleen/submit.sh mpi.sbatch 1 2 4 8                 # MPI test list on one node
 tools/kathleen/submit.sh --qos=test --nodes=2 -- mpi.sbatch 80   # 2 nodes x 40 ranks
@@ -293,8 +296,8 @@ nodes in `small` also invariance at 160 against 80, 40 and 20, 640 against 80
 oversubscribed and the harness at N = 10⁸ (tools/kathleen/README.md, "The correctness
 job").
 
-`cargo test --workspace` needs a working MPI runtime, because nd-octree and
-nd-fmm-plan tests initialise MPI; crates without MPI (e.g. `cargo test -p nd-fmm-math`)
+`cargo test --workspace` needs a working MPI runtime, because tetraleaf-octree and
+tetraleaf-plan tests initialise MPI; crates without MPI (e.g. `cargo test -p tetraleaf-math`)
 test without one. Keep `RUST_MIN_STACK=8388608` on every test invocation of an MPI
 crate; some tests need it. Crate CLAUDE.md files add crate-specific checks. Keep clippy
 clean without blanket `#[allow]`s.
@@ -307,15 +310,15 @@ runs `cargo upgrades` (not `cargo audit`) through `.github/scripts/dependency-ch
 which fails on a lookup error and lists the exact (`=`) pins' upgrades without failing.
 
 ## MPI
-- MPI is a required dependency of nd-octree and nd-fmm-plan, also for one-rank runs.
-  nd-fmm-math, nd-fmm-ref and nd-fmm-tables stay free of MPI and the octree.
+- MPI is a required dependency of tetraleaf-octree and tetraleaf-plan, also for one-rank runs.
+  tetraleaf-math, tetraleaf-ref and tetraleaf-tables stay free of MPI and the octree.
 - Every rank must reach every collective in the same order, including ranks with empty
   input. Never put communication inside a branch only some ranks take.
 - Keep MPI initialisation to a single test per test executable: MPI cannot be
   re-initialised after finalisation in one process. Add scenarios to the existing
   MPI-owning test, or move them to `tests/` or `examples/`.
 - Doctests that initialise MPI are marked `no_run`.
-- CI runs the MPI test executables and the nd-octree MPI examples at 2 and 4 ranks on
+- CI runs the MPI test executables and the tetraleaf-octree MPI examples at 2 and 4 ranks on
   every pull request (`run-tests-mpi`, correctness only), and the registered examples
   weekly at 3; everything else in CI runs on one rank. For changes to distributed code,
   still run multi-rank by hand (8 ranks and the ignored tests run only by hand, on the
@@ -337,7 +340,7 @@ which fails on a lookup error and lists the exact (`=`) pins' upgrades without f
   (2026-10-31: wall time within the run-order drift, the exchanges +0.5 ms at 6 ranks).
 - Register every example that CI should run in the crate's `Cargo.toml` with both an
   `[[example]]` section and `[package.metadata.example.<name>.templated-examples]`
-  with `command = "mpirun -n {{NPROCESSES}}"`, as in `octree/Cargo.toml`.
+  with `command = "mpirun -n {{NPROCESSES}}"`, as in `tetraleaf-octree/Cargo.toml`.
 
 ## Navigating the code
 Prefer LSP tools (go-to-definition, find-references, symbols) over `grep`/`find` when
@@ -349,8 +352,8 @@ checkout on the machine, if any, is an unrelated development tree and may differ
 implementation and tests rather than trusting prose when checking how an API behaves.
 
 ## Commands
-- Test one crate: cargo test -p nd-fmm-<name>
+- Test one crate: cargo test -p tetraleaf-<name>
 - Regenerate fixtures: see tools/fixtures/README.md
-- Benchmark (a Markdown report in bench-results/, ignored by git; fmm-bench/CLAUDE.md):
+- Benchmark (a Markdown report in bench-results/, ignored by git; tetraleaf-bench/CLAUDE.md):
   `tools/bench/run.sh --backend host,metal --precision f32 --degree 6`; on locust
   `tools/gh200/remote.sh 'tools/bench/run.sh --backend host,cuda --precision f32,f64'`

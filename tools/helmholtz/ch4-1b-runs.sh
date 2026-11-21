@@ -3,7 +3,7 @@
 # and the level's scratch (docs/helmholtz/tasks/CH4.1b.md, "Machine runs"), from the
 # repository root after
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch4-1b-runs.sh <out-dir> <stage…>
 #
 # Every launch runs `helmholtz_accuracy` with `--levels` (the table "Diagonal-form scratch":

@@ -7,7 +7,7 @@
 //! S o = rep. The representative is (min(|a|, |b|), max(|a|, |b|), |c|) of o = (a, b, c),
 //! and S flips the negative components, then swaps x and y if |a| > |b|.
 
-use nd_fmm_spike_truncation::geometry::{dist2, offsets};
+use tetraleaf_spike_truncation::geometry::{dist2, offsets};
 
 /// One class.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

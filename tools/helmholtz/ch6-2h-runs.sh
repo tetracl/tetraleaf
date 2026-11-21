@@ -3,7 +3,7 @@
 # (docs/helmholtz/tasks/CH6.2h.md, "Machine runs"): CH6.2b's stages, from the repository
 # root after the example was built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch6-2h-runs.sh <out-dir> <stage…>
 #
 # Stages: `matrix` (CH6.1e's matrix at ε = 1e-3 and 1e-6: W1 at kD = 10, 30, 100, W3 at

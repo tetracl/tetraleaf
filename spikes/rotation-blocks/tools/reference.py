@@ -10,7 +10,7 @@ The block O^n(beta) of degree n maps Y_n(x) to Y_n(R_y(beta) x), with Y_n the re
 storage (CONVENTIONS §3.6) of N R_n: slot 0 sqrt(n! n!) R_n^0, slot +m
 sqrt(2 (n+m)! (n-m)!) Re R_n^m, slot -m the same with Im, R_n^m the Racah regular
 harmonics of §3.3 (no Condon-Shortley phase) and R_y(beta) = [c 0 s; 0 1 0; -s 0 c] as in
-nd_fmm_math::rotation::euler_zyz.
+tetraleaf_math::rotation::euler_zyz.
 
 Method:
   - Wigner's explicit sum for d^n_{m'm}(beta) (standard phase), with

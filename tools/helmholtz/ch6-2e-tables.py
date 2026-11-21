@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The tables of Helmholtz CH6.2e's report (fmm-validate/results/helmholtz-ch6-2e.md) from
+"""The tables of Helmholtz CH6.2e's report (tetraleaf-validate/results/helmholtz-ch6-2e.md) from
 the outputs of tools/helmholtz/ch6-2e-runs.sh:
 
     tools/helmholtz/ch6-2e-tables.py <out-dir>[,<out-dir>…] verify|scan|times

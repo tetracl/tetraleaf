@@ -13,7 +13,7 @@
 //! target (Σ|q|/r for φ, Σ|q|/r² for each gradient component), and the relative L2
 //! error over all targets.
 
-use nd_fmm_ref::p2p::direct_sum;
+use tetraleaf_ref::p2p::direct_sum;
 
 use crate::rng::Rng;
 use crate::simd::Elem;

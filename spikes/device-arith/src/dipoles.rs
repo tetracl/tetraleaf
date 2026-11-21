@@ -1,21 +1,21 @@
 //! Phase 6 T8d: the coincident-pair rule of the production dipole P2P
-//! (`nd_fmm_kernels::p2p::p2p` with `SourceKind::Dipoles`, the backend's default layout) on
+//! (`tetraleaf_kernels::p2p::p2p` with `SourceKind::Dipoles`, the backend's default layout) on
 //! the adversarial and random pairs of the §3.13 check (`pairs`), each with a seeded moment
 //! d̂ uniform in [−1, 1)³ (CONVENTIONS §3.13, "Device kernels").
 //!
 //! Each pair is one row of one launch: the target leaf t with u_t, and the source leaf s
 //! with u_s and d̂ (the leaf itself for s = t), so the kernel forms ŷ = fma(r̂, u_s, ĉ) and
 //! r̂ d̂ from the leaves' integer coordinates. Checked per pair, against the host's inputs
-//! (ŷ = fl(ĉ + r̂ u_s), d_t = r̂ d̂) and `nd_fmm_ref::p2p::p2p_dipoles` in T:
+//! (ŷ = fl(ĉ + r̂ u_s), d_t = r̂ d̂) and `tetraleaf_ref::p2p::p2p_dipoles` in T:
 //! - a coincident pair (u_t == ŷ, which the reference skips) adds exactly zero to φ̂ and ĝ;
 //! - every other pair in the f32 dipole range (r² ≥ 2⁻⁷⁹ for |d_t,ₖ| ≤ 2; every pair in
 //!   f64) is finite and within the device dipole contract, 32 u_T (φ̂, relative to
 //!   |d_t| / r²) and 176 u_T (each component of ĝ, relative to |d_t| / r³).
 
-use nd_fmm_kernels::p2p::{P2pInputs, P2pLayout, p2p};
-use nd_fmm_kernels::view::{IndexView, LeafCoordinates, PointOffsets};
-use nd_fmm_kernels::{Device, DeviceFloat, SourceKind};
-use nd_fmm_validate::SplitMix64;
+use tetraleaf_kernels::p2p::{P2pInputs, P2pLayout, p2p};
+use tetraleaf_kernels::view::{IndexView, LeafCoordinates, PointOffsets};
+use tetraleaf_kernels::{Device, DeviceFloat, SourceKind};
+use tetraleaf_validate::SplitMix64;
 
 use crate::pairs::Pair;
 use crate::real::Real;
@@ -157,7 +157,7 @@ pub fn run<T: Real + DeviceFloat>(
             continue;
         }
         let (mut rphi, mut rg) = ([T::narrow(0.0)], [[T::narrow(0.0); 3]]);
-        nd_fmm_ref::p2p::p2p_dipoles(&[y], &[d], &[p.ut], &mut rphi, Some(&mut rg));
+        tetraleaf_ref::p2p::p2p_dipoles(&[y], &[d], &[p.ut], &mut rphi, Some(&mut rg));
         let dn = d.iter().map(|c| c.widen().powi(2)).sum::<f64>().sqrt();
         if dn == 0.0 {
             continue;

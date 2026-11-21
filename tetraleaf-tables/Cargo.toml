@@ -1,0 +1,24 @@
+[package]
+name = "tetraleaf-tables"
+version = "0.1.0-dev"
+description = "Precomputed Laplace FMM operator tables and their versioned cache for the tetraleaf FMM."
+readme = "README.md"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "tetraleaf_tables"
+
+[dependencies]
+tetraleaf-math = { workspace = true }
+tetraleaf-ref = { workspace = true }
+num-traits = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+# No `unsafe` in any target of this crate (root CLAUDE.md, "Working rules"; Helmholtz CHA.2).
+[lints.rust]
+unsafe_code = "forbid"

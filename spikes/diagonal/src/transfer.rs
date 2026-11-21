@@ -2,7 +2,7 @@
 //!
 //! T_L(ŝ) = Σ_{l≤L} (2l + 1) iˡ hₗ(k|t|) Pₗ(ŝ · t̂) (proposal §3.6, [`crate::signature`]),
 //! evaluated in double-double at each sample: hₗ by S7's upward recursion
-//! (`nd_fmm_spike_truncation::radial::hankel`), Pₗ by the forward three-term recurrence,
+//! (`tetraleaf_spike_truncation::radial::hankel`), Pₗ by the forward three-term recurrence,
 //! which is stable for |μ| ≤ 1. One pass gives T at several bandwidths L (the snapshots),
 //! since the partial sums are the lower bandwidths.
 //!
@@ -16,9 +16,9 @@
 //! Gaussian window (the regularised Shannon sampling series of Qian, 2003), 2h terms per
 //! sample, in f64.
 
-use nd_fmm_spike_truncation::complex::Complex;
-use nd_fmm_spike_truncation::radial;
-use nd_fmm_spike_truncation::real::{Dd, Real};
+use tetraleaf_spike_truncation::complex::Complex;
+use tetraleaf_spike_truncation::radial;
+use tetraleaf_spike_truncation::real::{Dd, Real};
 
 use crate::grid::round;
 

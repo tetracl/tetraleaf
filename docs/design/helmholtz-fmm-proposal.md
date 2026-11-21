@@ -13,7 +13,7 @@ What draft 0.8 changes, after a review of draft 0.7 against RLST 0.12 (released 
 the FFTW rework shipped in 0.11.0 on 2026-10-25):
 
 - **Phase HR's RLST part is done (Sections 6.7 and 10).** RLST 0.11.0 implements every task
-  nd-fmm needed: CHR.1 is complete, D14 closed, R19 retired. What remains is nd-fmm's own
+  tetraleaf needed: CHR.1 is complete, D14 closed, R19 retired. What remains is tetraleaf's own
   adoption: the pin move (CHR.2), the wrapper (CHR.3) and the machines' FFTW (CHR.4).
 - **CHR.2 rewritten and moved to the front.** RLST 0.12 removes `rlst::simd`, which
   green-kernels uses, so the `[patch]` for green-kernels stays on 0.10.2; octree's own pin
@@ -22,19 +22,19 @@ the FFTW rework shipped in 0.11.0 on 2026-10-25):
   measured once. New risks R21 (the pin move) and R22 (system FFTW).
 - **New early task CHR.4**: the FFTW builds of the machines of record (both precisions,
   version, SIMD) and RLST's own FFTW tests on them, before S9.
-- **One FFTW back end (Section 6.7).** RLST has only `fftw_system`; nd-fmm's `fftw` feature
+- **One FFTW back end (Section 6.7).** RLST has only `fftw_system`; tetraleaf's `fftw` feature
   forwards to it. D13 is withdrawn: RLST ≥ 0.11 has no `fftw_mkl`.
 - **Interleaved scratch, not split plans, for the φ step (Sections 3.3 and 6.7).** RLST's
   measurements put split plans at 1.5–2.8× the interleaved time on a SIMD build of FFTW; the
   zero-padding scatter of the φ step writes interleaved scratch at no extra cost.
 - **Rank invariance with FFTW (Sections 6.6 and 6.7, R15).** Its preconditions are stated
   (the same FFTW build, SIMD support and wisdom on every rank); plan fingerprints are
-  compared across ranks at build, and nd-fmm uses no wisdom.
+  compared across ranks at build, and tetraleaf uses no wisdom.
 - **S9 on RLST 0.12 (CH0.9)**, outside the workspace, at the real batch of 2P − 1 rings and
   padded to 2P, on all three machines; Homebrew's FFTW on the M3 Max has no SIMD (D7).
 - Smaller corrections are listed in Appendix A.
 
-The review of draft 0.7 read the repositories only (RLST at `v0.12.0`, nd-fmm's `main`,
+The review of draft 0.7 read the repositories only (RLST at `v0.12.0`, tetraleaf's `main`,
 green-kernels' pinned rev) and compiled nothing. Every compilation and test it could not
 run is scheduled in CHR.2, CHR.4, CH0.9 and CHR.3, the first two as the first
 implementation tasks (Section 10).
@@ -54,7 +54,7 @@ a rounding bound shows the diagonal form stable and faster; the nearest classes 
 RCR. On the low-frequency levels the host tuner picks the M2L among Rotation, the
 table-based strategies (small p only) and an exponential (plane-wave) M2L that generalises
 Phase 6 T13. Yukawa runs on a real path with pruning of the coarse levels. Leaves stay a
-fraction of a wavelength wide. Share the octree, `nd-fmm-plan`, the evaluator, the
+fraction of a wavelength wide. Share the octree, `tetraleaf-plan`, the evaluator, the
 distribution and the build and benchmark infrastructure; share the host drivers with Laplace
 through monomorphised generics where the rule of Section 2 holds, first for Yukawa. Build
 RCR on every level first, since it is correct at any kD; then the exponential M2L, which
@@ -101,7 +101,7 @@ the radius of the circumsphere of a box (a_l = (√3/2) w_l for box width w_l):
   Section 11 records why.
 - Maxwell, layered media, periodic boundary conditions.
 - Any change to a Laplace kernel, table, layout or default. The one additive change that
-  Section 3.7 may need, a maximum leaf width in `nd-octree` that defaults to none, leaves
+  Section 3.7 may need, a maximum leaf width in `tetraleaf-octree` that defaults to none, leaves
   Laplace's trees as they are.
 - High-frequency levels in f32, unless spike S6 shows offset classes stable in f32. Since
   Metal and WGSL have no f64 (constraint 8), this means no high-frequency Helmholtz on
@@ -150,16 +150,16 @@ proposal keeps every one of them.
    output over the union of the points, at every thread count and overlap setting, as for
    Laplace (laplace-fmm-plan §5.4).
 3. **The level-batched interface.** Helmholtz implements
-   `nd_fmm_plan::operator::FmmOperator`. `Value` stays a real scalar; complex quantities
+   `tetraleaf_plan::operator::FmmOperator`. `Value` stays a real scalar; complex quantities
    are stored as real planes. `multipole_size(level)` and `local_size(level)` already may
    vary by level, which a level-dependent p_l needs, and may differ from each other, which
    real multipoles with complex locals need (Section 3.3).
 4. **No complex type on the device** (laplace-fmm-plan §6.3). Every device kernel works on
    real scalars.
 5. **Tables in f64 on the host**, rounded when stored (§6.2), in the versioned cache of
-   `nd-fmm-tables`.
+   `tetraleaf-tables`.
 6. **Every fast path is tested against a slower trusted path**: direct sums, addition
-   theorems, reference operators in `nd-fmm-ref`.
+   theorems, reference operators in `tetraleaf-ref`.
 7. **Table memory is a node budget** ([node-m2l.md](node-m2l.md)): the strategy rule sees
    the tables of a rank and of all the ranks of a node. With level-dependent tables and
    signature scratch this budget becomes the binding constraint (Section 7).
@@ -187,7 +187,7 @@ j_n and spherical Hankel functions of the first kind h_n = h_n^{(1)}:
 
 for |y| = r_< < r_> = |x| about a common centre. A multipole expansion of box b is
 4π ik Σ M_nm h_n(kρ) Y_n^m(ρ̂) about its centre, a local expansion Σ L_nm j_n(kρ) Y_n^m(ρ̂),
-both of φ̃ = 4πφ. The factor 1/(4π) is applied once, by `nd-fmm-exec`, at the output; the
+both of φ̃ = 4πφ. The factor 1/(4π) is applied once, by `tetraleaf-exec`, at the output; the
 factor 4π ik by the three operators where a far-field contribution crosses from a singular
 to a regular representation, M2L, M2P and P2L, so the locals carry it
 (L_nm = 4π ik Σ q h_n Y_n^m) and the multipoles do not (CONVENTIONS §3.15, "Where the
@@ -223,7 +223,7 @@ to 700 (Section 3.5). An orthonormal basis keeps every coefficient and every rot
 of order one: N Dⁿ N⁻¹ is orthogonal (CONVENTIONS §3.8).
 
 What carries over: at low degree the orthonormal blocks are the existing blocks conjugated
-by N, so `nd_fmm_math::rotation::blocks` serves as the reference and as the generator up
+by N, so `tetraleaf_math::rotation::blocks` serves as the reference and as the generator up
 to the degree where the conjugation stays accurate (spike S1, Section 10). Above it, the
 blocks come from a recursion that is stable at large degree (Section 8, R1).
 
@@ -341,7 +341,7 @@ Top level (level 2) against kD, at ε = 10⁻⁴ / 10⁻⁶ / 10⁻⁸:
 Doubling kD moves the whole table up one level.
 
 **Calibrated (H3, CH3.3; amended at H3.G).** The full FMM's rule, `DegreeRule::CALIBRATED`
-of `nd_fmm_exec::helmholtz`, with L = log₁₀(1/ε) and x = Re(k) a:
+of `tetraleaf_exec::helmholtz`, with L = log₁₀(1/ε) and x = Re(k) a:
 
 ```math
 p(x, \varepsilon) = \max\!\left(\lceil 0.30 L^2 + 0.25 L + 2.60 \rceil,\;
@@ -539,8 +539,8 @@ addition to the points-per-leaf rule, with c_leaf from spike S8 (initially betwe
 - under-resolved inputs get more, sparser leaves instead of high-frequency ones; S8 measures
   the cost on the reference workloads (Section 9.1).
 
-If `nd-octree` already takes a maximum depth or width, the builder passes it. Otherwise a
-maximum leaf width is added to `nd-octree` as an optional parameter that defaults to none,
+If `tetraleaf-octree` already takes a maximum depth or width, the builder passes it. Otherwise a
+maximum leaf width is added to `tetraleaf-octree` as an optional parameter that defaults to none,
 so that Laplace's trees and outputs are unchanged (constraint 1, checked in CH3.0). For
 Yukawa there is no wavelength and the rule does not apply.
 
@@ -607,7 +607,7 @@ filtering), and rotates back.
   expansion as two columns. The eight child shifts share the polar angles β and π − β,
   whose blocks are related by a signed permutation, and orthogonality gives the back
   rotation as the transpose, so a level needs one block set of
-  B = (p + 1)(2p + 1)(2p + 3)/3 reals (`nd_fmm_tables::rotation` stores 2 B per polar
+  B = (p + 1)(2p + 1)(2p + 3)/3 reals (`tetraleaf_tables::rotation` stores 2 B per polar
   angle): 31 MiB in f64 at p = 144, 183 MiB at p = 261. Above a degree measured in S1 the
   blocks are generated per level call from the recursion of Section 8 (R1) instead of
   stored.
@@ -625,7 +625,7 @@ Strategies behind a `HelmholtzM2l` choice per level, resolved by a tuner as `M2l
 is for Laplace:
 
 - **Rotation** (default, exact up to truncation): RCR with the M2L family's 47 polar
-  angles and 32 azimuths (as `nd_fmm_tables::rotation`) and the complex coaxial (S|R)
+  angles and 32 azimuths (as `tetraleaf_tables::rotation`) and the complex coaxial (S|R)
   coefficients per level and distance (15 distances). O(p³) per V pair. It is correct on
   every level, so it also serves the offset classes of high-frequency levels that fail the
   rule of Section 3.6.
@@ -690,7 +690,7 @@ is for Laplace:
     kD = 500 and W3 at kD = 100 (H6 gate §8, Kathleen job 633000). The gain is below Laplace's T10:
     below 10⁻⁶ the waves need a degree above the level's, and above it they run at p ≈ 15,
     where Rotation is still cheap. Merge and shift is 64–95 % of the time per level (CH6.2d).
-    Reports: fmm-validate/results/helmholtz-ch6-{1e,1g,1h,2b,2d,2f,2h}.md; the H6 gate,
+    Reports: tetraleaf-validate/results/helmholtz-ch6-{1e,1g,1h,2b,2d,2f,2h}.md; the H6 gate,
     docs/helmholtz/gates/H6.md §3.1.
 
 ### 5.4 M2L on high-frequency levels: signatures
@@ -786,7 +786,7 @@ high-frequency levels; only weakly damped ones use them.
 
 Potential and gradient of e^{ikr}/r: cos(kr)/r and sin(kr)/r (real k), e^{−κr}/r (Yukawa),
 e^{−Im k r}(cos + i sin)(Re k r)/r (complex k); the gradient factor is (ik − 1/r). New
-kernels in `nd-fmm-simd` for NEON and AVX2 + FMA (AVX-512 with C6.7), with vectorised
+kernels in `tetraleaf-simd` for NEON and AVX2 + FMA (AVX-512 with C6.7), with vectorised
 sincos and exp, under an accuracy contract like simd-p2p.md's, on a loop skeleton shared
 with Laplace where constraint 1 of Section 2 holds (Section 6.2). The phase k r is formed
 from k r_leaf (a per-tree constant formed in f64) times the leaf-scaled distance; with the
@@ -806,18 +806,18 @@ Laplace modules, with drivers shared where Section 6.2 allows.
 
 | Crate | New for Helmholtz | Shared with Laplace |
 | --- | --- | --- |
-| `nd-fmm-math` | orthonormal real harmonics; j_n, h_n, i_n, k_n for real and complex arguments, with the Yukawa scaling; orthogonal rotation blocks at any degree | `RealScalar`, the index layout, the low-degree rotation recursion (reference and generator) |
-| `nd-fmm-ref` | direct-sum oracle for G_k; reference P2M … L2P; direct and RCR translations; the diagonal form in extended precision | test infrastructure |
-| `nd-fmm-tables` | per-level coaxial, rotation, transfer-function (per class) and quadrature tables; per-level cache keys | the versioned cache, canonical frames, V-list and octant geometry |
-| `nd-fmm-simd` | Helmholtz and Yukawa pair arithmetic (sincos, exp) | ISA dispatch, chunk layout, accuracy harness; the P2P loop skeleton (chunking, masking) generic over the pair kernel, if the C3S.4 gate holds |
-| `nd-fmm-kernels` | device kernels for complex planes, the complex (S\|R) step, diagonal M2L, transforms, Helmholtz and Yukawa P2P, leaf operators with radial recursions; cubek-fft if S5 adopts it (a new dependency, D10) | GEMM kernels where the stacked form applies (Section 6.5) |
-| `nd-fmm-exec` | `HelmholtzOperator<T, K>`, `HelmholtzM2l`, the classifier and the per-class rule, the builder with the leaf rule, the high-frequency levels; the host FFT back ends behind a trait of its own, FFTW only behind the optional `fftw` feature (Section 6.7) | `Fmm` plumbing, leaf-scaled loading, tuner and table-cache machinery, MPI and device hooks; from H2, the host drivers of Dense, Classes, Rotation and Batched, generic over the kernel, if the rule of Section 2 holds |
-| `nd-octree` | only if missing: an optional maximum leaf width, defaulting to none (Section 3.7) | everything else |
-| `nd-fmm-validate`, `nd-fmm-bench` | the reference workloads of Section 9.1 and their calibrations; a problem-file version with k and complex charges | harness, distributions, reporting, `--write-problem` and `--check-output` |
+| `tetraleaf-math` | orthonormal real harmonics; j_n, h_n, i_n, k_n for real and complex arguments, with the Yukawa scaling; orthogonal rotation blocks at any degree | `RealScalar`, the index layout, the low-degree rotation recursion (reference and generator) |
+| `tetraleaf-ref` | direct-sum oracle for G_k; reference P2M … L2P; direct and RCR translations; the diagonal form in extended precision | test infrastructure |
+| `tetraleaf-tables` | per-level coaxial, rotation, transfer-function (per class) and quadrature tables; per-level cache keys | the versioned cache, canonical frames, V-list and octant geometry |
+| `tetraleaf-simd` | Helmholtz and Yukawa pair arithmetic (sincos, exp) | ISA dispatch, chunk layout, accuracy harness; the P2P loop skeleton (chunking, masking) generic over the pair kernel, if the C3S.4 gate holds |
+| `tetraleaf-kernels` | device kernels for complex planes, the complex (S\|R) step, diagonal M2L, transforms, Helmholtz and Yukawa P2P, leaf operators with radial recursions; cubek-fft if S5 adopts it (a new dependency, D10) | GEMM kernels where the stacked form applies (Section 6.5) |
+| `tetraleaf-exec` | `HelmholtzOperator<T, K>`, `HelmholtzM2l`, the classifier and the per-class rule, the builder with the leaf rule, the high-frequency levels; the host FFT back ends behind a trait of its own, FFTW only behind the optional `fftw` feature (Section 6.7) | `Fmm` plumbing, leaf-scaled loading, tuner and table-cache machinery, MPI and device hooks; from H2, the host drivers of Dense, Classes, Rotation and Batched, generic over the kernel, if the rule of Section 2 holds |
+| `tetraleaf-octree` | only if missing: an optional maximum leaf width, defaulting to none (Section 3.7) | everything else |
+| `tetraleaf-validate`, `tetraleaf-bench` | the reference workloads of Section 9.1 and their calibrations; a problem-file version with k and complex charges | harness, distributions, reporting, `--write-problem` and `--check-output` |
 | `tools/fmm3d/`, `tools/fixtures/` (not crates) | `hfmm3d` in the driver; a fixture generator that runs it | T9's pinned build, driver, `run.sh` steps (`problems`, `sweep`, `match`, `time`, `crosscheck`) |
 | `spikes/` (a workspace of their own, `spikes/Cargo.toml` with `spikes/Cargo.lock`, outside the root's, so never in CI nor in the root `Cargo.lock` (amended at CHA.1); S9 outside both, with a `[workspace]` table of its own, CH0.9) | S1–S9 | — |
 
-Nothing in `nd-fmm-plan` changes. Proposal B (separate crates `fmm-helmholtz-*`) isolates
+Nothing in `tetraleaf-plan` changes. Proposal B (separate crates `fmm-helmholtz-*`) isolates
 more but duplicates the build and test plumbing; decision D2.
 
 ### 6.2 Sharing code with Laplace
@@ -833,7 +833,7 @@ that, nothing in Laplace is generalised in advance.
 | Yukawa host M2L, M2M, L2L (Dense, Classes, Rotation, Batched) | the drivers: batch walking, gathers and scatters, threading, charge vectors, scratch | tables per (level, offset); coaxial coefficients; the cube-group coefficient transforms of Classes in the orthonormal basis; leaf radial functions | large: Yukawa is real with (p + 1)² storage, as Laplace |
 | Helmholtz low-frequency levels | the same drivers, with complex expansions as two real columns per vector; for real k, M2M and L2L as real operators on those columns | the epilogue that combines the four real products of a complex M2L; complex (S\|R) coefficients | moderate |
 | Helmholtz high-frequency levels | none (RCR classes reuse the low-frequency Rotation driver) | transforms, diagonal M2L, signature scratch, the per-class rule | none |
-| P2P (`nd-fmm-simd`) | chunking, masking, ISA dispatch | the pair arithmetic | moderate |
+| P2P (`tetraleaf-simd`) | chunking, masking, ISA dispatch | the pair arithmetic | moderate |
 | Leaf operators | per-particle loops, leaf-scaled frames | harmonics and radial recursions | small |
 | Device | launch and buffer plumbing (already shared) | kernels; at most a comptime kernel parameter | small |
 
@@ -865,7 +865,7 @@ imaginary planes are two columns. In Dense and Batched the products with [A_r; A
 the four real products, which are accumulated over the offsets of a target and combined by
 a kernel-specific epilogue once per target (Section 6.5). In Rotation the real blocks, and
 for real k the real coaxial steps of M2M and L2L, act on both columns; only the (S|R) step
-of the M2L is complex. The `#[target_feature]` functions of `nd-fmm-simd` keep the loop
+of the M2L is complex. The `#[target_feature]` functions of `tetraleaf-simd` keep the loop
 skeleton inside them and take the pair arithmetic as `#[inline]` trait methods, so it
 inlines into the feature context.
 
@@ -906,7 +906,7 @@ constructs the monomorphised operator, so the kind is resolved above the level c
 - It owns the per-level strategy, the per-(level, class) M2L choice of the high-frequency
   levels, the per-level tables (or references into a shared table object) and the scratch of
   the high-frequency levels (signatures of one level at a time).
-- Level calls follow the batches of `nd-fmm-plan` exactly as `LaplaceOperator`'s do: M2L by
+- Level calls follow the batches of `tetraleaf-plan` exactly as `LaplaceOperator`'s do: M2L by
   target rows on the host, by offset groupings on the device, each target's contributions
   added in a fixed order (Section 5.4), so determinism and rank invariance follow as for
   Laplace.
@@ -983,7 +983,7 @@ depend on the ranks per node, as for Laplace's node rule (amended at CH6.2h and 
 ### 6.6 Distributed path
 
 - Variable expansion sizes per level are already supported by the exchanges of
-  `nd-fmm-plan`; the locally essential set and the owned top tree carry over.
+  `tetraleaf-plan`; the locally essential set and the owned top tree carry over.
 - **The replicated top needs a byte cap, not a box cap.** Phase 5S replicates at most 4,096
   boxes. With Helmholtz the top levels are the large-p levels. At ε = 10⁻⁶ the complex f64
   multipoles of levels 2 to 4 take, on every rank:
@@ -1031,7 +1031,7 @@ counted as one, before any measurement of efficiency:
 
 (Padding relative to the multiple of 4 above 4P − 3.) The column "DFT as a product" counts the
 φ step without the grid's symmetries in complex arithmetic. As built at CH4.1a (amended at
-CH4.1a; `fmm-validate/results/helmholtz-ch4-1a.md`) the product needs far less: the cos and
+CH4.1a; `tetraleaf-validate/results/helmholtz-ch4-1a.md`) the product needs far less: the cos and
 sin are real, so the φ step is two real transforms of each ring's sums; the parity of the
 Gauss–Legendre nodes halves the Legendre step; and, N_φ being a multiple of 4, every azimuth
 is ±φⱼ + qπ/2 of a base azimuth j ≤ N_φ/8, which quarters the φ step. That is about 2P³ + 8P³
@@ -1086,8 +1086,8 @@ takes 16 N_φ (2P − 1) bytes, a multiple of 64 since N_φ is a multiple of 4, 
 level packed back to back in one aligned allocation all stay in class 0.
 
 Plans are made once per operator build, dropped with the operator and never written to the
-table cache, since FFTW plans are not portable data. nd-fmm uses no wisdom and never calls
-`Planner::threads`; if an embedding application enables RLST's `fftw_threads`, nd-fmm's
+table cache, since FFTW plans are not portable data. tetraleaf uses no wisdom and never calls
+`Planner::threads`; if an embedding application enables RLST's `fftw_threads`, tetraleaf's
 plans stay single-threaded (RLST tests that threaded planning leaves single-threaded plans
 unchanged).
 
@@ -1095,7 +1095,7 @@ unchanged).
 have the same layout, alignment classes, options and thread count, were made with the same
 FFTW build on a CPU with the same SIMD support, and found the same wisdom in the process.
 Wisdom is process-global, so an application that plans size N_φ with `Measure`, or imports
-wisdom, on some ranks changes nd-fmm's `Estimate` plans on those ranks only. The builder
+wisdom, on some ranks changes tetraleaf's `Estimate` plans on those ranks only. The builder
 therefore all-gathers each level's `Plan::fingerprint` (one u64 per level) and, if the ranks
 disagree, every rank runs that level's φ step as the product: a collective decision on
 inputs that do not depend on the data (constraint 9). The machines of record run one FFTW
@@ -1107,7 +1107,7 @@ thread count or the process, and measures the per-box overhead.
 
 1. **The transform as a product** (default, always built): no dependency, the reference,
    the path of every default build and of CI's default jobs.
-2. **FFTW through RLST 0.12**, behind the optional `fftw` feature of `nd-fmm-exec`, defined
+2. **FFTW through RLST 0.12**, behind the optional `fftw` feature of `tetraleaf-exec`, defined
    as `fftw = ["rlst/fftw_system"]` (CH4.6). `fftw_system` is RLST's only back end and
    implies its `fftw` feature; `fftw` alone is a compile error. It links the system's FFTW,
    version 3.3.4 or later (3.3.10 recommended), in **both precisions** (`fftw3` and
@@ -1119,7 +1119,7 @@ thread count or the process, and measures the per-box overhead.
    features); decision D7. On the M3 Max it may beat FFTW: Homebrew's FFTW on Apple silicon
    is built without SIMD (RLST `docs/fftw/F8b-benchmarks.md`).
 
-The back ends sit behind a small trait internal to `nd-fmm-exec`; RLST provides none (its
+The back ends sit behind a small trait internal to `tetraleaf-exec`; RLST provides none (its
 DF4). RLST ≥ 0.11 has no MKL back end (its DF5), so draft 0.7's D13 is withdrawn.
 
 **FFTW stays optional.** Required, and checked in the pull requests of CHR.2, CHR.3 and
@@ -1148,14 +1148,14 @@ CH4.6:
 **GPL warning in the user documentation.** FFTW is licensed under the GNU General Public
 License, version 2 or later; MIT's Technology Licensing Office sells non-free licences. The
 repository is MIT OR Apache-2.0. A warning goes wherever a user can meet the feature: the
-crate-level documentation of `nd-fmm-exec` (its section on features, with the
+crate-level documentation of `tetraleaf-exec` (its section on features, with the
 feature-gated items marked as above so docs.rs shows it), the repository README, the
 documentation of the builder option that selects the FFT back end, and the comment on the
-feature in `nd-fmm-exec/Cargo.toml`. Proposed wording:
+feature in `tetraleaf-exec/Cargo.toml`. Proposed wording:
 
 > **Warning: FFTW is licensed under the GNU General Public License (version 2 or later).**
 > The optional `fftw` feature links FFTW and the GPL-licensed fftw-sys bindings through
-> RLST. nd-fmm itself is licensed MIT OR
+> RLST. tetraleaf itself is licensed MIT OR
 > Apache-2.0, but a program built with this feature links a GPL-licensed library, and
 > distributing such a program is subject to the terms of the GPL unless you hold a non-free
 > FFTW licence from MIT's Technology Licensing Office. Cargo enables a feature for the whole
@@ -1175,23 +1175,23 @@ fingerprints; wisdom; an optional `fftw_threads` feature; errors instead of `Opt
 determinism tested in fresh processes; and RLST's own GPL warning. RLST 0.12.0 (2026-10-26)
 made the execution checks allocation-free and removed the unrelated `rlst::simd` module,
 which matters to CHR.2. The repository moved to github.com/tbetcke/rlst in 0.10.3;
-Codeberg and github.com/linalg-rs/rlst are archived. nd-fmm's needs, against 0.12:
+Codeberg and github.com/linalg-rs/rlst are archived. tetraleaf's needs, against 0.12:
 
-| nd-fmm need | RLST 0.12 | Used by |
+| tetraleaf need | RLST 0.12 | Used by |
 | --- | --- | --- |
 | 1-D plans along one axis with a fixed batch (F1, F2) | `Layout::along_axis` on arrays and views; guru64 | CHR.3, CH4.6 |
 | execution on new arrays from every rayon worker (F1, F4) | `Plan` is `Send + Sync`; execution takes no lock and checks each buffer | CHR.3, CH4.6 |
 | interleaved scratch, or split plans (F3) | c2c on interleaved scratch, the choice above; `Planner::split_c2c` available, slower with SIMD | CHR.3, CH4.6 |
 | alignment classes and aligned buffers (F1) | `AlignmentClass`, `PLAN_ALIGNMENT` = `FFTW_ALIGNED` = 64, `rlst_dynamic_array!(…, shape \| rlst::FFTW_ALIGNED)`, `AlignedDynArray` | CHR.3, CH4.6 |
-| determinism (F4) | `Plan::fingerprint`; RLST's `fftw_determinism` test in fresh processes, at 9 rings rather than nd-fmm's 2P − 1 | CHR.3, CH4.6, CH8.1, S9 |
-| the warning (F7) and a release (F8) | in the README, the guide, the module documentation and `Cargo.toml`; 0.11.0 and 0.12.0 | CH4.6 (nd-fmm's own warning); CHR.2 |
+| determinism (F4) | `Plan::fingerprint`; RLST's `fftw_determinism` test in fresh processes, at 9 rings rather than tetraleaf's 2P − 1 | CHR.3, CH4.6, CH8.1, S9 |
+| the warning (F7) and a release (F8) | in the README, the guide, the module documentation and `Cargo.toml`; 0.11.0 and 0.12.0 | CH4.6 (tetraleaf's own warning); CHR.2 |
 | later, two-dimensional transforms over (θ, φ) (F2) | `Layout::over_axes` | the Cecka–Darve upgrade |
 
-r2c, c2r, r2r, wisdom and `fftw_threads` (F5, F6) are not used by nd-fmm. RLST's decisions
-that matter here: DF3 (64-byte classes; nd-fmm allocates through RLST's aligned
-containers), DF4 (no back-end-neutral trait in RLST; nd-fmm's is internal), DF5 and DF6
+r2c, c2r, r2r, wisdom and `fftw_threads` (F5, F6) are not used by tetraleaf. RLST's decisions
+that matter here: DF3 (64-byte classes; tetraleaf allocates through RLST's aligned
+containers), DF4 (no back-end-neutral trait in RLST; tetraleaf's is internal), DF5 and DF6
 (only `fftw_system`), DF8 (FFTW 3.3.4 or later, 3.3.10 recommended). The open points that
-RLST's design lists for nd-fmm (its Section 11) are answered in this draft: items 1 and 2 by
+RLST's design lists for tetraleaf (its Section 11) are answered in this draft: items 1 and 2 by
 CH0.9 and the scratch choice above, 3 by the fingerprint check, 4 by using no wisdom, 5 and
 6 by CHR.2, 7 and 8 by the host back ends above, 9 and 10 by the release, 11 by the
 `cargo deny` entry, and 12 by the packed buffers above.
@@ -1365,7 +1365,7 @@ and reported per frequency in CH4.4.
 | R18 | Under-resolved or unevenly resolved inputs | high-frequency leaves, P2P over many wavelengths | the maximum leaf width of Section 3.7; S8 measures its cost on W3; validation item 8 |
 | R19 | RLST rework and release timing | retired: RLST 0.11.0 and 0.12.0 are released | the move to them is R21 |
 | R20 | Gates on unrepresentative workloads | gates pass on easy distributions and fail on real ones | the reference workloads of Section 9.1, fixed before H2 (D12) |
-| R21 | The move to RLST 0.12 | 0.12 removes `rlst::simd`, which green-kernels (spikes) uses; moving one pin but not the other leaves two RLST copies in the default build; a Laplace bit or benchmark could move | the `[patch]` for green-kernels stays on 0.10.2; the workspace's and octree's pins move together; the distributed tools and `threading`, the RLST modules the Laplace path calls most, are unchanged in source from 0.10.2, and nothing nd-fmm's crates name was removed; constraint 1 checked in CHR.2, first in the plan; fallback: stay on 0.10.2 without the `fftw` feature |
+| R21 | The move to RLST 0.12 | 0.12 removes `rlst::simd`, which green-kernels (spikes) uses; moving one pin but not the other leaves two RLST copies in the default build; a Laplace bit or benchmark could move | the `[patch]` for green-kernels stays on 0.10.2; the workspace's and octree's pins move together; the distributed tools and `threading`, the RLST modules the Laplace path calls most, are unchanged in source from 0.10.2, and nothing tetraleaf's crates name was removed; constraint 1 checked in CHR.2, first in the plan; fallback: stay on 0.10.2 without the `fftw` feature |
 | R22 | System FFTW on the machines | RLST has no source back end any more: a machine without FFTW in both precisions has no FFTW back end, and one without SIMD (Homebrew on Apple silicon) a slow one | CHR.4 records each machine's FFTW; the product, or rustfft (D7), where FFTW is missing or slow |
 
 ## 9. Validation
@@ -1427,7 +1427,7 @@ largest error at one of its targets over the reference's RMS over all targets, r
 beside the all-target ℓ2 error. A gate checks it against a bound: the worst box at most
 100 ε (amended at CH4.0b). ε stays the relative ℓ2 tolerance, on which the degree rule is
 calibrated; pointwise the errors reach 10–60 ε near box corners, where the truncation is
-largest (fmm-validate/results/helmholtz-ch4-0b.md), and a worst box above 100 ε is a finding
+largest (tetraleaf-validate/results/helmholtz-ch4-0b.md), and a worst box above 100 ε is a finding
 as an ℓ2 miss is. CH4.4's "no error concentrated at a class boundary" is read with it.
 
 ### 9.2 FMM3D as an independent reference
@@ -1445,7 +1445,7 @@ matches our direct sum.
 - **Fixtures, for CI.** A generator in `tools/fixtures/` runs the extended
   `tools/fmm3d/driver.f90` on small problems (two points, then N of a few hundred to a few
   thousand, for real, complex and purely imaginary k, real and complex charges, potentials
-  and gradients) and commits the values as fixtures of `nd-fmm-ref`, with the FMM3D
+  and gradients) and commits the values as fixtures of `tetraleaf-ref`, with the FMM3D
   release, the routine and its `eps` recorded beside them. FMM3D's direct evaluation
   routines are used where the pinned release has them for Helmholtz (the names checked
   against the release, as T9 did for Laplace), else `hfmm3d` at its tightest `eps`. CI
@@ -1485,7 +1485,7 @@ by its error, not at the same requested eps (amended at H6.G).
 
 | Phase | Check against FMM3D | k |
 | --- | --- | --- |
-| H1 (CH1.4) | two-point normalisation; fixtures; `nd-fmm-ref`'s direct sum to round-off | real, complex, imaginary |
+| H1 (CH1.4) | two-point normalisation; fixtures; `tetraleaf-ref`'s direct sum to round-off | real, complex, imaginary |
 | H2 (CH2.5) | Yukawa FMM on W1 and W3, sampled and full-target, over κ D | imaginary, where R12 holds (amended at H1.G) |
 | H3 (CH3.6) | RCR on every level: W1, W3 and W4 for kD ≤ 100, and W1 at kD = 500 | real |
 | H6 (CH6.2) | the exponential M2L against `hfmm3d`'s, which uses the same M2L up to boxes of 8 wavelengths (amended at CH0.4): per-level accuracy and time; met at 10⁻³ and 10⁻⁶ (CH6.2d), 10⁻⁷ and 10⁻⁸ in CH9.1 (amended at H6.G) | real |
@@ -1505,7 +1505,7 @@ baseline is measured once, on the pin H2 builds on; CHR.4 comes before S9. The s
 run beside them, but no phase waits for all of them: §3.15 and H1 need only S1–S3; H3 needs
 the truncation tables of S7 and the leaf rule of S8; H4 needs the stability rule of S6; H6
 needs S4; the device transforms need S5; the optional FFTW back end needs S9. Phase HR's
-RLST part is done (RLST 0.11.0 and 0.12.0); what remains is nd-fmm's adoption, CHR.2 to
+RLST part is done (RLST 0.11.0 and 0.12.0); what remains is tetraleaf's adoption, CHR.2 to
 CHR.4, and only CH4.6 depends on it.
 
 H3 builds RCR on every level, which is correct at any kD and is the first Helmholtz
@@ -1546,29 +1546,29 @@ flowchart LR
 | ID | Component | Acceptance (initial) | Depends on |
 | --- | --- | --- | --- |
 | **H0** | **Spikes** (`spikes/`, outside the workspace, never in CI) | | |
-| CH0.1 | S1: orthogonal rotation blocks at large degree (Gumerov–Duraiswami 2014 recursion) in the orthonormal real basis | orthogonality and agreement with an arbitrary-precision reference to p = 1000; agreement with N-conjugated `nd_fmm_math::rotation::blocks` at p ≤ 30; the degree up to which the conjugated blocks stay accurate; the relation between the blocks of β and π − β; time per block set | none |
+| CH0.1 | S1: orthogonal rotation blocks at large degree (Gumerov–Duraiswami 2014 recursion) in the orthonormal real basis | orthogonality and agreement with an arbitrary-precision reference to p = 1000; agreement with N-conjugated `tetraleaf_math::rotation::blocks` at p ≤ 30; the degree up to which the conjugated blocks stay accurate; the relation between the blocks of β and π − β; time per block set | none |
 | CH0.2 | S2: coaxial (S\|R), (S\|S), (R\|R) coefficients by recursion | relative error against an arbitrary-precision reference for p up to 300 and k a up to 300, real, complex and imaginary k; the imaginary parts of (S\|S) and (R\|R) zero to round-off for real k; the index symmetry used to halve the tables | none |
 | CH0.3 | S3: j_n, h_n, i_n, k_n for real and complex arguments; the scaling of Section 3.4, with exponential scaling for Yukawa above κ r ≈ 1 | accuracy against arbitrary precision on the argument and degree ranges of every operator (the leaf ranges bounded by Section 3.7); the scaling chosen | none |
 | CH0.4 | S4: quadratures of the Helmholtz exponential M2L per k w_l | how FMM3D obtains them, and a generator or table for this library with its accuracy over the k w_l of low-frequency levels | none |
 | CH0.5 | S5: cubek-fft for the φ step (Section 6.7) | f64 accuracy against the product transform in f64 and an extended-precision DFT; time against the transform as a GEMM, N_φ = 256 to 2048 at the batch sizes of S8 (Section 7's until S8 reports), on the GH200 and the CPU runtime; the cost of the per-butterfly twiddles and of power-of-two padding, in time and memory; adopt, contribute upstream, or keep the GEMM (D10) | none |
 | CH0.6 | S6: stability of the diagonal form in full 3D (Section 3.6; the script of Appendix B.1 is its seed) | the S → F, diagonal, F → R chain of Section 5.4 in f64 and f32, transfer functions from extended precision rounded to the working precision, for every one of the 34 classes, against extended-precision RCR and the direct sum. Realistic conditions: sources and targets filling the boxes (uniform, concentrated at corners, and surface patches cut from W1), multipoles formed by P2M from those points rather than synthetic coefficients, k a from 3 to 400, ε from 10⁻³ to 10⁻¹⁰, P from the formula of Section 3.5 and from S7's tables, Im k > 0 up to the pruning cut, and \|t\| = 3w as a control. Outputs: C_T and θ with the largest observed under-prediction; the table of classes on RCR per (k a, ε); the f32 verdict (D3); whether interpolating T in ŝ · t̂ keeps the bound; prototype times of diagonal and RCR per class. Accepted when the bound never under-predicts the measured error by more than 2× over the sweep, and the reading of Gumerov and Duraiswami is confirmed or Sections 3.5 and 5.4 corrected | CH0.3; CH0.7 for the calibrated runs |
 | CH0.7 | S7: truncation under realistic geometry | the chain P2M → M2M → M2L → L2L → L2P over two levels, and M2M and L2L chains over three, on all 316 offsets, with points filling the boxes (uniform, corners, W1 patches), for real, complex and imaginary k, in extended precision with the S1 and S2 prototypes, so that only truncation is measured. Output: p as a function of (k a, ε, operator) on the low- and high-frequency ranges against the formula of Section 3.5, meeting ε with a stated margin on every placement; fed to S6, S8, Section 7 and CH2.3, CH3.3, CH4.3 | CH0.1, CH0.2, CH0.3 |
-| CH0.8 | S8: workload census | trees of W1–W4 over the kD sweep from `nd-octree` with a prototype maximum leaf width (c_leaf from 0.25 to 2) and the points-per-leaf rule. Per level: occupied boxes; U, V (by distance class), W and X list sizes; p_l (formula and S7); regime and per-class choice (S6's bound); the memory model of Section 7 (multipoles, locals, signatures, tables, replicated top per rank and per node) and an operation count per operator. Outputs: c_leaf (D11); confirmation that no leaf is high frequency; the numbers that replace Section 7's; batch sizes for S5 and S9. No FMM is run | none for a first pass with the formula p; CH0.6 and CH0.7 for the final pass |
+| CH0.8 | S8: workload census | trees of W1–W4 over the kD sweep from `tetraleaf-octree` with a prototype maximum leaf width (c_leaf from 0.25 to 2) and the points-per-leaf rule. Per level: occupied boxes; U, V (by distance class), W and X list sizes; p_l (formula and S7); regime and per-class choice (S6's bound); the memory model of Section 7 (multipoles, locals, signatures, tables, replicated top per rank and per node) and an operation count per operator. Outputs: c_leaf (D11); confirmation that no leaf is high frequency; the numbers that replace Section 7's; batch sizes for S5 and S9. No FMM is run | none for a first pass with the formula p; CH0.6 and CH0.7 for the final pass |
 | CH0.9 | S9: FFT plans, bits and host timing | a spike crate outside the workspace (a `[workspace]` table of its own, so nothing enters the root lock file) on RLST 0.12's `rlst::fftw` with `fftw_system`, the code path of CH4.6, and rustfft. Per-box plans of 2P − 1 rings and of 2P (one zero ring), interleaved scratch against split plans, executed on boxes at different positions in a batch, in batches of different sizes, from different threads and in fresh processes, with buffers in class 0: bits identical; plan fingerprints compared across two ranks. For the record, whether plans over varying batch or stride change bits. Time per box for the product, FFTW (`Rigor::Estimate`) and rustfft, for P from 34 to 262 on smooth and power-of-two grids, on the M3 Max, locust and Kathleen, with `rlst::fftw::version()` recorded per machine. Outputs: the plan layout and scratch storage of Section 6.7 confirmed or revised, the batch (2P − 1 or 2P), D7 per machine | CHR.4 |
 | **H1** | **Conventions, math, reference** | | |
 | CH1.1 | CONVENTIONS §3.15 (Section 4) | signed off by the user, after the two-point check of CH1.4 | CH0.1, CH0.2, CH0.3, CH1.4 |
-| CH1.2 | `nd-fmm-math`: harmonics, radial functions (with the Yukawa scaling), rotation blocks | the identities of §3.15; the reality of the M2M and L2L coefficients for real k | CH1.1 |
-| CH1.3 | `nd-fmm-ref`: direct-sum oracle, reference operators, direct and RCR translations, the diagonal form in extended precision | addition theorems; the k → 0 limit with the tolerances of Section 9; Yukawa two ways; the direct sum against the FMM3D fixtures of CH1.4 to round-off | CH1.2, CH1.4 |
+| CH1.2 | `tetraleaf-math`: harmonics, radial functions (with the Yukawa scaling), rotation blocks | the identities of §3.15; the reality of the M2M and L2L coefficients for real k | CH1.1 |
+| CH1.3 | `tetraleaf-ref`: direct-sum oracle, reference operators, direct and RCR translations, the diagonal form in extended precision | addition theorems; the k → 0 limit with the tolerances of Section 9; Yukawa two ways; the direct sum against the FMM3D fixtures of CH1.4 to round-off | CH1.2, CH1.4 |
 | CH1.4 | FMM3D convention check and fixtures (Section 9.2): `hfmm3d` in `tools/fmm3d/driver.f90`, a generator in `tools/fixtures/` | on two points, FMM3D's factor, sign of k, gradient and branch identified and matching the draft §3.15 (or the draft corrected); fixtures for real, complex and purely imaginary k, and real and complex charges, committed with release, routine and `eps`; whether FMM3D is accurate for purely imaginary zk (R12) | a draft of §3.15 |
 | **H2** | **Yukawa on the host** | | |
 | CH2.0 | Laplace's real host drivers (Dense, Classes, Rotation, Batched) made generic over the kernel (Section 6.2) | constraint 1 of Section 2: no new dispatch below the level call, layouts and tables unchanged, Laplace outputs bit for bit unchanged, Laplace benchmarks within noise on the M3 Max, locust and Kathleen; the pull request states how p reaches Laplace's inner loops today and how the trait supplies it; else dropped and Yukawa gets copies | CH1.3, D9, CHR.2 (passed or fallen back) |
 | CH2.1 | Real `HelmholtzOperator` path on the drivers of CH2.0 (or on copies); Rotation and Dense M2L | FMM against the direct sum on W1, W3 and W4 for κ D from 10⁻² to 10³; deterministic | CH2.0 |
-| CH2.2 | Per-level tables in `nd-fmm-tables` with per-level cache keys | build cost and memory reported; reuse of levels across an octave sweep shown | CH2.1 |
+| CH2.2 | Per-level tables in `tetraleaf-tables` with per-level cache keys | build cost and memory reported; reuse of levels across an octave sweep shown | CH2.1 |
 | CH2.3 | Pruning rule and calibration of p_l | relative error within target for κ D from 10⁻² to 10³; on pruned levels V, W and X lists empty and buffers zeroed; the same levels pruned on every rank of a two-rank run; θ_D set | CH2.1, CH0.7 |
-| CH2.4 | Yukawa P2P in `nd-fmm-simd`, on a P2P loop skeleton shared with Laplace if constraint 1 holds | an accuracy contract like simd-p2p.md's; cost per pair against Laplace; Laplace P2P bit for bit unchanged and at least 90 % of the spike (C3S.4) | CH1.2 |
+| CH2.4 | Yukawa P2P in `tetraleaf-simd`, on a P2P loop skeleton shared with Laplace if constraint 1 holds | an accuracy contract like simd-p2p.md's; cost per pair against Laplace; Laplace P2P bit for bit unchanged and at least 90 % of the spike (C3S.4) | CH1.2 |
 | CH2.5 | Gate: Yukawa against FMM3D | both codes against the same sampled direct sum over κ D on W1 and W3, and the full-target crosscheck, on Kathleen or the M3 Max; skipped, with the reason recorded, if CH1.4 found FMM3D unreliable for purely imaginary zk | CH2.3, CH1.4 |
 | **H3** | **Helmholtz on the host, RCR on every level** (correct at any kD; the first Helmholtz deliverable) | | |
-| CH3.0 | Builder: the leaf rule and complex densities | no leaf wider than c_leaf λ on W1–W4; if `nd-octree` gains the maximum leaf width, Laplace's trees and outputs bit for bit unchanged (constraint 1); complex charges in and potentials and gradients out as split planes (§3.15 item 9), one complex expansion per complex charge vector | CH1.3, D11 |
+| CH3.0 | Builder: the leaf rule and complex densities | no leaf wider than c_leaf λ on W1–W4; if `tetraleaf-octree` gains the maximum leaf width, Laplace's trees and outputs bit for bit unchanged (constraint 1); complex charges in and potentials and gradients out as split planes (§3.15 item 9), one complex expansion per complex charge vector | CH1.3, D11 |
 | CH3.1 | Complex planes; RCR M2M and L2L (real coaxial steps for real k) and RCR M2L on every level, on the shared drivers if CH3.5 holds | FMM against the direct sum on W1, W3 and W4 for kD ≤ 100 and on W1 at kD = 500; deterministic | CH3.0, CH3.5 |
 | CH3.2 | Dense, Classes and Batched where the node budget allows; CH3.2d the M2L rule per level (Auto), added at CH3.2c | measured against Rotation per p, including the cost of the cube-group transforms that move the z-axis; CH3.2d: the rule's choice within 1.10 of the best per level on the three machines | CH3.1 |
 | CH3.3 | Calibration of p_l over (k a_l, ε) | S7's low-frequency tables confirmed in the full FMM | CH3.1, CH0.7 |
@@ -1605,8 +1605,8 @@ flowchart LR
 | CH8.2 | Kathleen scaling at kD of a few hundred | efficiency and memory reported as Phase 5S | CH8.1 |
 | **HR** | **RLST's FFTW interface and its adoption** (RLST's part done; CHR.2 and CHR.4 are the first implementation tasks) | | |
 | CHR.1 | RLST's FFTW rework: tasks F0 to F8 of `rlst-fftw-design.md` | **Done**: RLST 0.11.0 (2026-10-25), with 0.12.0 (2026-10-26) the release to pin. The tests of RLST's design Section 7 (correctness matrix, identities, plans and arrays, concurrency, determinism in fresh processes) in CI on ubuntu-24.04 and macos-26; the licence warning in the README, the guide, the module documentation and `Cargo.toml` | none |
-| CHR.2 | First implementation task, before CH2.0: nd-fmm's RLST pins moved to 0.12.0, the workspace dependency and `octree/Cargo.toml`'s own pin together; the `[patch]` for green-kernels left on 0.10.2, since green-kernels uses `rlst::simd`, which 0.12 removes; `CLAUDE.md`, `fmm-plan/CLAUDE.md` and `docs/design/workspace-structure.md` updated; the `fftw` feature not yet added | compiled and run, since the review of draft 0.7 compiled nothing: the default members build, pass Clippy with `-D warnings`, test and document; the MPI tests (fmm-plan's `mpi_regressions`, octree's MPI examples) and the weekly examples job pass; `cargo check --workspace --all-targets` builds the spikes, green-kernels on its own RLST 0.10.2; `cargo tree -e normal` on the default members lists no fftw-sys; a `cargo deny` licence check of the default set added to CI; the `cmake` install of CI and the `cmake` entry of `tools/gh200/spack.yaml`, which names RLST's build as its reason, kept or dropped by a build without them, since RLST 0.11 dropped its `cmake`, `cc`, `bindgen` and `git2` build dependencies (other crates may still need `cmake`: checked, not assumed); the weekly `run-dependency-checks` job (`cargo upgrades`) no longer reports `rlst`; constraint 1 of Section 2: Laplace fixtures and bit identity across threads, overlap and ranks, and Laplace benchmarks within noise on the M3 Max, locust and Kathleen (D9). Fallback: if any condition fails, nd-fmm stays on RLST 0.10.2 and does not offer the `fftw` feature; nothing else is affected | CHR.1, D9 |
-| CHR.3 | A thin internal wrapper in `nd-fmm-exec`, behind the `fftw` feature (`fftw = ["rlst/fftw_system"]`), over RLST's plans for the φ step: one plan per (level, N_φ) of 2P − 1 (or 2P) rings along the φ axis, interleaved per-box scratch, `Rigor::Estimate`, executed per box by any rayon worker; fingerprints all-gathered at build | against the product path on the layout of one high-frequency level, to round-off; a box's bits identical across batch positions, batch sizes and thread counts; with a fingerprint made to differ on one of two ranks (a test hook), both ranks run the product; the feature off by default; the CI job with the feature, with `pkg-config`, the FFTW version report and the `cargo deny` entry for fftw-sys | CHR.2, CH0.9 |
+| CHR.2 | First implementation task, before CH2.0: tetraleaf's RLST pins moved to 0.12.0, the workspace dependency and `tetraleaf-octree/Cargo.toml`'s own pin together; the `[patch]` for green-kernels left on 0.10.2, since green-kernels uses `rlst::simd`, which 0.12 removes; `CLAUDE.md`, `tetraleaf-plan/CLAUDE.md` and `docs/design/workspace-structure.md` updated; the `fftw` feature not yet added | compiled and run, since the review of draft 0.7 compiled nothing: the default members build, pass Clippy with `-D warnings`, test and document; the MPI tests (tetraleaf-plan's `mpi_regressions`, octree's MPI examples) and the weekly examples job pass; `cargo check --workspace --all-targets` builds the spikes, green-kernels on its own RLST 0.10.2; `cargo tree -e normal` on the default members lists no fftw-sys; a `cargo deny` licence check of the default set added to CI; the `cmake` install of CI and the `cmake` entry of `tools/gh200/spack.yaml`, which names RLST's build as its reason, kept or dropped by a build without them, since RLST 0.11 dropped its `cmake`, `cc`, `bindgen` and `git2` build dependencies (other crates may still need `cmake`: checked, not assumed); the weekly `run-dependency-checks` job (`cargo upgrades`) no longer reports `rlst`; constraint 1 of Section 2: Laplace fixtures and bit identity across threads, overlap and ranks, and Laplace benchmarks within noise on the M3 Max, locust and Kathleen (D9). Fallback: if any condition fails, tetraleaf stays on RLST 0.10.2 and does not offer the `fftw` feature; nothing else is affected | CHR.1, D9 |
+| CHR.3 | A thin internal wrapper in `tetraleaf-exec`, behind the `fftw` feature (`fftw = ["rlst/fftw_system"]`), over RLST's plans for the φ step: one plan per (level, N_φ) of 2P − 1 (or 2P) rings along the φ axis, interleaved per-box scratch, `Rigor::Estimate`, executed per box by any rayon worker; fingerprints all-gathered at build | against the product path on the layout of one high-frequency level, to round-off; a box's bits identical across batch positions, batch sizes and thread counts; with a fingerprint made to differ on one of two ranks (a test hook), both ranks run the product; the feature off by default; the CI job with the feature, with `pkg-config`, the FFTW version report and the `cargo deny` entry for fftw-sys | CHR.2, CH0.9 |
 | CHR.4 | First implementation task, beside CHR.2: the FFTW builds of the machines of record | compiled and run: `pkg-config --modversion fftw3 fftw3f` and `rlst::fftw::version()` (its SIMD suffixes) on the M3 Max (Homebrew), locust (spack's FFTW through `tools/gh200/env.sh`, not the RPM's 3.3.8), Kathleen (`fftw/3.3.10`) and CI; RLST 0.12's own `cargo test --features fftw_system` on each, `fftw_determinism` included; the FFTW version, precisions and SIMD of each machine recorded in `tools/*/machine.md`. Fallback: a machine without FFTW in both precisions runs the product, or rustfft (D7) | none |
 
 ## 11. Alternatives considered
@@ -1615,7 +1615,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | **Gumerov–Duraiswami 2009** | spherical harmonics, RCR | same expansions; M2L via one conversion per box to signatures, diagonal | adopted as the skeleton, with the diagonal form per offset class (Section 3.6) instead of per level |
 | Diagonal form per level, as in draft 0.6 | | the level switch P − p_hi ≤ 2 | replaced: unstable for the nearest classes at ε ≤ 10⁻⁶ by the bound of Section 3.6 |
-| Two-box separation on high-frequency levels | | larger V lists; the nearest offset at 3w | not adopted: stabilises the diagonal form much further down, but changes the U and V lists, so `nd-fmm-plan`, and enlarges the near field; the per-class rule gets the stability without it |
+| Two-box separation on high-frequency levels | | larger V lists; the nearest offset at 3w | not adopted: stabilises the diagonal form much further down, but changes the U and V lists, so `tetraleaf-plan`, and enlarges the near field; the per-class rule gets the stability without it |
 | Cheng et al. 2006 | spherical harmonics with six-direction exponential M2L | signatures with interpolation and filtering between levels | its low-frequency M2L adopted as an optional strategy (H6); its high-frequency part not, because the per-box conversion of the skeleton needs no interpolation |
 | Cecka–Darve 2013 | none (low-frequency breakdown) | uniform (θ, φ) signatures, FFT interpolation, diagonal M2M, M2L and L2L | upgrade path for the high-frequency levels beyond kD ≈ 10³; its reflection classes adopted |
 | Chaillat–Collino 2015 | plane waves, propagating and evanescent | plane waves | not adopted: plane waves on the low-frequency levels, where most boxes are, replace the operators this library is fast at, and the evanescent part is directional; its error estimates are useful for p_l and the regime boundary |
@@ -1643,14 +1643,14 @@ these.
 | D4 | Yukawa: own operator type, or the wavenumber kind as a type parameter of one operator | one operator, `HelmholtzOperator<T, K>`, with K resolved at build (Section 6.3), if CH2.1 shows no cost to the complex path |
 | D5 | Source types in the first release | charges, real and complex, with potentials and gradients; dipoles when C6.4 exists for Laplace |
 | D6 | Order of H4 and H6 | H6 first by default (Sections 7 and 10); H4 first only if D1 puts most of the work at kD of several hundred or more and loose tolerances |
-| D7 | Host back ends for the φ step | the product as the default and reference; FFTW through RLST 0.12 behind the optional `fftw` feature (CH4.6), with the GPL warning; rustfft as a fast default without FFTW if S9 shows it deterministic per box and faster than the product, decided per machine (Homebrew's FFTW on the M3 Max has no SIMD); all behind a trait internal to `nd-fmm-exec`, since RLST provides none (its DF4) |
+| D7 | Host back ends for the φ step | the product as the default and reference; FFTW through RLST 0.12 behind the optional `fftw` feature (CH4.6), with the GPL warning; rustfft as a fast default without FFTW if S9 shows it deterministic per box and faster than the product, decided per machine (Homebrew's FFTW on the M3 Max has no SIMD); all behind a trait internal to `tetraleaf-exec`, since RLST provides none (its DF4) |
 | D8 | Whether the exponential M2L may become a default on low-frequency levels | after CH6.2, as Laplace's T11 decides for `PlaneWave`. Signed off at CH6.2h (2026-11-08), amended at CH6.1g and CH6.1h (2026-11-11): `Auto` takes it by the rule of Section 5.3 |
 | D9 | What "within noise" means in constraint 1 of Section 2 | the run-to-run spread of the Laplace baseline, repeated on each machine of record before the change, per benchmark; plus the C3S.4 throughput gate |
 | D10 | cubek-fft on the device | after S5 (CH0.5): adopt it (a new dependency, and the cubecl pin moved to the current 0.11.x, 0.11.3 on 2026-10-22, if 0.3.1 is needed), contribute twiddle tables and radix 3 and 5 upstream first, or keep the transform as a GEMM |
 | D11 | The maximum leaf width c_leaf (Section 3.7) | from S8: the largest c_leaf at which P2P and leaf costs stay within 10 % of their best on W1 and W3, expected between 0.5 and 1 |
 | D12 | The reference workloads (Section 9.1) | the set of Section 9.1, fixed before H2 |
 | D13 | RLST's `fftw_mkl` back end | **withdrawn**: RLST 0.11 removed `fftw_mkl` (its DF5) |
-| D14 | Ownership and schedule of Phase HR | **closed**: RLST's maintainers shipped it in 0.11.0 (2026-10-25) and 0.12.0 (2026-10-26); nd-fmm's adoption is CHR.2 to CHR.4 |
+| D14 | Ownership and schedule of Phase HR | **closed**: RLST's maintainers shipped it in 0.11.0 (2026-10-25) and 0.12.0 (2026-10-26); tetraleaf's adoption is CHR.2 to CHR.4 |
 
 ## 13. References
 
@@ -1711,7 +1711,7 @@ these.
   C3.4), CONVENTIONS §3.3, §3.6–§3.9, §3.12–§3.14, node-m2l.md, scale-out.md,
   docs/phase6/README.md (decision 6), docs/phase6/T9-fmm3d-comparison.md and
   `tools/fmm3d/` (the pinned FMM3D v2.1.0 build, the driver and its normalisation check),
-  `nd_fmm_tables::rotation`; for draft 0.8 the root and `octree/` manifests, `Cargo.lock`,
+  `tetraleaf_tables::rotation`; for draft 0.8 the root and `tetraleaf-octree/` manifests, `Cargo.lock`,
   `.github/workflows/`, `CLAUDE.md`, `docs/design/simd-p2p.md` (§8.4), `tools/kathleen/` and
   `tools/gh200/`.
 
@@ -1751,7 +1751,7 @@ these.
 - **Draft 0.5** (2026-10-20): a complete rework of RLST's FFTW interface instead of narrow
   extensions, designed in `rlst-fftw-design.md`.
 - **Draft 0.6** (2026-10-20): the RLST rework made a prerequisite phase, HR, ahead of H0;
-  the RLST pin move (CHR.2) and the nd-fmm wrapper (CHR.3) added.
+  the RLST pin move (CHR.2) and the tetraleaf wrapper (CHR.3) added.
 - **Draft 0.7** (2026-10-21), after a review of draft 0.6. Major changes:
   - **Stability of the diagonal form (Section 3.6).** With the transfer-function bandwidth
     2P − 2 of Section 5.4 and the nearest V-list offsets at two box widths, the transfer
@@ -1848,14 +1848,14 @@ these.
   p_high term; Sections 5.4 and 5.6: T from extended precision (per sample or
   interpolated), the damping factor; Sections 1 and 6.5: f32 on high-frequency levels by
   D3.
-- **Amended at CH6.2h, 2026-11-08** (D8, fmm-validate/results/helmholtz-ch6-2h.md; signed off
+- **Amended at CH6.2h, 2026-11-08** (D8, tetraleaf-validate/results/helmholtz-ch6-2h.md; signed off
   by the user on PR #200, "1–5 as recommended"; this line added at H6.G): Section 5.3, `Auto`
   takes the exponential M2L by default on the levels of its rule at ε ≥ 10⁻⁶; Section 6.4, the
   selection on low-frequency levels with it, no boxes term.
-- **Amended at CH6.1g, 2026-11-11** (fmm-validate/results/helmholtz-ch6-1g.md; signed off by the
+- **Amended at CH6.1g, 2026-11-11** (tetraleaf-validate/results/helmholtz-ch6-1g.md; signed off by the
   user on PR #203, "Lift for 10⁻⁸–10⁻⁷ only (Recommended)"; this line added at H6.G): Section
   5.3, D8 also at 10⁻⁸ ≤ ε < 10⁻⁷, iprec 3 with the level's degree raised to max(p_l, 32).
-- **Amended at CH6.1h, 2026-11-11** (fmm-validate/results/helmholtz-ch6-1h.md; signed off by the
+- **Amended at CH6.1h, 2026-11-11** (tetraleaf-validate/results/helmholtz-ch6-1h.md; signed off by the
   user on PR #204, "Lift it (Recommended)"; this line added at H6.G): Section 5.3, D8 also at
   10⁻⁷ ≤ ε < 10⁻⁶, the M2L alone raised to max(p_l, 28).
 - **Amended at H6.G, 2026-11-12** (draft 0.8 stays the plan of record; signed off by the user,
@@ -1879,20 +1879,20 @@ these.
   - Section 7: the 22.4 s of W1 at kD = 500 is our evaluation with the build apart, FMM3D's
     times its whole call.
   - Sections 3.4 and 3.1 against CONVENTIONS §3.15 (M2) are left to CH1.3d.
-- **Amended at CH4.0, 2026-11-12** (fmm-validate/results/helmholtz-ch4-0.md; signed off by the
+- **Amended at CH4.0, 2026-11-12** (tetraleaf-validate/results/helmholtz-ch4-0.md; signed off by the
   user on PR #211, question 3, "yes to Q3"): Section 6.4, Batched under `Auto` only where its
   columns per table read reach m* of the machine class, its blocks split by the threads with no
   bit changed, and the dense tables under a node budget (8 GiB, question 1).
-- **Amended at CH4.0b, 2026-11-12** (fmm-validate/results/helmholtz-ch4-0b.md; signed off by
+- **Amended at CH4.0b, 2026-11-12** (tetraleaf-validate/results/helmholtz-ch4-0b.md; signed off by
   the user on PR #212, "Sign off 1 and 2 as recommended"): Section 9.1, the box measure a gate bound
   of 100 ε beside the ℓ2 tolerance, which ε stays (question 1); the charges of §9.1 unchanged
   (D12), with the smooth densities in the verification of CH4.0c, CH4.3 and CH4.4 (question 2).
-- **Amended at CH4.0c, 2026-11-13** (fmm-validate/results/helmholtz-ch4-0c.md; PR #214, its
+- **Amended at CH4.0c, 2026-11-13** (tetraleaf-validate/results/helmholtz-ch4-0c.md; PR #214, its
   question 1, signed off by the user after the merge, "Sign off as recommended"): Section 3.5,
   the degree rule also checked at x = 216 and 108 (W1 at kD = 1000): within ε, and the levels
   beyond the measured x ≤ 65 move the error by under 1 % when raised. A check of accuracy, not
   of the smallest degrees: CH4.3's recalibration stays.
-- **Amended at CH4.0d3, 2026-11-14** (fmm-validate/results/helmholtz-ch4-0d3.md; PR #219, its
+- **Amended at CH4.0d3, 2026-11-14** (tetraleaf-validate/results/helmholtz-ch4-0d3.md; PR #219, its
   questions 1–4 as built, signed off by the user, "I agree with the recommendation"): Section 3.7, the
   builder's c_leaf 2 (D11's 1 the leaf rule's constant; CH4.3 re-decides it with the
   high-frequency rule) and the P2P's phase below 44 c_leaf with V pairs made near pairs.
@@ -1916,12 +1916,12 @@ these.
   operators and S3's adopted Yukawa scaling (review 2026-11-19, M14); Section 9, item 2, the
   bound E read as measured ≤ 2E (CH1.3d1's sign-off on #228).
 
-- **Amended at CH4.1a, 2026-11-19** (`fmm-validate/results/helmholtz-ch4-1a.md` §1–§3; PR
+- **Amended at CH4.1a, 2026-11-19** (`tetraleaf-validate/results/helmholtz-ch4-1a.md` §1–§3; PR
   #234, its question 3, signed off by the user, "Q1-3 as recommended. Merge when green"):
   Section 6.7, the product's count as built (2P³ + 8P³ real multiply-adds per conversion,
   against about 68P³ in the table's count), the measured per-box cost (1–3 RCR pairs) and the
   FFT's bound (about 1–2 % of W1 at kD = 500's run).
-- **Amended at CH4.2c2, 2026-11-20** (`fmm-validate/results/helmholtz-ch4-2c2.md` §2–§3; PR #241,
+- **Amended at CH4.2c2, 2026-11-20** (`tetraleaf-validate/results/helmholtz-ch4-2c2.md` §2–§3; PR #241,
   its question 1, signed off by the user, "Both questions as recommended"): Section 5.4, the
   interpolated build of the transfer functions the default, the per-sample build the trusted
   path.

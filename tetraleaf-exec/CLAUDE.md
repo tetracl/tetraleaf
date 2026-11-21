@@ -1,0 +1,1477 @@
+# tetraleaf-exec
+
+Purpose: the Laplace FMM on top of `tetraleaf-plan`: `LaplaceOperator`, which implements
+the plan's level-batched operator interface from the Phase 2 tables and the
+`tetraleaf-ref` leaf operators, P2P through the SIMD kernel of `tetraleaf-simd`, box geometry
+from Morton keys, and the user-facing `FmmBuilder` and `Fmm`; behind the feature `gpu`,
+the device path (`device`: `DeviceOperator`, its report and transfer accounting).
+Phase and components: Phase 3, C3.1–C3.3 and C3.5 (tasks T3 and T8–T11 in docs/phase3/);
+Phase 3S, C3S.5 (task T6 in docs/phase3s/); Phase 4, C4.1 (task T5 in docs/phase4/;
+design docs/design/device-path.md), C4.2 (task T6: P2P on the device), C4.3 (task
+T7: P2M, L2P, P2L and M2P on the device), C4.4 (task T8: M2M and L2L on the device),
+C4.5 (task T9: dense M2L on the device), C4.6 (task T10: rotation M2L on the device),
+C4.8 (task T11: the device FMM end to end, every kind on the device) and C4.7 (task T12:
+autotune with a persistent cache, module `tune`); Phase 4S, C4S.4 (task T4: the device
+FMM on CUDA), C4S.5 (task T5: per-kind timings, `FmmBuilder::kind_timings`) and C4S.8
+(task T9: the output pass and the charge load in parallel, `Fmm::evaluate_into`, the output
+pass on the device, `FmmBuilder::output_pass`) and C4S.10 (task T11: the download read in
+place, the charges uploaded without a copy); Phase 5, C5.1 host (task T6 in docs/phase5/:
+`Fmm` on any number of ranks through `tetraleaf_plan::redistribute::Redistribution`; design
+docs/design/distributed-fmm.md) and C5.1 device with C5.2's device-resident ghost
+buffers (task T8: the device operator on any number of ranks through the host-data
+hook) and C5.2 (task T9: the exchanges overlapped with local work, `FmmBuilder::overlap`);
+Phase 5N, C5N.3 (task T4 in docs/phase5n/: the M2L strategy rule on the node, the table
+loading with a cache at scale, the ranks × threads guidance; design docs/design/node-m2l.md);
+Phase 5S, C5S.3 (T6: the owned top tree in `Fmm`) and C5S.4 (T7: the work-weighted cut,
+module `cost`; design docs/design/scale-out.md §6); Phase 6, C6.6 (T2 in docs/phase6/: the
+host batched M2L, `M2lStrategy::Batched`, with `tetraleaf-simd`'s `MatrixKernel` and the
+opt-in fused mode `FmmBuilder::m2l_mul_add`; design docs/design/optimisation.md §2) and
+C6.3 (T5: several charge vectors, `FmmBuilder::vectors`, `Fmm::evaluate_many`,
+`OutputMany`, host and device; design docs/design/optimisation.md §4) and C6.1 (T7: the
+device's fused gather, reduction by chunk and shared-memory GEMM,
+`FmmBuilder::{device_gather, device_reduction}`, `DeviceGemm::Shared`; design
+docs/design/optimisation.md §6) and C6.4 (T8: dipole sources, `SourceType`,
+`FmmBuilder::sources`, `Sources`, `Fmm::evaluate_sources`; T8d: the dipole kinds on the
+device; design docs/design/optimisation.md §7; report tetraleaf-validate/results/phase6-dipoles.md)
+and C6.9 (T12: the near rule, `FmmBuilder::near_rule`, `NearRuleChoice`, `Fmm::near_rule`;
+design docs/design/optimisation.md §8a; report tetraleaf-validate/results/phase6-near.md) and
+C6.5 (T13: the plane-wave M2L, `M2lStrategy::PlaneWave`, the level call in
+`src/operator_plane_wave.rs`, `cost::M2lUnit`; CONVENTIONS §3.14; design
+docs/design/optimisation.md §8.2, "As built in T13"; report
+tetraleaf-validate/results/phase6-planewave.md); and the defaults of T11 (decision 7 of
+docs/phase6/README.md; report tetraleaf-validate/results/phase6.md); Helmholtz CH7.5b (the
+device's `PlaneWave` on `tetraleaf_kernels::plane_wave`, opt-in until CH7.5c: `DevicePlaneWave`,
+`FmmBuilder::{device_plane_wave, device_plane_wave_budget}`; docs/helmholtz/tasks/CH7.5b.md;
+CH7.5c, its measurement and adoption: `FmmBuilder::device_plane_wave_layout`,
+`DevicePlaneWaveLayout`, `DevicePlaneWave::Kernels` the default, the layout by backend and p
+and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.md).
+
+## Rules
+- Read docs/CONVENTIONS.md before changing any formula; never change a convention here.
+  - Box geometry and table order follow §3.12; leaf data, relative frames and output
+    scaling follow §3.13.
+  - Operator formulas are reached only through tetraleaf-tables and tetraleaf-ref, and for
+    P2P also through tetraleaf-simd (`P2pKernel::evaluate`). Do not re-derive one here.
+  - P2P runs the kernel of `P2pChoice` (default `Auto`, `Isa::detect`: AVX-512 on an
+    AVX-512 machine since Phase 6 T11; selectable as `Isa(Isa::Avx512)` since T6). Keep
+    `P2pChoice::Reference` (`tetraleaf_ref::p2p::p2p`) as the trusted slower path: tests
+    compare every ISA with it. `tetraleaf-exec` itself stays free of `unsafe`.
+- Geometry comes from integer keys: tables by `morton::child_index` and V-list offset,
+  frames between boxes from `geometry::relative_frame`. Never form a shift as a
+  difference of floating-point centres in library code.
+- Every operator accumulates (+=). 1/(4π) and the leaf radius are applied once, when
+  `Fmm` produces output (§3.1, §3.13), never inside an operator.
+- Generic over `T: SimdScalar + Equivalence` (`SimdScalar` of tetraleaf-simd, re-exported
+  from `operator`; f32 and f64, like `RealScalar`). No allocation in operators: scratch
+  is owned by the operator and sized at construction.
+- The host path executes each level target by target, through the plan's
+  target-centric view, each target's contributions in a documented order. The one
+  exception is M2L under `Batched` (Phase 6 T2): blocks of `M2L_BLOCK_TARGETS`
+  consecutive targets, offsets in index order through the grouped view's batches, each
+  local receiving exactly the chain of `Dense` (the `operator` module docs, "The batched
+  M2L"). Keep `Batched` bit for bit `Dense` in its default mode; `Dense` stays the
+  trusted path. The other is M2L under `PlaneWave` (Phase 6 T13, C6.5; the `operator`
+  module docs, "The plane-wave M2L"): per vector and frame the waves of every box of the
+  level, then merge and shift parent by parent, the pool splitting at parent boundaries.
+  It approximates M2L (CONVENTIONS §3.14; the quadrature of each degree keeps the FMM's
+  errors within 1.1× the exact M2L's, `tetraleaf_tables::plane_wave::nodes_for_degree`), so
+  it is not `Dense`'s bits; keep it deterministic, the same at every thread count, overlap
+  setting and ISA, and on P ranks the one-rank `Fmm`'s bit for bit: every accumulator sums
+  its slots in ascending order over geometric masks, so its sources and order do not depend
+  on the rank. Its formulas stay in `tetraleaf-tables` and its loops in `tetraleaf-simd`
+  (`WaveKernel`, on the P2P choice's ISA); the pair path (`m2l_pair`, `PairOperator`)
+  translates each pair directly along the merge's direction (`Tables::m2l_at`), equal to
+  the level call to rounding. M2M and L2L are `Rotation`'s; on a device it runs merge and
+  shift on the device by default since Helmholtz CH7.5c (CH7.5b, below in the device path's
+  rules), as `Dense` under `DevicePlaneWave::Dense` (the device path builds the dense
+  tables). `Fmm` sizes its waves buffer from the plan
+  (`with_plane_wave_boxes`), so no level call allocates; the cost model counts its M2L per
+  box with a V row (`cost::M2lUnit::Boxes`). `Auto` resolves to it on the host at f64 p ≥ 7
+  and f32 p ≥ 8 since Phase 6 T11 (below, "The defaults of Phase 6 T11"). Since Helmholtz
+  CH6.2i (docs/helmholtz/tasks/CH6.2i.md; tetraleaf-validate/results/helmholtz-ch6-2i.md) merge
+  and shift splits over the pool by `PlaneWaveSplit` (moved from `helmholtz`, re-exported
+  there and from `fmm`; `LaplaceOperator::{with_plane_wave_split, set_plane_wave_split}`,
+  `FmmBuilder::plane_wave_split`, `Fmm::{plane_wave_split, set_plane_wave_split}`): by
+  parents as before, or by child on `Execution::chunks` (`Kernels::plane_child`: the
+  parent's call restricted to the child, `plane_parent`'s `serve` mask, so the same bits),
+  `Auto` by child where `driver::parent_pieces` (moved from Helmholtz's `pieces`; the one
+  addition to `driver.rs`) gives at most a quarter as many pieces with work as the pool
+  has threads (`PLANE_CHILD_SHARE`; Helmholtz's rule takes half: Laplace's level 4 of 32
+  pieces lost by child at 72 threads), once per level call; the doc-hidden `plane_wave_by_child` counts the passes.
+- Several charge vectors (Phase 6 T5, C6.3; the `operator` and `fmm` module docs,
+  "Several charge vectors"; CONVENTIONS §3.13, "Several charge vectors"):
+  `LaplaceOperator::with_vectors(m)` sizes every store for m vectors (m (p + 1)² values per
+  box, the vectors one after the other; 3 + m per source, the charges point-major; m or
+  4 m per target, the vectors' φ̂ one after the other, then their ĝ), and every operator
+  gives each vector exactly the one-vector chain, sharing only what does not depend on
+  the charge: the harmonics (`tetraleaf_ref::leaf::*_many`), a pair's distance
+  (`P2pKernel::evaluate_many`; the reference P2P vector by vector), a table (the
+  translations column by column; `Batched` with m columns per pair). So vector v of
+  every output is the one-vector `Fmm`'s on vector v, bit for bit; keep it so. The plan,
+  the exchanges and the redistribution carry m through the sizes alone (no `tetraleaf-plan`
+  change). `Fmm::evaluate` is refused with `FmmError::VectorCount` when m > 1, agreed in
+  the charge-length all-reduce; `evaluate_many` packs the charges point-major on the
+  pool. The cost model weighs one vector's work (only the partition depends on it). On
+  the device the grouped GEMMs and rotation M2L run on views with m columns per box
+  (`device::Columns`), the leaf and P2P kernels take the vectors along z, and the GEMM
+  decisions are keyed by the plan's pairs, with a chunk budget per vector unless the builder
+  names one (`vector_settings`; the `device` module docs).
+- Dipole sources (Phase 6 T8, C6.4; the `operator` and `fmm` module docs, "Dipoles";
+  CONVENTIONS §3.7, "Dipole sources", and §3.13, "Source chunks"): `SourceType` is fixed at
+  build (`FmmBuilder::sources`, `LaplaceOperator::with_sources`) and sets the source chunk
+  (3 + m with charges, 6 with dipoles, 7 with both: u, q, d̂). Only P2M, P2L and P2P change:
+  each adds the leaf's charge terms first, then its dipole terms (`leaf::p2m_dipoles`,
+  `leaf::p2l_dipoles`, `P2pKernel::evaluate_dipoles` or `p2p::p2p_dipoles` with
+  `Reference`), the moments of another leaf mapped by r̂(s|t) into scratch (exact). The
+  charge load scales each moment into its leaf's units, `T::from_f64(d.to_f64() / r)`;
+  the forward moves 1, 3 or 4 strengths per source (the build's `strengths`), the charges and
+  moments packed q, d₀, d₁, d₂ per source. With `SourceType::Charges` (the default) nothing
+  changes: `evaluate_sources(Sources::charges(c))` is `evaluate(c)` bit for bit; keep it so.
+  `evaluate` and `evaluate_many` on a dipole FMM, and a `Sources` that does not match the
+  build, give `FmmError::SourceType`, a short moment slice `FmmError::DipolesLength`, agreed
+  in the length all-reduce; dipoles with m > 1 are `SettingsError::SourcesWithVectors`. On a
+  device (Phase 6 T8d; the device module docs, "Dipoles") P2M, P2L and P2P run the dipole
+  kernels of `tetraleaf-kernels` (`SourceKind`; `host_fallback` keeps any kind on the host, bit
+  for bit the host path as before): the device's source store holds the chunk layout with
+  the strengths, one upload of w = 3 or 4 values per source per evaluation
+  (`DataKind::Charges`, scattered by the strength slots, `DeviceViews::charge_slots`), the
+  moments scaled into their leaf's units on the host first (`scale_moments` in `fmm`, the
+  bits of the charge load; the sent leaves' chunks from the scaled upload); the P2P layout
+  under `DeviceP2pLayout::Auto` is the static rule with dipoles (the tuning cache's P2P
+  decisions are the charge kernel's). The cost model weighs the charge kernels. `tests/operator/dipoles.rs` checks the operators against `tetraleaf_ref` (C3.1
+  criterion, every P2P kernel); `tests/mpi_exec.rs`, **dipole sources**, the FMM against the
+  direct sum, threads, overlap, `Reference`, f32, the one-rank reference, linearity and the
+  errors, with the `gpu` feature `device_common::check_dipoles` and `dipole_scenario` (also
+  in `tests/device_metal.rs`, `tests/device_cuda.rs` and `tests/device_ranks.rs`: every kind
+  on the fallback bit for bit the host, every kind on the device within the FMM bounds, two
+  evaluations and blocking against overlapped bit for bit, the transfers of the formula with
+  w strengths per source); `tests/operator/device_p2p.rs` and `device_leaf.rs` the dipole
+  kernels at the absolute frames (P2P also against the host kernel; P2M, P2L p ≤ 20 in f64);
+  the ignored `tests/dipoles.rs` (its own MPI test, any rank count) the gate: twice each source
+  type's single-translation prediction on the C3.2 cube, twice the cube's error on the C3.3
+  Plummer sphere, f64 p = 3, 8, 12 and f32 p = 3, 8, with a device feature each case also
+  with every kind on the device (the CPU runtime f64, Metal f32, CUDA both) within the
+  device-against-host bounds of docs/phase4/README.md. The dipole scenario added about 20 s
+  to the one-rank debug run of `tests/mpi_exec.rs` (137 → 157 s on the M3 Max).
+- The near rule (Phase 6 T12, C6.9; the `fmm` module docs, "The near rule (C6.9)"):
+  `FmmBuilder::near_rule` (`NearRuleChoice::CostModel` by default since Phase 6 T11, `Off`
+  before; `CostModel`: N_W =
+  α_M2P / α_P2P and N_X = α_P2L / α_P2P of the FMM's `CostModel`,
+  `CostModel::near_crossovers`; `Crossovers { w, x }` named, negative or NaN refused with
+  `SettingsError::NearCrossover`). Step 4 counts every local leaf's points where they are
+  (`cost::leaf_point_counts`, shared with the cut), fetches the W rows' ghost leaves' source
+  counts (`tetraleaf_plan::near::LeafCounts::exchange`) and builds the plan again with the
+  rule (`near_plan`, `Plan::with_near_rule`); the cut weighs that plan (converted pairs as
+  P2P), and a recut makes the counts and the rule's plan again. Converted pairs lose their
+  truncation error, so the output is not the rule off's; it stays deterministic, the same
+  at every thread count and overlap setting, and on P ranks the one-rank `Fmm` of the same
+  rule bit for bit. `Fmm::near_rule` reports the setting, the crossovers and the plan's
+  `NearPairs`; `BuildTimings::plan` includes the rule's counts and plan. Tested in
+  `tests/mpi_exec.rs` (`check_near_rule` on every scenario with W or X lists, **work-weighted
+  cut**, **input errors**), `tests/invariance.rs` (the Plummer sphere and the graded tree
+  with the rule) and `tests/multi_rank.rs` (the variant "auto, near rule" with the C6.9
+  check). A converted pair is exact, but where the truncation errors of pairs cancel the
+  error against the direct sum can grow by a few per cent (2.1 % on the work-weighted
+  cut's tree at p = 5 with the cost model's rule, 0.6 % at p = 16 with every pair
+  converted); the tests bound it at 1.1 times the rule off's (`NEAR_ERROR_BOUND`), C6.9's
+  "at most" being a sign-off question (tetraleaf-validate/results/phase6-near.md).
+- The shared host drivers (Helmholtz CH2.0; docs/design/helmholtz-fmm-proposal.md §2,
+  constraint 1, and §6.2; the `operator` module docs, "The shared drivers"): the level
+  calls' walking of the views, threads, scratch sets and batched-M2L blocks live in the
+  crate-private `src/driver.rs`, generic over `driver::HostKernel<T>`. Its methods take
+  the level call's level. `operator::Kernels` is Laplace's kernel: it ignores the level,
+  keeps its runtime p and its per-pair `Tables` dispatch, and delegates to its own
+  methods. The plane-wave M2L stays in `operator`. A change to `driver.rs` is a change
+  to Laplace's paths: Laplace's outputs stay bit for bit, and its benchmarks within noise
+  on the M3 Max, locust and Kathleen (D9 of docs/helmholtz/roadmap.md). Add no runtime
+  dispatch below the level call, and keep Laplace's strides and sizes as they are
+  (runtime p): never turn a compile-time constant into a runtime value. A box block's
+  layout is the kernel's (Helmholtz CH3.5, docs/helmholtz/tasks/CH3.5.md): the
+  target-by-target drivers take the block sizes from the plan's stores and pass whole
+  blocks, so complex expansions in two planes, multipoles and locals of different sizes
+  and real shifts on both planes need no driver change. Only `driver::m2l_block` assumes
+  Laplace's layout (m expansions of n values per box, multipole and local alike, square
+  tables). Any other kernel returns `None` from `batched_m2l` (and keeps a `Columns` for
+  `columns`, which the driver then never calls; Helmholtz's own block uses it). Helmholtz
+  CH3.2c chose its own block over a two-plane case here (the user, 2026-11-02; below, "The
+  Batched M2L"), so `m2l_block` stays Laplace's.
+- The Helmholtz builder (Helmholtz CH3.0b; docs/design/helmholtz-fmm-proposal.md §3.7,
+  §6.3; CONVENTIONS §3.15): `helmholtz::Wavenumber` classifies k (Yukawa for Re k = 0,
+  real for Im k = 0, complex otherwise; k = 0, Re k < 0, Im k < 0 and non-finite parts
+  are `WavenumberError`s), and `helmholtz::min_leaf_level` is the leaf rule, the
+  shallowest level whose boxes are at most c_leaf λ wide (λ = 2π/Re k, `C_LEAF` = 1 from
+  D11, capped at 16; 0 for Yukawa), for `OctreeOptions::with_min_leaf_level`. It reads k,
+  the domain and c_leaf only (constraint 9). `FmmBuilder` does not use it: it stays
+  Laplace's builder, and the Helmholtz FMM (CH3.1) passes the level to its tree.
+  `tests/helmholtz/` checks it against the census spike's search; the trees of the
+  reference workloads are checked in `tetraleaf-validate` (`tests/helmholtz_leaves.rs`).
+- Complex densities (Helmholtz CH3.0c; `helmholtz::densities`, re-exported from
+  `helmholtz`; CONVENTIONS §3.15, "Storage" and "Inputs and outputs"): `Densities` (k's
+  kind, `ChargeKind`, m) fixes the sizes of §3.15's table and the leaf chunks, which the
+  module docs define (§3.15 leaves them to CH3.0, not versioned): a complex vector is two
+  adjacent real columns, Re then Im, of §3.13's several-vector layout, so every chunk is a
+  §3.13 chunk of `columns` source and `output_columns` output vectors, and Yukawa's
+  complex vectors are its real path's 2m vectors value for value; keep both so. One
+  complex expansion per complex vector. `Charges` in (`check_charges`,
+  `write_leaf_charges`), `Output` out in split planes (§3.15's order;
+  `write_leaf_output`, Laplace's scales 4π r and 4π r²); `p2m` and `l2p` in the leaf's own
+  frame at k̂ = k r, one reference call per point (`LeafScratch`). The operators with a
+  second frame (P2L, M2P, P2P) and the FMM are CH3.1's. `tests/helmholtz/densities.rs`
+  checks the sizes and indices against closed forms, P2M and L2P bit for bit against
+  `tetraleaf_ref::helmholtz::leaf`, and the chunks end to end against the direct sum.
+- The Helmholtz operator (Helmholtz CH3.1a; `helmholtz::{degree, operator}`, the module
+  docs; docs/helmholtz/tasks/CH3.1a.md): `Degrees` (a tolerance, the rule `degree` at
+  Re(k) a, degree 0 on levels 0 and 1, which nothing reads; or degrees named per level)
+  and `HelmholtzOperator` for real and complex k, real and complex charges and
+  m vectors (Yukawa is `OperatorError::Yukawa`, CH2.1's path). Level l works in its own
+  units at k̂_l = k r_l; a box holds r_l φ̃ there as a chunk does, so P2L scales its
+  charges by r̂(t|s) and the L2L tables carry ½ (`tetraleaf_tables::helmholtz`). M2M, L2L
+  and M2L are `tetraleaf_tables::helmholtz::HelmholtzTables` (RCR, real shifts for real k,
+  per-level tables, M2L y-blocks stored within a budget); P2M and L2P `Densities`'; P2L
+  and M2P `tetraleaf_ref::helmholtz::leaf` in the points' units with the frame's radius as
+  the other box's half-width (the levels of X and W boxes from the frame's radius); P2P
+  the kernel of a `P2pChoice` (below, CH3.4c). It runs on the unchanged shared drivers
+  (`batched_m2l` `None`) and implements `PairOperator`. `tests/helmholtz/operator.rs`
+  checks the bodies pair by pair against the direct sum and, at low degrees, against
+  `tetraleaf-ref`'s chains in absolute units; the level calls are tested with the FMM
+  (CH3.1b).
+- The Dense M2L (Helmholtz CH3.2a; the `helmholtz::operator` module docs, "M2L";
+  docs/helmholtz/tasks/CH3.2a.md): `HelmholtzM2l` (`Rotation`, the default, or `Dense`),
+  `HelmholtzOperator::with_m2l(choice, budget)` and `HelmholtzFmmBuilder::{m2l,
+  dense_budget}` (`DEFAULT_DENSE_BUDGET` 1 GiB per rank): `tetraleaf_tables::helmholtz::dense`
+  on the levels that fit the budget from the finest up, RCR on the others, chosen from the
+  degrees and the budget only; `m2l_on(level)` and `dense_bytes()` report it. Dense
+  combines the complex products per pair in the kernel's `m2l` body (no driver change,
+  `batched_m2l` stays `None`); its output is Rotation's to rounding, deterministic and
+  rank-invariant. `tests/helmholtz/dense.rs` checks every offset of levels 2–4 against
+  Rotation pair by pair, the budget and a zero budget bit for bit Rotation;
+  `tests/helmholtz_fmm.rs` (`check_dense`, two scenarios) the FMM against the direct sum
+  and Rotation within `DENSE_TOLERANCE` (1e-14), 2 threads, pair by pair and the one-rank
+  FMM bit for bit, and the finest level alone (in debug builds the deeper tree's only Dense
+  run). Its debug cost: about 15 s of the one-rank run on the M6 (46 → 61 s; the dense
+  builds), about 2 s at CI's opt-level 1.
+- The Classes M2L (Helmholtz CH3.2b; the `helmholtz::operator` module docs, "M2L";
+  docs/helmholtz/tasks/CH3.2b.md): `HelmholtzM2l::Classes`, `tetraleaf_tables::helmholtz::classes`
+  on the levels whose 16 class matrices and transforms fit the same budget
+  (`ClassM2l::select`, from the finest up), RCR on the others; `class_bytes()` reports it,
+  the thread scratch holds the class scratch (rebuilt by `with_m2l`). Per pair in the
+  kernel's `m2l` body (no driver change); Rotation's and Dense's output to rounding,
+  deterministic and rank-invariant. `tests/helmholtz/dense.rs` checks every offset of levels
+  2–4 against Rotation and Dense (`CLASSES_BOUND` 5e-14, 5.6e-15 measured), the budget and a
+  zero budget bit for bit Rotation; `tests/helmholtz_fmm.rs` runs `check_tables` for both
+  strategies (Classes on every level and the finest alone, in every build). Its debug cost:
+  about 8 s of the one-rank run on the M6 (61 → 69 s).
+- The Batched M2L (Helmholtz CH3.2c; the `helmholtz::operator` module docs, "M2L";
+  docs/helmholtz/tasks/CH3.2c.md; tetraleaf-validate/results/helmholtz-ch3-2c.md):
+  `HelmholtzM2l::Batched`, `tetraleaf_tables::helmholtz::batched::BatchedM2l` (Dense's
+  matrices in split planes, A_r and A_i each n × n; Dense's bytes, budget and `select`),
+  `batched_bytes()`. The operator's own block, not `driver::m2l_block` (Laplace's layout;
+  the user chose it on 2026-11-02 so that no Laplace path changes and no D9 runs are
+  needed): the crate-private `src/helmholtz/batched.rs`, on `Execution::blocks`,
+  `M2L_BLOCK_TARGETS`, the driver's `Columns` type (unchanged) and
+  `tetraleaf_simd::MatrixKernel` on the P2P choice's ISA (scalar for `Reference`). Per offset:
+  one plane L_r += A_r M, L_i += A_i M (Dense bit for bit in the separate mode); two planes
+  L_r += A_r M_r, L_r −= A_i M_i (L_r negated around the call, exact), L_i += A_i M_r,
+  L_i += A_r M_i (Dense to rounding: CH3.2a's sign-off 2). The imaginary planes are the
+  same offsets on the slices shifted by n. The pair body (`Kernel::m2l`, so `PerPair`) runs
+  the same calls with one column per vector, so the level call is it bit for bit; keep the
+  two one chain. `with_m2l_mul_add` and `HelmholtzFmmBuilder::m2l_mul_add` (default
+  `MulAdd::Separate`, under `Auto` `auto_m2l_mul_add`; `Fused` one fma per step, Dense to rounding in
+  both cases, about 1.8× the separate rate on the M6). `tests/helmholtz/dense.rs` checks every offset of levels
+  2–4 against Dense (bit for bit with one plane) and Rotation, the fused mode, the same
+  bits on every ISA in both modes, the budget and a zero budget bit for bit Rotation;
+  `tests/helmholtz_fmm.rs` runs `check_tables` with Batched (Dense's output of the same
+  check bit for bit with real multipoles, within `DENSE_TOLERANCE` with complex ones; two
+  vectors, the level call against the pair body bit for bit; the fused mode against
+  Rotation and Dense and the one-rank FMM). Its debug cost: about 53 s of the one-rank run
+  on the M6 (69 → 122 s; the dense builds of each run, about 7× cheaper at CI's opt-level
+  1).
+- The M2L rule per level (Helmholtz CH3.2d; the `helmholtz::operator` module docs, "M2L";
+  docs/helmholtz/tasks/CH3.2d.md; tetraleaf-validate/results/helmholtz-ch3-2d.md):
+  `HelmholtzM2l::Auto`, Batched (in `auto_m2l_mul_add(isa)`'s mode unless one is named:
+  fused, but separate for the scalar kernel in a build without hardware fma, where
+  `mul_add` is a library call; a named mode holds through later `with_m2l` and `with_p2p`;
+  the builder keeps `m2l_mul_add(MulAdd)` and stores an `Option`) on the levels of degree
+  p_l at most a
+  crossover whose tables fit the dense budget from the finest up
+  (`BatchedM2l::select_within`), Rotation on the others. The crossover is `auto_batched_max_degree(isa, planes)` of the column
+  kernel's ISA and the multipole planes (the machine class, constraint 9), or named
+  (`with_m2l_max_degree`, the builder's `m2l_max_degree`); `with_p2p` and
+  `with_m2l_max_degree` choose the levels again when it changes, so the order of the calls
+  does not matter. `HelmholtzFmmBuilder::build` agrees it over the ranks (all-reduce min)
+  and names it to the operator; `HelmholtzFmm::m2l_max_degree` and the operator's
+  `max_degree` report it. Each level runs Batched's or Rotation's level call unchanged, so
+  the output is deterministic and rank-invariant as theirs. `tests/helmholtz/dense.rs`
+  checks every offset of levels 2–4 level by level (fused Batched bit for bit at or below
+  the crossover, Rotation bit for bit above), the extremes, the mode, the budget, the
+  rule of each ISA in either order of the calls and the crossovers' order;
+  `tests/helmholtz_fmm.rs` (`check_auto`, two scenarios) the FMM at the finest level's
+  degree (in debug builds with the finest level's tables alone) against Rotation and the
+  direct sum, 2 threads, pair by pair and the one-rank FMM bit for bit, and the rule's
+  crossover agreed. Its debug cost: about 28 s of the one-rank run on the M6 (122 → 150 s).
+  `Auto` is `HelmholtzFmmBuilder`'s default since CH3.2d's sign-off (2026-11-02; the enum's
+  `Default` too); the operator's own default before `with_m2l` stays `Rotation`. The tests
+  of `tests/helmholtz_fmm.rs` name Rotation (`builder`) as the reference of every check;
+  `check_auto` checks the default (`default_builder`).
+- The M2L rule's sparse-level term (Helmholtz CH4.0; the `helmholtz::operator` module docs,
+  "M2L"; docs/helmholtz/tasks/CH4.0.md; tetraleaf-validate/results/helmholtz-ch4-0.md):
+  `LevelShape { pairs, targets }` per level, each box counted by the rank that computes it
+  (`Plan::computes`) and summed over the ranks in `HelmholtzFmmBuilder::build` (one
+  all-reduce; `HelmholtzOperator::with_level_shapes`, `level_shapes`,
+  `HelmholtzFmm::level_shapes`), and under `Auto` Batched only where
+  `LevelShape::batched_columns` (m̂, the estimate of the columns per table read at blocks of
+  64: pairs over ⌈targets/64⌉ blocks × 316 (1 − (1 − L̄/316)^b̄) offsets) is at least
+  `auto_batched_min_columns(isa, planes, p)` (m*, per machine class: the pair fit at the
+  class's margin, 1.45 on x86 with two planes, 1.2 with one, 1.15 on NEON), besides p_l ≤ the
+  crossover; `build` agrees a table of m* for p ≤ 64 over the ranks (all-reduce max;
+  `with_m2l_min_columns`, `m2l_min_columns`), as the crossover; the builder's
+  `batched_term(false)` gives CH3.2d's rule (the tests that pin the split by degree name it).
+  Under D8's default the term changed no level of CH6.2h's cases (the waves take the levels
+  where it would bind); it decides with the waves off, in f32, at Im κ_l ≥ 5π and below
+  10⁻⁸. Batched's level call narrows its blocks on a
+  level of fewer blocks than threads (`batched_block_targets(rows, threads)`: 64 on one
+  thread, else ⌈rows/threads⌉ within `M2L_MIN_BLOCK_TARGETS` and 64; named by
+  `with_m2l_block_targets` and the builder's `m2l_block_targets`), the pair chain bit for bit
+  at every width. The dense budget per rank is min(`dense_budget`, `dense_node_budget` /
+  ranks per node) (`DEFAULT_DENSE_NODE_BUDGET` 8 GiB; `HelmholtzFmm::dense_budget`), so the
+  levels a rank batches depend on the ranks per node, as for Laplace's node rule (8 GiB signed
+  off on #211; each rank holds its own copy, shared by its threads, so the documented advice is
+  a few ranks per node with threads; one copy per node is CH8.0).
+  `tests/helmholtz/dense.rs` checks the term level by level (a sparse level Rotation's bits,
+  dense ones Batched's, either order of the calls, `None` CH3.2d's choice, a named m* table),
+  m̂ on hand shapes, m*'s order and the widths; `check_batched_term` in
+  `tests/helmholtz_fmm.rs` the shapes the same on every rank and the one-rank tree's, the
+  agreed m*, each level's method by the term (some level Rotation by the term alone), within
+  `DENSE_TOLERANCE` of Rotation, 2 threads and the one-rank FMM bit for bit, the library's
+  default against the direct sum and one rank, widths 1, 7 and 64 at 1 and 2 threads the
+  default's bits (in debug builds 1 at 1 and 7 at 2), and the node budget's share per rank.
+  Its debug cost: about 91 s of the one-rank run on the M6 (526 s in all at opt-level 0, load
+  2–6; 21 % on the rest); at CI's opt-level 1 the whole executable takes 28 s at 1, 2 and 4
+  ranks.
+- The exponential M2L (Helmholtz CH6.1d; the `helmholtz::operator` module docs, "M2L";
+  docs/helmholtz/tasks/CH6.1d.md): `HelmholtzM2l::PlaneWave` (opt-in), merge and shift on
+  the levels whose `PlaneWavePrecision` gives a quadrature (`Rule`, the default:
+  `tetraleaf_tables::helmholtz::plane_wave::merge::select`, measured by Helmholtz CH6.1e:
+  iprec 2 at the FMM's tolerance ε ≥ 10⁻⁶, none below until CH6.1g (below), which the builder passes from
+  `Degrees::Tolerance` through `with_plane_wave_tolerance`; with named degrees iprec 2 to
+  p = 15; or `PerLevel`, for the measurements), RCR elsewhere; `with_plane_wave_precision`,
+  `plane_wave_precision(level)`, `plane_wave_bytes`, `with_plane_wave_boxes` (the builder
+  sizes the waves buffer from the plan) and `HelmholtzFmmBuilder::plane_wave_precision`.
+  Since Helmholtz CH6.2a (docs/helmholtz/tasks/CH6.2a.md; tetraleaf-validate/results/helmholtz-ch6-2a.md)
+  the level call runs by chunks of whole parents whose distinct V sources' waves fit the
+  buffer's bound (`with_plane_wave_buffer`, at least `MIN_BUFFER_BOXES` = 216 boxes of a
+  level; `plane_wave_buffer`, `plane_wave_buffer_bytes`, `plane_wave_counts`): the builder's
+  `plane_wave_budget` per node (`DEFAULT_PLANE_WAVE_NODE_BUDGET` 8 GiB, `usize::MAX` a
+  whole level) over the ranks per node, which `build` now agrees from one `split_shared`
+  (`HelmholtzFmm::ranks_per_node`). Every box's waves are its multipole's alone and every
+  accumulator keeps its order, so the output is the same at every bound;
+  `check_plane_wave` runs the floor, twice the floor's buffer and no bound against the
+  default bit for bit (the chunks agreed between the floor's and the default's), the floor
+  at 2 threads and, on several ranks, against the one-rank FMM, and asserts on one rank that
+  the floor chunked a level call (the clusters' finest level with waves);
+  `tests/helmholtz/plane_wave.rs` checks the buffer's sizes and `plane_wave_bytes` at every
+  bound. The bound is not a hard cap: the floor may exceed it, and the positions (4 bytes
+  per box of the largest level with waves) lie outside it, both counted in
+  `plane_wave_bytes`. Since Helmholtz CH4.0c the builder sets the bound before it sizes the
+  buffer for the plan's boxes (sized first, it held every box of the largest level with waves
+  until the bound came: 218 GB on W3 at N = 10⁶ and kD = 500, refused by a Kathleen node);
+  `plane_wave_buffer_peak_bytes` reports the most it held, and the floor check asserts that is
+  the bound's buffer.
+  Since Helmholtz CH6.2b (docs/helmholtz/tasks/CH6.2b.md) every M2L level call of the
+  Helmholtz operator, under every setting, is timed on the calling thread's clock and
+  summed per level (`HelmholtzOperator::m2l_times`, reset with `plane_wave_counts` when the
+  tables are chosen): two clock reads per call, no value changed (`check_auto` and
+  `check_plane_wave` check an entry on every level with V pairs). Laplace's opt-in
+  `KindTiming` is untouched. Since Helmholtz CH6.2d (docs/helmholtz/tasks/CH6.2d.md) the
+  exponential M2L's level call also times its two passes per level
+  (`HelmholtzOperator::plane_wave_times`, `PlaneWaveTimes { waves, parents }`: the waves of
+  each chunk's sources, and merge and shift; summed over chunks, vectors and frames, reset
+  with the others; four clock reads more per chunk, vector and frame, no value changed):
+  `check_plane_wave_times` in `check_plane_wave` checks both passes timed and within the
+  level's M2L time on every level with waves and V pairs, zero elsewhere.
+  Since Helmholtz CH6.2e (docs/helmholtz/tasks/CH6.2e.md) `with_plane_wave_reach` and
+  `HelmholtzFmmBuilder::plane_wave_reach` name the lateral reach of the quadratures' α counts
+  (default `RHO_MAX` = 4√2, the region's corner; a smaller reach bounds the kernel on
+  ρ ≤ reach only, with fewer waves where Im κ < π/2 and on some strongly damped levels
+  more), for the measurements; an invalid reach panics in the setter; `plane_wave_reach` and
+  `plane_wave_waves(level)` report it. `check_plane_wave` checks the corner named bit for
+  bit the default, and reach 4 with at most the corner's waves per level within
+  `PLANE_WAVE_RATIO` of Rotation's error, at 2 threads and on P ranks the one-rank FMM (the
+  one-rank debug run on the M6: see docs/helmholtz/tasks/CH6.2e.md, "Results").
+  Since Helmholtz CH6.2g (docs/helmholtz/tasks/CH6.2g.md) `tests/helmholtz/plane_wave_reach.rs`
+  checks the default counts at the 24 largest V offsets, (±3, ±3, ±2), along every direction
+  merge and shift gives them, at the calibrated degree with iprec 2: the error against RCR
+  within the error with converged counts plus 10× the stated error (an empirical guard: the
+  measured worst is 3.2×), on CH6.1a's fixture domains and domain 92 at 10⁻⁶ in debug (16 s on the M6) and, ignored, on every domain below Im κ = 5π
+  at 10⁻³ and 10⁻⁶ (release, about 40 s; the domains from 5π, where the stated errors fall to
+  round-off, are a known effect left to CH6.2f); reach 4.5's error printed (CH6.2e's proposal,
+  withdrawn: up to 2·10⁴× the stated error at high κ).
+  Since Helmholtz CH6.2f (docs/helmholtz/tasks/CH6.2f.md; tetraleaf-validate/results/helmholtz-ch6-2f.md)
+  merge and shift splits over the pool by `PlaneWaveSplit` (`with_plane_wave_split`,
+  `HelmholtzFmmBuilder::plane_wave_split`): `Parents` on `Execution::parents` as before, or
+  `Children` on `Execution::chunks`, one task per box of a chunk, each computed child summing
+  the accumulators whose mask holds it and converting, the parent's call restricted to it
+  (`parent_call`'s `serve` mask), so every local the same bits; `Auto` (the default) takes
+  `Children` on a chunk whose split by parents makes at most half as many pieces holding a
+  computed box as the pool has threads (`driver::parent_pieces`, `pieces` until CH6.2i, restates `driver::split_parents`' halving
+  down to `PARENT_GRAIN` = 64 boxes; level 2 ran on one thread, level 3 on 8 pieces; on P
+  ranks a level's held boxes it does not compute make pieces without work, which at 4 × 10
+  on Kathleen kept level 3 by parents on 3 busy threads before they were left out), since the split by child repeats
+  shared accumulators (1.2–3× the parents' thread time on CH6.2f's cases). `driver.rs`
+  unchanged.
+  `PlaneWaveTimes` gains merge and shift's thread-seconds by part (`busy`, `shifts`,
+  `children`, `conversions`, each worker's clock in its `PlaneScratch`, drained after the
+  level call) and `PlaneWaveCounts::by_child`. `check_plane_wave_split` (in
+  `check_plane_wave`) checks `Parents` at 2 threads and `Children` at 1 and 2 against the
+  default bit for bit with every chunk split as named, `Children` on P ranks against the
+  one-rank FMM, the default by child at 2 threads and never at 1; the floor at 2 threads
+  runs `Children`; `check_plane_wave_times` the parts within `busy`.
+  Since Helmholtz CH6.2h (D8; docs/helmholtz/tasks/CH6.2h.md;
+  tetraleaf-validate/results/helmholtz-ch6-2h.md) `HelmholtzM2l::Auto` may take the exponential
+  M2L: `with_auto_plane_wave` and `HelmholtzFmmBuilder::auto_plane_wave` (on by default
+  since D8's sign-off, 2026-11-08; `false` gives CH3.2d's rule), on each level of degree at least `auto_plane_wave_min_degree(isa, planes)` (one
+  above Batched's crossover, 12 on AVX-512 with two planes; named by
+  `with_m2l_plane_wave_min_degree` and the builder's `m2l_plane_wave_min_degree`, agreed
+  over the ranks by an all-reduce min, reported by `plane_wave_min_degree` and
+  `HelmholtzFmm::m2l_plane_wave_min_degree`) with a quadrature of `select` and Im κ_l below
+  `AUTO_PLANE_WAVE_MAX_IM_KAPPA` (5π), f64 only; then Batched on the other levels (the
+  levels with waves take no batched tables and none of the budget), RCR else. Each level
+  runs an existing level call. `tests/helmholtz/plane_wave.rs` checks the choice per level
+  (named degrees, off, ε below 10⁻⁶, a damped level, f32, the ISA's rule);
+  `check_auto_plane_wave` in `tests/helmholtz_fmm.rs` (on degrees varied as `check_auto`'s)
+  PlaneWave bit for bit at degree 0, the mixed rule against the direct sum within
+  `PLANE_WAVE_RATIO` of Rotation's error, 2 threads and the one-rank FMM bit for bit, today's
+  Auto bit for bit with the smallest degree above every level's, the agreed degree and none
+  by default. Its debug cost: about 39 s of the one-rank run on the M6 (216 → 255 s).
+  Since Helmholtz CH6.1g (docs/helmholtz/tasks/CH6.1g.md;
+  tetraleaf-validate/results/helmholtz-ch6-1g.md) PlaneWave's rule reaches below ε = 10⁻⁶ by
+  CH6.1f's resolving degree (signed off 2026-11-09): the operator keeps the degrees it was
+  given (`base_degree`) and, under `PlaneWavePrecision::Rule` with a tolerance, raises each
+  level with a quadrature to `merge::plane_wave_degree` (iprec 3 at max(p_l, 28) for
+  10⁻⁷ ≤ ε < 10⁻⁶ and at max(p_l, 32) for 10⁻⁸ ≤ ε < 10⁻⁷; signed off 2026-11-11, iprec 2
+  erring above Rotation at 10⁻⁷ whatever the degree), building `HelmholtzTables`
+  again in `select_tables` where the degrees change (and back at the degrees given when a
+  later setting takes the waves away), so every operator of the level and the store sizes
+  follow; `degree` and `HelmholtzFmm::degrees` report the degrees run. Named precisions and
+  named degrees raise nothing. Auto takes the rule's levels, raised, at 10⁻⁸ ≤ ε < 10⁻⁷ and
+  kept D8's bound in 10⁻⁷ ≤ ε < 10⁻⁶ (signed off 2026-11-11) until CH6.1h lifted it (below). `tests/helmholtz/plane_wave.rs` checks the degrees, sizes and tables per level,
+  the order of the calls, Rotation afterwards, named precisions and Auto;
+  `check_resolving_degree` in `tests/helmholtz_fmm.rs` (the clusters at kD = 1, with levels
+  at κ_l ≤ 0.08, and the cube at kD = 20 + 2i, each at 10⁻⁷ and 10⁻⁸) the errors within
+  `PLANE_WAVE_RATIO` of Rotation's at the degrees given, 2 threads and the one-rank FMM bit
+  for bit, and the default (Auto) PlaneWave's output bit for bit at 10⁻⁸ and Rotation's at
+  10⁻⁷. Its debug cost: 157 s of the one-rank run (603 s) on a loaded M6 (load about 20),
+  where every other check ran about 1.7× slower than on a quiet one, so about 90 s quiet
+  (an estimate; not measured quiet).
+  Since Helmholtz CH6.1h (docs/helmholtz/tasks/CH6.1h.md;
+  tetraleaf-validate/results/helmholtz-ch6-1h.md) `PlaneWaveRaise` (`with_plane_wave_raise`,
+  `plane_wave_raise`, `HelmholtzFmmBuilder::plane_wave_raise`) names which operators of a
+  raised level run at p_w: `Level` (CH6.1g's, every one),
+  `Leaves` (the M2M to the parent and the L2L from it on the first p_l degrees,
+  `translation_degree`, by `HelmholtzTables::build_with_m2l_degrees`) and `M2l` (those and
+  the leaves' P2M, L2P, P2L and M2P on the first p_l degrees, through the scratch's `first`
+  expansion: zeroed, computed at p_l and added into the first degrees, or copied out of
+  them). The stores, the ghost exchange, the M2L and the M2M from the children and the L2L
+  to them stay at p_w in every form, so `degree` is unchanged. `Level` is CH6.1g's output
+  bit for bit. `tests/helmholtz/plane_wave.rs`
+  (`the_raised_levels_translations_keep_the_degrees_given`) checks the degrees, sizes and
+  tables per form, the M2L pair body the same bits, a leaf's P2M and L2P (`Level`'s under
+  `Leaves`, Rotation's at p_l on the first degrees under `M2l`), the order of the calls,
+  Rotation afterwards and Auto; `check_m2l_raise` in `tests/helmholtz_fmm.rs` both forms on
+  `check_resolving_degree`'s four trees within `PLANE_WAVE_RATIO` of Rotation's, 2 threads,
+  the one-rank FMM bit for bit, and `Leaves` bit for bit `Level`'s where only level 2 is
+  raised. Signed off 2026-11-11: `PlaneWaveRaise::Rule`, the default (`resolved`: `M2l` at
+  10⁻⁷ ≤ ε < 10⁻⁶, `Leaves` at 10⁻⁸ ≤ ε < 10⁻⁷, where `M2l` erred 1.53× on one case), and D8's
+  bound lifted there: Auto takes the rule's levels, raised, at every ε ≥ 10⁻⁸ with a
+  quadrature. `check_resolving_degree` checks the default's translation degrees, Auto bit for
+  bit PlaneWave's output at both tolerances, and `check_m2l_raise` the named forms against it
+  (the rule's form bit for bit; `M2l` at 10⁻⁸ printed, not held to the ratio);
+  `tests/helmholtz/plane_wave.rs` also the four leaf operators by form with one and two
+  multipole planes (`the_raised_levels_leaf_operators_by_the_form`). Its debug cost: the
+  one-rank run 715 s on a loaded M6 (load 14–22; CH6.1g's 603 s at load about 20); CI's
+  `run-tests-mpi` 54 s at 2 ranks and 103 s at 4 (opt-level 1, its 900 s timeout).
+  The level call is the crate-private `src/helmholtz/operator_plane_wave.rs`, Laplace's
+  order (`src/operator_plane_wave.rs`) restated in scalar loops on
+  `tetraleaf_tables::helmholtz::plane_wave` (no `tetraleaf-simd` kernel: Laplace's `WaveKernel`
+  has the real half-node layout of §3.14) on the driver's `Execution::{chunks, parents}`
+  (used, not changed): per chunk of parents (since CH6.2a), vector and frame the waves of
+  the chunk's sources, then parent by parent
+  every accumulator over its slots in ascending order (geometric masks), so the output is
+  the same at every thread count and on P ranks the one-rank output bit for bit. The pair
+  body (`PerPair`) is `PlaneWaveLevel::m2l` along `PlaneWaveTables::pair_direction`, which
+  the level call equals to rounding (2.0e-16 relative L2 on the M6). It approximates M2L
+  (not Rotation's bits); f64 only. `tests/helmholtz/plane_wave.rs` checks the precisions
+  (rule and named) and the pair body bit for bit `PlaneWaveLevel::m2l`;
+  `tests/helmholtz_fmm.rs` (`check_plane_wave`, two scenarios, one and two multipole
+  planes) the FMM against the direct sum and within `PLANE_WAVE_RATIO` (1.1) of
+  Rotation's error (CH6.1's acceptance, asserted since CH6.1e; 1.000× on both scenarios
+  on the M6; the rule on CH3.1c's cases within 1.070×, tetraleaf-validate/results/helmholtz-ch6-1e.md),
+  against the pair path within `PLANE_PAIR_TOLERANCE` (1e-14; in
+  debug builds of a tree with waves on several levels the finest level's alone), 2
+  threads and the one-rank FMM bit for bit, two vectors each the one-vector FMM, and named
+  precisions (none on every level is Rotation bit for bit). Its debug cost: about 27 s of
+  the one-rank run on the M6 (47 s with CH6.1e's iprec 2 on the second scenario, on a
+  loaded M6).
+- The degree rule (Helmholtz CH3.3; the `helmholtz::degree` module docs;
+  tetraleaf-validate/results/helmholtz-ch3-3.md): `degree` is `DegreeRule::CALIBRATED`,
+  max(⌈0.30 L² + 0.25 L + 2.60⌉, ⌈x + 0.80 (ln 1/ε)^{2/3} x^{1/3}⌉) with L = log₁₀(1/ε),
+  x = Re(k) a, calibrated in the full FMM (every measured degree at ε/2 covered, 10⁻⁸ ≤ ε
+  ≤ 10⁻³, x ≤ 65, checked at x = 108 by CH3.3 and at x = 216 and 108 by Helmholtz CH4.0c,
+  W1 at kD = 1000 within ε in ℓ2 (tetraleaf-validate/results/helmholtz-ch4-0c.md); an
+  extrapolation beyond, below S7's p* there; CH3.3's 10⁻¹⁸ to 10⁻¹ compared the two formulas
+  and is not a measured range, review 2026-11-12 M6);
+  S7's closed form, the default before, is `s7_degree`, the per-pair bound. Tests of single pairs or chains (`tests/helmholtz/operator.rs`) take `s7_degree`;
+  tests of the whole FMM the default. `DegreeRule`'s ceilings forgive 10⁻⁹. A change of
+  the constants is a recalibration: rerun `tetraleaf-validate`'s `helmholtz_calibrate` and
+  the verification of the report, and update `tests/helmholtz/degree.rs`'s `MEASURED`.
+- The Helmholtz P2P kernel (Helmholtz CH3.4c; the `helmholtz::operator` module docs, "P2P
+  kernel"; docs/helmholtz/tasks/CH3.4c.md): `HelmholtzOperator::with_p2p` and
+  `HelmholtzFmmBuilder::p2p_kernel` take Laplace's `P2pChoice` (default `Auto`):
+  `tetraleaf_simd::P2pKernel::evaluate_helmholtz` on the ISA, one call per vector on all the
+  leaf's targets (vector v's charges point-major, the chunk's own slice for m = 1, else
+  gathered into scratch; the output planes of columns 2v and 2v + 1 as they lie, the
+  kernel's layout); `Reference` keeps `tetraleaf_ref::helmholtz::p2p::p2p` target by target,
+  the trusted path, which `Isa::Scalar` equals bit for bit. An unavailable ISA is
+  `IsaUnavailable` from the operator, `SettingsError::P2pIsaUnavailable` from the builder;
+  `p2p_kernel()` reports the resolved choice on both. `tests/helmholtz/p2p.rs` checks every
+  ISA against `Reference` pair by pair within CH3.4b's per-term contract summed over the
+  sources (f64 and f32, real and complex k and charges, one and two vectors, with and
+  without gradients, a coarser neighbour);
+  `tests/helmholtz_fmm.rs` the FMM on every ISA within `KERNEL_TOLERANCE` (1e-13) of
+  `Reference`, `Scalar` bit for bit, `Auto` that of `Isa::detect`, and every other scenario
+  on `Auto`.
+- The point pipeline (Helmholtz CH3.1b; the crate-private `src/pipeline.rs`, its module
+  docs; docs/helmholtz/tasks/CH3.1b.md): steps 3, 4's keys and octree, 5, 6 and 8 of
+  `FmmBuilder::build` (`pipeline::{domain, octree}`, `Points::{route, load_coordinates}`)
+  and the evaluation's helpers (`agree`, the checks, `LeafRanges`, `OutputOrder`, the
+  charge load, `pack_charges`, `gather_output`, `unpack_output_many` and the rest of the
+  moves; the dipole and device helpers of that block moved with it), verbatim from
+  `fmm.rs`; `Fmm` holds a `Points`. It is on Laplace's path: a change there keeps `Fmm`'s
+  outputs bit for bit (constraint 1, as for `driver.rs`). Keep its build steps
+  operator-independent: what names Laplace's operator, strategy, cost model or device
+  stays in `fmm.rs`. The moved helpers' unit tests stayed in `fmm.rs`'s `mod tests`.
+- The Helmholtz FMM (Helmholtz CH3.1b; `helmholtz::fmm`, its module docs):
+  `HelmholtzFmmBuilder` (k, `Degrees`, `ChargeKind`, vectors, gradients, threads, domain,
+  points per leaf, `max_level`, the block budget, c_leaf, the P2P kernel since CH3.4c) and
+  `HelmholtzFmm` on any number of ranks, the pipeline's steps with the leaf rule
+  (`min_leaf_level` into `OctreeOptions::with_min_leaf_level`) and `HelmholtzOperator` on `Evaluator` (M2L
+  by `HelmholtzM2l`, CH3.2a); no near
+  rule, work cut, overlap, device or table cache. `evaluate` packs the c m columns
+  (Re q, Im q per complex vector) point-major, so the charge load, `gather_output` and
+  `unpack_output_many` run unchanged with m replaced by the columns and output columns
+  (CH3.0c's chunks); `HelmholtzFmmError` wraps `FmmError` for the shared steps. Doc-hidden
+  for the tests: `pair_calls` (the evaluator runs `PerPair` of the operator) and
+  `reference_output` (the pass of `Densities::write_leaf_output`).
+  Since Helmholtz CH4.0d1 (docs/helmholtz/tasks/CH4.0d1.md) the builder's plan has the
+  empty-box rule of `tetraleaf_plan::empty` by default (`HelmholtzFmmBuilder::empty_boxes`,
+  `HelmholtzFmm::empty_boxes`; what it left out is `plan().empty_boxes()`): after the routes
+  (steps 5 and 6) the build takes every box's subtree counts from the points the routes
+  deliver to each local leaf (`LeafCounts::exchange_with_boxes`) and builds the plan with
+  the rule; the rule changes no local leaf, so the routes hold
+  (`cost::leaf_point_counts`, a pass over every point, is not needed). Since Helmholtz
+  CH4.0d1b (docs/helmholtz/tasks/CH4.0d1b.md) the plan is built once: step 4 builds the
+  octree's `BoxIndex::of_octree`, the routes run on it (`Points::route` takes the index;
+  `Fmm` passes its plan's, the same routes), and `Plan::with_rules_on` builds the plan on it,
+  with the rule or without. A box whose subtree holds no target loses its V, X, W and
+  L2L rows, one with no source leaves the V, W and M2M rows naming it; only exact zeros go,
+  so the output is the rule off's as values (−0 and +0 equal), and on P ranks the one-rank
+  FMM's of the same setting bit for bit. Auto's term counts the rule's V pairs, so under
+  the default a level's M2L may differ from the rule off's (it did on both test cases).
+  `check_empty_boxes` (a sphere at kD = 30 under the leaf rule, and the clusters with
+  separate targets) checks the rule off's values under Rotation, Batched, PlaneWave and Auto
+  without the term (and under the default where every level's M2L agrees), 2 threads and the
+  one-rank FMM bit for bit; `check_plane_wave` names the rule off, so that the clusters'
+  finest level still chunks at the waves buffer's floor. `FmmBuilder` (Laplace) has no rule
+  (CH4.0g decides).
+  Since Helmholtz CH4.0d2 (docs/helmholtz/tasks/CH4.0d2.md) `HelmholtzFmmBuilder::near_v`
+  (`VNear`: `Off`, the default until its sign-off, or `Crossover(n)`, n_s n_t below n on every
+  level; negative or NaN is `HelmholtzFmmError::VCrossover`) makes V pairs between two leaves
+  near pairs through `tetraleaf_plan`'s `NearRule::with_v_pairs` on the counts the empty-box rule
+  reads (counted even with that rule off), in the one plan build; W and X pairs never convert
+  here. On a level whose M2L is the exponential one (under `PlaneWave` or Auto's levels with
+  waves, known before the plan from `operator::wave_levels`, the operator's own choice since
+  Helmholtz CHA.11, which replaced the builder's restatement and its assert; named precisions
+  take no waves on a level whose κ_l lies outside the tables, where the restatement assumed
+  them and the assert failed) the decision is per parent P and source s (`v_group`): merge and shift
+  serves s to every child of P whose V list holds it by geometric masks, so a pair converted
+  alone counts its source twice (W1 at kD = 500 erred 4·10⁵× before; the user, 2026-11-13:
+  "Group per (parent, source)"); all those children convert if all are leaves and
+  n_s n_P < n m_s (n_P the targets under P, m_s the children reading s; `v_group` caches the
+  parent's leaf mask for its siblings). `VNear::CostModel`'s crossover per level is
+  `v_crossover(&v_costs(isa), m2l, p, gradients)`: the cheapest M2L the setting may run on the
+  level (the waves at their degree where predicted, Batched to Auto's crossover degree, else
+  Rotation; a named M2L its own) per pair over the P2P per interaction, from `VCosts` per
+  machine class (`V_COSTS_X86` from Kathleen, `V_COSTS_NEON` from locust; the M6 takes NEON's
+  unmeasured), agreed over the ranks (all-reduce min); fitted in
+  tetraleaf-validate/results/helmholtz-ch4-0d2.md. Left off by default (signed off 2026-11-13: decided
+  with CH4.0d3's leaf size). `check_near_v`'s debug cost: the one-rank run at opt-level 0
+  766 s at load 16–20 on the M6 (CH4.0d1b 701 s at load 17–20). A converted pair is exact, so the output is not the rule off's; it stays deterministic
+  and on P ranks the one-rank FMM's of the same setting bit for bit. `HelmholtzFmm::{near_v,
+  source_points_exchanged, near_interactions}` report the setting, the source exchange's points
+  (sent, received) and each level's Σ_t n_t Σ_s n_s; `HelmholtzOperator::p2p_times` times every
+  P2P level call per level (two clock reads, as `m2l_times`). `check_near_v` in
+  `tests/helmholtz_fmm.rs` (the cube with rank 0 empty and the sphere, at n_s n_t < 100, every
+  V pair and the cost model, under Rotation, PlaneWave, the default and Auto with waves from
+  degree 0; on the sphere PlaneWave's groups convert in part): the errors within `NEAR_ERROR_BOUND` (1.1) of
+  the rule off's, 2 threads and the one-rank FMM bit for bit, crossover 0 the rule off's bits,
+  more near interactions and ghost points, the P2P timed on every level with near rows;
+  `check_errors` the refused crossovers.
+  Since Helmholtz CH4.0d3 (docs/helmholtz/tasks/CH4.0d3.md;
+  tetraleaf-validate/results/helmholtz-ch4-0d3.md) `HelmholtzFmmBuilder::near_wx` (`WxNear`: `Off`,
+  `Crossovers { w, x }` named, negative or NaN `HelmholtzFmmError::WxCrossover`, or
+  `CostModel`) makes W and X pairs near pairs through `NearRule::new`'s `LeafPair` predicate
+  on the same counts, in the one plan build, with the V rule: a W pair where the W leaf's
+  sources are below N_W, an X pair where the X leaf's targets are below N_X, per level of the
+  finer leaf. `CostModel`: `wx_crossovers(&wx_costs(isa), &v_costs(isa), p)`, N_W =
+  α_M2P(p)/α_P2P and N_X = α_P2L(p)/α_P2P, α = a + b (p + 1)² per point from `WxCosts`
+  (`WX_COSTS_X86` from Kathleen, `WX_COSTS_NEON` from locust; the M6 takes NEON's
+  unmeasured), agreed over the ranks (all-reduce min). The output is not the rule off's
+  (converted pairs are exact); deterministic and on P ranks the one-rank FMM's bit for bit.
+  `HelmholtzOperator::kind_times` times P2M, M2M, L2L, L2P, P2L and M2P per level
+  (`TIMED_KINDS`; two clock reads per level call, as `m2l_times`), and
+  `HelmholtzFmm::{far_interactions, leaves_by_level, max_points_per_leaf, c_leaf}` report
+  the per-level X and W point interactions, the leaves and occupied leaves, and the tree's
+  settings. `check_near_wx` (the clusters and the sphere: crossover 0 the rule off's bits,
+  a named crossover, every pair, the cost model alone and with the V rule's; the errors
+  within `NEAR_ERROR_BOUND` of the rule off's, no more far interactions, 2 threads and the
+  one-rank FMM bit for bit) and `check_leaf_sizes` (8 and 512 points, c_leaf 2: the
+  settings, the leaves, the kind times, the errors, 2 threads and one rank) in
+  `tests/helmholtz_fmm.rs`; `check_errors` the refused crossovers. The builder's defaults
+  since CH4.0d3 (signed off as built on #219, 2026-11-14, D11 amended): the points per leaf of
+  `helmholtz::default_max_points_per_leaf(tolerance, isa)` unless named (256 on x86; on NEON
+  128 at ε ≥ 10⁻⁷ or named degrees, 256 below; the multipole planes not read; agreed over
+  the ranks in step 2's all-reduce, max; Laplace's `fmm::default_max_points_per_leaf`
+  untouched), `DEFAULT_C_LEAF` = 2 (D11's `C_LEAF` = 1 stays the leaf rule's constant and
+  the census tests'), `VNear::CostModel` and `WxNear::CostModel`. `tests/helmholtz_fmm.rs`'s
+  `default_builder` names the settings before (32 points, `C_LEAF`, the three rules off), so
+  every other check keeps its tree and pairs; `check_defaults` (the sphere with a tolerance,
+  the clusters with named degrees) checks the defaults as built, the output the same
+  settings named bit for bit, the errors, 2 threads and the one-rank FMM;
+  `tests/helmholtz/leaf_rule.rs` the rule's table.
+  Since Helmholtz CH4.0h (docs/helmholtz/tasks/CH4.0h.md; tetraleaf-validate/results/helmholtz-ch4-0h.md)
+  the build is timed by step (`HelmholtzBuildTimings`, `HelmholtzFmm::build_timings`: the
+  settings, the domain, the octree, the routes, the counts, the plan, the shapes, the
+  operator with its tables by part, `TableTimings` of `HelmholtzOperator::table_timings`, the
+  evaluator and the coordinates; clock reads only) and the operator's tables are built once,
+  on the pool: `HelmholtzOperator::unbuilt` records the setters and builds nothing until
+  `build_tables` (the builder names every setting and the pool first; `with_block_budget`
+  is `unbuilt` then the build, as before), and `select_tables` decides each level's M2L
+  first, then builds the RCR tables again only where their degrees change, with the M2L
+  y-blocks stored for the levels whose M2L is RCR's alone (`set_m2l_blocks` on built
+  tables); every table build and the scratch sets run as `tetraleaf_tables::parts` on the
+  pool (`PoolParts`, rayon's indexed collect, which keeps the parts' order), so the tables
+  and the output are the serial build's bit for bit. `tests/helmholtz/build.rs` checks the
+  unbuilt operator on a pool against `with_block_budget`'s with the setters after it, under
+  Rotation, Auto (10⁻⁶, raised below 10⁻⁷), PlaneWave, Batched, Dense and Classes: the
+  degrees, the M2L per level, the blocks only on RCR levels, the bytes and every pair body
+  bit for bit; `check_build_timings` (in `check_defaults`) the build's parts on every rank;
+  the 2 threads of every check now also build the tables on the pool against one thread's
+  serial build. Laplace's builder, drivers and pipeline unchanged.
+  `tests/helmholtz_fmm.rs`
+  (its own MPI test at `Funneled`, in CI's MPI list) checks it against the direct sum, at 1,
+  2 and 4 threads (4 only in debug), pair by pair, against the reference pass and the
+  one-rank FMM bit for bit, two vectors, real charges against complex ones with Im q = 0,
+  and the errors, with one scenario that leaves rank 0 empty; ε = 10⁻⁶ and kD = 100 in
+  release only (about 36 s at one rank in debug on the M6; 46 s since CH3.4c's P2P
+  kernel checks).
+  Since Helmholtz CH4.0i (docs/helmholtz/tasks/CH4.0i.md; tetraleaf-validate/results/helmholtz-ch4-0i.md)
+  a Rotation (RCR) M2L level call may run by pairs (`RcrSplit::{Auto, Boxes, Pairs}`,
+  `HelmholtzOperator::{with_rcr_split, with_rcr_buffer, with_rcr_levels, rcr_counts}`,
+  `HelmholtzFmmBuilder::{rcr_split, rcr_budget}`, `DEFAULT_RCR_NODE_BUDGET` 1 GiB per node
+  over the ranks per node; the private `operator_rcr.rs`): the level's V pairs in the plan's
+  order in chunks that fit the buffer, every pair's contribution
+  (`HelmholtzTables::m2l_contribution`) into its own slot on the pool, the chunk's pairs by
+  (polar angle, distance) so that the scratch's kept y-blocks and the coaxial tables are
+  reused, then each target adds its slots in its row's order
+  (`tetraleaf_tables::helmholtz::add_m2l_contribution`): the shared driver's chain bit for bit,
+  so `Auto` may read the pool's threads (`rcr_by_pairs`: by pairs at p_l ≥
+  `RCR_PAIR_MIN_DEGREE` = 48 at every thread count, and at p_l ≥ `RCR_PAIR_FEW_DEGREE` = 30
+  where a level's targets with a V row are fewer than `RCR_PAIR_SHARE` = 4 times the
+  threads). `driver.rs` unchanged. `tests/helmholtz_fmm.rs`'s `check_rcr_split` holds
+  `Pairs` serially, on 2 threads with the default buffer and on 3 at the buffer's floor (one
+  pair per thread, rows across chunks), `Auto` at 20 threads, and two vectors to by boxes bit
+  for bit, under Rotation and the library's Auto (some level by pairs), and on P ranks to the
+  one-rank FMM; no scenario reaches p ≥ 30, so Auto's choice of pairs inside an FMM is
+  `tests/helmholtz/rcr_split.rs`' rule alone.
+- The diagonal M2L (Helmholtz CH4.2b1; the `helmholtz::operator` module docs, "M2L"; the
+  private `src/helmholtz/operator_diagonal.rs`; docs/helmholtz/tasks/CH4.2b1.md):
+  `HelmholtzDiagonal` (`Off`, the default until CH4.3; `Rule` at the FMM's tolerance;
+  `Tolerance(ε)` named), `HelmholtzOperator::{with_diagonal, with_diagonal_budget,
+  with_diagonal_sources, with_diagonal_chunk, diagonal_classes, diagonal_counts,
+  diagonal_bytes}`, `HelmholtzFmmBuilder::{diagonal, diagonal_budget}` (per node, default
+  `tetraleaf_tables::helmholtz::diagonal::DEFAULT_SIGNATURE_NODE_BUDGET`, over the ranks per
+  node). On the levels whose M2L is RCR's under the setting, each class with E(l, c) ≤ θ ε
+  (`diagonal_rule_classes`: `class_bounds`, θ = 1/2, S6's f64 constants, f32's at ε ≥ 10⁻⁴
+  only, D3) takes CH4.2a's `DiagonalM2l`; a level whose scratch at the largest count of its V
+  sources over the ranks (the builder's one all-reduce max, on every rank whatever the
+  setting) does not fit the budget runs RCR whole, the same on every rank. The level call:
+  S → F of each distinct diagonal source per vector into one `Signatures` store
+  (`Signatures::relayout` for each level's degree; blocks over `Execution::chunks`, through
+  `Signatures::strides_mut` and `Conversions::s2f_strides`), then chunks of consecutive
+  targets over the pool, each target's accumulators (the thread's) zeroed, its diagonal pairs
+  in row order, F → R, then its RCR pairs in row order (`HelmholtzTables::m2l`): every local
+  the same bits at every thread count and chunk width, on P ranks the one-rank FMM's.
+  `m2l_on` reports such a level as Rotation; its RCR buffer by pairs is not sized for it. The
+  pair body (`PairOperator`) is S → F, the pair and F → R per pair, so `check`'s pair-by-pair
+  bit identity does not apply to it. `tests/helmholtz/diagonal.rs` checks the rule per level
+  (the bound's classes, none off, without a tolerance, in f32 below 10⁻⁴, on Classes' levels,
+  at a tight budget, without sources) and the pair body on every offset of levels 2 and 3 at
+  k = 40 (real and damped, one and two planes, two vectors) within 2E of Rotation's in
+  CH1.3d1's measure (at most 0.34 E on the M6), the RCR classes Rotation's bits;
+  `check_diagonal` in `tests/helmholtz_fmm.rs` (the cube at kD = 40 + 2i and the clusters at
+  kD = 20, ε = 10⁻⁴; the clusters' level 4 mixes the forms) under Rotation and the library's
+  Auto (where Auto leaves no RCR level, the setting's output unchanged): the errors within
+  `DIAGONAL_RATIO` (1.1) of the setting's without it, 2 threads (4 in release) and chunks of
+  1, 2, 3, 5 and 7 (1 and 3 in debug builds) bit for bit, the one-rank FMM, two vectors each
+  the one-vector FMM, the budget's floor Rotation's bits, and a second evaluation the same bits
+  with the signature buffer not grown (sized from the agreed source counts; without them, and
+  for the slots, the first call of the largest level grows it once). Where the budget binds,
+  the levels depend on the ranks per node, as the dense tables' do. Its debug cost: about 110 s of the
+  one-rank run on a loaded M6 (less with the debug widths), 8 s at opt-level 1.
+  Since Helmholtz CH4.2b2 (docs/helmholtz/tasks/CH4.2b2.md; tetraleaf-validate/results/helmholtz-ch4-2b2.md)
+  the level call times its two passes (S → F, the targets) on the calling thread's clock and the
+  workers' thread-seconds of S → F, the pairs, F → R and the RCR pairs, each worker's clock in its
+  scratch, drained after the call (`DiagonalTimes`, `HelmholtzOperator::diagonal_times`, reset
+  with the counts; a few clock reads per block and chunk, no value changed); `DiagonalCounts::back`
+  counts the accumulators converted back; `diagonal_build_time(level)` gives each level's
+  transfer functions' and conversions' build, `diagonal_multiply_adds(level)` one conversion's
+  multiply-adds. `check_diagonal_times` (in `check_diagonal`, after every run) checks the parts
+  timed exactly where they ran, within the passes and the level's M2L time, `back` against the
+  plan's V rows, the build times on the diagonal levels alone.
+  Since Helmholtz CH4.2c2 (docs/helmholtz/tasks/CH4.2c2.md; tetraleaf-validate/results/helmholtz-ch4-2c2.md)
+  the transfer functions' build is a setting: `TransferBuild` (re-exported from
+  `tetraleaf_tables::helmholtz::diagonal`; `Interpolated`, CH4.2c1's table in ŝ · t̂, the
+  default `DEFAULT_DIAGONAL_BUILD` of the operator and the builder since the sign-off (#241's
+  question 1, 2026-11-20: "Both questions as recommended"), or `Direct`, per sample, the tests'
+  trusted path), `HelmholtzOperator::{with_diagonal_build, diagonal_build}`,
+  `HelmholtzFmmBuilder::diagonal_build`; the rule reads the build's constants
+  (`diagonal_rule_classes(p, k̂, ε, build)`: `TransferBuild::bound_constants`, C_T = 0.15
+  direct, 0.23 interpolated, F32's for f32 by either), so the interpolated build takes at most
+  the direct build's classes. `tests/helmholtz/diagonal.rs` checks the classes per build (a
+  subset, fewer on some level) and the pair body with interpolated tables within 2E of its
+  constants, and the operator's default build; `check_interpolated` (in `check_diagonal`, under
+  Rotation, the build not named, so the builder's default; the rest of `check_diagonal` names
+  `Direct`) the FMM's errors within
+  `DIAGONAL_RATIO` of Rotation's, the classes within the direct build's and the same on every
+  rank, 2 threads and the one-rank FMM bit for bit.
+  Since Helmholtz CH4.3b1 (docs/helmholtz/tasks/CH4.3b1.md; tetraleaf-validate/results/helmholtz-ch4-3b1.md)
+  the time rule, `HelmholtzDiagonal::Auto` (opt-in until CH4.3b2; the operator module docs, "M2L"):
+  the bound's classes of a level taken only where `DiagonalCosts` (per machine class,
+  `DIAGONAL_COSTS_X86` from Kathleen, `DIAGONAL_COSTS_NEON` from locust, `diagonal_costs(isa)`;
+  each unit a (p + 1)² + b (p + 1)³ thread-ns of a whole level call, wall × threads, fitted by
+  `tools/helmholtz/ch4-3b1-fit.py`: S → F and F → R per box with a V row, the diagonal pair, RCR's
+  pair, the waves per box at p_w) puts the diagonal level below the level's other M2L, on the
+  level's agreed `DiagonalShape` (boxes with a V row and pairs per class, `offset_class`; the
+  builder's one all-reduce sum, counted whatever the setting; `DiagonalShape::uniform()` without
+  it): `diagonal_beats_rcr` on an RCR level; under `HelmholtzM2l::Auto` a level with waves given
+  up where `diagonal_beats_plane_waves` (in `select_tables`, after the plan: the waves cost per
+  box, the form per pair, so the order turns on the pairs per box, about 45 on W1, 165 on W3),
+  the level then at its own degree, without batched tables, by the cheaper of the form and RCR.
+  No level below k a = `DIAGONAL_AUTO_MIN_KA` (2.8, S6's range). The builder's V rule reads
+  `wave_levels` before the plan, a superset of the operator's levels with waves (its grouping
+  per (parent, source) converts exact pairs under every M2L). The builder agrees the costs
+  (all-reduce max, `HelmholtzFmmBuilder::diagonal_costs` names them) and passes
+  `with_diagonal_costs` and `with_diagonal_shapes`. The scratch budget's fallback first.
+  `tests/helmholtz/diagonal.rs` (`the_time_rule_on_the_rcr_levels`, `the_time_rule_against_the_waves`)
+  checks the choice per level by the model, named costs, shapes, the fallback, f32, the waves'
+  levels at their own degree and the bound on k a; the unit tests the uniform shape, the model by
+  hand (the waves' order by the pairs per box) and the pair below RCR's at every p ≤ 256 on both
+  classes; `wave_levels_are_the_operators` the operator's levels with waves within the function's
+  under the rule; `check_diagonal_auto` (in `check_diagonal`, both settings, the machine's and
+  free costs) the agreed shapes, the classes on every rank, the errors within `DIAGONAL_RATIO`, 2
+  threads and the one-rank FMM bit for bit. Its cost: `helmholtz_fmm` at one rank, opt-level 1,
+  33 s on the M6.
+  Since Helmholtz CH4.3b2a (docs/helmholtz/tasks/CH4.3b2a.md; tetraleaf-validate/results/helmholtz-ch4-3b2a.md)
+  the time rule runs at matched accuracy: a level with Auto's waves keeps its resolving degree
+  p_w (`plane_wave_degree`, CH6.1g) whatever M2L the rule gives it (stores, M2L and leaves at
+  p_w, translations as `PlaneWaveRaise` gives the waves); by `wave_level_choice`
+  (`WaveLevelChoice`) it keeps the waves unless the form (the bound's classes at p_w, its scratch
+  at p_w within the budget) beats them, and then runs the cheaper of the form and RCR (ties to
+  the waves, then to RCR); RCR never against the waves alone (a rule of three lost 0.47 s and
+  gained 0.11 s on the report's runs: RCR's constant under-predicts RCR at the raised degree on
+  sparse levels); below k a 2.8 the waves stay. `HelmholtzOperator::taken_from_waves` reports the levels taken.
+  `the_time_rule_against_the_waves` (10⁻⁴, 10⁻⁷, 10⁻⁸; free form, free RCR, dear and a tight
+  budget: the defaults' degrees and translation degrees under every costs) and the unit test
+  `the_choice_on_a_level_with_waves_by_hand`; `check_time_rule_raised` in `tests/helmholtz_fmm.rs` (a
+  cube at kD = 40 + 2i, 10⁻⁷, whose level 2 takes 15 classes at p_w = 28; in release builds also
+  the cubes of `check_resolving_degree` at kD = 20 + 2i, which pass no class at p_w and keep the
+  defaults' bits): the machine's (release), free form and free RCR costs, the defaults' degrees,
+  the form at free form costs and RCR on the same levels at free RCR costs, the errors within
+  `DIAGONAL_RATIO` of the defaults', 2 threads, chunks of 3 and the one-rank FMM bit for bit. Its
+  debug cost: the one-rank run at opt-level 0 646 s at load 2–7 (CH4.2c2 611 s), 34.6 s at
+  opt-level 1.
+  Since Helmholtz CH4.3b2b (docs/helmholtz/tasks/CH4.3b2b.md; tetraleaf-validate/results/helmholtz-ch4-3b2b.md)
+  `HelmholtzFmmBuilder::v_after_plan` (`VAfterPlan`: `Off`, the default; `TakenLevels`;
+  `AllLevels`), under `VNear::CostModel` only, decides the V rule's crossovers again after the
+  operator's choice: a level the time rule took from the waves gets the form's pair (or RCR's)
+  over the P2P's per interaction, and under `AllLevels` a level that keeps its waves the waves'
+  cost per box with a V row over its pairs (`v_after_plan_crossover`, `VLevelM2l`), where higher
+  and where the first plan holds a V pair between leaves (summed over the ranks); if any rose, the
+  plan is built once more on a fresh `BoxIndex::of_octree` (the first plan's index has ghost leaves
+  numbered), converting the first plan's pairs and those the new crossover adds, so its V lists lie
+  within the first plan's, the operator's buffers and M2L per level hold, and every rank builds it
+  or none (`HelmholtzBuildTimings::replan`, `HelmholtzFmm::{v_after_plan, v_crossovers,
+  v_crossovers_after_plan, replanned}`); `HelmholtzFmmBuilder::v_costs` names the near rules'
+  `VCosts` (default the ISA's), for tests whose plans must not depend on the machine class. A measurement tool (the report: not adopted on the levels
+  taken, the raised levels' rule left to a follow-up). `tests/helmholtz/v_crossover.rs` checks the
+  closed form; `check_v_after_plan` in `tests/helmholtz_fmm.rs` (the sphere at kD = 30) the M2L per
+  level unchanged (NEON's V costs named: x86's first plan converts every leaf pair of the sphere's
+  level 3, so nothing was left to raise and CI failed until 2026-11-21), the levels raised exactly where named, V pairs at most and conversions at least
+  the setting off's, errors within `NEAR_ERROR_BOUND`, 2 threads and the one-rank FMM bit for bit,
+  Rotation unchanged. Its debug cost: the one-rank run at opt-level 0 703.5 s at load 4–9 on the M6,
+  34.3 s at opt-level 1.
+  Since Helmholtz CH4.3b2d (docs/helmholtz/tasks/CH4.3b2d.md; tetraleaf-validate/results/helmholtz-ch4-3b2d.md)
+  `HelmholtzFmmBuilder::v_raised_price` (`VRaisedPrice`: `PerPair`, CH4.0d2's per-pair constant;
+  `PerBox`, the default since CH4.3b2d, for its sign-off) prices a V pair before the plan, under `VNear::CostModel`, on a level whose waves are
+  raised (p_w above the degree given, ε < 10⁻⁶): `PerBox` takes the higher of the per-pair
+  crossover and `raised_crossover`, the waves' cost per box with a V row at p_w
+  (`DiagonalCosts::plane_wave`) times the level's leaves over their V entries, over the P2P's per
+  interaction. The leaves and entries (`LeafVShape`) are counted before the plan from the octree's
+  keys and the point counts (`leaf_v_shapes`: per local leaf the per-key rule's V entries, the
+  children of the parent's interior neighbours not adjacent to it, less what the empty-box rule
+  leaves out and the leaf pairs that `v_group` converts at the agreed per-pair crossover, so the
+  leaves' V rows of the per-pair plan), summed over the ranks (one all-reduce), the crossovers
+  agreed (one all-reduce min), both inside `HelmholtzBuildTimings::counts`, only where a level is
+  raised; one plan. Where a raised level's boxes with a V row are leaves, it is the crossover that
+  `VAfterPlan::RaisedLevels` (the second plan on the raised levels that keep their waves alone,
+  the trusted measure) finds after a first plan. `HelmholtzFmm::{v_raised_price,
+  raised_v_shapes}` report it. `tests/helmholtz/v_crossover.rs` checks the closed form;
+  `check_v_raised` in `tests/helmholtz_fmm.rs` (3,000 points on the sphere at kD = 30, 10⁻⁷, leaves
+  of up to 128 points, NEON's V and time-rule costs named) the counts against `PerPair`'s plan's
+  leaf rows, the crossovers by `raised_crossover` exactly on the raised levels, more conversions,
+  one plan, the errors within `NEAR_ERROR_BOUND`, 2 threads and the one-rank FMM bit for bit,
+  Rotation counting nothing, and `RaisedLevels`' crossover after the plan equal to the per-box one;
+  `check_v_after_plan` `RaisedLevels` and `PerBox` on the unraised sphere (nothing raised or
+  counted, the per-pair output bit for bit; both checks name `PerPair` as their reference);
+  `check_defaults` the default `PerBox`. Its debug cost: the one-rank run at opt-level 0 703 s
+  at load 2.5–4 on the M6 (before the self-review's two runs on the unraised sphere), 39 s at
+  opt-level 1.
+- Threading (from T10): rayon over the targets of a level call, in a pool owned by
+  `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
+  count. No `unsafe`, no atomics, no global pool; per-thread scratch created at
+  construction; worker threads never call MPI, which must provide at least
+  `Threading::Funneled` when threads > 1.
+- Threads and BLAS: no BLAS or LAPACK call inside a rayon worker in Phase 3; any later
+  one runs single-threaded. Ranks × rayon threads × BLAS threads stay within the
+  physical cores. BLAS threads are set by the launcher (`OPENBLAS_NUM_THREADS`,
+  `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `BLIS_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS`);
+  this crate reads and reports them and never sets an environment variable.
+- Written only against the new tetraleaf-plan API (docs/design/fmm-plan-redesign.md),
+  never against the old one that T7 removes.
+- MPI: the root rules apply.
+  - At most one MPI-initialising test per test executable. `tests/mpi_exec.rs` owns it
+    for the scenario list; add scenarios to its `cases`, not new `#[test]`s. Large
+    ignored tests get their own executable. `tests/mpi_threading.rs` owns MPI at
+    `Threading::Single` (the error path of `threads`); `tests/mpi_exec.rs`,
+    `tests/accuracy.rs` (the ignored C3.2 gate), `tests/adaptive.rs` (the ignored
+    C3.3 error per list), `tests/device_metal.rs` (the ignored Metal run of the
+    device path, feature `metal`) and `tests/device_cuda.rs` (the ignored CUDA run,
+    feature `cuda`; Phase 4S T4) initialise it at `Threading::Funneled`;
+    `tests/device_fmm.rs` (the ignored C4.8 gate, feature `gpu`) and
+    `tests/device_tune.rs` (the tuner, feature `cpu`) at the default level, and
+    `tests/multi_rank.rs` (the ignored C5.1 host gate, Phase 5 T6),
+    `tests/device_ranks.rs` (the ignored C5.1 device gate, Phase 5 T8, feature `gpu`) and
+    `tests/invariance.rs` (rank-count invariance, Phase 5S T2, below) and
+    `tests/helmholtz_fmm.rs` (the Helmholtz FMM, Helmholtz CH3.1b) at `Funneled`.
+    The device checks shared by `tests/mpi_exec.rs`, `tests/device_metal.rs` and
+    `tests/device_cuda.rs` live in `tests/device_common/`, the tuner's in
+    `tests/tune_common/`, the shadow operator of the host-data hook (Phase 5 T7) in
+    `tests/shadow/` (used by `tests/mpi_exec.rs`), the per-kind timings' (Phase 4S T5)
+    in `tests/kind_common/` (also used by `tests/accuracy.rs`), with the call-window
+    measurement of the Metal and
+    CUDA executables in `tests/kind_common/windows.rs`, and the whole-output check of the
+    C3.2 tree (Phase 4S T9) in `tests/output_common/` (used by `tests/accuracy.rs` and
+    `tests/device_fmm.rs`).
+  - The batched M2L (Phase 6 T2): `evaluate_threaded` runs `check_batched` wherever the
+    scenario resolved `Dense`: the same settings under `Batched` bit for bit, serially,
+    once per scenario, precision, p and output kind; once per scenario and precision
+    also at its most threads and in the fused mode (within 1e-12 / 1e-5 of `Dense`, the
+    same bits at those threads, the one-rank fused reference on several ranks), on one
+    build (`Fmm::set_serial`, `Fmm::set_m2l_mul_add`). It added about 15 s to the
+    one-rank debug run (91 → 106 s on the M3 Max). `tests/multi_rank.rs` runs every
+    workload point with the default strategy, `Batched` and `Batched` fused.
+  - The plane-wave M2L (Phase 6 T13): `evaluate_threaded` runs `check_plane_wave` once
+    per scenario and precision: under `PlaneWave` within `PLANE_ERROR_BOUND` (1.1) of the
+    scenario's error against the direct sum, two evaluations and a build at the most
+    threads, overlapped, bit for bit, the kernels on the P2P ISA, M2L counted per box, and
+    on several ranks the one-rank `Fmm` bit for bit; **batched against per-pair** runs
+    merge and shift against `PerPair` (to rounding, 2.2e-16 on the M3 Max) and threads. In
+    debug it checks only the scenarios whose evaluation takes at most `DEBUG_PLANE_BUDGET`
+    (0.5 s, the slowest rank's time, agreed; CI's 4-rank run had 496 of its 600 s before
+    T13) and names the others, which the release runs check. It added about 15 s to the
+    one-rank debug run (about 180 → 195 s on the M3 Max).
+    Since Helmholtz CH6.2i `check_plane_wave_split` (in `check_plane_wave`) checks
+    `Children` and `Parents` named at one thread and at the most threads overlapped, the
+    default at four threads, each bit for bit the default's output, `Auto` never by child
+    at one thread and by child at four on some rank, and on several ranks `Children` at two
+    threads against the one-rank `Fmm`.
+    `tests/invariance.rs` runs every workload under `PlaneWave` (f64 p = 8, the graded
+    tree also f32 p = 6); `tests/multi_rank.rs` the variant `planewave` with C6.5's check;
+    the ignored `tests/accuracy.rs` and `tests/adaptive.rs` its gates at f64 p = 8, 12,
+    18 (within 1.1× `Rotation`'s error, threads bit for bit).
+  - Several charge vectors (Phase 6 T5): `evaluate_threaded` offers every one-thread
+    evaluation to `offer_vectors`, which keeps the scenario's cheapest (the slowest
+    rank's time, agreed) per slot (the default P2P kernel; the reference kernel once per
+    precision), and after the scenario `check_vectors` runs on it: `evaluate_many` with
+    one vector is `evaluate` bit for bit, a wrong vector count is `VectorCount` on every
+    rank, and each vector of an `Fmm` of 3 vectors (in release builds also 8, blocking
+    and overlapped, and `Batched` with 3 where the strategy is `Dense`) equals its
+    single-vector evaluation bit for bit, with the output pass the oracle's
+    (`Fmm::reference_output_many`); with the `gpu` feature
+    `device_common::check_three_vectors` repeats 3 vectors on the device (each the
+    one-vector device `Fmm`'s, blocking and overlapped, the transfers of the formula with
+    m, and on the host fallback the host's). The debug run checks 3 vectors overlapped
+    only, and leaves a scenario whose cheapest evaluation takes over
+    `DEBUG_VECTORS_BUDGET` (0.5 s; the strongly graded tree and multipole routing on the
+    M3 Max) to the release runs: it added about 14 s to the one-rank debug run on the M3
+    Max (106 → 120 s; the full check 210 s). `tests/multi_rank.rs` runs `auto` and `Batched` on an
+    `Fmm` of the eight vectors too, each bit for bit the one-rank single-vector
+    references; `tests/device_metal.rs`, `tests/device_cuda.rs` and
+    `tests/device_ranks.rs` run `check_three_vectors` in every scenario.
+  - New `Fmm` scenarios evaluate through `evaluate_threaded` in `tests/mpi_exec.rs`,
+    which repeats them at 2, 4 and 8 threads and checks the output bit for bit, or
+    through `evaluate_every_kernel`, which also repeats them with `Reference` and every
+    available ISA and compares each ISA with `Reference`. It roughly triples the cost
+    of a scenario, so it runs on the small ones only (debug run under a minute).
+  - Every scenario runs on every rank count (Phase 5 T6). Each rank passes its share of
+    the points (`share`, every P-th), or a distribution of the README (`distribute`);
+    `Fmm` moves them. A test that needs a rank count says so on every rank and returns
+    before any collective (as `input distributions` does on one rank).
+  - The one-rank reference (docs/phase5/README.md, "The oracles"; design §5): on several
+    ranks `evaluate_threaded` checks every one-thread evaluation bit for bit against the
+    `Fmm` of the same settings at one thread over the union of every rank's points and
+    charges in rank order, which every rank builds on `SimpleCommunicator::self_comm()`
+    (`check_one_rank`; the union gathered by all-gathers). Two input distributions agree
+    within 100 u_T relative L2 (1.1e-14 f64, 6.0e-6 f32), not bit for bit: the order
+    within a leaf is (origin rank, origin position). Not run on one rank, where a run is
+    its own reference, so the one-rank debug run costs nothing more.
+  - Rank-count invariance (Phase 5S T2, C5S.1; requirement 3 of docs/phase5s/README.md;
+    docs/design/scale-out.md §5.1): `tests/invariance.rs`, its own executable (so that
+    `mpi_exec` keeps its minute), checks that the `Fmm` on P ranks equals the `Fmm` on P/k
+    ranks bit for bit for every divisor k > 1 of P (k = 1 on one rank), when small rank r
+    holds the inputs of world ranks k r … k r + k − 1 concatenated: every input generated
+    by index (a seeded random share), the small runs on a `split` of the world (the other
+    ranks enter nothing of it), the outputs moved back point to point by index, one
+    all-reduce of the count. The cube, the Plummer sphere and a graded tree with one empty
+    rank, N = 10⁴, f64 p = 8 `Rotation` and f32 p = 3 `Dense` (the strategy named: `Auto`
+    resolves by the ranks per node), each comparison blocking against overlapped; since
+    Phase 6 T12 the Plummer sphere and the graded tree again with the near rule of the
+    cost model. 39 s at one rank in debug on the M3 Max (69 s with T12's runs); 31, 38 and
+    43 s at 2, 4 and 8; in CI (PR #101) 64 s at
+    one rank (`run-tests`), 56 and 110 s at 2 and 4 (`run-tests-mpi`). Keep it passing in
+    every structural task (T3–T8): it is the oracle where no one-rank run fits, and its
+    at-scale form is `tetraleaf_validate::scaling::invariance`.
+  - CI runs `tests/mpi_exec.rs`, `tests/mpi_threading.rs`, `tests/invariance.rs` and
+    `tests/helmholtz_fmm.rs` in debug at 2 and 4 ranks on every pull request (the
+    `run-tests-mpi` job, root `CLAUDE.md`, "Checks"; `mpi_threading` checks there that
+    its `MpiThreading` error, carried by step 1's agreement all-reduce, reaches every
+    rank). 8 ranks and the ignored tests
+    (`accuracy`, `adaptive`, `multi_rank`, the device executables) stay by hand, on the
+    M3 Max and on locust, under an external timeout; `multi_rank` at 1, 2, 4 and 8 ranks
+    in release (its module docs give the command).
+  - Operator and geometry tests do not initialise MPI.
+  - Every error that depends on one rank's input is agreed by all ranks before the
+    next collective.
+  - Doctests that initialise MPI are `no_run`.
+  - Since Phase 5 T6 `Fmm` runs on any number of ranks: `build` moves every point to the
+    rank that owns its leaf (two `Redistribution`s, the coordinates forwarded), and
+    `evaluate` forwards the charges and moves the output back (one all-to-all-v each
+    until Phase 5S T8, since then point to point on the routes fixed at build, rlst's
+    `SparseRoutes`;
+    `StageTimings::{forward_charges, backward_output}`, `BuildTimings::redistribute`).
+    `PointsNotOwned` is gone; `FmmError::Redistribution` carries a redistribution that
+    overflows MPI's counts. On P ranks the host output is bit for bit the one-rank `Fmm`
+    over the union of the points in rank order; keep it so (the `fmm` module docs,
+    "Several ranks").
+  - The work-weighted cut (Phase 5S T7, C5S.4, S3; docs/design/scale-out.md §6; the
+    `cost` and `fmm` module docs): on several ranks `build` cuts the coarse blocks a
+    second time by modelled cost, `FmmBuilder::work_cut` (on by default, decision 3 of
+    docs/phase5s/README.md; off: by points only, as before). Step 4 counts the points of
+    every local leaf where they are (one all-to-all-v of distinct keys with their source
+    and target counts, `cost::leaf_point_counts`), learns the ghost leaves' source counts
+    from the build of a `SourceExchange<u8>`, counts every own block's work by kind on the
+    first plan (`cost::work_counts`: P2M and L2P points, M2M and L2L pairs, V pairs, X
+    pairs × source points, W pairs × target points, near interactions n_t Σ n_s; the rows
+    of `Global` boxes belong to no block), weighs it with a `CostModel` (`cost_model`, by
+    default `CostModel::calibrated` for the strategy the host rule resolves at the
+    precision and p: Kathleen's constants,
+    scaled by powers of p + 1 away from the calibrated p), calls
+    `tetraleaf_octree::Octree::repartition` with `min_gain` `WORK_CUT_MIN_GAIN` (2 %: the new cut
+    only where it lowers the busiest rank's block cost by that much; signed off on
+    2026-10-13, `tetraleaf-validate/results/phase5s-t7.md` §9) and builds the plan again where
+    the cut changed, before any point moves (`BuildTimings::cut`, `Fmm::recut`). `tetraleaf-octree` receives weights only. The constants are fixed
+    inputs, never timed in a build: the partition is deterministic, and only it depends
+    on them, never a bit of the output. `Fmm::{work_cut, recut, cost_model, kind_counts}` report
+    it. `tests/mpi_exec.rs` runs every scenario with it on, and **work-weighted cut**
+    checks it off against on bit for bit, that it moves points, and the counts summed over
+    the ranks against one rank; `tests/invariance.rs` and `tests/multi_rank.rs` run with
+    it on (the default). The input distribution "owners" of **input distributions** takes
+    the owners from an `Fmm`'s own octree (both cuts).
+  - The host-data hook (Phase 5 T7; `tetraleaf_plan::operator::HostData`, design §6): the
+    evaluator tells the operator of `reset` and of every exchange's reads and writes.
+    `LaplaceOperator` keeps the default (nothing), and `ExecOperator` forwards the events
+    to its engine, so the host path is unchanged bit for bit; the device operator mirrors
+    them (from T8, below). `tests/mpi_exec.rs` checks the coverage with a shadow operator
+    (`tests/shadow/`) that keeps its own stores and learns of host data only through the
+    events: bit for bit the `Fmm` on every scenario (once per tree, precision and output
+    kind) on every rank count, and different with the hook disabled on several ranks
+    (**host-data hook**), and (Phase 5S T6) different with only the owned top tree's
+    events disabled (`shadow::Hook::WithoutTopTree`: `SendReduction`,
+    `ReceivedReduction`, `ReceivedTop`) on several ranks. Keep it so when the evaluator,
+    the exchanges or `Fmm`'s stages change; the device operator uses the events since T8.
+  - Overlap (Phase 5 T9, C5.2; docs/design/distributed-fmm.md §8; the `fmm` module docs,
+    "Overlap (C5.2)"): `FmmBuilder::overlap` (off by default until T9's sign-off decides
+    the default) and `Fmm::set_overlap` run `Evaluator::exchange_sources_and_upward_local`
+    and `far_field` in place of stages 1–5: the same level calls and events, bit for bit
+    the blocking output. `StageTimings` keeps its fields, split so that the two paths
+    compare (the work parts from `OverlapTimes`, the rest of each overlapped stage in
+    `exchange_sources` and `exchange_multipoles`), and adds `overlap: Option<OverlapTimes>`
+    (per exchange post to completion, exposed wait, `test` calls; the wait per level; the
+    all-gather of the replicated top, the coarse gather before Phase 5S T5).
+    `StageTimings::{reduction, replicated_top}` (Phase 5S T6) are parts of `upward_global`
+    in both paths, timed in `ExecOperator::host_data` from the events that bracket them
+    (`EventClock`: each reduction level from `SendReduction` to the end of
+    `ReceivedReduction`; the all-gather of R, from the end of `SendMultipoles` blocking
+    or `OverlapTimes::top_gather` overlapped, plus `ReceivedTop`).
+    `Fmm::exchange_traffic` gives the messages and values per exchange (since Phase 5S T5
+    also the upward reduction per level, the replicated top's values and threshold, and the
+    multipole exchange's neighbours, destinations per level and largest fan-out of a box;
+    since T8s its depth and forwarded chunks).
+  - The forwarding tree (Phase 5S T8s, S8; tetraleaf-validate/results/phase5s-t8s.md §1;
+    `tetraleaf_plan::exchange::MultipoleRouting`, re-exported by `fmm`):
+    `FmmBuilder::multipole_routing` (default `MultipoleRouting::Tree` with `TREE_FAN_OUT`
+    = 8; `Direct` is the oracle) and `Fmm::multipole_routing`. `build` takes each rank's
+    node from step 1's `split_shared` (`Group::translate_rank`, no communication) and
+    passes it to `Evaluator::with_routing`. The output is the same bit for bit under every
+    routing, and no event changes: the forwards resend received chunks, so the device and
+    the shadow see the direct exchange's `ReceivedMultipoles` lists (fewer duplicates in
+    `send_boxes`). The shadow check builds its evaluator with the `Fmm`'s routing.
+    `tests/mpi_exec.rs`, **multipole routing**, checks the narrow tree (fan-out 2), the
+    default and `Direct` against each other and one rank, blocking and overlapped, with
+    the shadow check on the narrow tree.
+    The device runs the overlapped stages too, for correctness (design §13, question 10;
+    the stage windows `UpwardLocal` and `Downward`). `tests/mpi_exec.rs` checks overlap on
+    every scenario that evaluates (its module docs, "Overlap"), the shadow check runs
+    overlapped, and the device's fallback check runs with `overlap(true)`.
+    `examples/overlap_timing.rs` (not registered; release, by hand) measures the C5.2
+    criterion: blocking and overlapped evaluations of one build in turn, the medians over
+    evaluations of the maxima over ranks, the traffic per rank and the copy bandwidth.
+  - The defaults of Phase 6 T11 (decision 7 of docs/phase6/README.md, signed off on
+    2026-10-20; tetraleaf-validate/results/phase6.md): `Auto` resolves on the host by p and the
+    precision alone, `Batched` below `M2lStrategy::auto_plane_wave_min_p` (f64 7, f32 8) and
+    `PlaneWave` from it (`StrategyChoice`'s reason `Auto → PlaneWave: f64 p = 8 ≥ 7`; the
+    ranks per node agreed and reported, not read; Phase 5N's node budget removed in
+    Helmholtz CHA.3); `Batched`'s mode
+    `fmm::default_m2l_mul_add(p)` (fused from `FUSED_MUL_ADD_MIN_P` = 6) unless named; the
+    near rule `NearRuleChoice::CostModel`; `Isa::detect` AVX-512 where the CPU has it; the
+    leaf size `fmm::default_max_points_per_leaf(p, backend)` unless named
+    (`Fmm::max_points_per_leaf`); `CostModel::calibrated` with T11's constants (`Batched`
+    its own, `Auto` that of its host rule's strategy). The device path keeps its rule.
+    With the near rule on, each strategy's cost model gives its own crossovers: a test that
+    compares two strategies, or the device with the host, at equal near pairs names them
+    (`near_as` in `tests/mpi_exec.rs`, `device_common::same_near_pairs`) or the rule off,
+    and where `Auto` resolves differently on the device (`Dense`, `Rotation`) and the host
+    (`Batched`, `PlaneWave`), the host reference names the device's strategy
+    (`device_common::check_default`, `tests/device_fmm.rs`). `check_batched`,
+    `check_plane_wave` and `check_near_rule` of `tests/mpi_exec.rs` build their own exact,
+    `Dense` or rule-off references where the scenario now resolves `Batched`, `PlaneWave` or
+    the rule (reusing the scenario's `Fmm` where they can: about 9 % more on the 4-rank debug
+    run, 224 → 244 s on the M3 Max; `run-tests-mpi`'s timeout rose to 900 s).
+  - The node (Phase 5N T4, C5N.3; docs/design/node-m2l.md §5, §11): `build` splits the
+    communicator by node once on every backend (step 1; the device path reuses it for
+    `RankPlacement`) and agrees the largest ranks per node in step 7's all-reduce (two
+    maxima), reported in `ThreadingReport::ranks_per_node` beside the strategy's reason
+    (`ThreadingReport::m2l`, `StrategyChoice`). Phase 5N's rule (Dense or Rotation by the
+    dense tables' bytes per rank and per node) was replaced by Phase 6 T11's (above), and its
+    budget, constants and `resolve(p)` removed in Helmholtz CHA.3; `NodeContext` holds p and
+    the value's bytes. The guarantee is per *resolved* strategy: a one-rank reference names
+    `Fmm::strategy()` of the multi-rank run (`check_one_rank` in `tests/mpi_exec.rs`,
+    `tests/multi_rank.rs`). With `table_cache` the lowest rank of each node loads or builds
+    and stores first, the others after a barrier of the node's communicator, then load
+    (decision 7; `TableCache` unchanged). `tests/mpi_exec.rs`, **the strategy rule on the
+    node**, checks the agreement, a named strategy kept, and the cold cache filled once per
+    node; `tests/operator/strategy.rs` the rule over both precisions and p = 0–20.
+  - `examples/basic_evaluation.rs` is the user-facing example of calling `Fmm`
+    (registered with `templated-examples`, so the weekly job runs it at 3 ranks): it
+    must run on any number of ranks, each passing its own points, and keep to the
+    public API of `fmm`.
+- Tests name their error measure (docs/phase1/README.md, "Error measures", and
+  docs/phase3/README.md). Operators are compared with tetraleaf-ref in a dyadic domain for
+  tight tolerances.
+- Keep the debug-mode test run under a minute. Large-N checks go into `#[ignore]`
+  tests or tetraleaf-validate examples.
+- The device path (Phase 4; docs/phase4/README.md requirements 3–9, device-path.md):
+  - features: `gpu` (`tetraleaf-kernels`), and `cpu`, `metal`, `cuda`, each enabling `gpu`
+    and the backend of `tetraleaf-kernels`; none on by default. `Backend::Host` stays the
+    default, and without the features the host path builds and runs unchanged;
+  - residency (requirement 3): plan views, geometry and tables uploaded once per `Fmm`,
+    points once per build, charges and output once per evaluation; the device zeroes its
+    stores at the evaluator's `HostData::Reset`, and `Fmm::evaluate` drives
+    `begin_evaluation` (the charges, after `reset`) and `read_output`;
+  - several ranks (Phase 5 T8, C5.1 device, C5.2's device-resident ghost buffers;
+    docs/design/distributed-fmm.md §7; the `device` module docs, "Several ranks"): a
+    device backend runs on any number of ranks; `DeviceNeedsOneRank` is gone. The device
+    stores have the plan's layouts, ghost slots included, so `build` builds the device
+    operator after the evaluator, from its source exchange's counts (every leaf of the
+    numbering) and `device::ExchangeLists` (copied from the evaluator's exchanges through
+    `Evaluator::{source_exchange, reduction_exchange, multipole_exchange, top_exchange}`),
+    swaps it in for the host operator, loads the points and agrees the outcome (one
+    all-reduce). At each event the device moves exactly what the exchange sends and
+    receives, packed on the device in buffers allocated at build: `SendReduction(l)` (Phase
+    5S T6) one `gather_columns` of the level's sent boxes and one download (one sync per
+    reduction level at which the rank sends: the owned boxes of the level are formed on
+    the device just before), `ReceivedReduction(l)` one upload and one `scatter_columns`
+    before the global M2M that reads them, `SendMultipoles` one `gather_columns` and one
+    download (one more sync), `ReceivedTop` (Phase 5S T5; `ReceivedCoarse`
+    before) and each
+    `ReceivedMultipoles(l)` one upload and one `tetraleaf_kernels::movement::scatter_columns`
+    (assignment, so a −0.0 stays −0.0), `ReceivedSources` one upload of the ghost tail;
+    `SendSources` nothing (`Fmm` writes the sent leaves' charges into the host chunks).
+    The counters split them by `DataKind` (`GhostSources`, `SentReduction`,
+    `ReceivedReduction`, `SentMultipoles`, `TopMultipoles`, `ReceivedMultipoles`; per
+    level in `DeviceCounters::received_levels` and `reduction_levels`);
+    `Fmm::exchange_sizes` gives the sizes (`sent_reduction`, `received_reduction` per
+    level since Phase 5S T6), and `tests/device_common::expected_evaluation` the formula,
+    checked on every scenario and rank count: 1 + [anything sent] + r_s syncs per
+    evaluation, at most 2 + r_s, r_s the reduction levels at which the rank sends
+    (docs/design/scale-out.md §4.5; Phase 5's two before T5). One rank is unchanged: every
+    list empty, Phase 4's formula. (Between Phase 5S T5 and T6 the device did not mirror
+    the reduction and the device scenarios on several ranks were not run.) A device per
+    rank: one `split_shared` per build (`DeviceReport::ranks`, `device::RankPlacement`);
+    every rank opens the default device (`Device::open` takes no index); on the CPU
+    runtime the units per cube are `threads(n)` capped at the node's cores over its
+    ranks. Errors (decision 12): one all-reduce after the output's download agrees a
+    device error of any rank (`Device` on the rank, `OtherRank` elsewhere), and the kept
+    error rides on the charge-length agreement of later evaluations;
+    `Fmm::inject_device_error` (doc-hidden) is the test hook. Tuning (design §7.6): with a
+    tuning cache on several ranks rank 0 alone tunes and uses the cache and broadcasts its
+    M2L strategy; the others take it and the static rule for the rest
+    (`RankPlacement::follows_rank0`). Ranks sharing one GPU are correctness only, never
+    timed as scaling (docs/phase5/README.md, decision 3);
+  - accumulation, no atomics, determinism (requirements 4–6): the kernels' rules in
+    tetraleaf-kernels/CLAUDE.md; every launch and transfer from the calling thread; nothing
+    chosen per call;
+  - precision (requirement 7): f64 refused where the device does no f64 arithmetic
+    (`PrecisionUnsupported`), agreed by step 1's all-reduce, never a panic or a cast;
+  - host fallback (requirement 8): every kind runs on the host through the wrapped
+    `LaplaceOperator`'s own method with explicit transfers; with every kind there,
+    bit for bit the host path (tested on every `tests/mpi_exec.rs` scenario);
+  - device kernels (from T6): P2P runs on the device by default (`tetraleaf_kernels::p2p`,
+    one launch per level, the layout by backend or `FmmBuilder::device_p2p_layout`), and
+    from T7 so do P2M, L2P, P2L and M2P (`tetraleaf_kernels::leaf`, one launch per level
+    call, the layout by backend or `FmmBuilder::device_leaf_layout`), and from T8 M2M
+    (both passes) and L2L (`tetraleaf_kernels::translate::grouped` with the dense octant
+    tables under every strategy, three launches per chunk (two with the fused gather,
+    Phase 6 T7), plans and scratch built at build, the GEMM by `FmmBuilder::device_gemm` and the chunks by
+    `device_scratch_budget`, reported in `DeviceReport::translations`), and from T9 M2L
+    under `Dense` and `Classes` (the same grouped translation over the level's V view
+    and the 316 dense tables, `Classes` from `M2lClasses::expand` and reported as
+    "Classes, run as dense on the device"; under the default `DeviceGemm::Auto` M2L runs
+    the hand-written GEMM, the library only under `DeviceGemm::Library`, decided after
+    T9's measurement), and from T10 M2L under `Rotation` (`tetraleaf_kernels::rotation::m2l`,
+    one launch per level, the M2L family of the host's `RotationTables` uploaded once in
+    its own storage through `device::RotationHostArrays`, the rows of each V view at
+    build, the layout by backend in `DeviceReport::rotation_layout`, the calls in
+    `DeviceReport::rotations`; M2M and L2L stay the dense octant GEMMs);
+    `host_fallback` names a kind to keep it on the host;
+    and from Helmholtz CH7.5b M2L under `PlaneWave` on `tetraleaf_kernels::plane_wave`
+    (`FmmBuilder::device_plane_wave`, by default `DevicePlaneWave::Kernels` since Helmholtz
+    CH7.5c, signed off 2026-11-06; the named `DevicePlaneWave::Dense` keeps "PlaneWave, run
+    as dense on the device", `Dense`'s bits; the device `Auto` never resolves to
+    `PlaneWave`; the `device` module docs, "Plane-wave M2L on the device"): the host's `PlaneWaveTables` uploaded once, per level the lists of
+    the host's order (`src/operator_plane_wave.rs`: parents in index order, the slots
+    from the computed children's V rows, every accumulator over its slots ascending, each
+    computed child's accumulators in order) built at build and cut into chunks of whole
+    parents within `device_plane_wave_budget` (default `device::default_plane_wave_budget`:
+    1 GB on Metal, `default_scratch_bytes` elsewhere; CH7.5c), the m
+    vectors as columns, four launches per chunk in the layout of
+    `device_plane_wave_layout` (`DevicePlaneWaveLayout::Auto`, by backend and p: the CPU
+    layout, 128 units on Metal and on CUDA to p = 12, 256 on CUDA from p = 13
+    (`CUDA_PLANE_WAVE_WIDE_*`); or a named cube; Helmholtz CH7.5c, refused at build where
+    the device cannot run it), one scratch for the widest chunk
+    (`PlaneWaveScratch::covering`), reported in `DeviceReport::{plane_wave,
+    plane_wave_layout, plane_waves, plane_wave_scratch_bytes}` and "PlaneWave, merge and
+    shift on the device". Within the FMM bounds of the host's `PlaneWave`, the same bits at
+    every budget and layout and from run to run, and with M2L alone on the device on P ranks the
+    one-rank output's bit for bit. `device_common::check_plane_waves` (in `tests/mpi_exec.rs`'s
+    `check_plane_wave` on the CPU runtime, `tests/device_metal.rs`, `tests/device_cuda.rs`,
+    `tests/device_ranks.rs`) checks it with the transfer formula (four launches per chunk),
+    the default bit for bit `DevicePlaneWave::Kernels` named, `DevicePlaneWave::Dense`
+    `Dense`'s bits, named cubes (one unit on the CPU runtime, 32 and 256 on the GPUs) bit for
+    bit the default and the refusal of a cube of no unit and of one above the device's units;
+    the ignored `tests/device_fmm.rs` its accuracy gate (within 1.1× the device `Dense`'s
+    L2 errors on the cube and the Plummer sphere, f64 p = 8, 12, 18 and f32 p = 8).
+    `tests/operator/device_leaf.rs` checks the four leaf operators against
+    `tetraleaf_ref::leaf` (p ≤ 20 in f64) and the host operator;
+    `tests/operator/device_translate.rs` checks M2M and L2L, and
+    `tests/operator/device_m2l.rs` M2L for all 316 offsets on levels 2, 9 and 16, against
+    `tetraleaf_ref::direct` and the host operator's error (p ≤ 20 in f64, the sweeps
+    ignored), and `tests/operator/device_rotation.rs` rotation M2L the same way, against
+    `direct`, the host's `RotationTables::m2l` and the device dense M2L (p ≤ 20 in f64,
+    the sweep ignored). With a kind on the
+    device the output agrees with the host path within the FMM bounds of
+    docs/phase4/README.md, not bit for bit: `tests/device_common` checks both, every kind on the fallback bit for
+    bit and the default within the bounds, with the transfer formula of each;
+  - the device FMM (T11, C4.8): every kind on the device by default under every
+    strategy; an evaluation moves the charges up and the output down and syncs once, at
+    that download (`tests/device_common` asserts it on every scenario, with two builds
+    bit for bit); level calls queue their launches without a sync, the top levels stay
+    on the device, dense M2L is not merged across levels (measured negligible); stage
+    timing (`device::StageTiming`, `FmmBuilder::device_timestamps`, opt-in): one
+    timing window per stage with device work (`DeviceStage`, five per evaluation) where
+    the device times on itself (Metal, CUDA), read after the download, in
+    `StageTimings::device` (spans that overlap on Metal, not a breakdown; on CUDA, one
+    stream, they do not overlap: "CUDA (Phase 4S)" below); no window on
+    the CPU runtime, whose windows drain the stream; `synchronous_stages` disables them. Never add a sync, a download or a host call to a
+    default evaluation; a new launch belongs in the formula of `tests/device_common`;
+  - per-kind timings (Phase 4S T5, C4S.5; `fmm::KindTiming`, `FmmBuilder::kind_timings`,
+    `Fmm::set_kind_timings`, `StageTimings::kinds`, device-path.md §8.3): off by default,
+    and with `Off` each level call only checks the mode. The one place that times is the
+    `FmmOperator` implementation of `fmm::ExecOperator` (its `delegate!` macro), around
+    the engine's method: `LaplaceOperator`, the device operator and the kernels do not
+    change. Only calls with an entry in their view are timed and counted (at most 148 per
+    evaluation; 3–119 on the `tests/mpi_exec.rs` trees). `Synchronous`: the host clock per
+    call, and on a device one sync after the charge upload and one after every such call;
+    `Device`: one window per call of a device kind (`DeviceOperator::{open_call_window,
+    close_call_window}`), no sync, resolved after the download, refused at build
+    (`SettingsError::KindTimingUnsupported`, step 1's agreement) where the device does not
+    time on itself (the host, the CPU runtime). Both compose with `synchronous_stages`
+    and `device_timestamps`. Every mode gives the bits of `Off`: `tests/mpi_exec.rs`
+    checks `Synchronous` on every scenario at 1 and 4 threads and on the CPU runtime,
+    `tests/device_common` both modes on Metal and CUDA with the syncs and windows of
+    each, `tests/accuracy.rs` reports the sum over the kinds against the operator stages
+    on the C3.2 tree at p = 6 (0.9999 at one thread on the M3 Max). On Metal the `Device`
+    windows overlap and misattribute time between calls, so they are not a breakdown
+    there (M2L 0.25 ms against 6.15 ms with `Synchronous`, L2P 4.67 against 0.37 ms; the
+    cube at N = 10⁵, p = 8, f32; `tests/kind_common/windows.rs`); use `Synchronous`.
+    On CUDA they do not overlap and are a breakdown ("CUDA (Phase 4S)" below).
+    Never time a level call inside `tetraleaf-plan` or `tetraleaf-kernels`, and never assert a
+    timing (the overlapped stages of `tetraleaf-plan` read the clock around their `test`
+    calls, waits and work parts for `OverlapTimes`, Phase 5 T9: the one exception);
+  - the grouped translations' Phase 6 T7 variants (C6.1; the `device` and `tune` module
+    docs): `FmmBuilder::device_gather` (`DeviceGather::{Auto, Separate, Fused}`),
+    `device_reduction` (`DeviceReduction::{ByChunk, Walk}`, by chunk by default) and
+    `DeviceGemm::Shared` (the shared-memory GEMM, `GemmLayout::shared_for`); none changes a
+    bit. A plan with the fused gather needs no gathered columns and has chunks twice as
+    wide; the scratch holds X and Y for the widest plans and candidates of each
+    (`ScratchColumns`), X only where one gathers. Under `DeviceGemm::Auto` the static rule (`tune::static_layout`,
+    `tune::static_gather`) takes the shared-memory layout to p = 9 and the fused gather on
+    Metal, the default layout and the separate gather elsewhere (on CUDA the best variant
+    alternates with p, so the rule waits for T11), the several-vector chunk budget is
+    capped at 8 vectors on Metal and at one vector's on CUDA, and the tuner offers the
+    shared-memory layout and the other gather (`CANDIDATE_SET_VERSION` 3; the cache's
+    `FORMAT_VERSION` 2 names the gather and the shared-memory layout); a named gather holds
+    for every call and candidate. `TranslationReport::{gather, reduction, launches}` report
+    them, and `tests/device_common::check_variants` builds, in every device scenario (the
+    CPU runtime in `tests/mpi_exec.rs`, Metal, CUDA), the hand-written reference and four
+    variants (fused; walking; shared; shared, fused and walking), each bit for bit the
+    reference with the launches of the formula (the device line counts the evaluations);
+  - autotune (T12, C4.7; module `tune`, device-path.md §10): `FmmBuilder::tuning_cache`
+    (no default directory, no environment variable) and `tuning_budget` (10 s); the M2L
+    strategy under `Auto` with M2L on the device is decided before the tables are built
+    (`device::tune_strategy`: cache, timing rotation against dense on the largest V level,
+    or the static rule; at p ≥ 12 without `table_cache` the static rule, not stored), the
+    GEMM of each (kind, pair bucket) under `DeviceGemm::Auto` at the end of
+    `DeviceOperator::new`, the P2P layout under `DeviceP2pLayout::Auto` in `load_points`;
+    settings the builder names are never tuned. Static rule (`tune::static_*`, keyed by
+    backend since Phase 4S T7): f32 `Dense`; f64 `Dense` at every p on CUDA (decision 9,
+    signed off on 2026-10-07), on Metal and the CPU runtime `Dense` to p = 11 and
+    `Rotation` from 12 (provisional); the GEMMs of
+    `DeviceGemm::Auto`, `P2pLayout::default_for`; with M2L on the host fallback `Auto`
+    keeps the host rule (requirement 8). Candidates are registered only past the device's
+    checks and the input-precision guard (a library below T's precision never), timed
+    after a warm-up launch as the median of 5 batches of ≥ 10 ms, the static rule's
+    first, no candidate started past the deadline; level calls under 512 pairs keep the
+    static rule. The cache file (one per backend, device, precision, p) is text with a
+    checksum, the key and every version, written atomically; a stale or corrupt file is
+    rejected and re-tuned. Every choice is fixed at build and reported in
+    `DeviceReport::tuning`; never tune inside `evaluate`, never call CubeCL's autotune.
+    The coefficient-major layout is measured and not a candidate (`tune` docs); a change
+    to any candidate set bumps `tune::CANDIDATE_SET_VERSION`;
+  - safety (requirement 9): no `unsafe` here and no direct `cubecl` dependency;
+    CubeCL only through `tetraleaf-kernels`;
+  - threads: with `Backend::Cpu` no rayon pool, `threads(n)` caps the CPU runtime's
+    units per cube; with Metal and CUDA the pool serves host-fallback kinds, the charge
+    load and the host output pass only (Phase 4S T9);
+  - the output pass and the charge load (Phase 4S T9, C4S.8; `fmm` module docs, "The
+    output pass", device-path.md §18.4): `build` stores per target (caller's order) its
+    leaf-order point and leaf (`u32`, 8 N_t bytes) and per leaf 4π r and 4π r²; the host
+    pass is one loop over the targets on the `Fmm`'s pool (serially without one), collected
+    into the output buffers without a zero fill (`collect_into_vec`, `unzip_into_vecs`),
+    each value `T::from_f64(x.to_f64() / scale)`; the charge load splits the source chunks
+    by leaves and the device's upload buffer by ranges on the pool, and skips the host's
+    source store when P2M, P2L and P2P run on the device. `OutputPass` (decision 12,
+    `FmmBuilder::output_pass`): `Auto` runs the pass on the device where it does f64
+    arithmetic (`tetraleaf_kernels::movement::gather_output` on an `OutputOrder` uploaded
+    once, f64 division, one rounding; the CPU runtime and CUDA), the host pass otherwise
+    (Metal); `Host` on every backend; `Device` refused without f64
+    (`SettingsError::OutputPassUnsupported`, step 1's agreement). The device pass is one
+    launch more and the same download (o N_t values) and sync; `DeviceReport::output_pass`
+    and `Fmm::output_pass` say where it ran. `Fmm::evaluate_into` (decision 11) writes into
+    the caller's `Output` (wrong lengths and gradients resized, the output untouched on an
+    error); `evaluate` wraps it. `StageTimings::download` is the part of `output` in
+    `read_output`. Every pass is bit for bit the pass before T9, kept as the doc-hidden test
+    oracle `Fmm::reference_output` (`tests/mpi_exec.rs` at 1 and 4 threads and on the CPU
+    runtime with both passes, `tests/device_common` on every device scenario, the unit tests
+    of `fmm`, and the C3.2 tree at p = 6 in the ignored gates). Never change the scales'
+    arithmetic, the division or the rounding;
+  - the output's path from the device to the `Output` (Phase 4S T11, C4S.10, decision 14;
+    device-path.md §4.1, §18.5): `read_output` downloads with
+    `tetraleaf_kernels::Device::download_view` and returns `DeviceOutput` carrying
+    `OutputValues` (CubeCL's host copy, pinned memory on CUDA, behind a box, since
+    `DeviceDriver` knows only `T: SimdScalar`), borrowing the operator: `CallerOrder(values)`
+    after the device pass, which `copy_output` copies into the `Output` on the pool;
+    `LeafOrder { values, offsets }` for the host pass, which `gather_output` reads as a
+    slice in the `LeafStore` layout with the target leaves' point offsets. The operator
+    keeps no host copy of the target output: its host-fallback mirror exists only with
+    L2P, M2P or P2P on the host (`Mirrors::target_output`), and `DeviceReport::host_mirror_bytes`
+    says what the mirrors hold (0 with every kind on the device; checked in
+    `tests/device_common`). The charges: `gather_charges` collects them in leaf order into
+    a fresh `Vec` on the pool (no zero fill), which `begin_evaluation` hands to
+    `Device::write_owned` (no copy). Still one upload, one download and one sync per
+    evaluation, and the output bit for bit as before;
+  - every device test prints the backends it ran, and on several ranks the ranks; Metal
+    tests are ignored and run by hand outside the macOS sandbox (`tests/device_metal.rs`); CUDA tests are ignored,
+    type-checked in CI and run by hand on locust (`tests/device_cuda.rs`, the CUDA blocks
+    of `tests/device_fmm.rs`, `tests/accuracy.rs` and `tests/adaptive.rs`, and
+    `tests/operator/device_*.rs`; "CUDA (Phase 4S)" below).
+- Before finishing: `cargo clippy -p tetraleaf-exec --all-targets -- -D warnings` and
+  `RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec` must pass. Tasks that add
+  ignored tests must also pass
+  `RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec --release -- --ignored`. A change to
+  `Fmm`, the moves or the evaluator also runs `tests/mpi_exec.rs` at 2, 4 and 8 ranks and
+  the ignored `tests/multi_rank.rs` at 2, 4 and 8 ranks in release, by hand under an
+  external timeout (root `CLAUDE.md`, "MPI"). A change to
+  the device path also needs:
+  - `cargo clippy -p tetraleaf-exec --all-targets --features cpu,metal -- -D warnings`;
+  - `cargo check -p tetraleaf-exec --features cuda` (type-checked here; run on locust);
+  - `RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec --features cpu --release` (every
+    `tests/mpi_exec.rs` scenario repeated on the CPU runtime), and from Phase 5 T8 by hand
+    at 2 and 4 ranks under an external timeout (every scenario's device repeat runs on
+    every rank count, with **device errors and tuning on several ranks**), and the
+    ignored `tests/device_ranks.rs` at 2 and 4 ranks (its module docs give the commands;
+    Metal at 2 ranks outside the sandbox, CUDA at 2 and 4 on locust);
+  - `cargo doc -p tetraleaf-exec --no-deps --features cpu`;
+  - by hand on the M3 Max, outside the sandbox (build the tests sandboxed first):
+    `RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec --features metal --release --
+    --ignored`;
+  - from T6, the ignored gates on the device path too: `RUST_MIN_STACK=8388608 cargo
+    test -p tetraleaf-exec --features cpu --release -- --ignored` (`tests/accuracy.rs` and
+    `tests/adaptive.rs` repeat their problems with every kind on the device: on the CPU
+    runtime in f64, `tests/accuracy.rs` also at p = 18 under `Rotation` (T10) with the
+    C3.2 gate there (T11), and on Metal in f32 with `--features metal`; from T11
+    `tests/device_fmm.rs`, the C4.8 gate: the cube and the Plummer sphere at N = 10⁵, f64
+    p = 8, 12, 18 on the CPU runtime, f32 p = 3, 8 on Metal (with the Gaussian clusters
+    at p = 8), against the host of the same settings, and the C3.3 gate on the device;
+    from T12 also the tuning budget at the C3.2 size, the cube at p = 8 tuned with a fresh
+    cache);
+  - from T12, `tests/device_tune.rs`: the tuning cache without MPI (round trip, stale and
+    corrupt files, concurrent writers) and, with `--features cpu`, the scenarios of
+    `tests/tune_common` on the CPU runtime (f64 p = 6 in full, f32 p = 3; about a minute
+    in release), which `tests/device_metal.rs` also runs on Metal (f32 p = 8 and 3) and
+    `tests/device_cuda.rs` on CUDA (f32 p = 8 and f64 p = 6 in full, f32 p = 3);
+  - from Phase 4S T9, the whole output on the C3.2 tree in the ignored gates
+    (`tests/output_common`): the host in `tests/accuracy.rs`, the device backends in
+    `tests/device_fmm.rs`, each with the output hash printed;
+  - from Phase 4S T4, by hand on locust (root CLAUDE.md, "Checks"; after
+    `tools/gh200/sync.sh`, each as `tools/gh200/remote.sh '<command>'`):
+    `cargo clippy -p tetraleaf-exec --all-targets --features cpu,cuda -- -D warnings`,
+    `RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec --features cuda --release`, and the
+    same with `-- --ignored` (every CUDA test: `tests/device_cuda.rs`, the CUDA blocks of
+    the gates and the operator tests).
+
+## CUDA (Phase 4S)
+Measured on locust's H100 (GH200) on 2026-10-07 (Phase 4S T4, C4S.4; CubeCL
+0.11.0-pre.4 through LLVM NVPTX, CUDA 12.6; docs/design/device-path.md §18.1). The pin is
+CubeCL 0.11.0 since Phase 5S T1s, re-run on locust there (tetraleaf-validate/results/phase5s-t1s.md).
+- Running: on the M3 Max, outside the sandbox, `tools/gh200/sync.sh`, then
+  `tools/gh200/remote.sh 'RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec --features
+  cuda --release -- --ignored --nocapture'`. CUDA tests are `#[ignore = "CUDA: run by
+  hand on locust"]`: `tests/device_cuda.rs` (its own MPI test, at `Funneled`), the CUDA
+  blocks of `tests/device_fmm.rs`, `tests/accuracy.rs` and `tests/adaptive.rs` (behind
+  `Backend::Cuda.is_compiled()`), and `tests/operator/device_*.rs` (`…_on_cuda`). The
+  tuner scenarios and the strategy at f64 p = 12 run in `tests/device_cuda.rs`, not in
+  `tests/device_tune.rs`, whose one MPI test is the CPU runtime's.
+- Both precisions run on CUDA, every check with the f64 bounds in f64 and the f32 bounds
+  in f32. Every kind on the host fallback is bit for bit the host path, with the
+  transfers of the formula; the default placement (every kind on the device) stays within
+  the FMM bounds, two evaluations and two builds bit for bit.
+- The library GEMM never runs on CUDA: its probe fails on the LLVM path (F28), so every
+  level call the static rule gives the library (f32, n ≥ 81: M2M and L2L under `Auto`,
+  every kind under `Library`) reports a `library_rejection` and runs the hand-written
+  kernel; the tests assert it. The tuner's candidates are the hand-written layouts, the
+  chunk budget and the P2P layouts; a library candidate is unregistered. (Since CubeCL
+  0.11.0, Phase 5S T1s, the probe succeeds and runs f32 at TF32 precision; the
+  input-precision guard rejects it because CUDA registers no f32 CMMA form,
+  `docs/design/cubecl-upstream.md` entry 4, so the outcome is unchanged.)
+- C4.8 (`tests/device_fmm.rs`): the device output within 6.7e-15 (f64) and 2.9e-6 (f32)
+  of the host's (relative L2, φ), the errors against the direct sum within a ratio of
+  1.0000 of the host's in f64 and 0.991–1.010 in f32, over the cube, the Plummer sphere
+  and the clusters at N = 10⁵ and the cube at N = 10⁶; every evaluation moves the
+  charges up and the output down with one sync. The tuning budget at the C3.2 size: 3.2 s
+  (f32) and 3.4 s (f64) of the 10 s.
+- Stage windows (`device_timestamps(true)`, `tests/device_cuda.rs`, the cube at N = 10⁵,
+  p = 8): five windows and one sync per evaluation, the output bit for bit the default's.
+  On CUDA the windows do not overlap (one stream, events in order): the five spans add up
+  to 0.71–0.77 of the wall time of `evaluate` in f32 and f64 (on Metal, T11, they added
+  up to more than it). `KindTiming::Device` (T5) was not checked: T5 had not merged.
+- Kind timings (Phase 4S T5, run on 2026-10-07; GPU idle before and after, clocks not
+  locked): `Synchronous` and `Device` (alone and inside the stage windows) bit for bit
+  the default in every `tests/device_cuda.rs` scenario, with the syncs and windows of
+  each (44 and 88 evaluations, 8–40 calls). On the cube at N = 10⁵, p = 8
+  (`tests/kind_common/windows.rs`) the call windows do not overlap: every stage's call
+  windows add up to less than its own window in all 10 evaluations (f32 downward
+  1.64 ms of calls in a 1.65 ms span), and their sum is 0.68–0.71 (f32) and 0.72–0.74
+  (f64) of the wall time of `evaluate`. Medians per kind, ms, `Device` / `Synchronous`,
+  f32: P2M 0.036 / 0.039, M2M 0.145 / 0.219, M2L 1.475 / 1.556, L2L 0.152 / 0.374, L2P
+  0.078 / 0.176, P2P 0.307 / 0.328; f64: P2M 0.063 / 0.068, M2M 0.135 / 0.226, M2L
+  2.244 / 2.342, L2L 0.149 / 0.302, L2P 0.135 / 0.181, P2P 0.480 / 0.666. The ignored
+  run took 989 s (`device_fmm.rs` 659 s, `device_cuda.rs` 104 s).
+- Defaults and tuner candidates (Phase 4S T7, C4S.7; measured on 2026-10-07 with
+  `tetraleaf-validate`'s `layout_sweep`, the uniform cube at N = 10⁶; device-path.md §18.2):
+  - the CUDA defaults come from `tetraleaf-kernels` by backend: P2P `Cube` of 32 units, the
+    leaf operators `Cube` of 32 units with tiles of 32, the GEMM's CUDA rule
+    (`GemmLayout::default_for`), the rotation layout as on Metal, and the chunk budget
+    `default_scratch_bytes` (2 GB on CUDA; `FmmBuilder::device_scratch_budget` names
+    another), which `tune::static_gemm` and the scratch sizing take. Metal and the CPU
+    runtime keep theirs;
+  - CUDA GEMM candidates (`tune::gemm_candidates`, `cuda_gemm_layouts`): the CUDA default,
+    the Metal default, one plane of 32 units with 2 columns each (small level calls) and
+    the default's rows with 128 units and 4 columns, all at the device's budget; no
+    16 MB candidate on CUDA (a smaller budget only adds chunks). CUDA P2P candidates:
+    cube 32 (the default) and 64, planes 2 and 4 (128 units measured slower everywhere).
+    The library stays unregistered (F28). `CANDIDATE_SET_VERSION` is 2;
+  - the static M2L rule on CUDA (decision 9, signed off on 2026-10-07): `Dense` at every p
+    in f32 and f64; measured dense faster than rotation at every p (f64 p = 4 to 20, f32
+    p = 2 to 10) per level and end to end, rotation/dense 1.05–1.90 in f64 and 1.15–1.56
+    in f32 (`tetraleaf-bench`, N = 10⁵ and 10⁶). `tests/device_cuda.rs` asserts `Dense` at
+    f64 p = 12 without a table cache;
+  - the tuning hook may offer a GEMM candidate with wider chunks than the operator's
+    scratch: the strategy decision times it on a scratch of its own, a GEMM decision skips
+    it (`Timing::Skipped`, "scratch"), and a budget the builder names holds for every
+    level call (`tests/tune_common`, "a wider candidate").
+- Test budget (release, H100, one process per test file): `tests/device_cuda.rs` 95 s,
+  `tests/device_fmm.rs` 656 s (its slowest point the host at f64 p = 18), `accuracy.rs`
+  91 s, `adaptive.rs` 71 s, the five operator tests 57 s; the whole ignored run 16 min.
+
+## Allowed dependencies
+tetraleaf-math, tetraleaf-ref, tetraleaf-tables, tetraleaf-plan, tetraleaf-simd (from Phase 3S T6),
+tetraleaf-octree, mpi, rlst, thiserror, rayon (from T10; no other crate gets it), and
+tetraleaf-kernels (from Phase 4 T5, optional, feature `gpu`), all through
+[workspace.dependencies]; dev-dependencies: proptest.
+Not allowed:
+- CubeCL directly (only through tetraleaf-kernels);
+- tetraleaf-validate, not even as a dev-dependency (it depends on this crate).
+
+Anything else needs a note in the PR.
+
+## Test oracle
+- `tetraleaf_ref::{direct, rotation, leaf, p2p}` at the absolute frames of §3.12, for
+  every operator; for P2P with every `P2pChoice` the machine offers.
+- On several ranks, the one-rank `Fmm` of the same settings over the union of every
+  rank's points in rank order, bit for bit (Phase 5 T6, decision 7).
+- The `P2pChoice::Reference` run of the same `Fmm` settings, for every ISA's output.
+- `tetraleaf_ref::p2p::direct_sum` in f64 over the original coordinates, for every
+  complete FMM.
+- `tetraleaf-octree` and `tetraleaf-plan` for the octant and offset order of the tables.
+- The single-translation prediction of Phase 1 (design §7) for the C3.2 gate.

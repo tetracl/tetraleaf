@@ -45,8 +45,8 @@ concurrency:
 # build, and main's run of #188 was cancelled at 30 a minute into its tests, no test failed;
 # its warm runs over Helmholtz H6 took 5.8–10.3 minutes.
 # run-tests-kernels rose from 20 to 40 on 2026-11-19: since #231 (the H1 gate) built and ran
-# nd-fmm-exec's device tests in it, its warm runs grew from 5–9 to 11–17 minutes (16.2 on
-# #234, 16.9 on main after #233: about 6 to build nd-fmm-exec's tests, 6 to run the kernel
+# tetraleaf-exec's device tests in it, its warm runs grew from 5–9 to 11–17 minutes (16.2 on
+# #234, 16.9 on main after #233: about 6 to build tetraleaf-exec's tests, 6 to run the kernel
 # tests and 2 for the device operator tests), above two thirds of the limit; no run was
 # cancelled at 20.
 # Test builds at opt-level 1 (2026-10-31): the tests ran unoptimised, which made the
@@ -155,7 +155,7 @@ jobs:
       - name: Licences of the default set
         run: cargo deny --locked check licenses
 
-  # nd-fmm-simd alone, without MPI, on real x86_64 (AVX2 + FMA) and arm64 (NEON)
+  # tetraleaf-simd alone, without MPI, on real x86_64 (AVX2 + FMA) and arm64 (NEON)
   # hardware (Phase 3S, decided 2026-10-02). The tests print the ISAs they ran;
   # --show-output puts that into the log. Correctness and accuracy only, never timings.
   run-tests-simd:
@@ -184,27 +184,27 @@ jobs:
           rustc --version
 
       - name: Clippy
-        run: cargo clippy -p nd-fmm-simd --all-targets -- -D warnings
+        run: cargo clippy -p tetraleaf-simd --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo test -p nd-fmm-simd -- --show-output
+        run: cargo test -p tetraleaf-simd -- --show-output
 
       - name: Run release accuracy tests (ignored)
-        run: cargo test -p nd-fmm-simd --release -- --ignored --show-output
+        run: cargo test -p tetraleaf-simd --release -- --ignored --show-output
 
-  # nd-fmm-kernels alone on the CubeCL CPU runtime (f32 and f64), without MPI (Phase 4
+  # tetraleaf-kernels alone on the CubeCL CPU runtime (f32 and f64), without MPI (Phase 4
   # T4; README decision 7, kept at sign-off on 2026-10-03). Correctness on small shapes only,
   # never timings of kernels. The tests print the backends they ran; --show-output puts
   # that into the log. The two measurement steps report the tracel-llvm bundle download
   # (the bundler's build-script run) and, from CubeCL's profiling log of the test run
   # (Phase 4S T10), the kernel compilation inside the tests. Since Phase 4S T2
-  # (decision 6) the job also type-checks CUDA (nd-fmm-kernels and nd-fmm-exec); CUDA
-  # never runs in CI. Since the H1 gate (review 2026-11-19, T4) it also builds nd-fmm-exec's
+  # (decision 6) the job also type-checks CUDA (tetraleaf-kernels and tetraleaf-exec); CUDA
+  # never runs in CI. Since the H1 gate (review 2026-11-19, T4) it also builds tetraleaf-exec's
   # tests with `--features cpu` in release, so the device path's test code compiles on every
   # pull request, and runs the device operator tests (`tests/operator`'s `device_*`: the
   # device's P2P, leaf operators, translations, M2L and rotation M2L against the host's),
   # which need no MPI initialisation. The other device tests (mpi_exec's device repeats,
-  # device_tune, the ignored gates) stay checks by hand (fmm-exec/CLAUDE.md).
+  # device_tune, the ignored gates) stay checks by hand (tetraleaf-exec/CLAUDE.md).
   run-tests-kernels:
     name: run-tests-kernels (CPU runtime)
     runs-on: ubuntu-latest
@@ -240,14 +240,14 @@ jobs:
           rm -rf target/cargo-timings
 
       - name: Clippy
-        run: cargo clippy -p nd-fmm-kernels --all-targets --features cpu --timings -- -D warnings
+        run: cargo clippy -p tetraleaf-kernels --all-targets --features cpu --timings -- -D warnings
 
       # CUDA is type-checked here, never run (Phase 4S decision 6). The runner has no
       # nvcc, so cudarc assumes its default CUDA version, which is enough for a check.
-      - name: Type-check nd-fmm-kernels with CUDA
-        run: cargo check -p nd-fmm-kernels --features cuda
+      - name: Type-check tetraleaf-kernels with CUDA
+        run: cargo check -p tetraleaf-kernels --features cuda
 
-      # nd-fmm-exec depends on mpi (mpi-sys runs bindgen against an MPI installation).
+      # tetraleaf-exec depends on mpi (mpi-sys runs bindgen against an MPI installation).
       - name: Package cache key (runner image and package list)
         id: apt-key
         run: echo "key=apt-$ImageOS-$ImageVersion-${{ runner.arch }}-$(echo "$APT_PACKAGES" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
@@ -258,7 +258,7 @@ jobs:
           path: ~/apt-archives
           key: ${{ steps.apt-key.outputs.key }}
 
-      - name: Install MPI and libclang (for nd-fmm-exec)
+      - name: Install MPI and libclang (for tetraleaf-exec)
         id: apt
         timeout-minutes: 10
         run: .github/scripts/apt-install.sh ~/apt-archives $APT_PACKAGES
@@ -267,14 +267,14 @@ jobs:
         if: failure() && steps.apt.outcome == 'failure'
         run: echo "::error title=Package install failed::apt-get failed or timed out (10 minutes), most likely on a slow or failing Ubuntu mirror. Re-run the failed jobs."
 
-      - name: Type-check nd-fmm-exec with CUDA
-        run: cargo check -p nd-fmm-exec --features cuda
+      - name: Type-check tetraleaf-exec with CUDA
+        run: cargo check -p tetraleaf-exec --features cuda
 
-      - name: Build nd-fmm-exec's tests on the CPU runtime
-        run: cargo test -p nd-fmm-exec --features cpu --release --no-run
+      - name: Build tetraleaf-exec's tests on the CPU runtime
+        run: cargo test -p tetraleaf-exec --features cpu --release --no-run
 
       - name: Build the tests
-        run: cargo test -p nd-fmm-kernels --features cpu --release --no-run --timings
+        run: cargo test -p tetraleaf-kernels --features cpu --release --no-run --timings
 
       - name: Build measurement (bundle download and slowest units)
         run: |
@@ -295,15 +295,15 @@ jobs:
       - name: Run tests
         env:
           CUBECL_DEBUG_LOG: ${{ runner.temp }}/cubecl.log
-        run: cargo test -p nd-fmm-kernels --features cpu --release -- --show-output
+        run: cargo test -p tetraleaf-kernels --features cpu --release -- --show-output
 
       - name: Kernel compilation measurement (CubeCL profiling log of the test run)
-        run: awk -f fmm-kernels/tools/compile_times.awk "$RUNNER_TEMP/cubecl.log"
+        run: awk -f tetraleaf-kernels/tools/compile_times.awk "$RUNNER_TEMP/cubecl.log"
 
-      - name: Run nd-fmm-exec's device operator tests on the CPU runtime
-        run: RUST_MIN_STACK=8388608 cargo test -p nd-fmm-exec --features cpu --release --test operator device_
+      - name: Run tetraleaf-exec's device operator tests on the CPU runtime
+        run: RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec --features cpu --release --test operator device_
 
-  # The MPI-owning test executables and the nd-octree MPI examples at 2 and 4 ranks
+  # The MPI-owning test executables and the tetraleaf-octree MPI examples at 2 and 4 ranks
   # (Phase 5 T3; README decision 4), one job per rank count, in parallel (2026-10-31:
   # one after the other they took 340–610 s and 440–870 s). Dev-profile builds at
   # opt-level 1 (see the top of this file), correctness only, never timings; no

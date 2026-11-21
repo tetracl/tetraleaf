@@ -25,10 +25,10 @@ pub const U_F64: f64 = f64::EPSILON / 2.0;
 /// Bytes of a complex f64.
 const COMPLEX: f64 = 16.0;
 
-/// Phase 5S's cap on the replicated top (`nd_fmm_plan::exchange::TOP_MAX_BOXES`).
+/// Phase 5S's cap on the replicated top (`tetraleaf_plan::exchange::TOP_MAX_BOXES`).
 pub const TOP_MAX_BOXES: u64 = 4096;
 
-/// The polar angles of the M2L family's rotations (`nd_fmm_tables::rotation`, §5.3).
+/// The polar angles of the M2L family's rotations (`tetraleaf_tables::rotation`, §5.3).
 pub const M2L_POLAR_ANGLES: f64 = 47.0;
 
 /// p of proposal §3.5 (Gumerov–Duraiswami 2009 eq. 18, δ = 2): p = ⌈P⌉ − 1. Copied from

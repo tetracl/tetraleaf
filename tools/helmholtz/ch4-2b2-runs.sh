@@ -2,7 +2,7 @@
 # tools/helmholtz/ch4-2b2-runs.sh: the machine runs of Helmholtz CH4.2b2, the diagonal M2L on
 # W1 (docs/helmholtz/tasks/CH4.2b2.md, "Machine runs"), from the repository root after
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch4-2b2-runs.sh <out-dir> <stage…>
 #
 # Every launch runs `helmholtz_accuracy` with `--levels` (the tables "M2L per level" and

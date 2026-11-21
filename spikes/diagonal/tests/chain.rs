@@ -1,16 +1,16 @@
 //! The diagonal chain against its trusted paths: the quadrature, the identity, the
 //! far field, S7's RCR and the direct sum, in double-double.
 
-use nd_fmm_spike_diagonal::grid::{Grid, phi_count, tri};
-use nd_fmm_spike_diagonal::run::{Config, cloud, diagonal, diagonal_f64_built};
-use nd_fmm_spike_diagonal::signature::{f2r_ring, finish, s2f_ring, times_i_pow};
-use nd_fmm_spike_diagonal::transfer::{Transfer, TransferF64, log10_term};
-use nd_fmm_spike_truncation::chain::{self, Kind, Setup, Work, e2p, p2e, rcr};
-use nd_fmm_spike_truncation::complex::Complex;
-use nd_fmm_spike_truncation::geometry::{Placement, Rng, dist2};
-use nd_fmm_spike_truncation::harmonics::{Harmonics, Polar, idx, len};
-use nd_fmm_spike_truncation::real::{Dd, Real};
-use nd_fmm_spike_truncation::rotation::{Direction, Rotation};
+use tetraleaf_spike_diagonal::grid::{Grid, phi_count, tri};
+use tetraleaf_spike_diagonal::run::{Config, cloud, diagonal, diagonal_f64_built};
+use tetraleaf_spike_diagonal::signature::{f2r_ring, finish, s2f_ring, times_i_pow};
+use tetraleaf_spike_diagonal::transfer::{Transfer, TransferF64, log10_term};
+use tetraleaf_spike_truncation::chain::{self, Kind, Setup, Work, e2p, p2e, rcr};
+use tetraleaf_spike_truncation::complex::Complex;
+use tetraleaf_spike_truncation::geometry::{Placement, Rng, dist2};
+use tetraleaf_spike_truncation::harmonics::{Harmonics, Polar, idx, len};
+use tetraleaf_spike_truncation::real::{Dd, Real};
+use tetraleaf_spike_truncation::rotation::{Direction, Rotation};
 
 /// The relative ℓ2 difference of two coefficient vectors.
 fn rel<T: Real>(a: &[Complex<T>], b: &[Complex<T>]) -> f64 {
@@ -275,7 +275,7 @@ fn seed_reproduced_on_the_axis() {
     for ((level, &want), &bound) in (2..6).zip(&seed_2w).zip(&seed_bound) {
         let kw = 500.0 / f64::powi(2.0, level);
         let ka = 3f64.sqrt() / 2.0 * kw;
-        let p = nd_fmm_spike_diagonal::rules::formula(ka, 1e-6);
+        let p = tetraleaf_spike_diagonal::rules::formula(ka, 1e-6);
         let mut setup = Setup::<Dd>::new(Kind::Real, ka);
         setup.s = [Dd::ONE; 3];
         let a = Dd::from_f64(3.0).sqrt() * Dd::from_f64(0.5);

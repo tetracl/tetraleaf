@@ -3,7 +3,7 @@
 # (docs/helmholtz/tasks/CH6.2d.md, "Machine runs"): FMM3D's exponential M2L per level, timed
 # and level by level in accuracy, on CH6.2b's problems. From the repository root, after
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_fmm3d
+#     cargo build --release -p tetraleaf-validate --example helmholtz_fmm3d
 #     VARIANTS="default fastker timed fastker-timed" tools/fmm3d/build.sh build
 #     tools/helmholtz/ch6-2d-runs.sh <out-dir> <stage…>
 #

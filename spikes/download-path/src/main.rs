@@ -5,7 +5,7 @@
 //! ```text
 //! OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 BLIS_NUM_THREADS=1 \
 //!     VECLIB_MAXIMUM_THREADS=1 \
-//!     cargo run --release -p nd-fmm-spike-download-path --features metal -- \
+//!     cargo run --release -p tetraleaf-spike-download-path --features metal -- \
 //!     [--backends metal,cuda,cpu] [--precisions f32,f64] \
 //!     [--sections download,pool,upload,zero,device] [--sizes 16,160,320] \
 //!     [--upload-sizes 4,8,40,80,160] [--repeats 10] [--warmup 2] \
@@ -18,7 +18,7 @@
 //!   into a host slice on one thread (warm, as into a reused buffer; and cold, into a
 //!   fresh `vec!`, page faults included), the same copy in parallel on rayon's pool, and
 //!   dropping CubeCL's `Bytes`; and `read_one` plus the serial copy without the sync
-//!   first, which is what `nd_fmm_kernels::Device::download` does;
+//!   first, which is what `tetraleaf_kernels::Device::download` does;
 //! - `pool`: `read_one` per download over a sequence of downloads, to see whether the
 //!   host pool (CUDA's pinned pool, wgpu's staging pool) allocates in every download or
 //!   only on growth. Run it in a process of its own (`--sections pool`) so that the other
@@ -29,7 +29,7 @@
 //! - `zero`: the three zero kernels of `DeviceOperator::begin_evaluation` (multipoles,
 //!   locals, target output) at the benchmark's sizes, by timing windows (CUDA events,
 //!   Metal timestamps; the host clock on the CPU runtime);
-//! - `device`: `nd_fmm_kernels::Device::write` and `Device::download` end to end, with
+//! - `device`: `tetraleaf_kernels::Device::write` and `Device::download` end to end, with
 //!   their counters, the production path the other sections take apart.
 //!
 //! Metal needs a process with GPU access (outside the macOS sandbox). CUDA runs on locust.
@@ -41,7 +41,7 @@ use cubecl::bytes::Bytes;
 use cubecl::client::Client;
 use cubecl::prelude::*;
 use cubecl::server::Handle;
-use nd_fmm_kernels::{BackendKind, Device, DeviceFloat, movement};
+use tetraleaf_kernels::{BackendKind, Device, DeviceFloat, movement};
 use rayon::prelude::*;
 
 /// x[i] = i + seed (as E) for i < len, grid-stride.
@@ -661,7 +661,7 @@ fn device_section<E: Elem>(backend: Backend, o: &Options) {
                 s_d.push(t_d);
             }
         }
-        let counters = |c: nd_fmm_kernels::Counters| {
+        let counters = |c: tetraleaf_kernels::Counters| {
             format!(
                 "up {} ({} B), down {} ({} B), syncs {}",
                 c.uploads, c.upload_bytes, c.downloads, c.download_bytes, c.syncs
@@ -693,7 +693,7 @@ fn run<E: Elem>(backend: Backend, o: &Options) {
 
 fn main() {
     let o = parse();
-    use nd_fmm_validate::bench::{cores, cpu_model, target, toolchain};
+    use tetraleaf_validate::bench::{cores, cpu_model, target, toolchain};
     println!("## Download and upload paths (Phase 4S T11 spike)\n");
     println!(
         "- Host: {} ({}), {}, {}; rayon threads {}.",

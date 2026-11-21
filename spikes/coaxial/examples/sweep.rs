@@ -2,14 +2,14 @@
 //! FMM-weighted metric (src/metric.rs): one M2M/L2L table per level, the M2L tables at
 //! all 15 V-list distances. Prints a Markdown table for SPIKE_REPORT.md.
 //!
-//! `cargo run -p nd-fmm-spike-coaxial --release --example sweep [eps ...]`
+//! `cargo run -p tetraleaf-spike-coaxial --release --example sweep [eps ...]`
 
-use nd_fmm_spike_coaxial::coaxial::Table;
-use nd_fmm_spike_coaxial::complex::C64;
-use nd_fmm_spike_coaxial::config::{DISTANCES2, degree, m2l_kt, m2m_kt, scale};
-use nd_fmm_spike_coaxial::metric::{compare, m2l_weights, m2m_weights};
-use nd_fmm_spike_coaxial::projection::{default_nodes, regular_regular, singular_regular};
-use nd_fmm_spike_coaxial::{Op, start_values};
+use tetraleaf_spike_coaxial::coaxial::Table;
+use tetraleaf_spike_coaxial::complex::C64;
+use tetraleaf_spike_coaxial::config::{DISTANCES2, degree, m2l_kt, m2m_kt, scale};
+use tetraleaf_spike_coaxial::metric::{compare, m2l_weights, m2m_weights};
+use tetraleaf_spike_coaxial::projection::{default_nodes, regular_regular, singular_regular};
+use tetraleaf_spike_coaxial::{Op, start_values};
 
 const KA: [f64; 14] = [
     0.01, 0.1, 1.0, 3.0, 10.0, 20.0, 30.0, 40.0, 50.0, 70.0, 100.0, 150.0, 200.0, 300.0,

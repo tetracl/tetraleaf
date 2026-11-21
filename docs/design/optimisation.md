@@ -4,7 +4,7 @@ Phase 6, task T1 ([docs/phase6/T1-optimisation-design.md](../phase6/T1-optimisat
 Drafted on 2026-10-15 for sign-off by hand before T2. **Signed off by the user on
 2026-10-15** (§10, "Outcome"): the document and its scope changes; no host BLAS, the
 order-preserving kernel with an opt-in FMA mode; **SVD-compressed M2L (C6.2) dropped**
-for now (§3 stays as the record of the measurement); C6.9's near rule in `nd-fmm-plan`
+for now (§3 stays as the record of the measurement); C6.9's near rule in `tetraleaf-plan`
 and its task T12. It measures where an evaluation
 spends its time on the three machines (§1), designs the components that change the host
 operator (the batched M2L §2, compressed M2L §3, several right-hand sides §4) and the
@@ -48,14 +48,14 @@ timings (§1, Appendix A):
    change with the number of columns per call (so with the rank count), the CPU's kernel
    and the library; OpenBLAS called from 72 threads of one process collapses on locust;
    and no provider is linked today (the README said otherwise; corrected). The kernel
-   lives in `nd-fmm-simd` with run-time ISA dispatch, which also gives the far field the
+   lives in `tetraleaf-simd` with run-time ISA dispatch, which also gives the far field the
    AVX2 code Phase 5N asked for (2.1× the SSE2 build on Kathleen, §2.6, §2.11).
 4. **M2P and P2L are 28–74 % of an evaluation on the Plummer sphere and 71–73 % on the
    cube at 2 × 10⁶** on every machine (§1.2, §8a): C6.9 is the general case of adaptive
    trees. A leaf W source below N_W = 46–963 points or a leaf X target below N_X = 15–460
    (the measured crossovers by machine and p) is cheaper by P2P, and a leaf holds at most
    64: *modelled* 1.36–1.6× on the Plummer sphere and 2.2× on that cube at f64 p = 8. It needs the plan to take a
-   near rule (an `nd-fmm-plan` interface change) and a task of its own, **T12** (§8a).
+   near rule (an `tetraleaf-plan` interface change) and a task of its own, **T12** (§8a).
 5. **SVD compression (C6.2) pays only at high p** (dropped at sign-off): per offset, at a tolerance an order
    below the FMM's error, 1.10× the dense flops at p = 8, 0.53× at p = 12 and 0.31× at
    p = 18, with the tables 3.2× smaller at p = 18; shared bases do not compress at all
@@ -82,7 +82,7 @@ The questions for sign-off are §10.
 | Kathleen | Xeon Gold 6248 (Cascade Lake), 2 × 512-bit FMA units | 32 flop/cycle × 2.5 GHz base = 80 GFLOP/s (lower under the AVX-512 licence, higher with one core busy) | 104 GFLOP/s at f64 p = 18, 1,024 columns (OpenBLAS 0.3.28, SkylakeX kernels, one core busy) | L2 1 MB per core; L3 27.5 MB per socket |
 
 The default build is the target's baseline (the x86-64 baseline is SSE2: the far field's
-loops on Kathleen run 128-bit vectors without FMA; `nd-fmm-simd`'s P2P alone dispatches
+loops on Kathleen run 128-bit vectors without FMA; `tetraleaf-simd`'s P2P alone dispatches
 AVX2 at run time, phase5n-kathleen.md "Setup"). Dense tables per rank, 316 (p + 1)⁴ values
 (the octant tables add 16 more): 0.65, 6.1, 16.6, 72 and 329 MB in f64 at p = 3, 6, 8, 12
 and 18. With one rank per core: 199 MB on the M3 Max against 32 MB of L2, 1.2 GB on locust
@@ -181,7 +181,7 @@ of simd-p2p §4.6's AVX2 model at the base clock) and 0.82 / 0.56 in f64 (82 %, 
 accuracy check passed. Inside the FMM (`p2p_fmm --part kernels`, N = 10⁵, one thread) AVX2
 makes the leaves 1.94–3.76× faster than the reference kernel on the cube and 1.14–1.56× on
 the Plummer sphere (where M2P is part of the leaves). The fitted P2P constant at 40 ranks
-per node is 3.09 ns (f64) and 1.35 ns (f32) per pair (`nd_fmm_exec::cost`, job 603049).
+per node is 3.09 ns (f64) and 1.35 ns (f32) per pair (`tetraleaf_exec::cost`, job 603049).
 
 ## 2. The host batched M2L (C6.6)
 
@@ -280,7 +280,7 @@ the measured effect is §2.6).
 
 With NB = 4 and B = 64. The direct form needs no budget; the gathered form (BLAS only)
 caps C by a scratch budget per thread, C = ⌊S / (2 n · size_of(T))⌋, as the device's
-`PlanSettings::max_columns` does for its chunks (`fmm-kernels/src/translate.rs`), with
+`PlanSettings::max_columns` does for its chunks (`tetraleaf-kernels/src/translate.rs`), with
 S = 256 kB proposed (L2-resident on every machine: 1 MB per core on locust and
 Kathleen, 16 MB per 6-core cluster on the M3 Max).
 
@@ -367,7 +367,7 @@ What the measurements say:
    one process), Phase 5N's "far-field build for the CPU" question (node-m2l §9 q. 7).
 
 **Recommendation (decision 2): the hand-written order-preserving kernel**, in
-`nd-fmm-simd` behind its run-time ISA dispatch (§2.11), no BLAS. It keeps every bit of
+`tetraleaf-simd` behind its run-time ISA dispatch (§2.11), no BLAS. It keeps every bit of
 today's Dense (so the tests are bit for bit, requirement 3 holds without a new bound), it
 needs no dependency, it beats Rotation at f64 p = 8 on every machine at full load, and it
 answers the far-field build question without a global `target-cpu`. The FMA variant is a
@@ -442,14 +442,14 @@ runs SSE2) against today's best strategy, and 1.95–3.0× at f32 p = 8; at p = 
 Max at f64 p = 12 with 12 ranks (0.96×; Rotation's O(p³) catches up). C6.6's criterion
 ("faster than every existing host strategy at p ≥ 6 on one rank, and scaling with ranks
 per node where Dense does not") is met by the model everywhere but that cell; T2 measures
-it (measured in T2: fmm-validate/results/phase6-m2l.md, its §7 against this model). At 160 Kathleen ranks, where M2L is most of the 67–92 % downward share at p = 8 (§1.2),
+it (measured in T2: tetraleaf-validate/results/phase6-m2l.md, its §7 against this model). At 160 Kathleen ranks, where M2L is most of the 67–92 % downward share at p = 8 (§1.2),
 the same per-pair gain applies per rank.
 
 ### 2.11 Where the kernel lives
 
-`nd-fmm-exec` is free of `unsafe` (root CLAUDE.md), and calling a
+`tetraleaf-exec` is free of `unsafe` (root CLAUDE.md), and calling a
 `#[target_feature]` function from code without the feature is `unsafe`, so the run-time
-ISA dispatch lives where it already does for P2P: a new module of `nd-fmm-simd`,
+ISA dispatch lives where it already does for P2P: a new module of `tetraleaf-simd`,
 
 ```rust
 /// C[:, c_j] += A · B[:, b_j] for each j, A n × n column-major, columns of length n,
@@ -462,9 +462,9 @@ pub fn accumulate_columns<T: SimdScalar>(
 
 with `arch::{scalar, neon, avx2}` bodies (and `avx512` with T6), `unsafe` only in `arch`
 and the dispatch, safe public functions, and a test of every ISA against the scalar body
-bit for bit (the same chain on every ISA). `nd-fmm-exec` calls it from the level call with
+bit for bit (the same chain on every ISA). `tetraleaf-exec` calls it from the level call with
 the `Fmm`'s P2P ISA choice (`P2pChoice`, which already selects the widest ISA). This
-widens T2's crates by `nd-fmm-simd` (a sign-off point: README "Scope" lists only T6 there)
+widens T2's crates by `tetraleaf-simd` (a sign-off point: README "Scope" lists only T6 there)
 and touches the files T6 changes (`isa.rs`, `arch/mod.rs`): merge one, then rebase the
 other.
 
@@ -522,7 +522,7 @@ tolerance is rejected: the ranks vary about 2× between offsets (mean against ma
 
 ### 3.3 What it buys, and where
 
-Flops per pair (f64; rotation (p + 1)(10p² + 32p + 9)/3 multiply–adds, `fmm-tables`'s
+Flops per pair (f64; rotation (p + 1)(10p² + 32p + 9)/3 multiply–adds, `tetraleaf-tables`'s
 rotation module; dense 2n²; compressed 4 n k̄ at the ε above):
 
 | p | dense | compressed | rotation | dense tables per rank | compressed |
@@ -567,9 +567,9 @@ any rayon worker, then cached:
 - **the SVD itself** (decision 3b): rlst's `svd` calls LAPACK's `?gesdd`, which, like BLAS
   (§2.6), is not linked today, so LAPACK needs a provider (a new dependency, or a link
   line), and its bits depend on the library; or a hand-written one-sided Jacobi SVD in
-  `nd-fmm-tables` (no dependency; deterministic by construction, like the dense tables;
+  `tetraleaf-tables` (no dependency; deterministic by construction, like the dense tables;
   about 3n³ flops per sweep, *model* a few minutes at p = 18 single-threaded, once per node
-  with `table_cache`). **Recommended: the Jacobi SVD**, keeping `nd-fmm-tables` free of a
+  with `table_cache`). **Recommended: the Jacobi SVD**, keeping `tetraleaf-tables` free of a
   native library and its tables the same on every machine; LAPACK if the build time at
   p ≥ 18 turns out to matter (T3 measures).
 
@@ -593,7 +593,7 @@ operator reports
 | `source_point_size()` | 4 (u, then q) | 3 + m |
 | `target_output_point_size()` | 1 or 4 | m or 4m |
 
-so **no `nd-fmm-plan` change** (README, "Every operator behind the `FmmOperator`
+so **no `tetraleaf-plan` change** (README, "Every operator behind the `FmmOperator`
 interface"): one message per neighbour and exchange as today, m times the values; the
 replicated top's all-gather-v grows in its bandwidth term (0.62 and 2.06 µs per rank at
 0.26 and 2.65 MB on Kathleen, phase5s-kathleen §1.2), reported per vector by T5.
@@ -645,7 +645,7 @@ charge. That holds operator by operator:
 | P2P | d, r², ρ per (target, source) | φ_v = fma(q_v, ρ, φ_v); t = q_v ρ, … as `arch::p2p::block` |
 | output | the scale per leaf | the division per value |
 
-P2P needs a kernel that takes m charges per source: in `nd-fmm-simd`
+P2P needs a kernel that takes m charges per source: in `tetraleaf-simd`
 (`P2pKernel::evaluate_many(sources, charges /* m per source */, m, targets, …)`), the
 source loop of `arch::p2p::block` with an inner loop over v, `unsafe` only in `arch`.
 The device kernels likewise. T5 tests the bit identity per vector (README C6.3 criterion).
@@ -680,7 +680,7 @@ differs from the proposal above:
   single-vector chunk's, which the reference P2P (vector by vector) and the device's output
   pass read unchanged. The charges are point-major as proposed (`q[i m + v]`): the forward
   moves them in one piece per leaf, and P2P and P2M read a source's m charges together.
-- **P2P** (`P2pKernel::evaluate_many`, `nd-fmm-simd`): the vectors in register groups,
+- **P2P** (`P2pKernel::evaluate_many`, `tetraleaf-simd`): the vectors in register groups,
   ρ formed once per source and target vector per group (NEON: blocks of 2 target vectors
   with groups of 8 vectors without gradients, 1 and 4 with; AVX2: 1 and 8, 1 and 4, each
   chosen by timing), each vector then the single-vector kernel's steps. Its gain is
@@ -688,7 +688,7 @@ differs from the proposal above:
   without gradients and 1.8–1.9× with, on Kathleen (AVX2) 3.9× and 4.4×, 1.5× and 1.9×,
   against the model's 15–20× and 3.5–4×, whose bounds assume every vector's accumulators
   in registers.
-- **The leaf operators** share the harmonics through `nd_fmm_ref::leaf::{p2m, p2l, l2p,
+- **The leaf operators** share the harmonics through `tetraleaf_ref::leaf::{p2m, p2l, l2p,
   m2p}_many` (the oracle crate: the single-vector operators are their m = 1 case).
 - **M2M, L2L and M2L target by target** apply the table to each vector's column in turn
   (the table from cache); **Batched** gives each pair m columns of the column kernel, so a
@@ -708,7 +708,7 @@ differs from the proposal above:
 - **Not changed**: the cost model weighs one vector's work (only the partition depends on
   it; T11 refits the constants), and the strategy rule (`Auto`) is m's.
 
-**Measured** (`fmm-validate/results/phase6-rhs.md`; the N = 10⁶ cube, φ and ∇φ, one rank
+**Measured** (`tetraleaf-validate/results/phase6-rhs.md`; the N = 10⁶ cube, φ and ∇φ, one rank
 per core): the evaluation per vector at m = 8 against m = 1 is 0.61–0.63 at f64 p = 3 and
 0.69–0.74 at f64 p = 8 under `Batched` on Kathleen and locust (f32 0.61–0.71 and
 0.70–0.76; the M3 Max 0.62 and 0.83, f32 0.64 and 0.83, its batched kernel already near
@@ -735,9 +735,9 @@ Rust 1.89.0 (2025-08-07) stabilised the AVX-512 target features and the
 `core::arch::x86_64` AVX-512 intrinsics ([release notes](https://blog.rust-lang.org/2025/08/07/Rust-1.89.0/)).
 The toolchain in use is 1.99.0 everywhere: the M3 Max (`rustc --version`), the pins of
 `tools/kathleen/env.sh` and `tools/gh200/env.sh`, and CI's floating `stable` (its logs
-show 1.99.0). `nd-fmm-simd`'s `toolchain` module already compiles a safe
+show 1.99.0). `tetraleaf-simd`'s `toolchain` module already compiles a safe
 `#[target_feature(enable = "avx512f")]` function and prints whether `avx512f` is
-detected. No nightly toolchain and no `pulp` (fmm-simd/CLAUDE.md: hand-written
+detected. No nightly toolchain and no `pulp` (tetraleaf-simd/CLAUDE.md: hand-written
 `core::arch` only). (pulp 0.22.3 now gates V4 behind its `x86-v4` feature, not `nightly`;
 simd-p2p §2.2's wording is out of date but the crate does not use pulp.)
 
@@ -782,7 +782,7 @@ compares into `__mmask16`/`__mmask8`, masked moves):
 The baseline T6 must beat (§1.3): the AVX2 kernels on Kathleen at 2.95 / 1.74 Gpairs/s
 (f32 φ / φ, ∇φ) and 0.82 / 0.56 (f64) on one core (job 604312, `p2p_kernels --ghz 2.5`;
 phase5n-kathleen §10 had 2.84 / 1.61 and 0.79 / 0.55), and P2P's fitted constant inside the FMM at 40 ranks per node, 3.09 ns (f64)
-and 1.35 ns (f32) per pair (`nd_fmm_exec::cost`, job 603049). The model (simd-p2p §4.6):
+and 1.35 ns (f32) per pair (`tetraleaf_exec::cost`, job 603049). The model (simd-p2p §4.6):
 1.60 / 0.70 pairs per cycle (f32 / f64 with ∇φ) against AVX2's 0.80 / 0.29, 2× and 2.4×,
 before the licence and before lane waste at FMM leaf sizes (simd-p2p §4.1: 16 f32 lanes
 put 24 targets into 32 lanes).
@@ -806,12 +806,12 @@ tests also print which ISAs ran, so a CI log shows whether AVX-512 was covered.
 
 `Isa::Avx512` and `arch::avx512` as §5.2 planned them (`avx512f` only, `vrsqrt14ps`/`pd`
 with one Newton step in f32 and two in f64, mask registers, tails on the padded copies with
-`MAX_LANES` 16), for every kernel of `nd-fmm-simd`: P2P, P2P of several charge vectors and
+`MAX_LANES` 16), for every kernel of `tetraleaf-simd`: P2P, P2P of several charge vectors and
 the batched M2L's column kernel (bit for bit the scalar layer, so `Dense`, on AVX-512 too).
 Available where the CPU has AVX-512F, AVX2 and FMA; `Isa::detect` and `P2pChoice::Auto`
 keep AVX2 (§5.3), the rule a function of the feature set with a unit test over every
 forced set (§5.4). What the measurements fixed or found
-(`fmm-validate/results/phase6-avx512.md`, Kathleen jobs 604543–604551, one node each):
+(`tetraleaf-validate/results/phase6-avx512.md`, Kathleen jobs 604543–604551, one node each):
 
 - **Blocking**: K = 2 target vectors per P2P block (K = 1, 2, 4 within 5 %), R = 4 row
   vectors in the column kernel (R = 2 was 14 % slower at f64 p = 8). The several-vector
@@ -837,7 +837,7 @@ forced set (§5.4). What the measurements fixed or found
 ## 6. The device items (C6.1)
 
 The device's dense M2L, M2M and L2L run per chunk as gather, grouped GEMM and reduction
-(`nd_fmm_kernels::translate::level_call`; device-path §6.4). Where the time goes, measured
+(`tetraleaf_kernels::translate::level_call`; device-path §6.4). Where the time goes, measured
 in Phase 4 and 4S:
 
 | item | measured | source |
@@ -867,7 +867,7 @@ Phase 4's bounds, not bit for bit, as today).
 
 ### 6.1 As built in T7
 
-The three in-scope items as `nd_fmm_kernels::translate::PlanSettings` options of the
+The three in-scope items as `tetraleaf_kernels::translate::PlanSettings` options of the
 hand-written GEMM, each keeping one accumulator per output, `fma` with k ascending and the
 reduction's row order, so **each gives the bits of Phase 4's path** (tested on every layout
 and chunking against the host rows, and in every device scenario on the CPU runtime, Metal
@@ -878,7 +878,7 @@ twice as wide; the library keeps the separate gather), the reduction by chunk
 once per level call; Phase 4's walk kept as `Reduction::Walk`), and the shared-memory GEMM
 (`GemmLayout::Shared`, `shared_for`; on the CPU runtime one unit, whose `sync_cube` spins).
 L2P at high p was not built (not simple). What the measurements fixed
-(`fmm-validate/results/phase6-device.md`):
+(`tetraleaf-validate/results/phase6-device.md`):
 
 - **Metal f32** (the M3 Max): per level call the new paths take 0.51–0.56 of Phase 4S's
   time at N = 10⁶ (p = 3–12), 0.18–0.26 at 10⁷ (the reduction by chunk: Phase 4S's walk over
@@ -939,7 +939,7 @@ Only the source side. With φ(x) = d · ∇_y (1/|x − y|) = d · (x − y)/|x 
 | P2M | Σ q R̄(u) | Σ d̂ · ∇_u R̄(u): `harmonics::regular_grad` exists (CONVENTIONS §3.4's ladder) |
 | P2L | Σ q Ī(u) | Σ d̂ · ∇_u Ī(u): `harmonics::irregular_grad` exists |
 | P2P | q / r, ∇ | d̂ · (x − y)/r³ and its gradient d̂/r³ − 3 (d̂ · (x − y))(x − y)/r⁵: new SIMD kernels |
-| direct sum | `nd_fmm_ref::p2p::direct_sum` | the dipole sum, f64, in `nd-fmm-ref` |
+| direct sum | `tetraleaf_ref::p2p::direct_sum` | the dipole sum, f64, in `tetraleaf-ref` |
 | M2M, M2L, L2L, L2P, M2P, lists, exchanges of expansions | unchanged | unchanged |
 
 d̂ is the moment in the source leaf's scaled units (d / r_s: a dipole carries one power of
@@ -963,7 +963,7 @@ sign-off (T8 brief).
 Recommended: the dipole P2M, P2L and P2P on the **host fallback** first (`host_fallback`:
 every kind can run on the host with explicit transfers, bit for bit the host path;
 requirement 8 of Phase 4), and device kernels only if T8 measures the fallback above 20 %
-of a device evaluation at the workloads. The leaf kernels of `nd_fmm_kernels::leaf`
+of a device evaluation at the workloads. The leaf kernels of `tetraleaf_kernels::leaf`
 evaluate the harmonics per point; a dipole form needs the gradient ladder on the device
 (new code); the far field on the device is unchanged.
 
@@ -973,14 +973,14 @@ As designed in §7.1–§7.4, with the CONVENTIONS text proposed in T8's PR and 
 the user on 2026-10-17 (CONVENTIONS §3.7 "Dipole sources", §3.13; `CONVENTION_VERSION` 2,
 recommended because §3.10 bumps on any change to §3.7 and the new dipole fixture depends on
 it). The sign is φ = d · ∇_y 1/|x − y| = d · (x − y)/|x − y|³, the moment stored as
-d̂ = d / r_s in the chunk. What was built (`fmm-validate/results/phase6-dipoles.md`):
+d̂ = d / r_s in the chunk. What was built (`tetraleaf-validate/results/phase6-dipoles.md`):
 
-- **Reference** (`nd-fmm-ref`): `leaf::{p2m_dipoles, p2l_dipoles}` (the gradient ladder of
-  `nd-fmm-math` contracted with d̂ per slot) and `p2p::{p2p_dipoles, direct_sum_dipoles}`,
+- **Reference** (`tetraleaf-ref`): `leaf::{p2m_dipoles, p2l_dipoles}` (the gradient ladder of
+  `tetraleaf-math` contracted with d̂ per slot) and `p2p::{p2p_dipoles, direct_sum_dipoles}`,
   against an mpmath fixture (`tools/fixtures/gen_dipoles.py`: directional derivatives of the
   §3.3 definitions at 120 digits; 4e-15 per degree in f64) and fourth-order differences of
   the charge operators (8e-12).
-- **Interface** (`nd-fmm-exec`): `SourceType` (in `operator`, re-exported by `fmm`),
+- **Interface** (`tetraleaf-exec`): `SourceType` (in `operator`, re-exported by `fmm`),
   `FmmBuilder::sources`, `Sources`, `Fmm::evaluate_sources(_into)`,
   `FmmError::{SourceType, DipolesLength}`, `SettingsError::SourcesWithVectors` (dipoles carry
   one set). `evaluate(charges)` and its bits are unchanged, and `Sources::charges(c)` gives
@@ -1004,7 +1004,7 @@ d̂ = d / r_s in the chunk. What was built (`fmm-validate/results/phase6-dipoles
   P2M and P2L are indicated**; the user made them a follow-up task, T8d (2026-10-17;
   docs/phase6/T8d-dipoles-device.md).
 
-**As built in T8d** (`fmm-validate/results/phase6-dipoles.md`, "Phase 6 T8d"): the dipole
+**As built in T8d** (`tetraleaf-validate/results/phase6-dipoles.md`, "Phase 6 T8d"): the dipole
 kinds on the device, in the order of the brief.
 
 - **The source store with strengths.** The device's source store holds the chunks of 6 or 7
@@ -1012,7 +1012,7 @@ kinds on the device, in the order of the brief.
   once (`DataKind::Charges`, the strength slots of `charge_slots` generalised), the moments
   scaled into their leaf's units on the host's pool first, with the charge load's bits; the
   transfer formula of `tests/device_common` takes w N_s s bytes.
-- **P2P** (`nd_fmm_kernels::p2p`, every layout): separate dipole kernels with the tiles,
+- **P2P** (`tetraleaf_kernels::p2p`, every layout): separate dipole kernels with the tiles,
   rows and order of the charge kernels, which do not change; per source leaf its charges
   (the charge formulation) and then its moments, ŷ by an explicit fma and r̂ d̂ exact, the
   terms of simd-p2p.md §4.8 with fmas (never r⁻⁵). Contract (CONVENTIONS §3.13, "Device
@@ -1024,8 +1024,8 @@ kinds on the device, in the order of the brief.
   simd-p2p.md §4.2 and §4.8 (*model*) a fused kernel would save at most the charge stage's
   distance and ρ, about half of its 5 ms, some 7 % of a charge-and-dipole evaluation, so it
   was not built.
-- **P2M and P2L** (`nd_fmm_kernels::leaf`, both layouts): comptime flags in the existing
-  kernels, the gradient `ladder` contracted with d̂ per slot as `nd_fmm_ref::leaf::
+- **P2M and P2L** (`tetraleaf_kernels::leaf`, both layouts): comptime flags in the existing
+  kernels, the gradient `ladder` contracted with d̂ per slot as `tetraleaf_ref::leaf::
   {p2m_dipoles, p2l_dipoles}` (P2L with the harmonics to p + 1 and d̂ · 2^(l_t − l_s)).
 - **Placement**: the forced fallback (`SOURCE_KINDS`) is gone; `host_fallback` keeps any
   kind on the host, bit for bit the host path as before. With dipoles the P2P layout under
@@ -1046,9 +1046,9 @@ same reference, on one node, precomputation reported apart:
 
 - *problems*: the C3.2 cube and the C3.3 Plummer sphere at N = 10⁵, 10⁶, 10⁷ (Phase 5
   T10's `Workload`, every point generated by index from the seed), written once to a
-  binary file by an `nd-fmm-bench --write-problem` option (the one code change of T9);
+  binary file by an `tetraleaf-bench --write-problem` option (the one code change of T9);
   sources = targets, as our `Fmm` evaluates at its points;
-- *reference*: our f64 direct sum (`nd_fmm_ref::p2p::direct_sum`) at 1,000 sampled targets
+- *reference*: our f64 direct sum (`tetraleaf_ref::p2p::direct_sum`) at 1,000 sampled targets
   for 8 charge vectors, the errors of laplace-fmm-plan §8.2 (relative L2 of φ and ∇φ);
   FMM3D's Laplace kernel is 1/r without our 1/(4π) (CONVENTIONS §3.1), so its output is
   divided by 4π before the comparison (T9 checks the normalisation on a two-point
@@ -1077,7 +1077,7 @@ form, names checked against the pinned release's documentation), times with
 **Recommended gate machine: Kathleen** (x86, where FMM3D's compiled kernels are mature and
 our AVX2/AVX-512 P2P is measured), with the M3 Max as the second machine.
 
-**As built in T9 (2026-10-18; `fmm-validate/results/phase6-fmm3d.md`).** As designed, with
+**As built in T9 (2026-10-18; `tetraleaf-validate/results/phase6-fmm3d.md`).** As designed, with
 these differences:
 - FMM3D **v2.1.0** computes q / (4π r), not q / r: only the releases up to v2.0.0 have the
   1/r kernel this section describes. The driver's two-point check finds the factor (1) and
@@ -1129,7 +1129,7 @@ the margin (central case 1.4–8.1× at f64 p ≥ 8 on all three machines), so t
 built: the six directional conversions in our basis, FMM3D's merge-and-shift and its
 quadratures (whose stated errors understate the worst pair 6–23×; the spike chooses s by
 the level error, at most 0.1× the M2L truncation: s = 10, 15, 18, 21, 32 at p = 3, 6, 8,
-12, 18), checked against `nd_fmm_ref::direct::m2l` on a level. Measured on T1's level 4
+12, 18), checked against `tetraleaf_ref::direct::m2l` on a level. Measured on T1's level 4
 against the faster of `Batched` and Rotation: 2.8–3.3× at p = 8, 6.5–7.5× at p = 12 and
 6.0–9.8× at p = 18 on the M3 Max and locust, one process or every core; on Kathleen
 1.5–12.5× at p ≥ 8 against the AVX2 kernel, and against the AVX-512 kernel 3.6–8.6× at
@@ -1140,7 +1140,7 @@ body, several ranks, f32 and the device as its open items (the report's §8).
 **Decision 6 signed off by the user on 2026-10-18, as recommended:** C6.5 proceeds, as
 T13 (docs/phase6/T13-plane-wave-m2l.md).
 
-**As built in T13 (2026-10-19; `fmm-validate/results/phase6-planewave.md`).** The spike
+**As built in T13 (2026-10-19; `tetraleaf-validate/results/phase6-planewave.md`).** The spike
 made a strategy, `M2lStrategy::PlaneWave` (opt-in; `Auto` never resolves to it), with
 these differences from the spike and the brief:
 - **The convention** is CONVENTIONS §3.14, outside the versioned set like §3.13 (no
@@ -1159,7 +1159,7 @@ these differences from the spike and the brief:
   which rank holds a source: on P ranks the output is the one-rank `PlaneWave` run's bit
   for bit, and rank-count invariance holds (80 Kathleen ranks against 40, 20 and 10).
 - **The kernels are bit for bit across ISAs** (the brief allowed a bound): `merge`,
-  `gather`, `waves` and `sums` in `nd-fmm-simd` (NEON, AVX2, AVX-512, scalar) keep one
+  `gather`, `waves` and `sums` in `tetraleaf-simd` (NEON, AVX2, AVX-512, scalar) keep one
   fma per product and sum in a fixed order per value, and the tables' own steps round
   products and sums apart (an x86-64 build without `fma` turns `mul_add` into a library
   call). They run on the P2P choice's ISA.
@@ -1188,10 +1188,10 @@ these differences from the spike and the brief:
 
 For a leaf t, W(t) holds the children of t's refined same-level neighbours that do not
 touch t (leaves or interior boxes), and X(b) of a box b the leaves at the level of b's
-parent that do not touch b; s ∈ W(t) iff t ∈ X(s) (`nd-fmm-plan`'s `interaction_manager`
+parent that do not touch b; s ∈ W(t) iff t ∈ X(s) (`tetraleaf-plan`'s `interaction_manager`
 module docs). So between a leaf t and a finer **leaf** s ∈ W(t) the FMM makes two
 expansions: M2P of s's multipole at t's n_t target points (cost α_M2P n_t in the cost
-model's units, `nd_fmm_exec::cost`) and P2L of t's n_t sources into s's local (α_P2L n_t).
+model's units, `tetraleaf_exec::cost`) and P2L of t's n_t sources into s's local (α_P2L n_t).
 Evaluated directly, both are P2P: s's n_s sources at t's targets and t's sources at s's
 targets, α_P2P n_t n_s each, and exact. So, per pair of leaves (t coarse, s fine):
 
@@ -1251,12 +1251,12 @@ does), so the source exchange delivers its points, and P2P runs on host and devi
 any near pair. The counts are what Phase 5S T7's cut already gathers at build
 (`cost::leaf_point_counts`, every local leaf's source and target counts and the ghost
 leaves' source counts), identical on every rank, so every rank makes the same lists
-(requirement 3). `nd_fmm_exec` passes the rule built from its `CostModel` (the same
+(requirement 3). `tetraleaf_exec` passes the rule built from its `CostModel` (the same
 constants as the cut, scaled by p), opt-in by a builder setting (`FmmBuilder::near_rule`
 or similar, off by default until T11), and the cut's counts move the converted pairs from
 M2P/P2L to P2P.
 
-This is an **`nd-fmm-plan` interface change** (`Plan::new` takes the rule and the counts;
+This is an **`tetraleaf-plan` interface change** (`Plan::new` takes the rule and the counts;
 `from_key_types` likewise), so it is a sign-off question (README, "Every operator behind
 the `FmmOperator` interface"; §10 question 7).
 
@@ -1274,16 +1274,16 @@ thread-count guarantees are unchanged because the rows are.
 ### 8a.5 Which task builds it
 
 A new task, **T12 "M2P and P2L only where they pay"**, after T1 (needs nothing from
-T2–T5): `nd-fmm-plan` (the near rule in `key_lists`, `Plan::new`), `nd-fmm-exec` (the rule
+T2–T5): `tetraleaf-plan` (the near rule in `key_lists`, `Plan::new`), `tetraleaf-exec` (the rule
 from the cost model, the builder setting, the counts), the `scaling` harness (the counts
-by kind, unchanged in form). It shares `fmm-exec/src/fmm.rs` with T5 and T8: merge one,
+by kind, unchanged in form). It shares `tetraleaf-exec/src/fmm.rs` with T5 and T8: merge one,
 then rebase the next (README "Tasks"). Its brief is written after sign-off; its
 criterion is the README's (C6.9).
 
 ### 8a.6 As built in T12
 
-Built as §8a.3 designs it, measured in `fmm-validate/results/phase6-near.md`.
-- **`nd-fmm-plan`** (module `near`): `NearRule` holds an operator-supplied predicate over
+Built as §8a.3 designs it, measured in `tetraleaf-validate/results/phase6-near.md`.
+- **`tetraleaf-plan`** (module `near`): `NearRule` holds an operator-supplied predicate over
   `LeafPair::W { target, source, sources }` and `LeafPair::X { target, source, targets }`
   (the fine leaf's count in both) and the counts it reads (`LeafCounts`, by key).
   `Plan::with_near_rule` and `Plan::from_key_types_with_near_rule` apply it in the list
@@ -1296,9 +1296,9 @@ Built as §8a.3 designs it, measured in `fmm-validate/results/phase6-near.md`.
   counts are fetched from their owners: `LeafCounts::exchange`, the chunk sizes of one
   ghost communicator (no value moves) on the plan without the rule. With the points of the
   local leaves (`cost::leaf_point_counts`, the cut's all-to-all-v, run once for both),
-  `nd-fmm-exec` builds the plan again with the rule; the cut weighs that plan, so the
+  `tetraleaf-exec` builds the plan again with the rule; the cut weighs that plan, so the
   converted pairs count as P2P, and a recut makes the counts and the rule's plan again.
-- **`nd-fmm-exec`**: `FmmBuilder::near_rule(NearRuleChoice)`, `Off` by default; `CostModel`
+- **`tetraleaf-exec`**: `FmmBuilder::near_rule(NearRuleChoice)`, `Off` by default; `CostModel`
   (N_W = α_M2P / α_P2P, N_X = α_P2L / α_P2P, `CostModel::near_crossovers`) or named
   `Crossovers`; `Fmm::near_rule` reports it. The device path runs the converted pairs with
   the other near pairs.
@@ -1329,20 +1329,20 @@ marked:
 
 | task | component | where it pays | gain (*model*) | crates |
 | --- | --- | --- | --- | --- |
-| T2 | C6.6 batched host M2L | every tree at p ≥ 6, most at many ranks per node | f64 p = 8 at the node's ranks 1.13× (locust), 1.20–1.30× (M3 Max), 1.87–2.07× (Kathleen, with the AVX2 kernel); f32 p = 8 1.5–3.0×; one rank 1.3–2.3×; p = 3 1.07–1.21× | nd-fmm-exec, nd-fmm-simd |
-| T12 (new) | C6.9 M2P and P2L only where they pay | adaptive trees (Plummer, clusters, graded cubes), every p | Plummer f64 p = 8 1.36× (one rank) to about 1.6× (40 per node); the cube at 2 × 10⁶ 2.2×; uniform trees none | nd-fmm-plan, nd-fmm-exec |
-| T6 | C6.7 AVX-512 P2P | Kathleen, low p (P2P 63–66 % of the cube at f64 p = 3) | P2P up to 2× (f32) and 2.4× (f64) per core before the licence (simd-p2p §4.6): the cube at p = 3 up to 1.3–1.5×, p = 8 ≤ 1.1× (more after T2 shrinks M2L) | nd-fmm-simd |
-| T5 | C6.3 several right-hand sides | m vectors on the same points | per vector 0.3–0.5 of one evaluation at p = 3, 0.6–0.8 at p = 8 (m = 8) | nd-fmm-exec, nd-fmm-kernels, nd-fmm-simd |
+| T2 | C6.6 batched host M2L | every tree at p ≥ 6, most at many ranks per node | f64 p = 8 at the node's ranks 1.13× (locust), 1.20–1.30× (M3 Max), 1.87–2.07× (Kathleen, with the AVX2 kernel); f32 p = 8 1.5–3.0×; one rank 1.3–2.3×; p = 3 1.07–1.21× | tetraleaf-exec, tetraleaf-simd |
+| T12 (new) | C6.9 M2P and P2L only where they pay | adaptive trees (Plummer, clusters, graded cubes), every p | Plummer f64 p = 8 1.36× (one rank) to about 1.6× (40 per node); the cube at 2 × 10⁶ 2.2×; uniform trees none | tetraleaf-plan, tetraleaf-exec |
+| T6 | C6.7 AVX-512 P2P | Kathleen, low p (P2P 63–66 % of the cube at f64 p = 3) | P2P up to 2× (f32) and 2.4× (f64) per core before the licence (simd-p2p §4.6): the cube at p = 3 up to 1.3–1.5×, p = 8 ≤ 1.1× (more after T2 shrinks M2L) | tetraleaf-simd |
+| T5 | C6.3 several right-hand sides | m vectors on the same points | per vector 0.3–0.5 of one evaluation at p = 3, 0.6–0.8 at p = 8 (m = 8) | tetraleaf-exec, tetraleaf-kernels, tetraleaf-simd |
 | ~~T3, T4~~ | C6.2 compressed M2L, **dropped at sign-off** | p ≥ 12, memory | flops 0.53× (p = 12), 0.31× (p = 18) of dense; tables 3.2× smaller at p = 18; none at p ≤ 8 | – |
-| T7 | C6.1 device work | CUDA and Metal | fused gather ≤ 6 % of a CUDA evaluation (f32 p = 8); `Accumulate::Rows` by chunk −30 % of the M2L at N = 10⁷, f64 p = 18 | nd-fmm-kernels, nd-fmm-exec |
-| T8 | C6.4 dipoles | a feature | – | nd-fmm-ref, nd-fmm-math, nd-fmm-exec, nd-fmm-simd |
-| T9 | C6.8 FMM3D | a comparison | – | tools/, nd-fmm-bench |
+| T7 | C6.1 device work | CUDA and Metal | fused gather ≤ 6 % of a CUDA evaluation (f32 p = 8); `Accumulate::Rows` by chunk −30 % of the M2L at N = 10⁷, f64 p = 18 | tetraleaf-kernels, tetraleaf-exec |
+| T8 | C6.4 dipoles | a feature | – | tetraleaf-ref, tetraleaf-math, tetraleaf-exec, tetraleaf-simd |
+| T9 | C6.8 FMM3D | a comparison | – | tools/, tetraleaf-bench |
 | T10 | C6.5 plane waves | model first | must show 1.25× over Batched and Rotation | spikes/ |
 
 **Order** (signed off): T2 first (the largest gain on uniform trees at p ≥ 6, and T5, T9
 and T10 build on it); then **T12** beside it (the largest on adaptive trees, in other
-crates: `nd-fmm-plan`, and `fmm.rs`/`cost.rs` of `nd-fmm-exec`); T6 after T2 (both change
-`nd-fmm-simd`'s `isa.rs` and `arch/mod.rs`; T6 adds the AVX-512 body of T2's kernel with its
+crates: `tetraleaf-plan`, and `fmm.rs`/`cost.rs` of `tetraleaf-exec`); T6 after T2 (both change
+`tetraleaf-simd`'s `isa.rs` and `arch/mod.rs`; T6 adds the AVX-512 body of T2's kernel with its
 P2P); T7 and T8 beside them (disjoint crates, as the README has it); T5 after T2;
 T9 after T2; T10 its model only, unless the model shows the margin; T11 last.
 
@@ -1350,12 +1350,12 @@ T9 after T2; T10 its model only, unless the model shows the margin; T11 last.
 beside the factual corrections of Appendix D):
 
 - **README**: C6.9's task is T12 (Components table, Tasks table, exit checklist); "Scope"
-  adds `nd-fmm-simd` (the M2L kernel) to T2 and `nd-fmm-plan` (the near rule) to T12;
+  adds `tetraleaf-simd` (the M2L kernel) to T2 and `tetraleaf-plan` (the near rule) to T12;
   "Design decisions", BLAS inside rayon: no host BLAS in Phase 6 (decision 2).
 - **T2**: the strategy `M2lStrategy::Batched`, the order-preserving kernel in
-  `nd-fmm-simd` (§2.11) instead of "BLAS through rlst", M2M and L2L unchanged (§2.7),
+  `tetraleaf-simd` (§2.11) instead of "BLAS through rlst", M2M and L2L unchanged (§2.7),
   Classes unchanged (§2.8); its tests bit for bit `Dense`; the FMA mode if signed off
-  (question 2c); the results file `fmm-validate/results/phase6-m2l.md`.
+  (question 2c); the results file `tetraleaf-validate/results/phase6-m2l.md`.
 - **T3, T4**: dropped with C6.2 (decision 3); the briefs stay as the record, marked so.
 - **T5**: the interface of §4.2 (`FmmBuilder::vectors`, `evaluate_many`), point-major
   charges, the CONVENTIONS §3.13 addition proposed in its PR.
@@ -1371,11 +1371,11 @@ beside the factual corrections of Appendix D):
 1. **Decision 1, this document**, with the changes it proposes to the requirements and
    scope: (a) C6.9 states its own accuracy criterion (exact pairs, errors against the
    direct sum at most today's; not within 1e-12 of today's output), like a compressed
-   operator; (b) a new task T12 for C6.9 and its `nd-fmm-plan` interface change (question
-   7); (c) `nd-fmm-simd` in T2's scope; (d) the brief changes of §9. *Recommended: yes.*
+   operator; (b) a new task T12 for C6.9 and its `tetraleaf-plan` interface change (question
+   7); (c) `tetraleaf-simd` in T2's scope; (d) the brief changes of §9. *Recommended: yes.*
 2. **Decision 2, BLAS on the host.**
    a. *Recommended: no BLAS; the hand-written order-preserving kernel* (§2.3, §2.6), in
-      `nd-fmm-simd` with run-time ISA dispatch (§2.11), bit for bit today's `Dense`.
+      `tetraleaf-simd` with run-time ISA dispatch (§2.11), bit for bit today's `Dense`.
       BLAS measured 1.07–3.8× faster than it at the node's ranks, but its bits change with
       the column count (so with the rank count), the CPU kernel and the library, its
       many-thread behaviour depends on the build (locust), and no provider is linked today.
@@ -1390,7 +1390,7 @@ beside the factual corrections of Appendix D):
       ε(p) ≈ 0.1 × the FMM's error at p, fitted by T3; budget: errors against the direct
       sum ≤ 1.1× dense's, against dense ≤ 0.1× dense's own error; opt-in until T11*
       (§3.2). Shared bases rejected (no compression, §3.1).
-   b. The SVD: *a hand-written one-sided Jacobi in `nd-fmm-tables` (recommended:
+   b. The SVD: *a hand-written one-sided Jacobi in `tetraleaf-tables` (recommended:
       deterministic, no native library)*, or rlst's LAPACK with a linked provider (a new
       dependency: needs your approval).
    c. Whether it may become a default: only above the p where T3 measures it faster than
@@ -1407,7 +1407,7 @@ beside the factual corrections of Appendix D):
 6. **Decision 6, plane waves.** *T10 models first; the spike only if the model shows at
    least 1.25× over the faster of Batched and Compressed on some configuration; otherwise
    C6.5 is dropped* (§8.2).
-7. **C6.9's rule and its plan change.** *An optional near rule in `nd-fmm-plan`'s list
+7. **C6.9's rule and its plan change.** *An optional near rule in `tetraleaf-plan`'s list
    construction, supplied by the operator from the cost model and the leaf point counts
    the cut already gathers: a W pair with a leaf source below N_W and an X pair with a
    leaf target below N_X become near pairs; opt-in until T11* (§8a). Approve the
@@ -1423,15 +1423,15 @@ beside the factual corrections of Appendix D):
 ### Outcome (signed off by the user on 2026-10-15)
 
 - **Question 1 (decision 1)**: approved: the document, C6.9's own accuracy criterion, the
-  new task T12, `nd-fmm-simd` in T2's scope and the brief changes of §9 (made in this PR).
+  new task T12, `tetraleaf-simd` in T2's scope and the brief changes of §9 (made in this PR).
   The recommendations of questions 4–6 and 8–10 are part of the approved document.
 - **Question 2 (decision 2)**: approved as recommended, including **c, the opt-in FMA mode
-  in T2**: no host BLAS; the order-preserving kernel in `nd-fmm-simd`, `M2lStrategy::Batched`,
+  in T2**: no host BLAS; the order-preserving kernel in `tetraleaf-simd`, `M2lStrategy::Batched`,
   bit for bit `Dense`; M2M, L2L and Classes unchanged.
 - **Question 3 (decision 3)**: **SVD-compressed M2L dropped for now** ("barely worth it"):
   C6.2 is not built in Phase 6, T3 and T4 are dropped, and T10 competes with T2 and
   Rotation only. §3 stays as the measurement and design for a later phase.
-- **Question 7**: approved: the near rule in `nd-fmm-plan`'s list construction (the
+- **Question 7**: approved: the near rule in `tetraleaf-plan`'s list construction (the
   `Plan::new` interface change) for C6.9, built in T12.
 
 ## Appendix A. Runs and commands
@@ -1477,7 +1477,7 @@ right after the sweep (load average 3.5 at its start; no other process above 20 
 cube at 2 × 10⁶ and 4 × 10⁶ points and the Gaussian clusters at 10⁶, f64 p = 8 Rotation
 and p = 3 Dense (the work counts per kind and the kind times).
 
-**The table SVDs (§3.1).** A throwaway program over `nd_fmm_tables::M2lTables::<f64>::build`
+**The table SVDs (§3.1).** A throwaway program over `tetraleaf_tables::M2lTables::<f64>::build`
 (p = 3, 6, 8, 12, 18; 17 s at p = 18) wrote the tables, numpy computed every table's singular
 values and the shared bases (`svd` of the 316 tables side by side and stacked).
 

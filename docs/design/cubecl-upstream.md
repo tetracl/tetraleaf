@@ -86,13 +86,13 @@ upstream-worthy; keep the source document as the place for the full numbers.
   attached in both cases, so a caller that catches the panic still sees the error at the
   download. Turning on a debug log thus changes the error behaviour of a program that
   handles launch errors; worth documenting, or a non-panicking mode for logging.
-- **Where it showed:** `nd-fmm-kernels`'s launch-error test (Phase 4S T11), which failed
+- **Where it showed:** `tetraleaf-kernels`'s launch-error test (Phase 4S T11), which failed
   in the CPU-runtime CI job (it sets `CUBECL_DEBUG_LOG` for the compile-time report) and
   passed locally without the log; PR #74.
 - **0.11.0: still present.** `cubecl-runtime` `src/client.rs:1207` (pre.4: 1147) keeps the
   `panic!` under the same comment; seen again in T1s, where the CPU-runtime run with
   `CUBECL_DEBUG_LOG` set printed "the launch panicked in CubeCL's profiler (its log is
-  on)" in `nd-fmm-kernels`' launch-error test, which passes as before.
+  on)" in `tetraleaf-kernels`' launch-error test, which passes as before.
 
 ### 4. CUDA: an f32 CMMA runs at TF32 precision while reporting F32 types
 
@@ -100,7 +100,7 @@ upstream-worthy; keep the source document as the place for the full numbers.
   NVIDIA GH200 480GB (Phase 5S T1s, 2026-10-12). Not seen with 0.11.0-pre.4, where the
   same probe failed (F28: "No tile size is available for the problem").
 - **Observation:** `launch_ref` with `multi_level::Strategy::SimpleCyclicCmma` on f32
-  operands (`MatmulElems::from_single_dtype(f32)`, the call of `nd-fmm-kernels`'
+  operands (`MatmulElems::from_single_dtype(f32)`, the call of `tetraleaf-kernels`'
   `library_gemm`) succeeds and leaves every stage and register type of the
   `MatmulElems` at F32, yet the result has TF32 accuracy: the largest error relative to
   Σ|x b| is 1.5–2.1e-4 over batched shapes with n = 81 and 100 (f32 rounding would give
@@ -112,24 +112,24 @@ upstream-worthy; keep the source document as the place for the full numbers.
   `cubek-matmul`'s `adjust_dtypes` (`src/multi_level/definition/blueprint.rs:89-113`)
   switches to TF32 only on its own copy of the element types, which the caller's
   `MatmulElems` does not see.
-- **Why it matters here:** `nd-fmm-kernels`' input-precision guard read the resolved types
+- **Why it matters here:** `tetraleaf-kernels`' input-precision guard read the resolved types
   only, so on 0.11.0 the f32 GEMM of M2M and L2L (n ≥ 81) under `GemmPolicy::Auto` went to
   the library: two kernel tests failed (the library's error 1.48e-3 against the bound
   6.57e-4), the CUDA f32 p = 8 FMM output changed in every value (up to 1.3e-4 of the
   largest |φ|), and the C3.2 gate on CUDA failed (device error 17.9 times the host's).
   T1s added a second part to the guard: the device must register a CMMA form whose
-  operands are T (`registers_cmma` in `fmm-kernels/src/translate.rs`); CUDA f32 then
+  operands are T (`registers_cmma` in `tetraleaf-kernels/src/translate.rs`); CUDA f32 then
   runs the hand-written kernel again, as on pre.4, and Metal keeps the library (its f32
   output bit for bit pre.4's).
 - **Possible questions:** report the precision actually used through `MatmulElems` (or
   refuse an f32 request on a device without an f32 CMMA form unless the caller opts into
   TF32); document that f32 inputs may be rounded to TF32 on CUDA.
-- **Full numbers:** fmm-validate/results/phase5s-t1s.md.
+- **Full numbers:** tetraleaf-validate/results/phase5s-t1s.md.
 
 ### 5. Metal: a matmul with few rows is refused as "Plane dimension unsupported: 32"
 
 - **Version:** CubeCL 0.11.0, `cubek-matmul` 0.3.0, wgpu-msl on the M3 Max (seen
-  2026-10-24 in an `nd-fmm-bench` run at f32 p = 8, revision aff3514); the same message
+  2026-10-24 in an `tetraleaf-bench` run at f32 p = 8, revision aff3514); the same message
   in the Phase 4 and Phase 4S reports under 0.11.0-pre.4.
 - **Observation:** `launch_ref` with `multi_level::Strategy::SimpleCyclicCmma` on f32
   operands fails with `MatmulAvailabilityError::PlaneDimUnsupported { plane_dim: 32 }`,
@@ -147,22 +147,22 @@ upstream-worthy; keep the source document as the place for the full numbers.
   (`is_tiny`, `src/multi_level/routines/selector/mod.rs:16-25`, enabled by the simple
   routine) does not catch these shapes: it needs two of m, n, k at most 2 tile edges
   (16), and here only m is.
-- **Where it showed:** `nd-fmm-kernels`' library probe (`probe_library` in
-  `fmm-kernels/src/translate.rs`), box-major, so the matmul's m is the columns per group
+- **Where it showed:** `tetraleaf-kernels`' library probe (`probe_library` in
+  `tetraleaf-kernels/src/translate.rs`), box-major, so the matmul's m is the columns per group
   and n = k the order (p + 1)². Rejected on Metal at f32 p = 8 (n = 81): M2M and L2L level
   calls with 1 or 8 columns per group (`[8, 1, 81]`, `[8, 8, 81]`), and Phase 4's dense
   M2L at level 2 with 32 (`[316, 32, 81]`, also at n = 169 and 289); accepted from 64
   columns per group. Each rejected view runs the hand-written GEMM, so the outputs are
   correct and the cost is small (those level calls have 8 to 3096 pairs).
 - **0.11.0: present** (source and run, above). Under pre.4 the same text appears in
-  fmm-validate/results/phase4-m3max.md ("The device dense M2L per level") and
-  fmm-bench/results/phase4s-t11-download-path.md; not re-checked against the pre.4
+  tetraleaf-validate/results/phase4-m3max.md ("The device dense M2L per level") and
+  tetraleaf-bench/results/phase4s-t11-download-path.md; not re-checked against the pre.4
   sources.
 - **Possible questions:** report a stage that does not fit as its own error (or as
   "no stage fits the problem") rather than `PlaneDimUnsupported`, whose message names a
   supported plane size; or select a smaller stage for small m or n instead of refusing.
 - **Full numbers:** the level calls and their rejections in
-  fmm-validate/results/phase4-m3max.md and fmm-bench/results/phase4s-t11-download-path.md;
+  tetraleaf-validate/results/phase4-m3max.md and tetraleaf-bench/results/phase4s-t11-download-path.md;
   the 2026-10-24 run's report was not kept in the repository.
 
 ### Earlier observations, recorded elsewhere (pointers; re-check before quoting)
@@ -170,7 +170,7 @@ upstream-worthy; keep the source document as the place for the full numbers.
 - `PLANE_POS` not lowered for NVPTX; the compile panic is dropped and the launch fails
   silently (a later `read_one` returns stale data as `Ok`). Fixed upstream by
   tracel-ai/cubecl#1714 (merged 2026-09-25, not yet in a release). device-path.md F29;
-  fmm-kernels/CLAUDE.md, "CUDA". **0.11.0: fixed** (source): `cubecl-llvm`
+  tetraleaf-kernels/CLAUDE.md, "CUDA". **0.11.0: fixed** (source): `cubecl-llvm`
   `src/shared/builtins.rs:136-141` sets `PlanePos` for every GPU target (pre.4
   `src/nvptx/builtins.rs:93-107` did not), with the runtime tests
   `test_kernel_topology_plane_pos` (`cubecl-core` `src/runtime_tests/topology.rs:103`)

@@ -1,7 +1,7 @@
 //! The sweeps of S4 (SPIKE_REPORT.md), writing Markdown to `results/`:
 //!
 //! ```text
-//! cargo run --release -p nd-fmm-spike-pw-quadrature --example sweep -- <FMM3D src/Helmholtz> [domains|rays|levels|all]
+//! cargo run --release -p tetraleaf-spike-pw-quadrature --example sweep -- <FMM3D src/Helmholtz> [domains|rays|levels|all]
 //! ```
 //!
 //! - `domains`: every FMM3D domain × precision at 9 points of its rectangle (corners,
@@ -13,11 +13,11 @@
 //!   precision serve each ε, with what error, and which fall outside the tables or are
 //!   pruned (proposal §5.5 with θ_D = 1).
 
-use nd_fmm_spike_pw_quadrature::C;
-use nd_fmm_spike_pw_quadrature::fmm3d::{self, DOMAINS, NX, NY, Tables};
-use nd_fmm_spike_pw_quadrature::generator;
-use nd_fmm_spike_pw_quadrature::quadrature::Quadrature;
-use nd_fmm_spike_pw_quadrature::region::{Grid, Pairs};
+use tetraleaf_spike_pw_quadrature::C;
+use tetraleaf_spike_pw_quadrature::fmm3d::{self, DOMAINS, NX, NY, Tables};
+use tetraleaf_spike_pw_quadrature::generator;
+use tetraleaf_spike_pw_quadrature::quadrature::Quadrature;
+use tetraleaf_spike_pw_quadrature::region::{Grid, Pairs};
 use rayon::prelude::*;
 use std::fmt::Write as _;
 use std::path::Path;

@@ -6,11 +6,11 @@
 //!   off at CH0.7 as S7's output for S6), and off its grid S7's closed form
 //!   max(⌈6 log₁₀(1/ε)⌉ − 2, ⌈x + (ln 1/ε)^{2/3} x^{1/3}⌉);
 //! - [`calibrated`]: CH3.3's `DegreeRule::CALIBRATED`, the full FMM's rule
-//!   (`fmm-exec/src/helmholtz/degree.rs`, copied).
+//!   (`tetraleaf-exec/src/helmholtz/degree.rs`, copied).
 //!
 //! Every rule is taken at x = Re(k) a, a the circumradius, as the FMM's rule is.
 
-use nd_fmm_spike_truncation::calibrate::formula_p;
+use tetraleaf_spike_truncation::calibrate::formula_p;
 
 /// The ε of the sweep, 10⁻³ … 10⁻¹⁰.
 pub const EPSILONS: [f64; 8] = [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10];

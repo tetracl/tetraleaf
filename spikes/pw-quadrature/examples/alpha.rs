@@ -3,13 +3,13 @@
 //! region it peaks, and the error with ρ ≤ 4 only.
 //!
 //! ```text
-//! cargo run --release -p nd-fmm-spike-pw-quadrature --example alpha -- <FMM3D src/Helmholtz>
+//! cargo run --release -p tetraleaf-spike-pw-quadrature --example alpha -- <FMM3D src/Helmholtz>
 //! ```
 
-use nd_fmm_spike_pw_quadrature::fmm3d::{self, Tables};
-use nd_fmm_spike_pw_quadrature::quadrature::Quadrature;
-use nd_fmm_spike_pw_quadrature::region::Grid;
-use nd_fmm_spike_pw_quadrature::{C, kernel};
+use tetraleaf_spike_pw_quadrature::fmm3d::{self, Tables};
+use tetraleaf_spike_pw_quadrature::quadrature::Quadrature;
+use tetraleaf_spike_pw_quadrature::region::Grid;
+use tetraleaf_spike_pw_quadrature::{C, kernel};
 
 fn main() {
     let dir = std::env::args()

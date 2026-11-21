@@ -5,7 +5,7 @@
 //! |φ_pw − φ_batched| at 2 random points per box over the largest |φ_batched|.
 //!
 //! ```text
-//! cargo run --release -p nd-fmm-spike-plane-wave --example level -- \
+//! cargo run --release -p tetraleaf-spike-plane-wave --example level -- \
 //!     --level 4 --p 8 --s 17 [--reps 5] [--variants batched,fused,rotation,merge,direct] [--check]
 //!     [--isa scalar|neon|avx2|avx512]
 //! ```
@@ -18,14 +18,14 @@
 
 use std::time::Instant;
 
-use nd_fmm_math::{Layout, harmonics};
-use nd_fmm_simd::{Isa, MulAdd};
-use nd_fmm_spike_plane_wave::baseline::{BatchedM2l, Batches, RotationM2l};
-use nd_fmm_spike_plane_wave::geometry::Level;
-use nd_fmm_spike_plane_wave::planewave::{
+use tetraleaf_math::{Layout, harmonics};
+use tetraleaf_simd::{Isa, MulAdd};
+use tetraleaf_spike_plane_wave::baseline::{BatchedM2l, Batches, RotationM2l};
+use tetraleaf_spike_plane_wave::geometry::Level;
+use tetraleaf_spike_plane_wave::planewave::{
     LevelPlan, Parts, PlaneWave, Scratch, Translation, level_m2l,
 };
-use nd_fmm_spike_plane_wave::quadrature::Quadrature;
+use tetraleaf_spike_plane_wave::quadrature::Quadrature;
 
 fn median(mut v: Vec<f64>) -> f64 {
     v.sort_by(f64::total_cmp);

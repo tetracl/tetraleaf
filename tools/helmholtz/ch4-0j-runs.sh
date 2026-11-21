@@ -3,11 +3,11 @@
 # tables within a level in parts (docs/helmholtz/tasks/CH4.0j.md, "Machine runs"), from the
 # repository root after
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/ch4-0j-runs.sh <out-dir> <stage…>
 #
 # Stages:
-#   parts   `nd-fmm-tables`' ignored `time_a_levels_parts` (release): a level's build by part
+#   parts   `tetraleaf-tables`' ignored `time_a_levels_parts` (release): a level's build by part
 #           on one thread, into <out-dir>/parts.md (on many threads: the matrix's build part
 #           "plane-wave tables", on the FMM's pool)
 #   matrix  CH3.6's matrix as CH4.0h's (tools/helmholtz/ch4-0h-runs.sh: the library's
@@ -95,7 +95,7 @@ mpi() {
 for stage in "$@"; do
     case $stage in
     parts)
-        launch parts cargo test -p nd-fmm-tables --release --test helmholtz -- --ignored \
+        launch parts cargo test -p tetraleaf-tables --release --test helmholtz -- --ignored \
             --nocapture --exact parts::time_a_levels_parts
         ;;
     matrix)

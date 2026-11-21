@@ -8,7 +8,7 @@
 //! degree, and their rounding lands in the result. This spike runs the chain in f64 and f32
 //! with transfer functions rounded from double-double, on the 34 offset classes, with
 //! multipoles from realistic sources, against S7's double-double RCR and the direct sum
-//! (`nd_fmm_spike_truncation`), and fits the bound of proposal §3.6.
+//! (`tetraleaf_spike_truncation`), and fits the bound of proposal §3.6.
 //!
 //! - [`grid`]: the signature grid (Gauss–Legendre in cos θ, uniform in φ) and its tables;
 //! - [`signature`]: S → F and F → R in any precision;

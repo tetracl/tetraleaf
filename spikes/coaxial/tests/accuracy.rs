@@ -1,15 +1,15 @@
 //! The acceptance tests of CH0.2 (docs/helmholtz/tasks/CH0.2.md, "Tests that prove it").
 //! The tests that build tables to p = 371 are `#[ignore]`d, for debug builds; run them
-//! all with `cargo test -p nd-fmm-spike-coaxial --release -- --include-ignored`.
+//! all with `cargo test -p tetraleaf-spike-coaxial --release -- --include-ignored`.
 
-use nd_fmm_spike_coaxial::coaxial::{Table, Variant, recurse};
-use nd_fmm_spike_coaxial::complex::C64;
-use nd_fmm_spike_coaxial::config::{degree, m2l_kt, m2m_kt, scale};
-use nd_fmm_spike_coaxial::metric::{compare, m2l_weights, m2m_weights};
-use nd_fmm_spike_coaxial::projection::{
+use tetraleaf_spike_coaxial::coaxial::{Table, Variant, recurse};
+use tetraleaf_spike_coaxial::complex::C64;
+use tetraleaf_spike_coaxial::config::{degree, m2l_kt, m2m_kt, scale};
+use tetraleaf_spike_coaxial::metric::{compare, m2l_weights, m2m_weights};
+use tetraleaf_spike_coaxial::projection::{
     Dense, default_nodes, regular_inner, regular_regular, singular_regular,
 };
-use nd_fmm_spike_coaxial::{Op, start_values};
+use tetraleaf_spike_coaxial::{Op, start_values};
 
 /// Bound on the FMM-weighted error (src/metric.rs) against the reference.
 const WEIGHTED_BOUND: f64 = 1e-11;
@@ -361,7 +361,7 @@ fn real_k_regular_coefficients_are_real() {
         let p = degree(ka, 1e-10);
         let g = scale(ka);
         let w = m2l_weights(C64::new(ka, 0.0), 1.0, g, p);
-        for d2 in nd_fmm_spike_coaxial::config::DISTANCES2 {
+        for d2 in tetraleaf_spike_coaxial::config::DISTANCES2 {
             let z = C64::new(m2l_kt(ka, d2), 0.0);
             let rr = Table::build(&start_values(Op::Regular, z, g, 2 * p), g, p, p);
             let sr = Table::build(&start_values(Op::Singular, z, g, 2 * p), g, p, p);
@@ -531,7 +531,7 @@ fn recursion_is_stable_at_the_proposed_threshold() {
         }
         let g = scale(k.abs());
         let w = m2l_weights(k, 1.0, g, p);
-        for d2 in nd_fmm_spike_coaxial::config::DISTANCES2 {
+        for d2 in tetraleaf_spike_coaxial::config::DISTANCES2 {
             let kt = m2l_kt(ka, d2);
             let rec = Table::build(
                 &start_values(Op::Singular, C64::new(re * kt, im * kt), g, 2 * p),

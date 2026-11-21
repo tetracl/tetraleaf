@@ -3,7 +3,7 @@
 # (docs/helmholtz/gates/H6.md, §2 and §8), from the repository root after the example was
 # built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_accuracy
+#     cargo build --release -p tetraleaf-validate --example helmholtz_accuracy
 #     tools/helmholtz/h6-gate-runs.sh <out-dir>
 #
 # D1's two large cases, W1 at kD = 500 and W3 at kD = 100, at ε = 1e-7 and 1e-8, which

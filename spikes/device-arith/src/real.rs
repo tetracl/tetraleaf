@@ -8,7 +8,7 @@
 //! a / b.
 
 use cubecl::prelude::{CubeElement, Float};
-use nd_fmm_simd::SimdScalar;
+use tetraleaf_simd::SimdScalar;
 
 /// A precision run on the device and on the host.
 pub trait Real: Float + CubeElement + SimdScalar + Copy + Send + Sync + std::fmt::Debug {

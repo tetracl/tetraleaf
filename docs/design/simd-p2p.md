@@ -12,7 +12,7 @@ Decided on 2026-10-02:
   The x86_64 paths are tested for correctness and accuracy on real hardware in CI only,
   and judged for speed by their inner-loop instruction counts against the model of
   Section 4.6.
-- CI gains a job for `nd-fmm-simd` on an arm64 and an x86_64 runner (Section 7).
+- CI gains a job for `tetraleaf-simd` on an arm64 and an x86_64 runner (Section 7).
 - T7 adopts its own leaf-size recommendation.
 - AVX-512 is deferred until hardware to test and time it is available. Phase 3S ships
   NEON, AVX2 + FMA and scalar. What an AVX-512 path would use is kept, marked
@@ -48,14 +48,14 @@ Measured, against Section 3:
   4.56 / 10.35 u (f32) and 4.37 / 9.48 u (f64), the same on both aarch64 CPUs; AVX2
   4.18 / 8.70 u and 3.96 / 7.95 u (EPYC 7763).
 - Requirement 2, sums: every T5 test and every T7 cell passes; on the T7 workloads the
-  kernel's error is within 0.76–1.46× of `nd_fmm_ref::p2p`'s.
+  kernel's error is within 0.76–1.46× of `tetraleaf_ref::p2p`'s.
 - Requirement 4: chunk and target-position invariance bit for bit on every ISA (T5);
   per-pair = gathered in every T7 cell; bit-identical FMM output for 1, 2, 4 and 8
   threads and between per-pair and batched (T6), and the same FMM errors on 1 and 12
   threads (T7).
 - Requirement 10, throughput (T7, one thread, geometric means over the gathered W1
   cells, Gpairs/s): NEON 4.03 (f32 φ), 2.61 (f32 φ, ∇φ), 2.14 (f64 φ), 1.22 (f64 φ,
-  ∇φ); 7.4×, 8.3×, 4.4× and 4.0× `nd_fmm_ref::p2p`; 1.35×, 1.22×, 1.73× and 1.37×
+  ∇φ); 7.4×, 8.3×, 4.4× and 4.0× `tetraleaf_ref::p2p`; 1.35×, 1.22×, 1.73× and 1.37×
   green-kernels. Every one of the 64 cells of W1 and W2 is at least 1.17× green-kernels.
   green-kernels' sums are more accurate in 57 of them (its W partial sums); the C3S.6
   accuracy condition is therefore restated (decided 2026-10-03; Section 9, question 8).
@@ -68,13 +68,13 @@ Measured, against Section 3:
 
 Recommendation in one paragraph: write the near-field kernel of the Laplace FMM by hand
 with `core::arch` intrinsics for aarch64 NEON and for x86_64 AVX2 + FMA,
-in a new MPI-free crate `nd-fmm-simd`, with a scalar fallback and runtime dispatch.
+in a new MPI-free crate `tetraleaf-simd`, with a scalar fallback and runtime dispatch.
 Vectorise over **targets**: each lane holds one target, each source is broadcast, and
-every target adds its sources in input order, exactly as `nd_fmm_ref::p2p` does. Compute
+every target adds its sources in input order, exactly as `tetraleaf_ref::p2p` does. Compute
 1/r from the hardware reciprocal-square-root estimate and refine it with Newton steps
 (or an equivalent polynomial correction) until the result is within 4 units of roundoff,
 and exclude coincident pairs by r² = 0. The kernel keeps the signature of
-`nd_fmm_ref::p2p`, so `LaplaceOperator` swaps it in without touching the leaf layout of
+`tetraleaf_ref::p2p`, so `LaplaceOperator` swaps it in without touching the leaf layout of
 CONVENTIONS §3.13. It is benchmarked against the Laplace kernels of
 [green-kernels](https://github.com/bempp/green-kernels) on the same machine (NEON),
 workloads and accuracy measures.
@@ -82,7 +82,7 @@ workloads and accuracy measures.
 ## 1. Purpose and scope
 
 Phase 3 delivered a complete, threaded host FMM whose near field is the reference
-operator `nd_fmm_ref::p2p`. T12 measured where the time goes on one thread
+operator `tetraleaf_ref::p2p`. T12 measured where the time goes on one thread
 (design §7, Phase 3, "Per-pair cost"):
 
 - At p = 3 the leaf stage, dominated by P2P, takes 72–81% of an evaluation, on every
@@ -103,13 +103,13 @@ never does without fast-math. Phase 3 also documented that the GPU tests of Phas
 
 **In scope**
 
-- `nd-fmm-simd`: P2P for the Laplace kernel 1/|x − y| (CONVENTIONS §3.1), potential and
+- `tetraleaf-simd`: P2P for the Laplace kernel 1/|x − y| (CONVENTIONS §3.1), potential and
   gradient, f32 and f64, on aarch64 NEON and x86_64 AVX2 + FMA, plus a scalar fallback
   and runtime dispatch.
 - The inverse square root those kernels need, with a stated accuracy.
-- Use of the kernel in `nd-fmm-exec`'s `LaplaceOperator`, selectable, with the
+- Use of the kernel in `tetraleaf-exec`'s `LaplaceOperator`, selectable, with the
   reference path kept as a choice.
-- Benchmarks against `nd_fmm_ref::p2p` and against green-kernels, and the effect on the
+- Benchmarks against `tetraleaf_ref::p2p` and against green-kernels, and the effect on the
   complete FMM, including a new look at the leaf size.
 
 **Out of scope**
@@ -141,7 +141,7 @@ never does without fast-math. Phase 3 also documented that the GPU tests of Phas
 - For a source leaf s ≠ t it first maps the sources into scratch,
   ŷ = ĉ(s|t) + r̂(s|t) u_s, in the target's leaf-scaled coordinates (CONVENTIONS §3.13,
   "Operators in scaled coordinates"). For s = t it passes the stored chunk unchanged.
-- It then calls `nd_fmm_ref::p2p::p2p(sources: &[[T; 3]], charges: &[T],
+- It then calls `tetraleaf_ref::p2p::p2p(sources: &[[T; 3]], charges: &[T],
   targets: &[[T; 3]], potential: &mut [T], gradient: Option<&mut [[T; 3]]>)`, which adds
   into the target output.
 - Layouts (§3.13): a source chunk holds the n coordinate triples, then the n charges.
@@ -195,15 +195,15 @@ dependency on a portable SIMD layer.
 Phase 3S is designed and accepted against these. T1 or T2 may propose changing one,
 with reasons, for sign-off.
 
-1. **Same operator.** The kernel computes what `nd_fmm_ref::p2p` computes,
+1. **Same operator.** The kernel computes what `tetraleaf_ref::p2p` computes,
    φᵢ += Σⱼ qⱼ / |xᵢ − yⱼ| and ∇φᵢ += −Σⱼ qⱼ (xᵢ − yⱼ) / |xᵢ − yⱼ|³, with no 1/(4π),
    adding into its outputs. It has the same signature.
 2. **Accuracy.** Per pair, the potential term is within 8 u_T of the reference term,
    relative, and each gradient component within 16 u_T relative to the term magnitude
    |q| / r². Here u_T is the unit roundoff (2⁻²⁴ for f32, 2⁻⁵³ for f64). Sums agree
    with `direct_sum` to 1e-14 (f64) and 1e-6 (f32) relative to the sum of term
-   magnitudes, for up to 4,096 sources (the tolerance of `nd_fmm_ref::p2p` itself in
-   Phase 1 T4). *Decided on 2026-10-03 (T5):* where `nd_fmm_ref::p2p` itself exceeds
+   magnitudes, for up to 4,096 sources (the tolerance of `tetraleaf_ref::p2p` itself in
+   Phase 1 T4). *Decided on 2026-10-03 (T5):* where `tetraleaf_ref::p2p` itself exceeds
    that tolerance on the same inputs, the sum passes within twice the reference's
    error. In-order summation (requirement 4) puts f32 sums with gradients above 1e-6 on
    some FMM-shaped sets of 44 or more points per leaf (1,188 or more sources), for the
@@ -227,13 +227,13 @@ with reasons, for sign-off.
    time. Every path is selectable explicitly, for tests and benchmarks.
 8. **Tested on every ISA** that a machine offers, against the reference and the
    oracle. The report of each run says which ISAs ran.
-9. **Unsafe confined** to the architecture modules of `nd-fmm-simd` (Section 5.4).
-   `nd-fmm-exec` stays free of `unsafe`.
+9. **Unsafe confined** to the architecture modules of `tetraleaf-simd` (Section 5.4).
+   `tetraleaf-exec` stays free of `unsafe`.
 10. **Measured, not asserted.** No test asserts a throughput. Examples and the spike
-    report it, against `nd_fmm_ref::p2p` and green-kernels, together with accuracy.
+    report it, against `tetraleaf_ref::p2p` and green-kernels, together with accuracy.
     *Decided on 2026-10-03 (T7):* "at equal or better accuracy" than green-kernels
     (C3S.6) means within requirement 2, with each pair term within 8 / 16 u_T of
-    `nd_fmm_ref::p2p`. In-order summation (requirement 4) does not match green-kernels'
+    `tetraleaf_ref::p2p`. In-order summation (requirement 4) does not match green-kernels'
     partial sums, and is kept for the bit-identities it carries.
 
 ## 4. Kernel design
@@ -413,7 +413,7 @@ instructions, which may flush it to zero (x86 `rsqrtps` does).
 - **No layout change.** The kernel reads sources as `&[[T; 3]]` plus `&[T]` charges,
   as stored, and broadcasts them. A structure-of-arrays chunk layout (all x, then all
   y, …) would suit only the sources-in-lanes order, and would cost P2M, P2L and the
-  exchange a transposition, since `nd_fmm_ref::leaf` takes `[[T; 3]]`. If T2 chooses
+  exchange a transposition, since `tetraleaf_ref::leaf` takes `[[T; 3]]`. If T2 chooses
   sources in lanes, the kernel transposes into its own scratch: O(n) against
   O(n_s n_t).
 - **Blocks.** Targets are loaded per block and converted to per-lane form, and so are
@@ -473,7 +473,7 @@ an f64 evaluation went from 202 to 101 ms (T7), close to the 105 ms estimated ab
 
 AVX-512F was left out of Phase 3S (decided on 2026-10-02) for want of hardware; Kathleen's
 Cascade Lake nodes (Phase 5N) made it possible, and Phase 6 T6 built it as planned here
-(report `fmm-validate/results/phase6-avx512.md`; docs/design/optimisation.md §5).
+(report `tetraleaf-validate/results/phase6-avx512.md`; docs/design/optimisation.md §5).
 
 **As built** (T6): one module `arch::avx512` (`avx512f` only, stable since Rust 1.89) with
 the vector layer and its inverse square root, `Isa::Avx512` (the enum is
@@ -498,7 +498,7 @@ layer's or the contract's (the batched M2L bit for bit; P2P within §3's contrac
 - inside the FMM on a fully loaded node (T6, 40 ranks): the P2P kind 1.40–1.72× (f32) and
   2.03–2.33× (f64); the evaluation 1.49–1.63× on the cube at f64 p = 3, 1.00–1.07× at p = 8;
   no other stage slower beyond run-to-run variation;
-- with Phase 6's strategies (T11, `fmm-validate/results/phase6.md` §3; 240 cells, the cube
+- with Phase 6's strategies (T11, `tetraleaf-validate/results/phase6.md` §3; 240 cells, the cube
   and the Plummer sphere at N = 10⁶ and 10⁷, 1 × 40, 4 × 10 and 40 × 1): the evaluation
   1.0–1.79× faster under the batched M2L (fused) and 0.98–1.75× under the plane-wave M2L,
   never more than 2 % slower.
@@ -535,7 +535,7 @@ in range down to r² = 2^(−80 + 2e/3) for |dₖ| ≤ 2^e (CONVENTIONS §3.13, 
 terms in f32"); the form (3 s ρ⁵) wₖ would overflow there. The source's moment is
 broadcast by the same `Simd::broadcast` as its coordinates. Blocks: K = 2 on NEON and
 AVX-512 and 1 on AVX2 (`DIPOLE_K`), from the register count (7 K vectors per block plus six
-broadcasts), not measured. The scalar ISA runs `nd_fmm_ref::p2p::p2p_dipoles`'s loop and
+broadcasts), not measured. The scalar ISA runs `tetraleaf_ref::p2p::p2p_dipoles`'s loop and
 equals it bit for bit wherever r² ≠ 0.
 
 **Contract** (per term, against the reference's term in the same precision; first
@@ -563,7 +563,7 @@ measured at most 10.5 u (φ) and 32.6 u (∇φ) in f32 (r² from 2⁻⁸⁰) and
 f64, on the M3 Max (Phase 6 T8). The sums against `direct_sum_dipoles` are tested at 1e-5
 (f32) and 1e-13 (f64) relative to Σ |d| / r² and Σ |d| / r³.
 
-Charges and dipoles at the same points (`SourceType::ChargesAndDipoles` of `nd-fmm-exec`)
+Charges and dipoles at the same points (`SourceType::ChargesAndDipoles` of `tetraleaf-exec`)
 run the two kernels one after the other on the same source leaf, charges first; a fused
 kernel would share w, r² and ρ (about 8 + 3k operations per pair) and change the order of
 the additions, and is left for a later task.
@@ -630,7 +630,7 @@ overwrites its accumulator); AVX2 23 and 33; AVX-512 23 and 29. None contains a 
 
 `P2pKernel::evaluate_yukawa` adds q e^{−κr}/r and its gradient −q (κr + 1) e^{−κr} d / r³
 (CONVENTIONS §3.15, k = iκ; docs/design/helmholtz-fmm-proposal.md §5.7), with the semantics
-of `nd_fmm_ref::helmholtz::p2p::p2p_yukawa` as `evaluate` has `p2p`'s. κ ≥ 0 is finite, in
+of `tetraleaf_ref::helmholtz::p2p::p2p_yukawa` as `evaluate` has `p2p`'s. κ ≥ 0 is finite, in
 the coordinates' units (in the FMM the leaf-scaled ones of CONVENTIONS §3.13).
 
 **The shared skeleton** (proposal §6.2). The loop of §4.1 and §4.5 (blocks of K, K/2, …, 1
@@ -641,7 +641,7 @@ time. Laplace's pair kernel is zero-sized and holds the source loop of §4.1 ope
 operation; `p2p_body` is the skeleton with it. Laplace's generated code is unchanged: on
 `main` and on the branch every function of the crate is the same instruction for
 instruction, aarch64 and x86_64, at the default settings and with one codegen unit
-(report `fmm-validate/results/helmholtz-ch2-4b.md` §2). The several-vector and dipole
+(report `tetraleaf-validate/results/helmholtz-ch2-4b.md` §2). The several-vector and dipole
 bodies keep their own loops (rule of two).
 
 **Arithmetic per pair and lane.** E is the exponential's count of §4.9, 14 (f32) or 20
@@ -791,7 +791,7 @@ boundaries between n and n + 1 by up to |θ| u / π, so |t| may pass π/2 by 4 �
 - **The sign** is exact.
 
 Summed with these weights over a grid of 4,000 points of t in [0, π/2 + 10⁻⁴]
-(`fmm-simd/tools/sincos_bound.py`), the worst cases are
+(`tetraleaf-simd/tools/sincos_bound.py`), the worst cases are
 **2.7 u (sine) and 3.4 u (cosine)** in both precisions, under the contract of 4 u_T.
 
 **Measured** on the M6 (NEON, scalar) and on Kathleen (AVX2, AVX-512, scalar; job 617308),
@@ -814,7 +814,7 @@ and 58; AVX-512 37 and 45. None contains a call.
 `P2pKernel::evaluate_helmholtz` adds q e^{ikr}/r and its gradient q (ikr − 1) e^{ikr} d / r³
 (CONVENTIONS §3.15; docs/design/helmholtz-fmm-proposal.md §5.7) for a wavenumber k with
 Re k ≥ 0 and Im k ≥ 0, real or complex charges (`HelmholtzCharges`), with the semantics of
-`nd_fmm_ref::helmholtz::p2p::p2p` as `evaluate` has `p2p`'s. The outputs are split planes:
+`tetraleaf_ref::helmholtz::p2p::p2p` as `evaluate` has `p2p`'s. The outputs are split planes:
 the real part of every target, then the imaginary part (2n values; the gradient likewise),
 the layout of `evaluate_many`'s two output vectors and of one complex vector in CONVENTIONS
 §3.15's leaf chunks, so the operator (CH3.4c) passes its chunks as they are.
@@ -825,7 +825,7 @@ planes per source (1 real, 2 complex: Re q, Im q point-major) and OP output plan
 OP accumulators per target vector; the blocks, tails, loads, broadcast, d, r² and stores are
 unchanged. Laplace and Yukawa are the case QP = OP = 1. For that case the skeleton keeps the
 expressions of CH2.4b's one-plane skeleton where LLVM did not fold the general ones to the
-same code (the padded tail and the block ranges; report `fmm-validate/results/helmholtz-ch3-4b.md`
+same code (the padded tail and the block ranges; report `tetraleaf-validate/results/helmholtz-ch3-4b.md`
 §2): NEON and AVX2 then give `main`'s code for every Laplace function, instruction for
 instruction, at the default settings (and for every other existing function but NEON's
 Yukawa f32 gradient entry point on macOS, whose source loop exchanges two registers); AVX-512's two Laplace gradient entry points keep their
@@ -925,18 +925,18 @@ NEON 59/59, 88/81, 108/81, 109/100; AVX2 76/70, 106/106, 102/94, 129/133; AVX-51
 73/70, 72/65, 84/81. Complex charges change them by −5 to +5 instructions, damping adds 18–60 (report §5.3 lists
 every entry point). None contains a call.
 
-## 5. The crate `nd-fmm-simd`
+## 5. The crate `tetraleaf-simd`
 
-Directory `fmm-simd/`, package `nd-fmm-simd`, library `nd_fmm_simd`, a default member.
-It depends only on `nd-fmm-math` (for `RealScalar`) and `thiserror`; `nd-fmm-ref` and
-`proptest` are dev-dependencies. It is MPI-free, so `cargo test -p nd-fmm-simd` needs no
+Directory `tetraleaf-simd/`, package `tetraleaf-simd`, library `tetraleaf_simd`, a default member.
+It depends only on `tetraleaf-math` (for `RealScalar`) and `thiserror`; `tetraleaf-ref` and
+`proptest` are dev-dependencies. It is MPI-free, so `cargo test -p tetraleaf-simd` needs no
 MPI runtime.
 
 ### 5.1 Public surface (planned; built as planned in T3–T5)
 
 *As built:* the surface below, plus `Isa::all()` (every variant, for loops over ISAs),
 `Display` for `Isa` (`scalar`, `neon`, `avx2`), and `IsaUnavailable { isa }` as a
-`thiserror` error. `nd-fmm-exec` re-exports `Isa`, `IsaUnavailable` and `SimdScalar`
+`thiserror` error. `tetraleaf-exec` re-exports `Isa`, `IsaUnavailable` and `SimdScalar`
 from its `operator` module.
 
 
@@ -963,7 +963,7 @@ impl<T: SimdScalar> P2pKernel<T> {
     pub fn new(isa: Isa) -> Result<Self, IsaUnavailable>;
     pub fn detect() -> Self;
     pub fn isa(&self) -> Isa;
-    /// The signature and semantics of `nd_fmm_ref::p2p::p2p` (requirements 1–4).
+    /// The signature and semantics of `tetraleaf_ref::p2p::p2p` (requirements 1–4).
     pub fn evaluate(&self, sources: &[[T; 3]], charges: &[T], targets: &[[T; 3]],
                     potential: &mut [T], gradient: Option<&mut [[T; 3]]>);
 }
@@ -1017,10 +1017,10 @@ the semantics may not.
 
 ### 5.4 Unsafe policy
 
-The workspace rule (workspace-structure §5.1) allows `unsafe` only in `nd-fmm-kernels`.
+The workspace rule (workspace-structure §5.1) allows `unsafe` only in `tetraleaf-kernels`.
 Phase 3S proposes a second, narrow exception:
 
-- `unsafe` appears only in `nd-fmm-simd`'s `arch` modules and in the dispatch that calls
+- `unsafe` appears only in `tetraleaf-simd`'s `arch` modules and in the dispatch that calls
   `#[target_feature]` entry points.
 - The remaining uses are calling an entry point after `P2pKernel::new` has checked the
   ISA, and unaligned vector loads and stores from slices whose bounds the code has
@@ -1028,7 +1028,7 @@ Phase 3S proposes a second, narrow exception:
   assertions.
 - Every `unsafe` block carries a `// SAFETY:` comment. The crate sets
   `#![deny(unsafe_op_in_unsafe_fn)]` and `#![deny(clippy::undocumented_unsafe_blocks)]`.
-- Every public function is safe. `nd-fmm-exec` and every other crate stay free of
+- Every public function is safe. `tetraleaf-exec` and every other crate stay free of
   `unsafe`.
 - The spike (T2) is exempt as throwaway code, but still comments each block.
 
@@ -1050,22 +1050,22 @@ Phase 3S proposes a second, narrow exception:
     Neoverse-N2 (CI arm64; NEON results identical to the M3 Max's), AMD EPYC 7763 (CI
     x86_64; AVX2). No Intel CPU ran the AVX2 path.
 
-## 6. Integration into `nd-fmm-exec`
+## 6. Integration into `tetraleaf-exec`
 
 - `enum P2pChoice { Auto, Reference, Isa(Isa) }` (name final in T6):
   - `Auto`, the default: `P2pKernel::detect()`;
-  - `Reference`: `nd_fmm_ref::p2p::p2p`, the Phase 3 path, kept as the trusted slower
+  - `Reference`: `tetraleaf_ref::p2p::p2p`, the Phase 3 path, kept as the trusted slower
     path and for comparisons;
   - `Isa(isa)`: that ISA, or a `SettingsError` on every rank if the CPU lacks it. The
     check is local, and on a cluster with mixed CPUs ranks can disagree, so it goes
     through the same agreement (one all-reduce) that `build` already applies to every
     input error. No new collective is added.
 - `FmmBuilder::p2p_kernel(choice)` and `LaplaceOperator::with_p2p(choice)` set it.
-  `Fmm::p2p_kernel()` reports the resolved choice, and the `nd-fmm-validate` examples
+  `Fmm::p2p_kernel()` reports the resolved choice, and the `tetraleaf-validate` examples
   print it next to the `ThreadingReport`.
 - `LaplaceOperator<T>` gains the bound `T: SimdScalar`. f32 and f64 are the only
   `RealScalar` types, so no caller changes.
-- `Kernels::p2p` calls `P2pKernel::evaluate` where it called `nd_fmm_ref::p2p::p2p`.
+- `Kernels::p2p` calls `P2pKernel::evaluate` where it called `tetraleaf_ref::p2p::p2p`.
   The mapping of s ≠ t sources into scratch stays as it is. Calls stay per source leaf.
   Gathering a target's whole near field into one call is measured in T6 (Section 8.2,
   per-pair against gathered form), and adopted only if it gains more than 5%. Thanks to
@@ -1080,33 +1080,33 @@ Every fast path is tested against a slower trusted one:
 
 | Layer | Check | Oracle | Where |
 | --- | --- | --- | --- |
-| Inverse square root | contract of Section 4.3 (f32 exhaustive on [1, 4), f64 sampled, edges, r² = 0) | `1/√x` in f64 (for f32 inputs), or in double-double arithmetic (for f64 inputs) | `nd-fmm-simd`, per ISA |
-| Kernel terms | one source and one target, potential and gradient, requirement 2 | `nd_fmm_ref::p2p` | `nd-fmm-simd`, per ISA |
-| Kernel sums | random sets, n_s ≤ 4,096, every n_t mod W, both precisions | `direct_sum` (f64, compensated) | `nd-fmm-simd`, per ISA |
-| Semantics | coincident pairs (targets = sources, duplicated sources), empty inputs, accumulation onto nonzero output, chunk and target-position invariance bit for bit, determinism | the rule itself; the kernel's own results | `nd-fmm-simd`, per ISA |
-| Operator | P2P of `LaplaceOperator` on levels 2, 9 and 16 to 1e-13 (terms), as in T8 | `nd_fmm_ref::p2p` at absolute frames | `nd-fmm-exec`, per ISA |
-| FMM | the C3.2 and C3.3 scenarios: errors within 1% (f64) and 2% (f32) of the reference-P2P run; outputs within 1e-13 (f64) and 1e-6 (f32) relative L2 of it; gates still met; bit-identity for 1, 2, 4 and 8 threads; per-pair = batched | the Phase 3 path (`P2pChoice::Reference`), `direct_sum` | `nd-fmm-exec` |
+| Inverse square root | contract of Section 4.3 (f32 exhaustive on [1, 4), f64 sampled, edges, r² = 0) | `1/√x` in f64 (for f32 inputs), or in double-double arithmetic (for f64 inputs) | `tetraleaf-simd`, per ISA |
+| Kernel terms | one source and one target, potential and gradient, requirement 2 | `tetraleaf_ref::p2p` | `tetraleaf-simd`, per ISA |
+| Kernel sums | random sets, n_s ≤ 4,096, every n_t mod W, both precisions | `direct_sum` (f64, compensated) | `tetraleaf-simd`, per ISA |
+| Semantics | coincident pairs (targets = sources, duplicated sources), empty inputs, accumulation onto nonzero output, chunk and target-position invariance bit for bit, determinism | the rule itself; the kernel's own results | `tetraleaf-simd`, per ISA |
+| Operator | P2P of `LaplaceOperator` on levels 2, 9 and 16 to 1e-13 (terms), as in T8 | `tetraleaf_ref::p2p` at absolute frames | `tetraleaf-exec`, per ISA |
+| FMM | the C3.2 and C3.3 scenarios: errors within 1% (f64) and 2% (f32) of the reference-P2P run; outputs within 1e-13 (f64) and 1e-6 (f32) relative L2 of it; gates still met; bit-identity for 1, 2, 4 and 8 threads; per-pair = batched | the Phase 3 path (`P2pChoice::Reference`), `direct_sum` | `tetraleaf-exec` |
 
 **Which ISAs run where.**
 
-- *CI, the `nd-fmm-simd` job* (approved 2026-10-02; added in T3). It is a matrix over an
+- *CI, the `tetraleaf-simd` job* (approved 2026-10-02; added in T3). It is a matrix over an
   x86_64 runner (`ubuntu-latest`) and an arm64 runner (`macos-latest`, or
   `ubuntu-24.04-arm` if the repository qualifies). It needs no MPI, and runs
-  `cargo clippy -p nd-fmm-simd --all-targets -- -D warnings`, `cargo test -p
-  nd-fmm-simd` and `cargo test -p nd-fmm-simd --release -- --ignored`, the exhaustive and
+  `cargo clippy -p tetraleaf-simd --all-targets -- -D warnings`, `cargo test -p
+  tetraleaf-simd` and `cargo test -p tetraleaf-simd --release -- --ignored`, the exhaustive and
   sampled accuracy tests. The x86_64 leg is the only x86_64 hardware of the phase: it
   covers scalar and AVX2. At the time of writing the runners are typically AMD EPYC
   7763 (Zen 3). The job prints the CPU
   (`lscpu`, `sysctl -n machdep.cpu.brand_string`) and the tests print the ISAs they ran.
-- *The existing CI job* (`ubuntu-latest`) also runs the `nd-fmm-simd` and `nd-fmm-exec`
+- *The existing CI job* (`ubuntu-latest`) also runs the `tetraleaf-simd` and `tetraleaf-exec`
   debug tests as default members, so the AVX2 path is exercised inside the FMM there.
 - *Development machine* (Apple M3 Max, aarch64): scalar and NEON, run by hand in every
   task, and every timing. On macOS 15 and later, Rosetta 2 also runs x86_64 binaries
-  with AVX2 and FMA, so `cargo test -p nd-fmm-simd --target
+  with AVX2 and FMA, so `cargo test -p tetraleaf-simd --target
   x86_64-apple-darwin` gives a quick check before CI. Rosetta emulates the estimate
   instructions, and their bits need not match hardware, so accuracy contracts count
   only from CI. T3 confirms that this works on the machine.
-- Every architecture module also passes `cargo clippy -p nd-fmm-simd --all-targets
+- Every architecture module also passes `cargo clippy -p tetraleaf-simd --all-targets
   --target <the other architecture> -- -D warnings`, so that both compile on either
   machine.
 
@@ -1116,7 +1116,7 @@ not run is reported as not run, never as passing.
 ## 8. Benchmarking
 
 *Done in T7* (raw output in spikes/p2p-simd/results-m3max-final.md; summary in
-laplace-fmm-plan.md §7, Phase 3S): `nd-fmm-validate`'s examples `p2p_kernels` (W1 and W2,
+laplace-fmm-plan.md §7, Phase 3S): `tetraleaf-validate`'s examples `p2p_kernels` (W1 and W2,
 every ISA against the reference, Section 8.3's metrics) and `p2p_fmm` (W3: every P2P
 kernel in the FMM, and the leaf-size study), and the spike example `compare` (against
 green-kernels, on the inputs of `p2p_kernels`). The workloads are the T2 spike's, drawn
@@ -1134,7 +1134,7 @@ with the same seeds. The FMM examples run at 1 thread and at the 12 performance 
 - One thread per kernel. FMM runs at 1 thread and at the number of performance cores,
   with every BLAS variable set to 1 (design §6.8).
 - Every figure is the median of 15 batches of at least 20 ms
-  (`nd_fmm_validate::bench::median_time_per_call`).
+  (`tetraleaf_validate::bench::median_time_per_call`).
 - Inputs are seeded. Each report gives the machine (`bench::cpu_model`, `cores`,
   `target`), the toolchain, the ISA of every row and, for green-kernels, the commit and
   the pulp backend it dispatched to.
@@ -1192,7 +1192,7 @@ functions with attribution.
 
 | Risk | Mitigation |
 | --- | --- |
-| An ISA path is never run | report the ISAs of every run; the `nd-fmm-simd` CI job on x86_64 (AVX2) and arm64 (NEON) with the release accuracy tests |
+| An ISA path is never run | report the ISAs of every run; the `tetraleaf-simd` CI job on x86_64 (AVX2) and arm64 (NEON) with the release accuracy tests |
 | The x86_64 kernels are correct but slow, and nothing measures it | inner-loop instruction counts against Section 4.2 (T5); the inlining check; the same generic body as the timed NEON path; x86_64 throughput reported as not measured |
 | Undefined behaviour in intrinsic code (out-of-bounds load, missing feature) | the unsafe policy of Section 5.4; bounds by construction; `P2pKernel::new` checks the ISA; tests at every n_t mod W and with empty slices on each ISA |
 | An estimate is less accurate on some CPU than its documented bound, or differs between vendors | the contract is measured on every machine used, exhaustively in f32; Section 5.5 |
@@ -1211,7 +1211,7 @@ Questions for sign-off (Phase 3S README, "Decisions to sign off"):
    precision, and whether to ship a relaxed f64 level (T2). *Signed off after T2:*
    targets in lanes; `sqrt` + division on NEON, the polynomial corrections on AVX2;
    K = 2 / 4 on NEON and 1 on AVX2; no relaxed level (Outcome of Phase 3S).
-4. A CI job on an arm64 runner for `nd-fmm-simd` (T3). *Decided 2026-10-02: yes,
+4. A CI job on an arm64 runner for `tetraleaf-simd` (T3). *Decided 2026-10-02: yes,
    together with an x86_64 leg.*
 5. Which x86_64 machines run the x86_64 benchmarks. *Decided 2026-10-02: none; x86_64
    is correctness-only, in CI.*

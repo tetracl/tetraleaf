@@ -1,7 +1,7 @@
 //! Prototype times of the diagonal M2L and of RCR (S6 output 7), f64, one thread.
 //!
 //! ```text
-//! cargo run -p nd-fmm-spike-diagonal --release --example times -- [--p 8,16,...] [--reps n]
+//! cargo run -p tetraleaf-spike-diagonal --release --example times -- [--p 8,16,...] [--reps n]
 //! ```
 //!
 //! Per degree p (k a set so that p is §3.5's formula degree at 10⁻⁶, the class the
@@ -16,17 +16,17 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use nd_fmm_spike_diagonal::grid::Grid;
-use nd_fmm_spike_diagonal::rules::formula;
-use nd_fmm_spike_diagonal::run::narrow;
-use nd_fmm_spike_diagonal::signature::{f2r_ring, finish, s2f_ring};
-use nd_fmm_spike_diagonal::transfer::{Interp, Transfer, angle};
-use nd_fmm_spike_truncation::chain::{Kind, Setup, Work, rcr};
-use nd_fmm_spike_truncation::complex::Complex;
-use nd_fmm_spike_truncation::geometry::Rng;
-use nd_fmm_spike_truncation::harmonics::{Harmonics, len};
-use nd_fmm_spike_truncation::real::Dd;
-use nd_fmm_spike_truncation::rotation::{Direction, Rotation};
+use tetraleaf_spike_diagonal::grid::Grid;
+use tetraleaf_spike_diagonal::rules::formula;
+use tetraleaf_spike_diagonal::run::narrow;
+use tetraleaf_spike_diagonal::signature::{f2r_ring, finish, s2f_ring};
+use tetraleaf_spike_diagonal::transfer::{Interp, Transfer, angle};
+use tetraleaf_spike_truncation::chain::{Kind, Setup, Work, rcr};
+use tetraleaf_spike_truncation::complex::Complex;
+use tetraleaf_spike_truncation::geometry::Rng;
+use tetraleaf_spike_truncation::harmonics::{Harmonics, len};
+use tetraleaf_spike_truncation::real::Dd;
+use tetraleaf_spike_truncation::rotation::{Direction, Rotation};
 
 /// The median of `reps` timings of f, seconds.
 fn median(reps: usize, mut f: impl FnMut()) -> f64 {

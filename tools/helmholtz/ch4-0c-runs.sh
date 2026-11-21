@@ -3,7 +3,7 @@
 # (docs/helmholtz/tasks/CH4.0c.md, "Machine runs"), from the repository root after the
 # example was built in release:
 #
-#     cargo build --release -p nd-fmm-validate --example helmholtz_boxes
+#     cargo build --release -p tetraleaf-validate --example helmholtz_boxes
 #     tools/helmholtz/ch4-0c-runs.sh <stage> <out-dir>
 #
 # Stages, each launch one `helmholtz_boxes` on one rank × THREADS threads (default: the

@@ -4,7 +4,7 @@ The brief of the second review pass of `/milestone-gate` (its step 3), given to 
 as written, after the header the gate fills in (the milestone, `main`'s commit, the earlier
 review files).
 
-You review the Rust workspace in the working directory (nd-project/fmm: fast multipole
+You review the Rust workspace in the working directory (tetracl/tetraleaf: fast multipole
 methods; the root CLAUDE.md is the map). Do the work yourself; start no subagents.
 
 ## Limits
@@ -32,9 +32,9 @@ do not infer structure from documents.
 
 1. **The crate split.** The dependency graph from the manifests against
    `workspace-structure.md`; the layering; crates too thin or doing several jobs (lines per
-   crate and for the largest files). The rules of the root CLAUDE.md: nd-fmm-math, -ref and
+   crate and for the largest files). The rules of the root CLAUDE.md: tetraleaf-math, -ref and
    -tables free of MPI and the octree; `unsafe` only where it says; CubeCL only in
-   nd-fmm-kernels and `spikes/`.
+   tetraleaf-kernels and `spikes/`.
 2. **The kernel families.** How each kernel (Laplace, Helmholtz, Yukawa) sits on the shared
    code: a clean abstraction, or parallel near-copies? Name duplication with both paths and
    rough line counts, what a shared form would look like, and whether it is worth it.
