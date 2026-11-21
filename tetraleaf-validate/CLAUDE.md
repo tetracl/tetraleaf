@@ -671,6 +671,19 @@ on W1 at kD = 30 (one plan, counts only on raised levels, a crossover risen, the
 `ch4-3b2d-tables.py` makes the report's tables (`runs`, `levels`, `summary`). Its report is
 `results/helmholtz-ch4-3b2d.md`.
 
+Helmholtz CH4.3c2 (the high-frequency degrees refitted; docs/helmholtz/tasks/CH4.3c2.md) added
+to `helmholtz_calibration` CH3.3's level scans as data (`CH3_3_LEVELS`, `ch3_3_level_points`),
+`BranchForm` (`Linear`, `LinearOffset`, `Full`: the excess over x per x^{1/3} linear in L, with an
+offset d, and with C (ln 1/ε)^{2/3} beside), `cap_grid` and `fit_branch` (the least total excess
+that covers the points, optionally at most a cap's rule on `cap_grid`); `Case::degree_rule`
+(`HelmholtzFmmBuilder::degree_rule`, `None` in `Case::new`, the library's); to `helmholtz_calibrate`
+the mode `refit <files…>` (CH3.3's points and the files' `point: level` lines with x > 4, every
+form and the capped ones, a table of constants and one of the points); and `--rule
+calibrated|ch3-3` to `helmholtz_accuracy` (beside `s7`) and `helmholtz_boxes` (the degrees "CH3.3
+ε = …"; there also `--rule γ,α,β,C,a,b,d[,cap]`, a rule by its constants). `tools/helmholtz/ch4-3c2-runs.sh`
+runs the task's scans and verifications, `ch4-3c2-pairs.py` the pair evidence from spike S7's
+curves, `ch4-3c2-tables.py` the report's tables. Its report is `results/helmholtz-ch4-3c2.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

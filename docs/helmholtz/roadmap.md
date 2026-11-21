@@ -11,9 +11,11 @@ Status (2026-11-21): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 202
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
 item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1, CH4.3b2a, CH4.3b2b, CH4.3b2d (signed off 2026-11-21:
 the raised levels' V crossover priced per box before the plan, one plan, `VRaisedPrice::PerBox` the
-default) and CH4.3c1 (C₀ = 200 confirmed at p ≥ 72 against a double-double reference); CH4.3c was
-split into CH4.3c1 and CH4.3c2. Next CH4.3c2 (the degrees refit), then CH4.3b2c (the form by
-default; it needs CH4.3c2 since CH4.3c1), then CH4.3d and CH4.3e; CH4.2d off the list; the FFT
+default) and CH4.3c1 (C₀ = 200 confirmed at p ≥ 72 against a double-double reference); CH4.3c2
+(signed off 2026-11-21: the high-frequency degrees refitted, raised by 2 for the constant density
+and capped by CH3.3's rule; §3.5 amended). The project was renamed tetraleaf on 2026-11-21. Next
+CH4.3b2c (the form by default, on the refitted degrees), then CH4.3d, CH4.3e and CH4.3c3 (the
+constant density in the calibration); CH4.2d off the list; the FFT
 track stays item 11. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7,
 CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
 (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
@@ -89,7 +91,7 @@ the measured product leaves an FFT about 1–2 % of the run, so items 10 and 11 
    CH4.2's trusted path; split on 2026-11-19)
 9. CHA.11 The Helmholtz wave levels in one place (added on 2026-11-19 at the H1 gate, the
    user on #230: "CHA.11 + measure first (Recommended)"; review 2026-11-19, L1)
-10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21), CH4.4, CH4.5 (CH4.1a first
+10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3), CH4.4, CH4.5 (CH4.1a first
     measures the product conversions against RCR and stops to ask before CH4.2 whether item 11
     moves ahead: review 2026-11-19, A5)
 11. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
@@ -823,11 +825,17 @@ task's full line is in its record or report and its progress entry
   was the f64 references' rounding (RCR 290–3,345 u). FMM evidence CH4.3a's (no decision moves).
   *Sign-off:* 2026-11-21 on #246, the user: "Both questions as recommended.": C₀ = 200 kept;
   CH4.3c2 a *Need* of CH4.3b2c.
-- [ ] **CH4.3c2 The high-frequency degrees refit.** *Done when:* (review 2026-11-19, A8) the
-  refit of the high-frequency degrees searches downward at x ≥ 54 (levels 2–4 carry 0.6–1.0 % of
-  the error on W1 at kD = 1000, 10⁻⁸), the excess p − x refitted in L (proposal §3.5; CH3.3's
-  report §6 names the branch x + (a L + b) x^{1/3}); pair evidence and FMM evidence, both; the
-  rule for sign-off. *Needs:* CH4.3a. *Machines:* Kathleen. *Sign-off:* the rule.
+- [x] **CH4.3c2 The high-frequency degrees refit.** Report: `tetraleaf-validate/results/helmholtz-ch4-3c2.md`;
+  record `docs/helmholtz/tasks/CH4.3c2.md`. The branch refitted linear in L to x = 216, +2 for W1's
+  constant density, capped by CH3.3's: 4–10 degrees lower at 10⁻³, 0–3 at 10⁻⁸; all within ε.
+  *Sign-off:* 2026-11-21 on #249, the user: "Merge when green" (question 1, the rule the default)
+  and "q2 and Q3 as you recommend" (§3.5 amended; CH4.3c3 added).
+- [ ] **CH4.3c3 The constant density in the calibration.** *Done when:* (CH4.3c2's question 3)
+  `helmholtz_calibrate` scans a chosen density (`--density`); W1's level scans with the constant
+  density at x = 13.5–216 (kD = 250, 500, 1000) measure the margin CH4.3c2 chose (+2 degrees over
+  the random-charge fit); the rule refitted on the worst density if the margin is wrong either
+  way, verified as CH4.3c2, for sign-off. *Needs:* CH4.3c2. *Machines:* Kathleen. *Sign-off:* the
+  rule, if it changes.
 - [ ] **CH4.3d The transfer function's length.** *Done when:* (S6 §6) whether a shorter
   transfer function (⌈3(P − 1)/2⌉, whose rounding stays far below 2P − 2's at k a 6–45, S6's
   report §6) earns a truncation analysis; (review 2026-11-12, M8) the excess-bandwidth length

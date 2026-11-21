@@ -92,7 +92,7 @@ use mpi::collective::SystemOperation;
 use mpi::traits::CommunicatorCollectives;
 use tetraleaf_exec::geometry::{Domain, radius};
 use tetraleaf_exec::helmholtz::{
-    ChargeKind, Charges, DEFAULT_DENSE_BUDGET, Degrees, DiagonalCosts, DiagonalCounts,
+    ChargeKind, Charges, DEFAULT_DENSE_BUDGET, DegreeRule, Degrees, DiagonalCosts, DiagonalCounts,
     DiagonalTimes, HelmholtzDiagonal, HelmholtzFmm, HelmholtzFmmBuilder, HelmholtzFmmError,
     HelmholtzM2l, LevelShape, Output, PlaneWaveCounts, PlaneWavePrecision, PlaneWaveRaise,
     PlaneWaveSplit, PlaneWaveTimes, RcrSplit, TransferBuild, VAfterPlan, VCosts, VNear,
@@ -122,6 +122,9 @@ pub struct Case {
     pub k: (f64, f64),
     /// The degrees of the FMM's levels.
     pub degrees: Degrees,
+    /// The degree rule under a tolerance (`HelmholtzFmmBuilder::degree_rule`, Helmholtz
+    /// CH4.3c2; `None` the library's, `DegreeRule::CALIBRATED`).
+    pub degree_rule: Option<DegreeRule>,
     /// Real or complex charges.
     pub charges: ChargeKind,
     /// The charges' values (Helmholtz CH4.0b; [`Density::Random`], §9.1's, by default).
@@ -294,6 +297,7 @@ impl Case {
             domain: None,
             max_points_per_leaf: None,
             c_leaf: None,
+            degree_rule: None,
             empty_boxes: true,
             near_v: VNear::Off,
             near_wx: WxNear::Off,
@@ -1156,6 +1160,9 @@ pub fn run_output<C: CommunicatorCollectives>(
     }
     if let Some(c_leaf) = case.c_leaf {
         builder = builder.c_leaf(c_leaf);
+    }
+    if let Some(rule) = case.degree_rule {
+        builder = builder.degree_rule(rule);
     }
     let mut fmm: HelmholtzFmm<'_, f64, C> = builder.build(points, points, comm)?;
     let build = slowest(start.elapsed().as_secs_f64(), comm);

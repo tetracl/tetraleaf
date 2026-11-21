@@ -4,8 +4,12 @@
 //! ```text
 //! helmholtz_boxes [CASE] [--eps e,…] [--m2l rotation|default,…] [--study single|levels]
 //!     [--margin m] [--offset x,y,z] [--leaf-size n] [--raise-factor f] [--worst n]
-//!     [--per-box s] [--full-max n] [--threads t]
+//!     [--per-box s] [--full-max n] [--rule calibrated|ch3-3|γ,α,β,C,a,b,d[,cap]] [--threads t]
 //! ```
+//!
+//! `--rule ch3-3` (Helmholtz CH4.3c2) runs CH3.3's degree rule (`DegreeRule::CH3_3`) in place
+//! of the library's default under the same tolerance, for the errors before the refit;
+//! `--rule γ,α,β,C,a,b,d[,cap]` a `DegreeRule` of those constants (the refit's offset varied).
 //!
 //! One case on one rank, against the direct sum (`tetraleaf_validate::helmholtz_boxes`): at
 //! every point when N ≤ `--full-max` (default 200,000), else at §9.1's samples plus
@@ -43,7 +47,7 @@ use std::time::Instant;
 
 use mpi::Threading;
 use mpi::traits::*;
-use tetraleaf_exec::helmholtz::{ChargeKind, Degrees, HelmholtzM2l, Wavenumber};
+use tetraleaf_exec::helmholtz::{ChargeKind, DegreeRule, Degrees, HelmholtzM2l, Wavenumber};
 use tetraleaf_validate::bench::{cores, cpu_model};
 use tetraleaf_validate::fmm_accuracy::Distribution;
 use tetraleaf_validate::helmholtz_accuracy::{
@@ -74,6 +78,9 @@ struct Arguments {
     per_box: usize,
     full_max: usize,
     threads: usize,
+    /// A degree rule in place of the default (`--rule ch3-3` or the constants, Helmholtz
+    /// CH4.3c2).
+    degree_rule: Option<DegreeRule>,
 }
 
 /// The workload of a name at kD (W1 and W3 resolved depend on it).
@@ -103,7 +110,8 @@ fn arguments() -> Arguments {
              [--density random|planewave|constant] [--charges real|complex] [--eps e] \
              [--m2l rotation|default] [--study single|levels] [--margin m] [--offset x,y,z] \
              [--leaf-size n|uniform] [--raise-factor f] [--worst n] [--per-box s] \
-             [--full-max n] [--threads t]; got {args:?}"
+             [--full-max n] [--rule calibrated|ch3-3|γ,α,β,C,a,b,d[,cap]] [--threads t]; \
+             got {args:?}"
         );
         std::process::exit(2);
     };
@@ -124,6 +132,7 @@ fn arguments() -> Arguments {
         per_box: 2,
         full_max: 200_000,
         threads: 1,
+        degree_rule: None,
     };
     let mut rest = &args[..];
     while let [flag, value, tail @ ..] = rest {
@@ -192,6 +201,40 @@ fn arguments() -> Arguments {
                 .is_some(),
             "--worst" => value.parse().map(|v| parsed.worst = v).is_ok(),
             "--per-box" => value.parse().map(|v| parsed.per_box = v).is_ok(),
+            "--rule" => match value.as_str() {
+                "calibrated" => Some(None),
+                "ch3-3" => Some(Some(DegreeRule::CH3_3)),
+                constants => match constants
+                    .split(',')
+                    .map(|v| v.parse::<f64>().ok())
+                    .collect::<Option<Vec<f64>>>()
+                    .as_deref()
+                {
+                    Some(&[gamma, alpha, beta, c, a, b, d]) => Some(Some(DegreeRule {
+                        gamma,
+                        alpha,
+                        beta,
+                        c,
+                        a,
+                        b,
+                        d,
+                        cap: None,
+                    })),
+                    Some(&[gamma, alpha, beta, c, a, b, d, cap]) => Some(Some(DegreeRule {
+                        gamma,
+                        alpha,
+                        beta,
+                        c,
+                        a,
+                        b,
+                        d,
+                        cap: Some(cap),
+                    })),
+                    _ => None,
+                },
+            }
+            .map(|r| parsed.degree_rule = r)
+            .is_some(),
             "--full-max" => value.parse().map(|v| parsed.full_max = v).is_ok(),
             "--threads" => value.parse().map(|v| parsed.threads = v).is_ok(),
             _ => false,
@@ -467,6 +510,7 @@ fn main() {
     case.charges = args.charges;
     case.density = args.density;
     case.m2l = m2l_of(default_m2l);
+    case.degree_rule = args.degree_rule;
     let setup = Instant::now();
     let problem = Problem::new(&case);
     let n = problem.len();
@@ -590,8 +634,9 @@ fn main() {
     let mut raised: Option<Vec<Option<Errors>>> = None;
     if args.levels {
         let wavenumber = Wavenumber::new(args.kd, args.kim).expect("a valid wavenumber");
+        let rule = args.degree_rule.unwrap_or(DegreeRule::CALIBRATED);
         let tight = Degrees::Tolerance(eps * args.raise_factor)
-            .resolve(&wavenumber, &base.run.domain, base.run.row.levels)
+            .resolve_with(&rule, &wavenumber, &base.run.domain, base.run.row.levels)
             .expect("a valid tolerance");
         let degrees = base.run.row.degrees.clone();
         let mut parts = vec![None; degrees.len()];

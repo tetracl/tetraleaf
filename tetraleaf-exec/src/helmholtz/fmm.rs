@@ -124,11 +124,11 @@ use thiserror::Error;
 
 use super::{
     ChargeKind, Charges, DEFAULT_DENSE_BUDGET, DEFAULT_DIAGONAL_BUILD, DIAGONAL_COST_CONSTANTS,
-    DegreeError, Degrees, Densities, DensityError, DiagonalCosts, DiagonalShape, HelmholtzDiagonal,
-    HelmholtzM2l, HelmholtzOperator, LevelShape, OperatorError, Output, PlaneWavePrecision,
-    PlaneWaveRaise, PlaneWaveSplit, RcrSplit, TableTimings, TransferBuild, Wavenumber,
-    WavenumberKind, auto_batched_max_degree, auto_batched_min_columns, auto_plane_wave_min_degree,
-    diagonal_costs, min_leaf_level, offset_class,
+    DegreeError, DegreeRule, Degrees, Densities, DensityError, DiagonalCosts, DiagonalShape,
+    HelmholtzDiagonal, HelmholtzM2l, HelmholtzOperator, LevelShape, OperatorError, Output,
+    PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit, TableTimings, TransferBuild,
+    Wavenumber, WavenumberKind, auto_batched_max_degree, auto_batched_min_columns,
+    auto_plane_wave_min_degree, diagonal_costs, min_leaf_level, offset_class,
 };
 use crate::fmm::{FmmError, PointSet, SettingsError};
 use crate::geometry::{Domain, radius};
@@ -419,6 +419,7 @@ impl From<FmmError> for HelmholtzFmmError {
 pub struct HelmholtzFmmBuilder {
     k: Wavenumber,
     degrees: Degrees,
+    degree_rule: DegreeRule,
     charges: ChargeKind,
     vectors: usize,
     gradients: bool,
@@ -478,6 +479,7 @@ impl HelmholtzFmmBuilder {
         Self {
             k,
             degrees,
+            degree_rule: DegreeRule::CALIBRATED,
             charges: ChargeKind::Complex,
             vectors: 1,
             gradients: false,
@@ -911,6 +913,15 @@ impl HelmholtzFmmBuilder {
         self
     }
 
+    /// The degree rule under [`Degrees::Tolerance`] (default [`DegreeRule::CALIBRATED`];
+    /// Helmholtz CH4.3c2, for measuring one rule against another, such as
+    /// [`DegreeRule::CH3_3`]). Named degrees ignore it. The rule reads x and ε only, so the
+    /// degrees still depend on k, the domain and ε alone (constraint 9).
+    pub fn degree_rule(mut self, rule: DegreeRule) -> Self {
+        self.degree_rule = rule;
+        self
+    }
+
     /// The maximum leaf width in wavelengths (default [`DEFAULT_C_LEAF`] since Helmholtz
     /// CH4.0d3; D11's [`C_LEAF`](super::C_LEAF) before).
     pub fn c_leaf(mut self, c_leaf: f64) -> Self {
@@ -1119,7 +1130,7 @@ impl HelmholtzFmmBuilder {
         let degrees = agree(
             comm,
             self.degrees
-                .resolve(&self.k, &domain, index.nlevels())
+                .resolve_with(&self.degree_rule, &self.k, &domain, index.nlevels())
                 .map_err(HelmholtzFmmError::from),
         )?;
         // Auto's crossover, agreed over the ranks (constraints 2 and 9): the smallest of

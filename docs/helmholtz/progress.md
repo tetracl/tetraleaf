@@ -4244,3 +4244,47 @@ request, using this template:
   checksums). No convention, behaviour or result changed.
 - The paths on locust (`/data/ucahtbe/fmm`), Kathleen (`/scratch/scratch/ucahtbe/fmm`) and the
   development Mac keep the name `fmm`.
+
+## 2026-11-21: Helmholtz CH4.3c2, the high-frequency degrees refitted
+
+- Done: `DegreeRule::CALIBRATED` (`tetraleaf-exec`, `helmholtz::degree`) is CH3.3's plateau with a
+  refitted high-frequency branch, ⌈min(x + max(0, e(ε)) x^{1/3} + 5, x + 0.80 (ln 1/ε)^{2/3}
+  x^{1/3})⌉, e(ε) = 2.30 (ln 1/ε)^{2/3} − 0.75 L − 5.73: the excess linear in L beside CH3.3's
+  term, raised by 2 for the constant density and capped by CH3.3's branch (`DegreeRule::cap`).
+  CH3.3's rule stays `DegreeRule::CH3_3`; `Degrees::resolve_with` and the builder's `degree_rule`
+  take another. 4–10 degrees below CH3.3's at x ≥ 43 at 10⁻³, 0–3 at 10⁻⁸, the same at x ≤ 7.
+  - `tetraleaf-validate`: CH3.3's level points as data, `fit_branch` (forms A, B, C, a cap),
+    `helmholtz_calibrate refit`, `Case::degree_rule`, `--rule` for `helmholtz_accuracy` and
+    `helmholtz_boxes` (there also a rule by its constants).
+  - `tools/helmholtz/ch4-3c2-runs.sh`, `ch4-3c2-pairs.py`, `ch4-3c2-tables.py`. Report
+    `tetraleaf-validate/results/helmholtz-ch4-3c2.md`; record `docs/helmholtz/tasks/CH4.3c2.md`.
+- Measurements (Kathleen, one node per job, 1 × 40; jobs and nodes in the report §9):
+  - level scans from ⌊x⌋ − 2 (random charges) at x = 27, 54, 108 and 216 on W1 and W4's cube
+    (N = 10⁵, and 10⁴ for kD = 1000): p − x = 1.5–28 over 10⁻³ … 10⁻⁸ where CH3.3's rule gives
+    12–35; the workloads within 1–2 degrees of each other at one x;
+  - the fit over 150 points (CH3.3's 96, 54 new) at most CH3.3's rule at the decades: total excess
+    188 against CH3.3's 556; S7's worst pair within the FMM's at k a = 45 … 256;
+  - the fit missed ε on W1 with the constant density (2.60 ε at kD = 1000, 10⁻⁸; 1.58 ε in ∇φ at
+    kD = 500), where CH3.3's rule held 0.46 and 0.91 ε: the scans' random charges add the boxes'
+    errors incoherently, the sphere's constant density coherently; at 10⁻⁸ level 2 carried 44 %
+    of Σ|e|², at 10⁻³ every level a share. Raised by 2 (d = 3 → 5) it held 0.60 ε at kD = 250,
+    500, 1000 (+4 and +6 measured too);
+  - the rule: CH3.1c's matrix and CH3.3's held-out cases, 174 runs within ε (at most 0.64 ε), W1
+    at kD = 250, 500 and 1000 with the three densities within ε (at most 0.94 ε, CH3.3's 0.91 ε
+    there); total excess 367; the worst pair at most 4.6 ε;
+  - times on one node, alternated: the evaluation 11–15 % faster at 10⁻³, about 4 % at 10⁻⁶, the
+    same at 10⁻⁸;
+  - raw outputs in `~/projects/fmm-archive/kathleen/runs/ch4-3c2/`.
+- Checks: see the PR (fmt; Clippy default, examples, workspace all-targets; rustdoc `-D warnings`;
+  the default and workspace tests at opt-level 1, 2,804 passed; the MPI list at 2 and 4 ranks;
+  `tests/helmholtz` one rank at opt-level 0 54 s at load 8–13 on the M6). Not run: `cargo deny`
+  (no manifest change), Laplace's benchmarks (no Laplace path), 8 ranks (no distributed code).
+- Decisions: on #249 the user, 2026-11-21: "Merge when green" (question 1, the rule the
+  default) and "q2 and Q3 as you recommend": question 2, the proposal's §3.5 amended (Appendix A);
+  question 3, CH4.3c3 added (the constant density in the calibration).
+- Laplace: not touched (the Helmholtz degree rule, the validation harness, scripts; the
+  `tetraleaf-tables` tests' restated rule relabelled CH3.3's in comments only).
+- The branch was moved onto the tetraleaf rename mid-task (its commits replayed with the new
+  names; the pre-rename branch bundled in `~/projects/fmm-archive/ch4-3c2-pre-rename/`).
+- Follow-ups: CH4.3b2c measures the form's default on these degrees (its *Needs*); CH4.3c3
+  measures the constant density's margin (its line).
