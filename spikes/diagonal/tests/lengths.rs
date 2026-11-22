@@ -90,9 +90,15 @@ fn the_truncation_is_resolved() {
                 );
                 assert!(dd[n - 1] < 1e-20, "at 2p: {}", dd[n - 1]);
                 assert!(dd[0] > 1e2 * dd[n - 2], "{} {}", dd[0], dd[n - 2]);
-                // The double-double chain's rounding is far below the f64 chain's.
+                // The double-double chain's own error at 2p is far below the f64 chain's
+                // rounding, so it resolves the latter.
                 let round = c.errors[pl][n - 1].round;
                 assert!(round.0.is_finite() && round.1.is_finite());
+                assert!(
+                    dd[n - 1] < 1e-6 * round.0.max(round.1),
+                    "{} {round:?}",
+                    dd[n - 1]
+                );
             }
         }
     }

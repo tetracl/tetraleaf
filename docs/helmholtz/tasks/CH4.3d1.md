@@ -182,14 +182,21 @@ Report `tetraleaf-validate/results/helmholtz-ch4-3d1.md`.
   RCR on one level (k a 27.1, 10⁻⁸; 6 of 316 offsets).
 - ⌈3(P − 1)/2⌉ is admissible on no class at k a ≥ 11.3. Song and Chew's 2ka + 1.8 (log₁₀ 1/ε)^{2/3}
   (2ka)^{1/3} is safe for real k at k a ≥ 45 (0–8 % of the samples) and fails on 1–4 classes at
-  k a 11–32 (up to 7× RCR's error per pair). No one constant fits (γ −0.1 to 2.4).
+  k a 11–32 (up to 7× RCR's error per pair). No one constant fits (γ 0.1 to 2.3).
 - Gegenbauer's tail at 2a bounds T's truncation with C_τ = 0.041 (67× in the median); its rule is
   safe on all 4,356 classes the bound takes, and returns 2p on 126 of 134 rows (0–3 %).
 - The rounding stays within 2E at every length but six rows at k a 2.83 (2.0–2.7 E).
+- The self-review's findings applied: the table script's admissibility test per placement and norm,
+  as this plan defines it (first written on the worst over both; 315 of 6,596 classes moved, no
+  conclusion); the report's rounding maxima, gain wording and limits (§7: W3 and kD = 100–200 by
+  the nearest sweep points, the table build not measured, truncation above p = 100 not separate,
+  the model's damping); the summary committed as `spikes/diagonal/results/lengths-summary.md`.
 - The "earns CH4.3d2" criterion of this plan is met only by the oracle (≥ 5 % on some level, two
   classes from RCR); no rule computable before the run meets it safely. The report recommends not
   running CH4.3d2 (question 2).
-- Deviations: the table script in Python (above). Step 6's tolerance was a guess before the
+- Deviations: the table script in Python (above); `log10_tail` divides by |h₀(k|t|)| rather than
+  applying E's damping factor (conservative, report §7); the classes from RCR as a share of an
+  interior box's offsets, not of each level's V pairs; the table build not measured. Step 6's tolerance was a guess before the
   measurement: test 2 asserts a drop of two orders, not three (the nearest class's truncation
   falls only like 0.87^l; the plan said "orders of magnitude").
 

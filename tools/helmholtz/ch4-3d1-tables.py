@@ -15,9 +15,9 @@ length rules on the classes the bound takes: the measured lengths, the model's a
 Chew's, their grids and failures), `trunc` (T's truncation per length on the nearest class).
 
 Every number is the worst over the three placements of max(potential, gradient), S7's relative
-ℓ2 norm over the targets. A length L is admissible for a class at (k a, ε) when the f64
-chain's total error at L is at most max(1.1 × RCR's, RCR's + 0.1 ε) (the plan's "within RCR's
-error"). A unit (kind, k a, p) serves every ε whose rule gives p (the `eps` column). No timing.
+ℓ2 norm over the targets. A length L is admissible for a class at (k a, ε) when on every
+placement and both norms the f64 chain's total error at L is at most max(1.1 × RCR's, RCR's +
+0.1 ε) (the plan's "within RCR's error"). A unit (kind, k a, p) serves every ε whose rule gives p (the `eps` column). No timing.
 """
 
 import collections
@@ -39,13 +39,19 @@ def worst(r, a, b):
 
 
 def load(path):
-    """units[(kind, ka, p)] = {"eps": [...], "classes": {rep: {"d2", "trunc", "L": {L: {...}}}}}"""
+    """units[(kind, ka, p)] = {"eps": [...], "classes": {rep: {"d2", "trunc", "pr", "L": {L: {...}}}}}
+
+    "trunc" and each length's "dd", "dev", "round", "total" are the worst over the placements of
+    max(potential, gradient); "pr" holds RCR's errors per placement and norm, and each length's
+    "pt" the total's, for the admissibility test.
+    """
     units = {}
     for r in csv.DictReader(open(path)):
         key = (r["kind"], float(r["ka"]), int(r["p"]))
         u = units.setdefault(key, {"eps": [float(e) for e in r["eps"].split(";")], "classes": {}})
-        c = u["classes"].setdefault(r["rep"], {"d2": int(r["d2"]), "trunc": 0.0, "L": {}})
+        c = u["classes"].setdefault(r["rep"], {"d2": int(r["d2"]), "trunc": 0.0, "pr": {}, "L": {}})
         c["trunc"] = max(c["trunc"], worst(r, "trunc_pot", "trunc_grad"))
+        c["pr"][r["placement"]] = (float(r["trunc_pot"]), float(r["trunc_grad"]))
         L = int(r["l"])
         e = c["L"].setdefault(
             L,
@@ -54,10 +60,12 @@ def load(path):
                 "dev": 0.0,
                 "round": 0.0,
                 "total": 0.0,
+                "pt": {},
                 "term": float(r["log10_term"]),
                 "tail": float(r["log10_tail"]),
             },
         )
+        e["pt"][r["placement"]] = (float(r["total_pot"]), float(r["total_grad"]))
         for k in ("dd", "dev", "round", "total"):
             v = worst(r, k + "_pot", k + "_grad")
             if math.isnan(v):
@@ -83,8 +91,14 @@ def bound(kind, ka, d2, term):
 
 
 def admissible(c, L, eps):
-    e = c["L"][L]
-    return e["total"] <= max(1.1 * c["trunc"], c["trunc"] + 0.1 * eps)
+    """On every placement and both norms, the f64 chain's total at L at most
+    max(1.1 × RCR's, RCR's + 0.1 ε) (the plan's test)."""
+    pt = c["L"][L]["pt"]
+    for pl, rcr in c["pr"].items():
+        for got, ref in zip(pt[pl], rcr):
+            if not got <= max(1.1 * ref, ref + 0.1 * eps):
+                return False
+    return True
 
 
 def lmin(c, eps):

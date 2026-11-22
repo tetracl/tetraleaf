@@ -15,10 +15,11 @@ M6. Accuracy only: nothing here is timed.
    few per cent of a diagonal level's grid, and no length rule that can be computed before the
    run reaches even that safely.
 2. **What the shortest admissible lengths would give** (§3; an oracle, read off the
-   measurement): for real k the diagonal form stays within RCR's error down to 0–10 degrees
+   measurement): for real k the diagonal form stays within RCR's error down to 1–10 degrees
    below 2p at k a 22.6–32 and 6–28 below at k a ≥ 45. The grid that length allows has 0–16 %
-   fewer samples than 2p's on W1's diagonal levels (3–14 % at k a ≥ 22.6). At k a ≤ 16 and
-   ε ≤ 10⁻⁶ the nearest class needs 2p itself (no gain). At 10⁻⁸
+   fewer samples than 2p's on W1's diagonal levels (3–14 % at k a ≥ 22.6). At k a 11.3–16 and
+   10⁻⁶–10⁻⁷ some class needs 2p itself (no gain); at 10⁻⁸ there the nearest classes are on RCR
+   and the others save up to 7 %. At 10⁻⁸
    a shorter T takes two classes from RCR on one level of W1 (k a = 27.1: 6 of an interior box's
    316 offsets) and none elsewhere. M8's expectation, "a few degrees fewer could move the nearest
    classes from RCR at 10⁻⁸", holds only there.
@@ -28,7 +29,7 @@ M6. Accuracy only: nothing here is timed.
    is admissible on every class for real k at k a ≥ 45. There it is at most 9 degrees below
    2p (0–8 % of the samples). At k a 11–32 it fails on 1–4 of the classes the bound takes, with
    up to 7× RCR's error per pair on the nearest class. The length needed is not of the form
-   2ka + γ (log₁₀ 1/ε)^{2/3} (2ka)^{1/3} for one γ: the γ needed runs from −0.1 to 2.4 over k a
+   2ka + γ (log₁₀ 1/ε)^{2/3} (2ka)^{1/3} for one γ: the γ needed runs from 0.1 to 2.3 over k a
    and ε.
 4. **A truncation model** (§5): Gegenbauer's tail at the pair's largest radius,
    τ_L = |k||t| Σ_{L<l≤2p} (2l + 1)|jₗ(2ka)||hₗ(k|t|)|, covers T's measured truncation with
@@ -40,8 +41,8 @@ M6. Accuracy only: nothing here is timed.
    is the most a further study could win.
 5. **The bound holds at the shorter lengths** (§6): the f64 chain's rounding against the
    double-double chain stays within 2E (E at length L) on every row at L = 2p (largest 1.99 E,
-   S6's own fitting point). At L < 2p six rows at k a 2.8 reach 2.0–2.7 E, below the rule's range.
-   Elsewhere the rounding is at most 0.2 E.
+   S6's own fitting point). At L < 2p six rows at k a 2.83, the rule's band edge, reach 2.0–2.7 E.
+   At k a 4–8 the rounding is at most 1.1 E, at k a ≥ 11 at most 0.4 E.
 
 ## 1. The scan
 
@@ -55,15 +56,15 @@ p ≈ 250), with ⌈3p/2⌉ and the excess-bandwidth lengths of the unit's ε ad
 
 - **trunc**: S7's RCR at degree p against the direct sum, both in double-double;
 - **dd**: the chain in double-double at length L against double-double RCR. This is T's
-  truncation alone; it is computed at p ≤ 100 and is 10⁻²⁴–10⁻³⁰ at L = 2p;
+  truncation alone; it is computed at p ≤ 100 and is 10⁻²⁴–10⁻³¹ at L = 2p;
 - **round**: the f64 chain (T rounded once from double-double, as the FMM builds it) against the
   double-double chain at the same L;
 - **dev**, **total**: the f64 chain against double-double RCR and against the direct sum.
 
 Every number is the worst over the placements of max(potential, gradient), S7's relative ℓ2 norm
-over the targets. A length is **admissible** for a class at (k a, ε) when the f64 chain's total is
-at most max(1.1 × RCR's, RCR's + 0.1 ε): as accurate as RCR within CH4.3b's 1.1×, or within a
-tenth of ε more where RCR's own error is far below ε. The kinds are real k and k = κ(1 + 0.1i).
+over the targets. A length is **admissible** for a class at (k a, ε) when on every placement and
+both norms the f64 chain's total is at most max(1.1 × RCR's, RCR's + 0.1 ε): as accurate as RCR
+within CH4.3b's 1.1×, or within a tenth of ε more where RCR's own error is far below ε. The kinds are real k and k = κ(1 + 0.1i).
 The k a values are S6's grid 2^{j/2} (j = 3..15, 2.83–181) plus W1's levels at kD = 500 and 1000
 (108.3, 54.1, 27.1, 13.5 and 216.5). That makes 194 units and 387,804 rows, 26 minutes on locust
 at 70 threads. The rows are archived in `~/projects/fmm-archive/locust/runs/ch4-3d1/` (62 MB, not
@@ -114,27 +115,29 @@ classes (which sets a common grid), against 2p (from `ch4-3d1-tables.py lmin`; r
 | --- | --- | --- | --- | --- | --- | --- |
 | 13.5 | 10⁻³ | 20 | 40 | 34 | 34 | −6 |
 | 13.5 | 10⁻⁶ | 25 | 50 | 50 | 50 | 0 |
-| 13.5 | 10⁻⁸ | 27 | 54 | 54 | 54 | 0 |
+| 13.5 | 10⁻⁸ | 27 | 54 | none | 51 | −3 |
 | 27.1 | 10⁻³ | 34 | 68 | 60 | 61 | −7 |
 | 27.1 | 10⁻⁶ | 41 | 82 | 74 | 74 | −8 |
 | 27.1 | 10⁻⁸ | 44 | 88 | 86 | 86 | −2 |
 | 54.1 | 10⁻³ | 61 | 122 | 114 | 114 | −8 |
 | 54.1 | 10⁻⁶ | 71 | 142 | 127 | 127 | −15 |
 | 54.1 | 10⁻⁸ | 76 | 152 | 136 | 136 | −16 |
-| 108.3 | 10⁻³ | 115 | 230 | 218 | 221 | −9 |
+| 108.3 | 10⁻³ | 115 | 230 | 218 | 224 | −6 |
 | 108.3 | 10⁻⁶ | 128 | 256 | 234 | 237 | −19 |
-| 108.3 | 10⁻⁸ | 134 | 268 | 243 | 243 | −25 |
-| 216.5 | 10⁻³ | 224 | 448 | 431 | 431 | −17 |
+| 108.3 | 10⁻⁸ | 134 | 268 | 243 | 246 | −22 |
+| 216.5 | 10⁻³ | 224 | 448 | 431 | 436 | −12 |
 | 216.5 | 10⁻⁶ | 240 | 480 | 450 | 455 | −25 |
 | 216.5 | 10⁻⁸ | 248 | 496 | 462 | 468 | −28 |
 
-Over the sweep, for real k the longest is 0–10 degrees below 2p at k a 22.6–32 and 6–28 below
-at k a ≥ 45. At k a 11.3–16 it is
-2p at ε ≤ 10⁻⁵ to 10⁻⁷ (one or two classes need 2p). At k a ≤ 8 with the plateau's degrees,
+Over the sweep, for real k the longest is 1–10 degrees below 2p at k a 22.6–32 and 6–28 below
+at k a ≥ 45. At k a 11.3–16 it is 2p at 10⁻⁶ and 10⁻⁷ (one or two classes need 2p), 0–2 below at
+10⁻⁵; at 10⁻⁸ the nearest classes are admissible at no length (on RCR by the bound) and the
+others reach 2p − 3 ("none" in the table). At k a ≤ 8 with the plateau's degrees,
 classes whose rounding already fails at 2p (on RCR by the bound) are admissible at no scanned
-length or only at shorter ones (§4). For η = 0.1 the picture is the same with the longest lengths
-0–6 degrees longer, and with up to 12 classes per row admissible at no length (all of them on RCR
-by the bound: the rule below takes none of them).
+length or only at shorter ones (§4). For η = 0.1 the picture is the same, the longest lengths 5
+degrees shorter to 14 longer than real k's at the same (k a, ε, p), and up to 19 classes per row
+admissible at no length (at k a ≥ 11 all of them on RCR by the bound: §5's rule, safe on every
+class the bound takes, finds a length for each of those).
 
 **The grid.** A length L needs a grid exact for degree 2p + L: ⌈(2p + L + 1)/2⌉ Gauss–Legendre
 rings and 2p + L + 1 azimuths padded to a multiple of 4, against 2p + 1 and 4p + 4 at L = 2p. The
@@ -146,22 +149,24 @@ classes the bound takes at 2p (`rules`, column "measured"):
 | 13.5 | 0.839 | 1.000 | 0.929 |
 | 27.1 | 0.888 | 0.906 | 0.870 |
 | 54.1 | 0.936 | 0.892 | 0.898 |
-| 108.3 | 0.953 | 0.924 | 0.902 |
-| 216.5 | 0.958 | 0.945 | 0.945 |
+| 108.3 | 0.970 | 0.924 | 0.916 |
+| 216.5 | 0.973 | 0.945 | 0.945 |
 
 So the oracle's grid is 0.84–1.00 of 2p's on W1's diagonal levels, 0.86–0.97 over the sweep's
 real k at k a ≥ 22.6. The
 diagonal levels are part of the M2L, so the evaluation would gain a fraction of that.
 
 **Classes from RCR** (`gain`): classes the bound puts on RCR at 2p that some admissible length puts
-within θ ε. There are two at k a = 27.1 at 10⁻⁸ (6 offsets of 316) and none on any other W1
-level at any ε. At k a = 13.5, 10⁻⁸ the two RCR classes need 2p and fail there.
+within θ ε. There are two at k a = 27.1 at 10⁻⁸ (6 of an interior box's 316 offsets, about 1.9 %
+of its V pairs; on W1's sphere the share per level differs and was not counted) and none on any
+other W1 level at any ε. At k a = 13.5, 10⁻⁸ the two RCR classes need 2p and fail there.
 
 ## 4. The named lengths
 
 `named`: the classes (of 34) on which each length is admissible.
 
-- **⌈3(P − 1)/2⌉**: on none at k a ≥ 11.3, real and damped (one class at k a 11.3, 10⁻⁷). At
+- **⌈3(P − 1)/2⌉**: at k a ≥ 11.3, real and damped, on one class of one row (real k, k a 11.3,
+  10⁻⁷) and on none elsewhere. At
   k a 2.8–8 with the plateau's degrees it is admissible on 0–27 classes, mostly the ones whose
   rounding fails at 2p: S6's "within a few times ε where 2P − 2 loses orders to rounding", below
   the rule's k a ≥ 2.8 band edge and on classes the bound sends to RCR.
@@ -169,11 +174,11 @@ level at any ε. At k a = 13.5, 10⁻⁸ the two RCR classes need 2p and fail th
   fails"): for real k it is admissible on every class the bound takes at k a ≥ 45. There it gives
   0.92–1.00 of 2p's samples (1.000 wherever it reaches 2p: at ε ≥ 10⁻⁴ to 10⁻⁵ from k a ≈ 54 up,
   since the FMM's degrees are already tight there). At k a 11.3–32 it fails on 1–4 of the
-  classes the bound takes on 30 (kind, k a, ε) rows. The worst is the nearest class at
-  k a 11.3–13.5, 10⁻⁵–10⁻⁷: up to 7.0× RCR's error per pair, about 100 ε at 10⁻⁷. Overall 70 of
-  4,356 classes are above 1.1×.
+  classes the bound takes on 31 (kind, k a, ε) rows. The worst is the nearest class at
+  k a 11.3–13.5, 10⁻⁵–10⁻⁷: up to 7.0× RCR's error per pair, 30–100 ε at 10⁻⁷. Overall the length
+  is not admissible on 68 of the 4,356 classes the bound takes at k a ≥ 11.
 - **One constant does not fit.** The γ that 2ka + γ (log₁₀ 1/ε)^{2/3} (2ka)^{1/3} needs to reach
-  the longest admissible length is −0.1–1.4 at k a ≥ 90 and 0.8–2.4 at k a 11–32 (real k). It grows as
+  the longest admissible length is 0.1–1.4 at k a ≥ 90 and 0.5–2.3 at k a 11–64 (real k). It grows as
   ε tightens and k a falls, because the FMM's p already carries the ε-dependence.
 
 ## 5. A truncation model
@@ -217,12 +222,29 @@ not measured here.
   C_T was fitted to put the largest at 2), median 0.034 E;
 - L < 2p: 94,962 rows, median 0.029 E; above 2 E six rows, all at k a 2.83 (p 9, L 13–17: at most
   2.73 E), the sweep's smallest k a, at the rule's band edge (k a ≥ 2.8), where S6 fitted C_T; at
-  k a ≥ 4 at most 0.21 E.
+  k a 4–8 at most 1.11 E (real k; 0.60 E for η = 0.1), at k a ≥ 11 at most 0.38 E.
 
 So a shorter length lowers E with the rounding: the bound's form carries over, and it is not what
 limits a shorter T.
 
-## 7. Questions for sign-off
+## 7. Limits of this study
+
+- **W3 and W1 at kD = 100 and 200.** Their diagonal levels' k a (86.6, 43.3, 21.65, 10.8, 5.4) are
+  not on the sweep; the nearest sweep points (90.5, 45.3, 22.6, 11.3, 5.7) give the same picture
+  (§3, `lmin` and `rules` over the sweep), so the conclusion covers them, but their per-level
+  grids are not tabulated.
+- **The table build** (the plan's gain (iii)): T's samples cost O(L) each, so a shorter length
+  saves about (2p − L)/2p of a level's transfer-function work besides the smaller grid, a few per
+  cent of a build part CH4.2c's interpolated build already made small; not measured.
+- **Truncation above p = 100.** The double-double chain runs at p ≤ 100 only. The admissibility
+  test reads the total against the direct sum and needs no separate truncation; the model of §5
+  is fitted on the resolved rows (p ≤ 100) and applied above as an extrapolation, where its rule
+  is still safe on every class (the total decides). Above p = 100 T's truncation is not reported
+  separately.
+- **The model's damping.** `log10_tail` divides by |h₀(k|t|)| instead of applying E's factor
+  e^{Im(k)(|t| + 2a)}; for η = 0.1 it over-predicts by 10³–10⁶ (§5's table), so it is conservative.
+
+## 8. Questions for sign-off
 
 1. **The acceptance as read.** CH4.3d1 answers CH4.3d's pair questions: truncation and rounding
    per class against RCR, the excess-bandwidth length in the same sweep, the shortest lengths,
@@ -241,7 +263,7 @@ limits a shorter T.
    lengths within RCR's error save 0–16 % of a level's samples; no a-priori rule safely reaches
    them; 2P − 2 is kept (amended at CH4.3d1, with a line in Appendix A). Review M8 closes with it.
 
-## 8. Reproduce
+## 9. Reproduce
 
 From `spikes/` (the spikes workspace; `spikes/README.md`):
 
@@ -252,6 +274,7 @@ cargo run -p tetraleaf-spike-diagonal --release --example lengths -- --threads 7
 ```
 
 Then, from the root, `python3 tools/helmholtz/ch4-3d1-tables.py <dir>/lengths.csv` (sections
-`lmin`, `named`, `model`, `round`, `gain`, `rules`, `trunc`). On locust the sweep ran from the tree
+`lmin`, `named`, `model`, `round`, `gain`, `rules`, `trunc`); their output is committed as
+`spikes/diagonal/results/lengths-summary.md`. On locust the sweep ran from the tree
 `tools/gh200/sync.sh` copied, writing outside it (`/data/ucahtbe/runs/ch4-3d1/`); its log is
 archived with the rows.
