@@ -225,7 +225,7 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   `Degrees::resolve_with` another `DegreeRule`, the builder's `degree_rule`, default
   `DegreeRule::CALIBRATED`, CH3.3's plateau with CH4.3c3's high-frequency branch (refitted on
   the worst density, W1's constant density among the points), capped by
-  x + 0.82 (ln 1/ε)^{2/3} x^{1/3} through `DegreeRule::cap`, for sign-off;
+  x + 0.82 (ln 1/ε)^{2/3} x^{1/3} through `DegreeRule::cap` (signed off on #254);
   `DegreeRule::CH4_3C2` and `DegreeRule::CH3_3` the rules before, kept for the runs before and
   after)
   and `HelmholtzOperator` for real and complex k, real and complex charges and
@@ -529,7 +529,7 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   and is not a measured range, review 2026-11-12 M6);
   S7's closed form, the default before, is `s7_degree`, the per-pair bound. Since Helmholtz
   CH4.3c3 (docs/helmholtz/tasks/CH4.3c3.md; tetraleaf-validate/results/helmholtz-ch4-3c3.md) the
-  default is the refit on the worst density, for sign-off: C = 2.00, a = −0.55, b = −4.66, d = 2,
+  default is the refit on the worst density (signed off on #254, proposal §3.5): C = 2.00, a = −0.55, b = −4.66, d = 2,
   capped by x + 0.82 (ln 1/ε)^{2/3} x^{1/3} (CH4.3c2's rule, `DegreeRule::CH4_3C2`, missed four
   of the constant density's scanned degrees by one); `tests/helmholtz/degree.rs` holds it to
   `MEASURED` and `MEASURED_CONSTANT` and to its cap, and CH4.3c2's rule to its misses. Tests of single pairs or chains (`tests/helmholtz/operator.rs`) take `s7_degree`;

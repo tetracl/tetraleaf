@@ -153,5 +153,6 @@ launch per node (`srun -N1 -n1` per launch, in parallel); raw outputs to
 - None.
 
 ## Open questions
-- For sign-off (the report §8): the acceptance as read; the refit as the default (or CH4.3c2's
-  rule kept, or d = 6 with the cap 0.82); proposal §3.5 amended.
+- None. The report's §8 questions 1–3 were signed off 2026-11-22 by the user on #254, "1-3 as
+  recommended": the acceptance as read; the refit the default (not CH4.3c2's rule, nor d = 6 with
+  the cap 0.82); proposal §3.5 amended, with an Appendix A line.

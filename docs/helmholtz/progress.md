@@ -4415,7 +4415,7 @@ request, using this template:
     and rule beside the default, fits form C under the least raised cap (CH3.3's branch, its
     coefficient from 0.80 by 0.01) and a margin table; `--rule ch4-3c2` in `helmholtz_accuracy` and
     `helmholtz_boxes`.
-  - `tetraleaf-exec`: `DegreeRule::CALIBRATED` the refit on the worst density, for sign-off
+  - `tetraleaf-exec`: `DegreeRule::CALIBRATED` the refit on the worst density (signed off)
     (C = 2.00, a = −0.55, b = −4.66, d = 2, cap 0.82); CH4.3c2's rule kept as
     `DegreeRule::CH4_3C2`; the module docs and doctest.
   - `tools/helmholtz/ch4-3c3-runs.sh` (`scans`, `scans-low`, `verify-w1`, `verify-matrix`,
@@ -4449,7 +4449,9 @@ request, using this template:
   the default and workspace tests at opt-level 1, 1,384 and 1,428 passed; the MPI list at 2 and 4
   ranks at opt-level 1). Not run: `cargo deny` (no manifest change), Laplace's benchmarks (no
   Laplace path), 8 ranks (no distributed code).
-- Decisions: the report's questions 1–3 for sign-off (the acceptance as read; the refit the
-  default; proposal §3.5 amended).
+- Decisions: the report's questions 1–3, signed off 2026-11-22 by the user on #254, "1-3 as
+  recommended": the acceptance as read; the refit the default (cap 0.82, one degree above CH3.3's
+  rule at x = 8–21 for ε ≤ 2 · 10⁻⁷; CH4.3c2's rule kept as `DegreeRule::CH4_3C2`); proposal §3.5
+  amended (Appendix A).
 - Laplace: not touched (the Helmholtz degree rule, the harness, scripts, docs).
 - Follow-ups: CH4.4's Also (the constant density on the low-frequency trees, its line).

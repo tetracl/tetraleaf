@@ -32,7 +32,7 @@ times are read, never asserted.
    rule covers 230 of the 234 with 472); against CH4.3c2's rule it is 0–2 degrees lower at
    x ≤ 150 but one higher at x = 8–21 and ε ≤ 2 · 10⁻⁷ (where it exceeds CH3.3's rule, x = 13.5 at
    10⁻⁸ among them), and −1 to +2 beyond x = 150 (§4). It is the
-   default on this branch, for sign-off (`DegreeRule::CALIBRATED`; CH4.3c2's rule kept as
+   default (`DegreeRule::CALIBRATED`, signed off, §8; CH4.3c2's rule kept as
    `DegreeRule::CH4_3C2`).
 3. **Pair evidence.** S7's worst pair at the refit's degree is at most 4.8 ε at k a = 45 … 256
    (CH4.3c2's rule 4.6 ε), within the 19–42 ε the worst pair reaches at the degrees the FMM
@@ -271,6 +271,9 @@ against 0.09–0.10 ε) and within ε/2 everywhere, smaller at 10⁻⁸ under Ro
 against 0.64 ε).
 
 ## 8. Questions for sign-off
+
+Signed off 2026-11-22 by the user on #254, "1-3 as recommended": all three as asked, the refit
+the default (neither alternative), proposal §3.5 amended with an Appendix A line.
 
 1. The acceptance as read: the margin measured by level scans with W1's constant density at
    x = 13.5–216 (and 6.8) at kD = 250, 500 and 1000 (§2, §3); found wrong both ways (one short at

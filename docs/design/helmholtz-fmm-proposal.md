@@ -340,22 +340,42 @@ Top level (level 2) against kD, at ε = 10⁻⁴ / 10⁻⁶ / 10⁻⁸:
 
 Doubling kD moves the whole table up one level.
 
-**Calibrated (H3, CH3.3; amended at H3.G; the high-frequency branch amended at CH4.3c2).** The
+**Calibrated (H3, CH3.3; amended at H3.G; the high-frequency branch amended at CH4.3c2 and
+CH4.3c3).** The
 full FMM's rule, `DegreeRule::CALIBRATED` of `tetraleaf_exec::helmholtz`, with L = log₁₀(1/ε)
 and x = Re(k) a:
 
 ```math
 p(x, \varepsilon) = \max\!\left(\lceil 0.30 L^2 + 0.25 L + 2.60 \rceil,\;
-\left\lceil \min\!\left(x + \max(0, e(\varepsilon))\, x^{1/3} + 5,\;
-x + 0.80 (\ln\tfrac{1}{\varepsilon})^{2/3} x^{1/3}\right) \right\rceil\right),
-\quad e(\varepsilon) = 2.30 (\ln\tfrac{1}{\varepsilon})^{2/3} - 0.75 L - 5.73
+\left\lceil \min\!\left(x + \max(0, e(\varepsilon))\, x^{1/3} + 2,\;
+x + 0.82 (\ln\tfrac{1}{\varepsilon})^{2/3} x^{1/3}\right) \right\rceil\right),
+\quad e(\varepsilon) = 2.00 (\ln\tfrac{1}{\varepsilon})^{2/3} - 0.55 L - 4.66
 ```
+
+(amended at CH4.3c3) The high-frequency branch is refitted on the worst density: CH4.3c2's level
+scans with the random charges and level scans of W1's constant density at x = 6.8–216 (kD = 250,
+500, 1000), 234 measured degrees in all, under which CH4.3c2's +2 proved one degree short at
+x = 216 (10⁻³, 10⁻⁷) and at x = 13.5 (10⁻⁸) and up to 2 too many at x ≤ 54. The refit has no
+hand-chosen offset: it is the least total excess over every measured degree. No rule under
+CH3.3's branch covers x = 13.5 at 10⁻⁸ (the constant density needs 28, CH3.3's rule gives 27), so
+the cap's coefficient is raised from 0.80 to 0.82, the least that covers the data. The rule is
+then one degree above CH3.3's at x = 8–21 for ε ≤ 2 · 10⁻⁷ and at or below it elsewhere; against
+CH4.3c2's rule (`DegreeRule::CH4_3C2`, kept) it is 0–2 degrees lower at x ≤ 150, one higher at
+x = 8–21 for ε ≤ 2 · 10⁻⁷, and −1 to +2 beyond x = 150. Every case of CH3.1c's matrix and CH3.3's
+held-out cases is within ε under it (at most 0.44 ε), and so is W1 at kD = 250–1000 with the
+random charges, the plane wave's trace and the constant density at 10⁻⁸ … 10⁻³ (at most 0.65 ε;
+`tetraleaf-validate/results/helmholtz-ch4-3c3.md`). The constant density on the low-frequency
+trees (x < 6.8) is CH4.4's to check.
+
+(CH4.3c2's construction, superseded at CH4.3c3: an offset of 5 and the excess
+2.30 (ln 1/ε)^{2/3} − 0.75 L − 5.73, capped at 0.80.)
 
 (amended at CH4.3c2) The plateau is CH3.3's. The high-frequency branch is refitted to level
 scans from ⌊x⌋ − 2 at x = 27–216 (random charges), its excess linear in L beside CH3.3's term,
 raised by 2 degrees because W1's constant density, whose boxes' errors add coherently, missed ε
 by up to 2.6× under the fit alone, and capped by CH3.3's branch (`DegreeRule::cap`), so that no
-degree exceeds CH3.3's rule (`DegreeRule::CH3_3`, the rule below as CH3.3 fitted it). It is
+degree exceeded CH3.3's rule (`DegreeRule::CH3_3`, the rule below as CH3.3 fitted it; the cap
+raised to 0.82 at CH4.3c3, above). CH4.3c2's rule was
 CH3.3's rule at x ≤ 7 and 4–10 degrees below it at x ≥ 43 at 10⁻³, 0–3 at 10⁻⁸; every case of
 CH3.1c's matrix, CH3.3's held-out cases and W1 at kD = 250–1000 with the three densities is
 within ε under it (`tetraleaf-validate/results/helmholtz-ch4-3c2.md`). CH3.3's rule:
@@ -370,23 +390,23 @@ sampled targets within ε/2 on W1, W3 and W4, measured over 0.14 ≤ x ≤ 65 an
 10⁻⁸ ≤ ε ≤ 10⁻³ and checked in the full FMM at x = 108 (W1 at kD = 500) and at x = 216 and
 108 (W1 at kD = 1000, within ε at 10⁻⁸ to 10⁻³, at most 0.83 ε; raising either level moves the
 error by under 1 %; amended at CH4.0c). Beyond that it is
-an extrapolation, below S7's per-pair p* as x grows and ε falls; CH4.3c2 recalibrated the
-high-frequency levels (above). The low-frequency plateau is 7, 9, 12, 15, 20 and 24 at
+an extrapolation, below S7's per-pair p* as x grows and ε falls; CH4.3c2 and CH4.3c3
+recalibrated the high-frequency levels (above). The low-frequency plateau is 7, 9, 12, 15, 20 and 24 at
 10⁻³ … 10⁻⁸, about half of S7's 16 … 46. On the example above (CH3.6's W1 tree at kD = 500,
-10⁻⁶, leaves on level 7; the calibrated column CH4.3c2's rule, CH3.3's 131 and 72 on levels 2
-and 3):
+10⁻⁶, leaves on level 7; the calibrated column CH4.3c3's rule, CH4.3c2's 71 and 41 on levels 3
+and 4, CH3.3's 131 and 72 on levels 2 and 3):
 
 | Level | Box width | p_l, formula | p_l, calibrated |
 | --- | --- | ---: | ---: |
 | 2 | 19.9 λ | 144 | 128 |
-| 3 | 9.9 λ | 82 | 71 |
-| 4 | 5.0 λ | 50 | 41 |
+| 3 | 9.9 λ | 82 | 70 |
+| 4 | 5.0 λ | 50 | 40 |
 | 5 | 2.5 λ | 33 | 25 |
 | 6 | 1.2 λ | 25 | 16 |
 | 7 | 0.6 λ | 23 | 15 |
 
-The top level, formula and calibrated rule, at 10⁻⁶ and 10⁻⁸: 43 and 48 against 35 and
-38 at kD = 100; 144 and 151 against 128 and 134 at kD = 500 (CH3.3's rule 131 and 135). The
+The top level, formula and calibrated rule, at 10⁻⁶ and 10⁻⁸: 43 and 48 against 34 and
+38 at kD = 100 (CH4.3c2's rule 35 and 38); 144 and 151 against 128 and 134 at kD = 500 (CH3.3's rule 131 and 135). The
 formula stays above as the uncalibrated reference. The excess p − x on the high-frequency levels
 grows about linearly in L, faster than the formula's (ln 1/ε)^{2/3}, which CH4.3c2 refitted.
 
@@ -1981,6 +2001,13 @@ these.
   #252, its questions 1–3, signed off by the user, "Q1-3 as recommended"): Section 3.6, the
   shorter transfer function analysed (⌈3(P − 1)/2⌉ and the excess-bandwidth length per pair at the
   FMM's degrees) and 2P − 2 kept; review 2026-11-12, M8, closed with it.
+- **Amended at CH4.3c3, 2026-11-22** (`tetraleaf-validate/results/helmholtz-ch4-3c3.md` §2–§6, §8;
+  PR #254, its questions 1–3, signed off by the user, "1-3 as recommended"): Section 3.5, the
+  calibrated rule's high-frequency branch refitted on the worst density (W1's constant density
+  scanned at x = 6.8–216 beside CH4.3c2's random charges; C = 2.00, a = −0.55, b = −4.66, d = 2),
+  its cap raised from CH3.3's 0.80 to 0.82, so one degree above CH3.3's rule at x = 8–21 for
+  ε ≤ 2 · 10⁻⁷; CH4.3c2's rule kept beside it; the example table's calibrated degrees on levels 3
+  and 4 and the top level at kD = 100.
 - **Amended at CH4.3e, 2026-11-22** (`tetraleaf-validate/results/helmholtz-ch4-3e.md` §6; PR
   #253, its questions 1–3, signed off by the user, "Q1-3 as recommended"): Section 3.7, leaves on
   levels of k a ≥ 2.8 whatever their M2L, with W and X lists, the leaf operators independent of

@@ -11,9 +11,8 @@ Status (2026-11-22): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 202
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
 item 10 CH4.1, CH4.2, CH4.2c, CH4.3a–CH4.3e (CH4.3d2 closed unrun) and CH4.3c1–c2. CH4.3c3 (the
 constant density scanned: CH4.3c2's +2 one short at x = 216 (10⁻³, 10⁻⁷) and 13.5 (10⁻⁸), up to 2
-too many at x ≤ 54; the
-degree rule refitted on the worst density, the default for sign-off) is in review; then CH4.4 and
-CH4.5, which close H4's tasks; the FFT track stays item 11. The project was renamed tetraleaf on
+too many at x ≤ 54; the degree rule refitted on the worst density under a cap of 0.82, the
+default) is signed off; then CH4.4 and CH4.5, which close H4's tasks; the FFT track stays item 11. The project was renamed tetraleaf on
 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c. The
 history of this line until H6.G is in `progress.md` and in this file's history
 (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
@@ -824,8 +823,10 @@ task's full line is in its record or report and its progress entry
   `tetraleaf-validate/results/helmholtz-ch4-3c3.md`; record `docs/helmholtz/tasks/CH4.3c3.md`. W1's
   constant density scanned at x = 6.8–216 (`helmholtz_calibrate --density`): CH4.3c2's +2 one short
   at x = 216 (10⁻³, 10⁻⁷) and 13.5 (10⁻⁸), up to 2 too many at x ≤ 54; refitted on the worst density under a cap of
-  0.82 (C 2.00, a −0.55, b −4.66, d 2), every case within ε (at most 0.65 ε), the default for
-  sign-off. *Sign-off:* the report's questions 1–3, pending.
+  0.82 (C 2.00, a −0.55, b −4.66, d 2), every case within ε (at most 0.65 ε), the default.
+  *Sign-off:* the report's questions 1–3, signed off 2026-11-22 by the user on #254: "1-3 as
+  recommended": the acceptance as read; the refit the default (one degree above CH3.3's rule at
+  x = 8–21, ε ≤ 2 · 10⁻⁷), CH4.3c2's rule kept as `DegreeRule::CH4_3C2`; proposal §3.5 amended.
 - CH4.3d The transfer function's length. *Done when:* (S6 §6) whether a shorter
   transfer function (⌈3(P − 1)/2⌉, whose rounding stays far below 2P − 2's at k a 6–45, S6's
   report §6) earns a truncation analysis; (review 2026-11-12, M8) the excess-bandwidth length
