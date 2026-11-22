@@ -9,13 +9,13 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-22): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
-item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1, CH4.3b2a, CH4.3b2b, CH4.3b2d, CH4.3c1 and CH4.3c2.
-CH4.3b2c (signed off 2026-11-22: the diagonal form's time rule the builder's default, evaluation
-0.37–0.99× at matched accuracy on W1 and W3 on Kathleen and locust; D8 amended; CH4.3f added off the
-list). Next CH4.3d, CH4.3e and CH4.3c3; the FFT track stays item
-11. The project was renamed tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and
-CH0.6 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in
-this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
+item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1–CH4.3b2d, CH4.3c1 and CH4.3c2 (CH4.3b2c on 2026-11-22:
+the diagonal form's time rule the builder's default). CH4.3d was split into CH4.3d1 (the pair sweep)
+and CH4.3d2 (the FMM); CH4.3d1 is done on its branch (2P − 2 recommended, CH4.3d2 not run, for
+sign-off). Next CH4.3e and CH4.3c3; the FFT track stays item 11. The project was renamed tetraleaf
+on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c.
+The history of this line until H6.G is in `progress.md` and in this file's history
+(`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
 `git show 8475009:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
@@ -834,15 +834,12 @@ task's full line is in its record or report and its progress entry
   the truncation model, which may recommend) and CH4.3d2 (the FMM, which confirms), by the size
   rule of `/next-task` and the H6 gate's rule of pair and FMM evidence (a spike sweep on locust,
   then a change to the tables and the time rule with runs on Kathleen).
-- [ ] **CH4.3d1 The transfer function's length, per pair.** *Done when:* S6's chain on the 34
-  classes and three placements, real k and η = 0.1, k a 2.8–216, ε 10⁻³–10⁻⁸ at the FMM's degrees
-  (CH4.3c2's rule), with T's length L scanned from below ⌈3(P − 1)/2⌉ and 2ka to 2P − 2 (the
-  excess-bandwidth lengths among them): per class T's truncation (double-double chain against
-  double-double RCR), its rounding against the bound E at length L, and the total against the
-  direct sum; the shortest length within RCR's error per (k a, ε, class); a truncation model
-  against the measurement; what a length rule gains on W1's and W3's levels (grid size, classes
-  taken from RCR at 10⁻⁸); whether CH4.3d2 runs, for sign-off. *Needs:* CH4.3a. *Machines:*
-  locust. *Sign-off:* CH4.3d2's go-ahead and its rule.
+- [x] **CH4.3d1 The transfer function's length, per pair.** Report:
+  `tetraleaf-validate/results/helmholtz-ch4-3d1.md`; record `docs/helmholtz/tasks/CH4.3d1.md`. S6's
+  chain scanned in T's length at the FMM's degrees (locust): the shortest lengths within RCR's error
+  save 0–16 % of a W1 diagonal level's samples (two classes from RCR at k a 27, 10⁻⁸); ⌈3(P − 1)/2⌉
+  fails everywhere, Song and Chew's length fails at k a 11–32, Gegenbauer's tail is safe but keeps
+  2p (0–3 %). *Sign-off:* the report's questions 1–3 (recommended: CH4.3d2 not run, 2P − 2 kept).
 - [ ] **CH4.3d2 The shorter transfer function in the FMM.** *Done when:* (if CH4.3d1's sign-off
   says so) the length rule signed off at CH4.3d1 in `tetraleaf-ref`'s bound and transfer
   function and `tetraleaf-tables`' builds (opt-in), the grid shortened with it if signed off, the
