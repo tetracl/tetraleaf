@@ -713,6 +713,20 @@ column "M2L" and the tables "Time rule", "Leaves" and "Leaf operators", with the
 interactions touching them; `summary`, `cases`, `errors`). Its report is
 `results/helmholtz-ch4-3e.md`.
 
+Helmholtz CH4.4a (the kD sweep beside FMM3D; docs/helmholtz/tasks/CH4.4a.md) added
+`helmholtz_accuracy::Case::defaults` (every setting the library's default: `HelmholtzM2l::Auto`,
+`HelmholtzDiagonal::Auto` with `DEFAULT_DIAGONAL_BUILD`, the V, W and X rules of the cost model;
+`Case::new` keeps its named settings), `Row::memory` (`Memory`: the FMM's resident growth over its
+build and evaluations, per rank the peak `VmHWM` after `reset_peak_resident` wrote `5` to
+`/proc/self/clear_refs` less `VmRSS` then, the largest rank's and the sums; `None` on macOS) and
+`helmholtz_fmm3d::maxrss` (FMM3D's peak per eps from the driver's log); to the `helmholtz_fmm3d`
+example `--settings harness|defaults`, `--density`, a last column "memory GB", a table "Build" and
+the levels in the log. `tests/helmholtz_accuracy.rs` (`check_defaults`) holds `Case::defaults` to an
+FMM built by `HelmholtzFmmBuilder::new` with nothing else set, bit for bit. `tools/fmm3d/run.sh
+helmholtz` takes `<workload>@<kD>/<density>`, `H_SETTINGS` and GNU time's memory per eps;
+`tools/helmholtz/ch4-4a-runs.sh` runs the task's stages, `ch4-4a-tables.py` makes the report's
+tables. Its report is `results/helmholtz-ch4-4a.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

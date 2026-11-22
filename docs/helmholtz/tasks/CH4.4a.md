@@ -87,11 +87,12 @@ convention, dependency or manifest change):
    a line `maxrss: token=<eps> kb=<n>`), a table "Build" (a row per ε: the build, its parts, the
    evaluation) and in the log each level's degree, k a, M2L and the form's classes.
 3. `tools/fmm3d/run.sh` (`helmholtz`): the driver launched once per eps under GNU `time` where
-   present, appending the `maxrss:` line to the log; a case `<workload>@<kD>[/<density>]`; the
-   variables `H_SETTINGS` (passed as `--settings`) and `H_VARIANTS` (FMM3D's variants at ε for the
-   case, default `VARIANTS`); the README's `helmholtz` section.
+   it takes `-f` (`H_TIME`), appending the `maxrss:` line to the log; a case
+   `<workload>@<kD>[/<density>]`; `H_SETTINGS` (passed as `--settings`); the README's
+   `helmholtz` section.
 4. `tools/helmholtz/ch4-4a-runs.sh` (the stages below, each a call of `run.sh helmholtz` with its
-   cases) and `ch4-4a-tables.py` (the report's tables from the cases' Markdown).
+   cases and FMM3D's variants, `VARIANTS`) and `ch4-4a-tables.py` (the report's tables from the
+   cases' Markdown).
 5. `tests/helmholtz_accuracy.rs`: `check_defaults` (below).
 6. `tetraleaf-validate/CLAUDE.md`; the report `tetraleaf-validate/results/helmholtz-ch4-4a.md`.
 
@@ -110,15 +111,16 @@ convention, dependency or manifest change):
 `/verify` (format, Clippy default, examples and workspace all-targets, the default and workspace
 tests at opt-level 1, `cargo doc`, the MPI list at 2 and 4 ranks), with
 `cargo clippy -p tetraleaf-validate --all-targets -- -D warnings` and `cargo test -p
-tetraleaf-validate`; `bash -n` and `shellcheck` on the scripts. No Laplace file changes, so no D9.
+tetraleaf-validate`; `bash -n` on the scripts (`shellcheck` is not installed on the M6). No Laplace file changes, so no D9.
 
 ## Machine runs
-Kathleen, `singlenode` jobs (1 × 40, ≤ 6 h each), release, BLAS threads 1, through
-`fmm3d.sbatch helmholtz` with `H_SETTINGS=defaults`; ours at 4 × 10 ranks × threads bound by socket
+Kathleen, `singlenode` jobs (1 × 40, ≤ 6 h each), release, BLAS threads 1, each
+`run.sbatch 'tools/helmholtz/ch4-4a-runs.sh <logs>/ch4-4a <stage…>'` (`H_SETTINGS=defaults`); ours at 4 × 10 ranks × threads bound by socket
 (CH3.6's split, T9's), FMM3D on 40 OpenMP threads, `default` and `fastker` at ε, `default` also at
 10⁻¹²; the density cases with `default` only. Stages of `ch4-4a-runs.sh`:
 - `smoke`: W1 at kD = 10 and W2 at kD = 10 with the constant density (the script, the memory lines);
-- `low`: W1 and W2 at kD = 10, 30, 100, 250; W3 at kD = 10, 30; the constant density's cases;
+- `low`: W1 and W2 at kD = 10, 30, 100, 250; W3 at kD = 10, 30;
+- `const`: the constant density's cases;
 - `mid`: W1 and W2 at kD = 500, W1 at kD = 500 with the plane wave's trace;
 - `w1-1000`, `w1-1000-pw`: W1 at kD = 1000, random charges and the plane wave's trace;
 - `w3`: W3 resolved at kD = 100, W3 at N = 10⁶ for kD = 200, 500.

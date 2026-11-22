@@ -175,6 +175,23 @@ distributions at N = 10⁵ and kD = 1, 10, 100):
 `H_T1_CASES` (default `w1@100`) runs again on one thread for both codes, without the
 crosscheck. The full outputs are removed after each case unless `H_KEEP` is set.
 
+Helmholtz CH4.4a (docs/helmholtz/tasks/CH4.4a.md) added:
+
+- a case's density: `<workload>@<kD>/<density>` (`random`, the default, `planewave` or
+  `constant`; `helmholtz_fmm3d`'s `--density`), in the problem file's charges and in the
+  names (`h-w1-kd500-planewave.bin`, `helmholtz-w1-kd500-planewave.md`);
+- `H_SETTINGS`: `harness` (the default, CH3.6's: `Case::new`, M2L by Rotation, the diagonal
+  form off) or `defaults` (the library's every default, `Case::defaults`);
+- FMM3D's memory: where GNU time takes `-f` (`H_TIME`, by default `/usr/bin/time` if so; not
+  macOS's), the driver runs once per eps under it and appends `maxrss: token=<eps> kb=<n>`
+  (its peak resident set) to its log, which `compare` prints in its last column "memory GB"
+  beside ours (the FMM's resident growth over its build and evaluation, summed over the
+  ranks; Linux only). FMM3D's figure is the whole driver's, with its input and output arrays.
+  Without GNU time the driver runs once at every eps, as before.
+
+`tools/helmholtz/ch4-4a-runs.sh` runs CH4.4a's stages through this step, and
+`tools/helmholtz/ch4-4a-tables.py` makes its report's tables.
+
 ```sh
 FMM3D_ROOT=... tools/fmm3d/build.sh driver          # relink for the driver's FULL output
 FMM3D_ROOT=... H_CASES='w1@10 w1@30' tools/fmm3d/run.sh helmholtz
