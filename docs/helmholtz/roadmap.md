@@ -10,7 +10,7 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 Status (2026-11-22): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
 item 10 CH4.1, CH4.2, CH4.2c, CH4.3a–CH4.3d (CH4.3d2 closed unrun) and CH4.3c1–c2. CH4.3e (c_leaf
-with the time rule: leaves on the form's levels at every c_leaf, c_leaf 4 proposed) is on its PR for
+with the time rule: leaves at k a ≥ 2.8 at every c_leaf, c_leaf 4 proposed) is on its PR for
 sign-off; next CH4.3c3, then CH4.4 and CH4.5; the FFT track stays item 11. The project was renamed
 tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7,
 CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
@@ -844,8 +844,8 @@ task's full line is in its record or report and its progress entry
   (question 2, signed off 2026-11-22 by the user on #252: "Q1-3 as recommended"): T's length stays 2P − 2; no length rule computable
   before the run safely reaches the few per cent the shortest lengths would save.
 - [x] **CH4.3e c_leaf re-decided with the rule.** Report: `tetraleaf-validate/results/helmholtz-ch4-3e.md`;
-  record `docs/helmholtz/tasks/CH4.3e.md`. Under the time rule leaves lie on the form's levels at every
-  c_leaf from 1 to 8 (W2 with W and X lists), every run within ε; c_leaf 4 0.874× (Kathleen) and 0.790×
+  record `docs/helmholtz/tasks/CH4.3e.md`. Leaves lie on levels of k a ≥ 2.8 (the form's among them, W2's
+  with W and X lists) at every c_leaf from 1 to 8, every run within ε; c_leaf 4 0.874× (Kathleen) and 0.790×
   (locust) c_leaf 2's build plus one evaluation, from the under-resolved W3 (0.26–0.36×); `DEFAULT_C_LEAF`
   4 built. *Sign-off:* the report's questions 1–3 (c_leaf 4; §3.7, §5.1 and D11 amended), pending.
 - [ ] **CH4.3f The time rule's costs at many ranks per node.** (Added at CH4.3b2c, its question
@@ -864,7 +864,9 @@ task's full line is in its record or report and its progress entry
 - [ ] **CH4.5 Host performance against FMM3D at matched accuracy.** As C6.8, setup apart,
   one node, on CH4.4's sweep. Also (review 2026-11-19, A6, B6, B8): ours at 1 × N (one rank,
   N threads, as a threaded caller runs it) beside the best split; FMM3D's OpenMP binding
-  stated; CH4.0k reconsidered before it, and the H4 gate states one-rank-per-node figures.
+  stated; CH4.0k reconsidered before it, and the H4 gate states one-rank-per-node figures. Also
+  (CH4.3e's report §4): c_leaf 4, measured at one rank per node only, at the best split and at
+  N × 1 (W3 at N = 10⁶, kD = 500, where its gain lies).
   *Needs:* CH4.4. *Machines:* locust, Kathleen.
 - [ ] **CH4.6 The optional FFTW back end of the φ step.** *Done when:* against the product to
   round-off; per-box plans with bits the same across batch positions, sizes and threads, and

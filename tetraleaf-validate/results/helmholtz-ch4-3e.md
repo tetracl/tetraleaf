@@ -7,14 +7,15 @@ builder's default, `results/helmholtz-ch4-3b2c.md`).
 
 ## 0. Summary
 
-- **Leaves on high-frequency levels are the rule, not the exception, at every c_leaf.** As built,
-  a level is high frequency where its M2L is the diagonal form or RCR at k a ≥ 2.8 (S6's range,
-  the time rule's floor). A leaf of c_leaf λ has k a ≤ 5.4 c_leaf, so even c_leaf 1's leaves
-  (k a ≤ 5.4) lie in the form's range. Under the default, on Kathleen, 4–9 of the 10 trees at
-  10⁻³ and at 10⁻⁶ have occupied leaves on such levels at every c_leaf from 1 to 8, 6–7 of 8 at
-  10⁻⁷ from c_leaf 2 on, and 2 of 9 at 10⁻⁸ at c_leaf 4 and 8 (§2); on locust 3–4 of 5 at 10⁻³ and
-  10⁻⁶ at every c_leaf, none below. The census's first pass (`spikes/census`, D11's reason for
-  c_leaf 1) did not have the time rule's range; no c_leaf of this sweep keeps the leaves off.
+- **Leaves on high-frequency levels are the rule at every c_leaf.** A leaf of c_leaf λ has
+  k a ≤ 5.4 c_leaf (a = √3 w/2), so even c_leaf 1's leaves (k a ≤ 5.4) reach the diagonal form's
+  range, k a ≥ 2.8 (S6's, the time rule's floor). Counting every level at k a ≥ 2.8, whatever its
+  M2L, 8–9 of Kathleen's 8–10 trees per ε and all 5 of locust's have occupied leaves there, at every
+  c_leaf from 1 to 8 and every ε from 10⁻³ to 10⁻⁸ (§2; the exception the resolved W3 at kD = 100,
+  whose leaves lie at k a 2.7). Their M2L is the form (the time rule's choice), RCR, the plane waves
+  (D8's range reaches k a 27) or none (every V pair near). The census's first pass
+  (`spikes/census`, D11's reason for c_leaf 1) classified by a bound without S6's constants; no
+  c_leaf of this sweep keeps the leaves off such levels.
 - **They are correct.** The leaf operators (P2M, L2P, P2L, M2P) do not depend on the M2L's
   regime: they run at the level's degree, which the degree rule covers to x = 216 (CH4.0c,
   CH4.3c2), and leaves of c_leaf 4 have x ≤ 21.8. Every one of the 456 runs (both machines,
@@ -39,10 +40,12 @@ builder's default, `results/helmholtz-ch4-3b2c.md`).
   10⁻⁸), 1–3 % more on the means, at twice the phase range (Re(k) r ≤ 352) and leaf x (43.5);
   c_leaf 1 costs 1.4–1.5× (1.3–1.8× on W1 at kD ≥ 500, 3.7–4.8× on W3 at kD = 500).
 - **The proposal's §3.7 and §5.1 are wrong as built** (question 3): "every leaf is on a
-  low-frequency level, and so are the W- and X-list operators" holds at no c_leaf ≥ 1 under the
-  time rule. The correction proposed: leaves may lie on the form's levels; the leaf operators
-  stay correct there because they do not depend on the regime and the degree rule covers their
-  arguments; c_leaf bounds the P2P's phase and the leaves' argument, not the regime.
+  low-frequency level, and so are the W- and X-list operators" holds at no c_leaf ≥ 1, and
+  "under-resolved inputs get more, sparser leaves instead of high-frequency ones" is the price
+  c_leaf 4 now declines (its gain is that case). The correction proposed: leaves may lie on levels
+  of k a ≥ 2.8 whatever their M2L; the leaf operators stay correct there because they do not
+  depend on the regime and the degree rule covers their arguments; c_leaf bounds the P2P's phase
+  and the leaves' argument, not the regime.
 
 ## 1. Setup
 
@@ -61,60 +64,63 @@ builder's default, `results/helmholtz-ch4-3b2c.md`).
     core`): job 663653 (node-c11b-012, 2026-11-22 14:19–14:53, W1 and W1 at kD = 1000), 663654
     (node-c11a-021, 14:20–14:34, W2), 663655 (node-c11a-021, 14:34–15:18, W3 and W3 resolved);
     every launch exit 0 (74).
-  - locust (GH200, 72 cores), 14:21–14:40, W1 and W3, every launch exit 0 (40); 1-minute load
-    1.3 at the start, at most 44.7 during the runs (their own 72 threads; sampled every 30 s).
+  - locust (GH200, 72 cores), 14:21–14:40, W1 and W3, every launch exit 0 (40); idle before the
+    start (1-minute load 0.03, no other process above 1.1 % CPU), the 1-minute load at most 44.7
+    during the runs, below their own 72 threads (sampled every 30 s; the processes were not
+    sampled during the runs).
 - **Raw outputs**: `~/projects/fmm-archive/kathleen/runs/ch4-3e/` (`ch4-3e-w1`, `-w2`, `-w3`, the
   jobs' logs) and `~/projects/fmm-archive/locust/runs/ch4-3e/` (with `load.log`).
 - **Tables**: `tools/helmholtz/ch4-3e-tables.py census|summary|cases|errors`.
 
 ## 2. The census: leaves on high-frequency levels
 
-Per tree (c_leaf and ε), whether a level whose M2L is the form (`diagonal l:c` in the column
-"M2L") or RCR at k a ≥ 2.8 (the table "Time rule") holds occupied leaves (the table "Leaves").
-A level with no V pair has no M2L and does not count (W3 at kD = 500 at c_leaf 2: every V pair of
-level 6, leaves of about 4 points, is a near pair under the V rule).
+Per tree (c_leaf and ε), whether a level of k a = Re(k) √3 r_l ≥ 2.8 holds occupied leaves (the
+table "Leaves"), whatever the M2L that ran there: the form (`diagonal l:c` in the column "M2L"),
+RCR, the plane waves or Batched (the table "Time rule"), or none ("no V": W3 at kD = 500 at
+c_leaf 1 and 2, whose leaves of 1–4 points make every V pair of the leaf level a near pair under
+the V rule).
 
 | machine | c_leaf | ε | trees | with leaves on a high-frequency level |
 | --- | ---: | --- | ---: | ---: |
-| kathleen | 1 | 1e-3 | 10 | 4 |
-| kathleen | 1 | 1e-6 | 10 | 8 |
-| kathleen | 1 | 1e-7 | 8 | 0 |
-| kathleen | 1 | 1e-8 | 9 | 0 |
-| kathleen | 2 | 1e-3 | 10 | 7 |
-| kathleen | 2 | 1e-6 | 10 | 8 |
-| kathleen | 2 | 1e-7 | 8 | 6 |
-| kathleen | 2 | 1e-8 | 9 | 0 |
-| kathleen | 4 | 1e-3 | 10 | 8 |
+| kathleen | 1 | 1e-3 | 10 | 9 |
+| kathleen | 1 | 1e-6 | 10 | 9 |
+| kathleen | 1 | 1e-7 | 8 | 8 |
+| kathleen | 1 | 1e-8 | 9 | 8 |
+| kathleen | 2 | 1e-3 | 10 | 9 |
+| kathleen | 2 | 1e-6 | 10 | 9 |
+| kathleen | 2 | 1e-7 | 8 | 8 |
+| kathleen | 2 | 1e-8 | 9 | 8 |
+| kathleen | 4 | 1e-3 | 10 | 9 |
 | kathleen | 4 | 1e-6 | 10 | 9 |
-| kathleen | 4 | 1e-7 | 8 | 6 |
-| kathleen | 4 | 1e-8 | 9 | 2 |
-| kathleen | 8 | 1e-3 | 10 | 8 |
+| kathleen | 4 | 1e-7 | 8 | 8 |
+| kathleen | 4 | 1e-8 | 9 | 8 |
+| kathleen | 8 | 1e-3 | 10 | 9 |
 | kathleen | 8 | 1e-6 | 10 | 9 |
-| kathleen | 8 | 1e-7 | 8 | 7 |
-| kathleen | 8 | 1e-8 | 9 | 2 |
-| locust | 1 | 1e-3 | 5 | 3 |
-| locust | 1 | 1e-6 | 5 | 3 |
-| locust | 1 | 1e-7 | 5 | 0 |
-| locust | 1 | 1e-8 | 5 | 0 |
-| locust | 2 | 1e-3 | 5 | 4 |
-| locust | 2 | 1e-6 | 5 | 4 |
-| locust | 2 | 1e-7 | 5 | 0 |
-| locust | 2 | 1e-8 | 5 | 0 |
-| locust | 4 | 1e-3 | 5 | 3 |
-| locust | 4 | 1e-6 | 5 | 3 |
-| locust | 4 | 1e-7 | 5 | 0 |
-| locust | 4 | 1e-8 | 5 | 0 |
-| locust | 8 | 1e-3 | 5 | 3 |
-| locust | 8 | 1e-6 | 5 | 3 |
-| locust | 8 | 1e-7 | 5 | 0 |
-| locust | 8 | 1e-8 | 5 | 0 |
+| kathleen | 8 | 1e-7 | 8 | 8 |
+| kathleen | 8 | 1e-8 | 9 | 8 |
+| locust | 1 | 1e-3 | 5 | 5 |
+| locust | 1 | 1e-6 | 5 | 5 |
+| locust | 1 | 1e-7 | 5 | 5 |
+| locust | 1 | 1e-8 | 5 | 5 |
+| locust | 2 | 1e-3 | 5 | 5 |
+| locust | 2 | 1e-6 | 5 | 5 |
+| locust | 2 | 1e-7 | 5 | 5 |
+| locust | 2 | 1e-8 | 5 | 5 |
+| locust | 4 | 1e-3 | 5 | 5 |
+| locust | 4 | 1e-6 | 5 | 5 |
+| locust | 4 | 1e-7 | 5 | 5 |
+| locust | 4 | 1e-8 | 5 | 5 |
+| locust | 8 | 1e-3 | 5 | 5 |
+| locust | 8 | 1e-6 | 5 | 5 |
+| locust | 8 | 1e-7 | 5 | 5 |
+| locust | 8 | 1e-8 | 5 | 5 |
 
 Selected trees on Kathleen (every row: `ch4-3e-tables.py census`): the leaf levels, the
 high-frequency levels with leaves (the M2L, k a, the occupied leaves), the W interactions into
 them (M2P at that level), the X interactions out of them (P2L at the next finer level), the phase
 bound Re(k) × the farthest near pair's point distance (`Row::phase_bound`):
 
-| machine | case | c_leaf | leaf levels (occupied) | high-frequency levels with leaves: (M2L, k a): occupied | occupied there | W into them | X out of them | Re(k) r bound |
+| machine | case | c_leaf | leaf levels (occupied) | levels of k a ≥ 2.8 with leaves: (M2L, k a): occupied | occupied there | W into them | X out of them | Re(k) r bound |
 | --- | --- | ---: | --- | --- | ---: | ---: | ---: | ---: |
 | kathleen | w1-1000-1e-6 | 1 | 8 | 8 (rcr, k a 3.4): 291849 | 291849 | 0 | 0 | 27.1 |
 | kathleen | w1-1000-1e-6 | 2 | 7 | 7 (form 34, k a 6.8): 75295 | 75295 | 0 | 0 | 54.1 |
@@ -128,21 +134,21 @@ bound Re(k) × the farthest near pair's point distance (`Row::phase_bound`):
 | kathleen | w2-500-1e-6 | 2 | 6–8 | 6 (form 34, k a 6.8): 17556; 7 (form 21, k a 3.4): 2238 | 19794 | 34557 | 34557 | 54.1 |
 | kathleen | w2-500-1e-6 | 4 | 5–8 | 5 (form 34, k a 13.5): 1433; 6 (form 34, k a 6.8): 15212; 7 (form 21, k a 3.4): 2238 | 18883 | 57048 | 57048 | 108.3 |
 | kathleen | w2-500-1e-6 | 8 | 5–8 | 5 (form 34, k a 13.5): 1433; 6 (form 34, k a 6.8): 15212; 7 (form 21, k a 3.4): 2238 | 18883 | 57048 | 57048 | 108.3 |
-| kathleen | w3-500-1e-6 | 1 | 7 | none | 0 | 0 | 0 | 27.1 |
-| kathleen | w3-500-1e-6 | 2 | 6 | none | 0 | 0 | 0 | 54.1 |
+| kathleen | w3-500-1e-6 | 1 | 7 | 7 (no V, k a 3.4): 795931 | 795931 | 0 | 0 | 27.1 |
+| kathleen | w3-500-1e-6 | 2 | 6 | 6 (no V, k a 6.8): 256369 | 256369 | 0 | 0 | 54.1 |
 | kathleen | w3-500-1e-6 | 4 | 5 | 5 (rcr, k a 13.5): 32768 | 32768 | 0 | 0 | 108.3 |
 | kathleen | w3-500-1e-6 | 8 | 4–5 | 4 (form 34, k a 27.1): 3226; 5 (rcr, k a 13.5): 6960 | 10186 | 0 | 0 | 216.5 |
-| kathleen | w3-500-1e-8 | 1 | 7 | none | 0 | 0 | 0 | 27.1 |
-| kathleen | w3-500-1e-8 | 2 | 6 | none | 0 | 0 | 0 | 54.1 |
-| kathleen | w3-500-1e-8 | 4 | 5 | none | 0 | 0 | 0 | 108.3 |
-| kathleen | w3-500-1e-8 | 8 | 4–5 | none | 0 | 0 | 0 | 216.5 |
+| kathleen | w3-500-1e-8 | 1 | 7 | 7 (no V, k a 3.4): 795931 | 795931 | 0 | 0 | 27.1 |
+| kathleen | w3-500-1e-8 | 2 | 6 | 6 (no V, k a 6.8): 256369 | 256369 | 0 | 0 | 54.1 |
+| kathleen | w3-500-1e-8 | 4 | 5 | 5 (no V, k a 13.5): 32768 | 32768 | 0 | 0 | 108.3 |
+| kathleen | w3-500-1e-8 | 8 | 4–5 | 4 (waves, k a 27.1): 3226; 5 (no V, k a 13.5): 6960 | 10186 | 0 | 0 | 216.5 |
 
-So: the form runs on leaf levels at k a 3.4–27; on W1 the W and X pairs there are near pairs
-(the W and X rule converts them) or absent, on W2's cap they are not, and M2P and P2L run on the
-form's leaves (W2 at kD = 500, 10⁻⁶, c_leaf 4: 57,048 interactions each way). The phase bound
-stays within the 44 c_leaf of converted V pairs (at most 43.3 c_leaf, W1 at kD = 100 at c_leaf 1)
-and reaches 108.3 rad at c_leaf 4 and 216.5 at 8, inside the P2P kernel's contract domain
-(Re(k) r ≤ 2¹⁰).
+So: occupied leaves lie at k a 3.4–27 under every M2L the defaults run; on W1 the W and X pairs
+there are near pairs (the W and X rule converts them) or absent, on W2's cap they are not, and M2P
+and P2L run on the form's leaves (W2 at kD = 500, 10⁻⁶, c_leaf 4: 57,048 interactions each way).
+The phase bound stays within the 44 c_leaf of converted V pairs (at most 43.3 c_leaf, W1 at
+kD = 100 at c_leaf 1) and reaches 108.3 rad at c_leaf 4 and 216.5 at 8, inside the range the
+Helmholtz P2P's sine and cosine are tested on (|θ| ≤ 2¹⁰, `tetraleaf-simd`'s `sincos`).
 
 ## 3. Errors
 
@@ -162,7 +168,7 @@ output (the checksum of the whole output):
 | locust | 1e-8 | 40 | 0.27 | 0.44 | 1.000–1.000 | 1.000–1.000 | 0.774–1.000 | 1.000–1.000 | 1.000–1.000 | 0.819–1.000 | yes |
 
 Every run within ε by a factor of about 2.3 at least. Where a c_leaf changes the tree the errors
-move both ways, 0.48–1.61× c_leaf 2's: c_leaf 1 up to 1.29–1.61× in ∇φ (W1 at kD = 500 and 1000,
+move both ways, 0.48–1.61× c_leaf 2's: c_leaf 1 up to 1.18–1.61× in ∇φ (W1 at kD = 500 and 1000,
 W3 at kD = 200 and 500, at 10⁻³ and 10⁻⁶), c_leaf 4 and 8 down to 0.53 and 0.48× (W3 at kD = 500,
 10⁻⁶: coarser leaves, more of the field exact in P2P).
 
@@ -250,39 +256,50 @@ Per case (the build and evaluation of c_leaf 2 the geometric mean over both laun
 The leaf level in the table is the leaf rule's (`min_leaf_level`); the tree's leaves are split
 further by points. Where c_leaf 4 builds c_leaf 2's tree (no checksum changes) its ratio is the
 run-order spread: 0.94–1.11 on Kathleen (CH4.3b2c's report §6: 9–20 % between runs of one
-launch), 0.99–1.03 on locust. By CH4.0d3's rule (another value where its geometric mean over a
-machine class's cases is at least 5 % lower, errors within ε), c_leaf 4 and 8 both qualify on
-both classes; 1 does not.
+launch), 0.99–1.03 on locust. The cases above 1.05 at c_leaf 4 are all of that kind (the tree
+c_leaf 2's): W1 at kD = 100, 10⁻⁸ (1.11, 0.42 s in all), W1 and W2 at kD = 200, 10⁻⁸ (1.07); at
+c_leaf 8 W1 at kD = 200, 10⁻⁷ and 10⁻⁸ (1.12), W2 at kD = 200, 10⁻³ (1.10) and W1 at kD = 100,
+10⁻⁷ (1.07). By CH4.0d3's rule (another value where its geometric mean over a machine class's
+cases is at least 5 % lower, errors within ε), c_leaf 4 and 8 both qualify on both classes; 1
+does not. The whole margin is the under-resolved W3 (4 of 37 cases on Kathleen, 4 of 20 on
+locust); without it c_leaf 4 is neutral (0.995 and 1.000). c_leaf 8 beats 4 by 2.9 % (Kathleen)
+and 1.3 % (locust), under the rule's 5 %, on the same workload alone. Every run was one rank on
+all cores; c_leaf 4 at many ranks per node (where the time rule's levels and the cut depend on the
+ranks per node, CH4.3b2c) is not measured here (CH4.5's line, an Also).
 
 ## 5. The test
 
 `check_form_leaves` (`tetraleaf-exec/tests/helmholtz_fmm.rs`): Gaussian clusters, N = 2,000,
 kD = 40, ε = 10⁻⁴, complex charges with gradients, `DEFAULT_C_LEAF`, 64 points per leaf, the W and
 X rules off; the time rule at free form costs and at the machine's. On the M6 the form takes
-levels 2 and 3 (k a 8.7 and 4.3, all 34 classes); level 3 holds 84 occupied leaves, with 735 W
-entries (M2P into them) and 1,040 X entries naming them (P2L out of them); the errors 3.875·10⁻⁶
-(φ) and 8.560·10⁻⁶ (∇φ), 1.000× the form off's on the same tree; 2 threads and on 2 and 4 ranks
-the one-rank FMM bit for bit. The test asserts leaves, W and X entries on a level of the form.
-(Level 2 has 380 X entries naming leaves without points: the empty-box rule leaves X entries of
-source-free leaves, whose P2L adds nothing; not followed up.)
+levels 2 and 3 (k a 8.7 and 4.3, all 34 classes); level 3 holds 84 occupied leaves, into which M2P
+and out of which P2L compute 7,660 point interactions each (`HelmholtzFmm::far_interactions`); the
+errors 3.875·10⁻⁶ (φ) and 8.560·10⁻⁶ (∇φ), 1.000× the form off's on the same tree; 2 threads and
+on 2 and 4 ranks the one-rank FMM bit for bit. The test asserts occupied leaves, M2P and P2L work
+on a level of the form. (Level 2 has 380 X entries naming leaves without points: the empty-box rule
+keeps X entries of source-free leaves, whose P2L adds nothing; not followed up.)
 
 ## 6. Questions for sign-off
 
 1. **The acceptance as read**: c_leaf re-decided on W1–W3 under the default (the time rule),
-   "leaves on high-frequency levels" measured as built (the form's levels, or RCR at k a ≥ 2.8),
+   "leaves on high-frequency levels" measured as built (levels of k a ≥ 2.8, with the M2L each ran),
    §3.7's "W and X lists off them" checked rather than enforced (the census, the errors, the
    test). Recommended.
 2. **c_leaf 4 the builder's default** (`DEFAULT_C_LEAF`, built in this PR; D11 amended a second
    time, `C_LEAF` = 1 staying the leaf rule's and the census's constant): 0.874× and 0.790× c_leaf 2's
-   build plus one evaluation, from the under-resolved W3 (0.26–0.36×), the rest within the spread
-   or better (0.93–0.98× where the tree changes), errors within ε. Recommended. Alternatives:
-   (a) 8 (0.849× and 0.780×; only W3 at kD = 500 differs from 4, at twice the phase range and
-   leaf argument); (b) keep 2 (this PR's default reverted).
-3. **Proposal §3.7 and §5.1 amended** to the finding: leaves may lie on levels whose M2L is high
-   frequency (the form, or RCR at k a ≥ 2.8), with W and X lists; the leaf operators do not depend
-   on the regime, and the degree rule covers their arguments (x ≤ 5.4 c_leaf); c_leaf bounds the
-   P2P's phase (22 c_leaf, 44 c_leaf with V pairs near) and the leaves' argument, and the default
-   is 4; D11's row amended. Recommended.
+   build plus one evaluation, all of the margin from the under-resolved W3 (0.26–0.36×), the rest
+   within the spread or better (0.93–0.98× where the tree changes), errors within ε; with an Also
+   on CH4.5 (c_leaf 4 at its best split and at N × 1). Recommended: of the two that qualify, 4,
+   because 8's further 2.9 % and 1.3 % come from that one workload, below the rule's 5 %, at
+   twice the phase range (352 rad) and leaf argument (x ≤ 43.5). Alternatives: (a) 8 (0.849× and
+   0.780×); (b) keep 2 (this PR's default reverted).
+3. **Proposal §3.7, §5.1 and §5.7 amended** to the finding, with D11's row: in §3.7 the first
+   consequence (leaves may lie on levels of k a ≥ 2.8 whatever their M2L, the form's included, with
+   W and X lists; the leaf operators do not depend on the regime and the degree rule covers their
+   arguments, x ≤ 5.4 c_leaf) and the third (under-resolved inputs get leaves up to c_leaf λ, 4 λ
+   by default, not more and sparser ones), and the default 4; in §5.1 the leaves' arguments; in §5.7
+   the phase range (22 c_leaf, 44 c_leaf with V pairs near, 176 rad at c_leaf 4, within the sine and
+   cosine's tested 2¹⁰). Recommended.
 
 ## 7. Reproduce
 

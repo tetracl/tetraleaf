@@ -121,15 +121,23 @@ None. The runs are done (raw outputs in `~/projects/fmm-archive/{kathleen,locust
   before and at most 44.7 during (the runs' own threads).
 
 ## Results
-The report: tetraleaf-validate/results/helmholtz-ch4-3e.md. Under the time rule leaves lie on
-levels whose M2L is the form (or RCR at k a ≥ 2.8) at every c_leaf from 1 to 8 (a leaf of c_leaf
-λ has k a ≤ 5.4 c_leaf, in the form's range from k a 2.8), on W2 with W and X lists; every run within
-ε (at most 0.27 ε in φ, 0.44 ε in ∇φ). c_leaf 4 puts build plus one evaluation at 0.874× (Kathleen)
+The report: tetraleaf-validate/results/helmholtz-ch4-3e.md. Leaves lie on levels of k a ≥ 2.8 (the
+form's range) at every c_leaf from 1 to 8 (a leaf of c_leaf λ has k a ≤ 5.4 c_leaf), whatever their
+M2L (the form, RCR, the plane waves or none), on W2 with W and X lists; every run within ε (at most
+0.27 ε in φ, 0.44 ε in ∇φ). c_leaf 4 puts build plus one evaluation at 0.874× (Kathleen)
 and 0.790× (locust) c_leaf 2's, from the under-resolved W3 at kD = 500 (0.26–0.36×), the rest the
 same tree or 0.93–0.98×; c_leaf 8 only 1–3 % more, from the same case; c_leaf 1 1.42–1.52×. Built:
 `DEFAULT_C_LEAF` = 4, for sign-off.
 
 ## Open questions
-The report's §6, for sign-off: 1, the acceptance as read; 2, c_leaf 4 the default (or 8, or 2);
-3, proposal §3.7 and §5.1 amended to the finding (leaves may lie on high-frequency levels), D11's
-row amended.
+The report's §6, for sign-off: 1, the acceptance as read; 2, c_leaf 4 the default (or 8, or 2),
+with an Also on CH4.5 (c_leaf 4 at many ranks per node); 3, proposal §3.7, §5.1 and §5.7 amended to
+the finding (leaves may lie on levels of k a ≥ 2.8; under-resolved inputs get leaves up to c_leaf
+λ), D11's row amended.
+
+The self-review (a subagent with the plan, proposal §2 and §10 and the branch) found nothing
+blocking; fixed: the census counted only the form's and RCR's levels (now every level of k a ≥ 2.8,
+the M2L named), the test counted X entries of empty leaves (now the point interactions), the
+report's wording (§3.7's third bullet in question 3, the tie-break between 4 and 8, the losers,
+one ∇φ range), the doc comment's claims; not changed: the locust load sampled without its
+processes (stated in the report).

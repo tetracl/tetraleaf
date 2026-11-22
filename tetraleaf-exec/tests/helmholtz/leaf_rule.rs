@@ -261,9 +261,9 @@ fn the_default_leaf_width_is_four_wavelengths_two_levels_coarser() {
         let narrow = min_leaf_level(&k, &cube(0.0, 1.0), C_LEAF);
         let wide = min_leaf_level(&k, &cube(0.0, 1.0), DEFAULT_C_LEAF);
         // Two levels coarser, but never above the root; where c_leaf 1's level is capped at 16
-        // (its own level 17 or deeper) the default's is 14 to 16.
+        // (its own level 17 or deeper) the default's is 15 or 16.
         assert!(
-            wide == narrow.saturating_sub(2) || (narrow == 16 && wide >= 14),
+            wide == narrow.saturating_sub(2) || (narrow == 16 && wide >= 15),
             "kD = {kd}: {wide} against {narrow}"
         );
     }

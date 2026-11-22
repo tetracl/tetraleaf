@@ -4255,8 +4255,8 @@ fn scenarios() -> Vec<Scenario> {
 }
 
 /// The scenario of [`check_form_leaves`] (Helmholtz CH4.3e): Gaussian clusters at kD = 40,
-/// whose leaves under [`DEFAULT_C_LEAF`] (4: at most 4 λ = 0.63 wide, so the leaf rule binds
-/// nowhere; the tree's leaves are split by points) lie on levels 2–5, levels 2 and 3 at k a 8.7
+/// whose leaves under [`DEFAULT_C_LEAF`] (4: at most 4 λ = 0.63 wide, the leaf rule's level 1;
+/// the clusters' leaves are split further by points) lie on levels 2–5, levels 2 and 3 at k a 8.7
 /// and 4.3, in the diagonal form's range at ε = 10⁻⁴.
 fn form_leaves_scenario() -> Scenario {
     Scenario {
@@ -4276,13 +4276,12 @@ fn form_leaves_scenario() -> Scenario {
 /// Leaves on the diagonal form's levels (Helmholtz CH4.3e; proposal §3.7): under
 /// [`DEFAULT_C_LEAF`] with leaves of up to 64 points and the W and X rules off (so their pairs
 /// stay far), the time rule at [`FREE_DIAGONAL`] (the form wherever the bound passes a class)
-/// puts the form on a level that holds occupied leaves, which M2P (their W entries) and P2L (X
-/// entries of the next finer level naming them) touch, summed over the ranks (the caller
-/// asserts it). The errors against
-/// the direct sum within the scenario's bound and within [`DIAGONAL_RATIO`] of the same tree with
-/// the form off; 2 threads and on P ranks the one-rank FMM bit for bit. The machine's costs
-/// printed. Returns the occupied leaves on the form's levels and the W and X entries touching
-/// them, summed over the ranks.
+/// puts the form on a level that holds occupied leaves, into which M2P and out of which P2L
+/// compute (their point interactions, [`HelmholtzFmm::far_interactions`], summed over the ranks;
+/// the caller asserts both). The errors against the direct sum within the scenario's bound and
+/// within [`DIAGONAL_RATIO`] of the same tree with the form off; 2 threads and on P ranks the
+/// one-rank FMM bit for bit. The machine's costs printed. Returns the occupied leaves on the
+/// form's levels and the M2P and P2L point interactions touching them, summed over the ranks.
 fn check_form_leaves(scenario: &Scenario, comm: &SimpleCommunicator) -> [usize; 3] {
     let name = scenario.name;
     let kind = scenario.charges;
@@ -4309,23 +4308,17 @@ fn check_form_leaves(scenario: &Scenario, comm: &SimpleCommunicator) -> [usize; 
         let classes: Vec<usize> = (0..nlevels)
             .map(|l| op.diagonal_classes(l).map_or(0, |c| c.len()))
             .collect();
-        let plan = fmm.plan();
-        let leaves = plan.index().leaves();
         let by_level = fmm.leaves_by_level();
-        // Per level: occupied leaves, the W entries of its leaves (M2P into them), and the X
-        // entries of the next finer level that name its leaves (P2L out of them).
+        // Per level: occupied leaves, the M2P point interactions into its leaves (Σ_W n_t), and
+        // the P2L point interactions out of its leaves (Σ_X n_s of the next finer level, whose X
+        // entries are leaves of this level), so that leaves without points count no work.
+        let far = fmm.far_interactions();
         let mut local = vec![0u64; 3 * nlevels];
         for l in 0..nlevels {
             local[3 * l] = by_level[l][1] as u64;
-            local[3 * l + 1] = plan.level(l).w().len() as u64;
+            local[3 * l + 1] = far[l][1];
             if l + 1 < nlevels {
-                local[3 * l + 2] = plan
-                    .level(l + 1)
-                    .x()
-                    .entries()
-                    .iter()
-                    .filter(|&&j| leaves.level(j as usize) == l)
-                    .count() as u64;
+                local[3 * l + 2] = far[l + 1][0];
             }
         }
         let mut summed = vec![0u64; 3 * nlevels];
@@ -4344,7 +4337,7 @@ fn check_form_leaves(scenario: &Scenario, comm: &SimpleCommunicator) -> [usize; 
         let errors = errors(scenario, &inputs, &want, 0, comm);
         if comm.rank() == 0 {
             println!(
-                "{what}: (level, classes, [occupied leaves, W entries, X entries naming them]) \
+                "{what}: (level, classes, [occupied leaves, M2P into them, P2L out of them]) \
                  {form_levels:?}; φ {:.3e} against {:.3e} ({:.3}×), ∇φ {:.3e} against {:.3e}",
                 errors.0,
                 plain_errors.0,
@@ -4556,12 +4549,12 @@ fn helmholtz_fmm() {
     let classes = check_time_rule_raised(&time_rule_scenario(), &comm);
     assert!(classes > 0, "no raised level took the form");
     // Leaves on the form's levels under the default c_leaf (CH4.3e): occupied, and touched by
-    // M2P and by P2L (level 3: 84 leaves, 735 W and 1,040 X entries on the M6).
-    let [occupied, w_entries, x_entries] = check_form_leaves(&form_leaves_scenario(), &comm);
+    // M2P and by P2L (level 3 on the M6: 84 leaves, 7,660 point interactions each way).
+    let [occupied, m2p, p2l] = check_form_leaves(&form_leaves_scenario(), &comm);
     assert!(
-        occupied > 0 && w_entries > 0 && x_entries > 0,
-        "no occupied leaf on a level of the form with W or X entries: {occupied} leaves, \
-         {w_entries} W and {x_entries} X entries"
+        occupied > 0 && m2p > 0 && p2l > 0,
+        "no occupied leaf on a level of the form with M2P and P2L work: {occupied} leaves, \
+         {m2p} M2P and {p2l} P2L point interactions"
     );
     // The V rule after the plan (CH4.3b2b): the sphere under the leaf rule.
     check_v_after_plan(&sphere_scenario(), &comm);

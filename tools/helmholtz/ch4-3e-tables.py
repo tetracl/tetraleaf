@@ -10,11 +10,13 @@ library's defaults with the time rule named.
     ch4-3e-tables.py cases <machine>=<dir>[,<dir>…] …    every case, both orders
     ch4-3e-tables.py errors <machine>=<dir>[,<dir>…] …   the errors over ε and over c_leaf 2's
 
-A level is high frequency where the run's M2L is the diagonal form (its classes in the column
-"M2L", `diagonal l:c,…`) or RCR at k a ≥ 2.8 (the table "Time rule": "ran" `rotation…` on a level
-of k a ≥ 2.8). The census lists per run the occupied leaves on such levels (the table "Leaves"),
-the W interactions into them (M2P at that level, "Leaf operators") and the X interactions out of
-them (P2L at the next finer level), and the phase bound (`Row::phase_bound`).
+A level is high frequency where k a = Re(k) √3 r_l ≥ 2.8 (S6's range, the time rule's floor
+`DIAGONAL_AUTO_MIN_KA`; the domain the unit cube, so r_l = 2^-(l+1)), whatever its M2L; the census
+names the M2L that ran there (the column "M2L"'s `diagonal l:c,…`, else the table "Time rule"'s
+"ran": `rcr`, `waves`, `batched`, or `no V` on a level without V pairs) and lists per run the
+occupied leaves on such levels (the table "Leaves"), the W interactions into them (M2P at that
+level, "Leaf operators") and the X interactions out of them (P2L at the next finer level), and
+the phase bound (`Row::phase_bound`).
 """
 
 import glob
@@ -25,7 +27,7 @@ import sys
 from collections import defaultdict
 
 MIN_KA = 2.8  # DIAGONAL_AUTO_MIN_KA
-REFERENCE = 2.0  # DEFAULT_C_LEAF
+REFERENCE = 2.0  # CH4.0d3's DEFAULT_C_LEAF, the reference of every ratio
 
 
 def cells(line):
@@ -141,14 +143,31 @@ def runs_of(path):
     return runs
 
 
+def ka_of(run, level):
+    """k a = Re(k) √3 r_l on the unit cube (kD = Re(k))."""
+    return float(run["kd"]) * math.sqrt(3.0) * 0.5 ** (level + 1)
+
+
+def m2l_on(run, level):
+    if level in run["form"]:
+        return f"form {run['form'][level]}"
+    ran = run["ran"].get(level)
+    if ran is None:
+        return "no V"
+    for prefix, name in (("rotation", "rcr"), ("planewave", "waves"), ("batched", "batched")):
+        if ran.startswith(prefix):
+            return name
+    return ran
+
+
 def high_levels(run):
-    """The run's high-frequency levels: {level: "form c" or "rcr"}."""
+    """The run's high-frequency levels with their M2L: {level: name}."""
     out = {}
-    for level, ka in run["ka"].items():
-        if level in run["form"]:
-            out[level] = f"form {run['form'][level]}"
-        elif ka >= MIN_KA and run["ran"][level].startswith("rotation"):
-            out[level] = "rcr"
+    for level in range(run["levels"]):
+        if ka_of(run, level) >= MIN_KA:
+            if level in run["ka"]:
+                assert abs(run["ka"][level] - ka_of(run, level)) < 0.01, (level, run["ka"])
+            out[level] = m2l_on(run, level)
     return out
 
 
@@ -163,7 +182,7 @@ def census_row(run):
         occ += o
         w += run["ops"].get(level, (0, 0))[0]
         x += run["ops"].get(level + 1, (0, 0))[1]
-        levels.append(f"{level} ({kind}, k a {run['ka'][level]:.1f}): {o}")
+        levels.append(f"{level} ({kind}, k a {ka_of(run, level):.1f}): {o}")
     return occ, w, x, levels
 
 
@@ -180,7 +199,7 @@ def cases(spec):
             try:
                 out[case][order] = runs_of(path)
             except (AssertionError, KeyError) as error:
-                print(f"<!-- {path}: unreadable ({error!r}) -->")
+                sys.exit(f"{path}: unreadable ({error!r})")
     return machine, out
 
 

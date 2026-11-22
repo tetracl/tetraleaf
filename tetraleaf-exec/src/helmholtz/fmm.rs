@@ -145,15 +145,16 @@ const DEEPEST: usize = DEEPEST_LEVEL as usize;
 
 /// The default maximum leaf width in wavelengths of [`HelmholtzFmmBuilder::c_leaf`], 4
 /// (Helmholtz CH4.3e, for sign-off; tetraleaf-validate/results/helmholtz-ch4-3e.md): two levels
-/// coarser than D11's [`C_LEAF`](super::C_LEAF) where the leaf rule binds. Under the defaults
-/// (the diagonal form's time rule since CH4.3b2c) leaves lie on levels whose M2L is high
-/// frequency at every c_leaf measured, 1 included, the leaf operators not depending on the regime
-/// and every run within ε; c_leaf 4 put build plus one evaluation at 0.87× (Kathleen) and 0.79×
-/// (locust) c_leaf 2's over W1–W3 at 10⁻³–10⁻⁸, from the under-resolved W3 (N = 10⁶ at kD = 500:
-/// 0.26–0.36×; leaves of a few points at 2), and changed few other trees (W1 and W2 stay split by
-/// their points). The P2P's phase reaches Re(k) r ≤ 22 c_leaf, 44 c_leaf with converted V pairs
-/// (176 at 4, within the kernel's contract domain), and the leaves' x = Re(k) a ≤ 5.4 c_leaf
-/// (21.8). It was 2 from Helmholtz CH4.0d3 (signed off 2026-11-14, D11 amended) until CH4.3e.
+/// coarser than D11's [`C_LEAF`](super::C_LEAF) where the leaf rule binds. A leaf of c_leaf λ has
+/// k a ≤ 5.4 c_leaf, so at every c_leaf ≥ 1 leaves lie on levels of k a ≥ 2.8, the diagonal form's
+/// range, whatever their M2L (the form, RCR, the plane waves or none); the leaf operators do not
+/// depend on the regime, and every run of CH4.3e was within ε. c_leaf 4 put build plus one
+/// evaluation at 0.87× c_leaf 2's on Kathleen (W1–W3 at 10⁻³–10⁻⁸) and 0.79× on locust (W1, W3),
+/// all of the margin from the under-resolved W3 (N = 10⁶ at kD = 500: 0.26–0.36×; leaves of a few
+/// points at 2), elsewhere the same tree or, on W1 and W2 at kD ≥ 500, 0.93–0.98×. The P2P's phase
+/// reaches Re(k) r ≤ 22 c_leaf, 44 c_leaf with converted V pairs (176 at 4, within the sine and
+/// cosine's tested 2¹⁰), and the leaves' x = Re(k) a ≤ 5.4 c_leaf (21.8). It was 2 from Helmholtz
+/// CH4.0d3 (signed off 2026-11-14, D11 amended) until CH4.3e.
 pub const DEFAULT_C_LEAF: f64 = 4.0;
 
 /// The points per leaf of [`HelmholtzFmmBuilder`] when it names none (Helmholtz CH4.0d3;

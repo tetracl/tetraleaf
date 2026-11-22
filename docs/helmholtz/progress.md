@@ -4381,27 +4381,27 @@ request, using this template:
     Report `tetraleaf-validate/results/helmholtz-ch4-3e.md`; record `docs/helmholtz/tasks/CH4.3e.md`.
 - Tests: `check_form_leaves` (Gaussian clusters, N = 2,000, kD = 40, 10⁻⁴, `DEFAULT_C_LEAF`, 64
   points per leaf, the W and X rules off; the time rule at free form costs and the machine's): the
-  form on levels 2 and 3, level 3 with 84 occupied leaves, 735 W and 1,040 X entries touching them
-  (asserted: leaves, W and X), errors 1.000× the form off's and within the bound, 2 threads and the
-  one-rank FMM bit for bit (2 and 4 ranks in the MPI list).
+  form on levels 2 and 3, level 3 with 84 occupied leaves, M2P into them and P2L out of them 7,660
+  point interactions each (asserted: leaves, M2P and P2L work), errors 1.000× the form off's and
+  within the bound, 2 threads and the one-rank FMM bit for bit (2 and 4 ranks in the MPI list).
 - Measurements (Kathleen jobs 663653, 663654, 663655, `singlenode`, 1 × 40; locust 1 × 72; W1 and W2
   at kD = 100–500, W3 at N = 10⁶ and kD = 200, 500, at 10⁻³–10⁻⁸, on Kathleen also W1 at kD = 1000 and
   W3 resolved at kD = 100; c_leaf 1, 2, 4, 8 in both orders; 114 launches, every one exit 0):
-  - leaves on levels whose M2L is the form (or RCR at k a ≥ 2.8) at every c_leaf, 1 included (a leaf
-    of c_leaf λ has k a ≤ 5.4 c_leaf): 4–9 of 10 trees at 10⁻³ and 10⁻⁶ on Kathleen, 6–7 of 8 at
-    10⁻⁷ from c_leaf 2, 2 of 9 at 10⁻⁸ (c_leaf 4, 8); W2's with W and X lists on them;
+  - leaves on levels of k a ≥ 2.8 (the form's range) at every c_leaf, 1 included (a leaf of c_leaf
+    λ has k a ≤ 5.4 c_leaf), whatever their M2L (the form, RCR, the plane waves or none): 8–9 of
+    Kathleen's 8–10 trees per ε and all 5 of locust's, at every ε; W2's with W and X lists on them;
   - every run within ε (at most 0.27 ε in φ, 0.44 ε in ∇φ), each order's output the other's;
   - build plus one evaluation over c_leaf 2's: c_leaf 4 0.874 (Kathleen) and 0.790 (locust), 8
     0.849 and 0.780, 1 1.417 and 1.518; the gain W3 at kD = 500 (c_leaf 4 0.26–0.36×), elsewhere the
     same tree or 0.93–0.98× (W1, W2 at kD ≥ 500 on Kathleen);
   - raw outputs in `~/projects/fmm-archive/{kathleen,locust}/runs/ch4-3e/`.
 - Checks: see the PR (fmt; Clippy default, examples, workspace all-targets; rustdoc `-D warnings`;
-  the default and workspace tests at opt-level 1; the MPI list at 2 and 4 ranks; `helmholtz_fmm`
-  one rank at opt-level 0 1,315 s at load 24–27 on the M6, not comparable with CH4.3b2c's 700.5 s at
-  load 2–4). Not run: `cargo deny` (no manifest change), Laplace's benchmarks (no Laplace path), 8
+  the default and workspace tests at opt-level 1, 1,381 and 1,425 passed; the MPI list at 2 and 4
+  ranks; `helmholtz_fmm` one rank at opt-level 0 1,315 s at load 24–27 on the M6, the test's first
+  version, not comparable with CH4.3b2c's 700.5 s at load 2–4). Not run: `cargo deny` (no manifest change), Laplace's benchmarks (no Laplace path), 8
   ranks (no distributed code).
 - Decisions: the report's questions 1–3 for sign-off (the acceptance as read; c_leaf 4 the default,
-  D11 amended; proposal §3.7 and §5.1 amended to the finding).
+  D11 amended, with an Also on CH4.5; proposal §3.7, §5.1 and §5.7 amended to the finding).
 - Laplace: not touched (the Helmholtz builder's constant, Helmholtz tests, scripts, docs).
-- Follow-ups: none (the empty-box rule's X entries of source-free leaves noted in the report §5, not
-  followed up: their P2L adds nothing).
+- Follow-ups: CH4.5's Also (c_leaf 4 at many ranks per node, its line); the empty-box rule's X
+  entries of source-free leaves noted in the report §5, not followed up (their P2L adds nothing).
