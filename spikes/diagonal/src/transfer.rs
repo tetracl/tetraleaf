@@ -170,6 +170,51 @@ pub fn log10_term(z: Complex<f64>, l_max: usize) -> f64 {
     best + z.abs().log10()
 }
 
+/// log₁₀ of the truncation model's sum at length L (Helmholtz CH4.3d1):
+/// Σ_{L < l ≤ l_max} (2l + 1)|jₗ(z₂)||hₗ(z)| / |h₀(z)|, with z₂ = 2ka (the pair's largest
+/// source–target radius, 2a) and z = k|t|: Gegenbauer's tail of the kernel between the length
+/// L and 2p = l_max, relative to the kernel at the centres' distance (for real k
+/// |h₀(z)| = 1/|z|, so the sum is |k||t| Σ (2l + 1)|jₗ||hₗ|, E's form with |jₗ(2ka)| in place
+/// of u). hₗ by the upward recursion with rescaling and jₗ by S7's Miller recursion, in f64;
+/// a jₗ below f64's range counts as zero. −∞ when L ≥ l_max.
+pub fn log10_tail(z2: Complex<f64>, z: Complex<f64>, l: usize, l_max: usize) -> f64 {
+    if l >= l_max {
+        return f64::NEG_INFINITY;
+    }
+    let mut j = vec![Complex::<f64>::ZERO; l_max + 1];
+    radial::bessel_j(z2, 1.0, &mut j);
+    let e = (Complex::I * z).exp();
+    let h0_abs = (-(Complex::I * e) / z).abs();
+    let mut h0 = -(Complex::I * e) / z;
+    let mut h1 = -(e * (z + Complex::I)) / (z * z);
+    let mut offset = 0.0f64;
+    let mut logs = Vec::with_capacity(l_max - l);
+    // h1 holds h_m at the top of iteration m (m ≥ 1).
+    for m in 1..=l_max {
+        if m > l {
+            let jm = j[m].abs();
+            if jm > 0.0 {
+                logs.push(((2 * m + 1) as f64 * jm * h1.abs()).log10() + offset);
+            }
+        }
+        if m < l_max {
+            let h2 = h1 * (2 * m + 1) as f64 / z - h0;
+            h0 = h1;
+            h1 = h2;
+            if h1.abs() > 1e200 {
+                h0 = h0 * 1e-200;
+                h1 = h1 * 1e-200;
+                offset += 200.0;
+            }
+        }
+    }
+    let Some(&top) = logs.iter().max_by(|a, b| a.total_cmp(b)) else {
+        return f64::NEG_INFINITY;
+    };
+    let sum: f64 = logs.iter().map(|&v| 10f64.powf(v - top)).sum();
+    top + sum.log10() - h0_abs.log10()
+}
+
 /// The angle ψ between ŝ and t̂ in double-double: atan2(|ŝ × t̂|, ŝ · t̂) in f64, corrected
 /// by sin(ψ − ψ₀) = sin ψ cos ψ₀ − cos ψ sin ψ₀ in double-double. A table built once per
 /// class affords it; ψ in f64 alone would cost T about L u |T| (|dT/dψ| ≈ L |T|), and
