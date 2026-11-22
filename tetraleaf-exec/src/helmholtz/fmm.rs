@@ -468,10 +468,12 @@ impl HelmholtzFmmBuilder {
     /// [`HelmholtzM2l::Auto`] within [`DEFAULT_DENSE_BUDGET`] per rank and
     /// [`DEFAULT_DENSE_NODE_BUDGET`] per node, the exponential M2L's waves
     /// within [`DEFAULT_PLANE_WAVE_NODE_BUDGET`] per node, the Rotation M2L by pairs on levels
-    /// of high degree ([`RcrSplit::Auto`]) within [`DEFAULT_RCR_NODE_BUDGET`] per node, no
-    /// diagonal M2L ([`HelmholtzDiagonal::Off`]; its scratch within
-    /// [`DEFAULT_SIGNATURE_NODE_BUDGET`] per node and its transfer functions by
-    /// [`DEFAULT_DIAGONAL_BUILD`] when named), the leaf width [`DEFAULT_C_LEAF`],
+    /// of high degree ([`RcrSplit::Auto`]) within [`DEFAULT_RCR_NODE_BUDGET`] per node, the
+    /// diagonal M2L by its time rule on the high-frequency levels
+    /// ([`HelmholtzDiagonal::Auto`], since Helmholtz CH4.3b2c; its scratch within
+    /// [`DEFAULT_SIGNATURE_NODE_BUDGET`] per node, its transfer functions by
+    /// [`DEFAULT_DIAGONAL_BUILD`], its costs those of the P2P kernel's machine class), the
+    /// leaf width [`DEFAULT_C_LEAF`],
     /// the P2P kernel of [`P2pChoice::Auto`], the empty-box rule and the V, W and X pairs
     /// near pairs by the cost model (a V pair on a level of raised waves priced per box,
     /// [`VRaisedPrice::PerBox`]).
@@ -504,7 +506,7 @@ impl HelmholtzFmmBuilder {
             plane_wave_raise: PlaneWaveRaise::Rule,
             rcr_split: RcrSplit::Auto,
             rcr_budget: DEFAULT_RCR_NODE_BUDGET,
-            diagonal: HelmholtzDiagonal::Off,
+            diagonal: HelmholtzDiagonal::Auto,
             diagonal_build: DEFAULT_DIAGONAL_BUILD,
             diagonal_costs: None,
             v_costs: None,
@@ -844,15 +846,21 @@ impl HelmholtzFmmBuilder {
         self
     }
 
-    /// The diagonal M2L of the high-frequency levels (default [`HelmholtzDiagonal::Off`];
-    /// Helmholtz CH4.2b1, opt-in until CH4.3; `HelmholtzOperator::with_diagonal`): on the
-    /// levels whose M2L is RCR's, each offset class with E(l, c) ≤ θ ε on the diagonal form,
-    /// RCR on the others. [`HelmholtzDiagonal::Rule`] reads the tolerance of
-    /// [`Degrees::Tolerance`] (no level with named degrees); [`HelmholtzDiagonal::Auto`] (Helmholtz
-    /// CH4.3b1) too, and takes a level only where the time rule's model puts it below the M2L
-    /// the level would run otherwise, RCR's or, under [`HelmholtzM2l::Auto`], the exponential
-    /// M2L's ([`diagonal_costs`](Self::diagonal_costs)). The output is deterministic and on
-    /// P ranks the one-rank FMM's bit for bit.
+    /// The diagonal M2L of the high-frequency levels (default [`HelmholtzDiagonal::Auto`] since
+    /// Helmholtz CH4.3b2c, [`HelmholtzDiagonal::Off`] before; Helmholtz CH4.2b1;
+    /// `HelmholtzOperator::with_diagonal`): on the levels whose M2L is RCR's, each offset class
+    /// with E(l, c) ≤ θ ε on the diagonal form, RCR on the others. [`HelmholtzDiagonal::Rule`]
+    /// reads the tolerance of [`Degrees::Tolerance`] (no level with named degrees);
+    /// [`HelmholtzDiagonal::Auto`] (Helmholtz CH4.3b1) too, and takes a level only where the time
+    /// rule's model puts it below the M2L the level would run otherwise, RCR's or, under
+    /// [`HelmholtzM2l::Auto`], the exponential M2L's at the level's resolving degree
+    /// ([`diagonal_costs`](Self::diagonal_costs)), so with named degrees the default takes no
+    /// level either. The output is deterministic, and on P ranks the one-rank FMM's bit for bit
+    /// where every level runs the same M2L: the form's scratch budget is per node over the ranks
+    /// per node ([`diagonal_budget`](Self::diagonal_budget)), so where it binds the levels that
+    /// take the form depend on the ranks per node, as the dense tables' do. Under the default the
+    /// levels also depend on the machine class of the costs, as Batched's crossover and the near
+    /// rules' do.
     ///
     /// # Panics
     ///

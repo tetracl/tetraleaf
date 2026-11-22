@@ -72,12 +72,15 @@ use tetraleaf_tables::parts::Parts;
 
 use super::{HelmholtzOperator, Isa, Kernel, SimdScalar};
 
-/// The diagonal M2L of the high-frequency levels (Helmholtz CH4.2b1; opt-in until CH4.3b2;
-/// module documentation of [`operator`](super), "M2L").
+/// The diagonal M2L of the high-frequency levels (Helmholtz CH4.2b1; module documentation of
+/// [`operator`](super), "M2L"). [`Auto`](Self::Auto) is the default of the enum and of
+/// `HelmholtzFmmBuilder` since Helmholtz CH4.3b2c (`Off` before; for its sign-off); the
+/// operator's own default before
+/// [`with_diagonal`](super::HelmholtzOperator::with_diagonal) stays [`Off`](Self::Off).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum HelmholtzDiagonal {
-    /// No level takes the diagonal form (the default).
-    #[default]
+    /// No level takes the diagonal form (the operator's default, and the builder's until
+    /// Helmholtz CH4.3b2c).
     Off,
     /// The rule at the FMM's tolerance
     /// ([`with_plane_wave_tolerance`](super::HelmholtzOperator::with_plane_wave_tolerance),
@@ -95,7 +98,9 @@ pub enum HelmholtzDiagonal {
     /// ([`diagonal_beats_rcr`]); on a level with the exponential M2L under
     /// [`HelmholtzM2l::Auto`](super::HelmholtzM2l::Auto) the waves', then the cheaper of the form
     /// and RCR ([`wave_level_choice`]), at the level's resolving degree, which it keeps whatever
-    /// M2L runs (Helmholtz CH4.3b2a).
+    /// M2L runs (Helmholtz CH4.3b2a). The default since Helmholtz CH4.3b2c
+    /// (tetraleaf-validate/results/helmholtz-ch4-3b2c.md).
+    #[default]
     Auto,
 }
 
@@ -523,11 +528,11 @@ pub(super) struct DiagonalSettings {
 }
 
 impl Default for DiagonalSettings {
-    /// Off, [`DEFAULT_DIAGONAL_BUILD`], no budget, no source counts, the chunk width by rule,
-    /// the costs of the ISA and no shapes.
+    /// Off (the operator's own default, not the enum's), [`DEFAULT_DIAGONAL_BUILD`], no
+    /// budget, no source counts, the chunk width by rule, the costs of the ISA and no shapes.
     fn default() -> Self {
         Self {
-            choice: HelmholtzDiagonal::default(),
+            choice: HelmholtzDiagonal::Off,
             build: DEFAULT_DIAGONAL_BUILD,
             budget: None,
             sources: None,

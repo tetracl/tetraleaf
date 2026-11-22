@@ -684,6 +684,13 @@ calibrated|ch3-3` to `helmholtz_accuracy` (beside `s7`) and `helmholtz_boxes` (t
 runs the task's scans and verifications, `ch4-3c2-pairs.py` the pair evidence from spike S7's
 curves, `ch4-3c2-tables.py` the report's tables. Its report is `results/helmholtz-ch4-3c2.md`.
 
+Helmholtz CH4.3b2c (the diagonal form's time rule by default; docs/helmholtz/tasks/CH4.3b2c.md)
+changed no harness code: the library's default is `HelmholtzDiagonal::Auto` since, and
+`Case::new` and the example's `--diagonal` keep `off` named, so that the earlier reports' runs
+repeat. `tools/helmholtz/ch4-3b2c-runs.sh` runs the task's stages (`w1`, `w3`, `reverse`, `repeat`,
+`ranks`), `ch4-3b2c-tables.py` makes the report's tables (CH4.3b2a's `errors`, `choices` and
+`summary`, and `build`, `repeat`, `order`). Its report is `results/helmholtz-ch4-3b2c.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

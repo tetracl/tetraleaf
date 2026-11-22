@@ -170,8 +170,8 @@
 //!   ends with `/rcr-boxes` or `/rcr-pairs`, and `--levels`' column "ran" says `rotation by
 //!   pairs` where a level call ran by pairs. No bit depends on it.
 //! - `--diagonal off|rule|auto|<ε>,…` (Helmholtz CH4.2b2, `HelmholtzFmmBuilder::diagonal`): the
-//!   diagonal M2L on the levels whose M2L is RCR's (`off`, the default, the library's until
-//!   CH4.3; `rule` at the FMM's tolerance; `auto` the time rule, Helmholtz CH4.3b1, which may
+//!   diagonal M2L on the levels whose M2L is RCR's (`off`, the default here, the library's
+//!   until Helmholtz CH4.3b2c, whose default is `auto`; `rule` at the FMM's tolerance; `auto` the time rule, Helmholtz CH4.3b1, which may
 //!   also take Auto's levels with waves; `<ε>` at a named tolerance), outside
 //!   `--rcr-split`'s loop; the column "M2L" of a row with it lists its levels and classes
 //!   (`; diagonal 2:34,3:20`) and ends with `/diag` or `/diag<ε>`, and `--levels`' column
@@ -356,7 +356,7 @@ fn arguments() -> Arguments {
              [--dense-budget MB] [--plane-wave-budget MB|whole] [--block-budget MB] \
              [--reach corner|r,…] \
              [--split auto|parents|children,…] [--raise rule|level|leaves|m2l,…] \
-             [--rcr-split auto|boxes|pairs,…] [--diagonal off|rule|<ε>,…] \
+             [--rcr-split auto|boxes|pairs,…] [--diagonal off|rule|auto|<ε>,…] \
              [--diagonal-build direct|interpolated,…] \
              [--term on|off,…] [--block auto|w,…] [--empty-boxes on|off,…] [--near-v off|cost|n|inf,…] [--near-wx off|cost|n|inf,…] \
              [--v-after-plan off|taken|all,…] [--leaf-size auto|n,…] [--c-leaf auto|c,…] [--levels] \

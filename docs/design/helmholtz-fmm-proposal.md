@@ -698,7 +698,11 @@ is for Laplace:
     takes it on each level of degree p_l ≥ d_pw (Batched's crossover + 1; 12 on AVX-512
     with two planes) where the rule gives a quadrature (ε ≥ 10⁻⁸) and Im k w_l < 5π, in f64;
     Batched to its crossover on the rest, Rotation else; no term for the level's boxes, once
-    merge and shift splits the coarse levels by child (CH6.2f).
+    merge and shift splits the coarse levels by child (CH6.2f). Since the diagonal form's time
+    rule is the builder's default (amended at CH4.3b2c), a level of this rule in the time rule's
+    range (k a ≥ 2.8) keeps the waves unless the form, at the level's resolving degree, beats
+    them by the model of Section 6.4; it then runs the cheaper of the form and RCR, at that
+    degree.
   - *As measured.* Both readings hold, in different ranges. At 10⁻³ (p ≈ 7) RCR and the waves
     are at par, as Gumerov and Duraiswami found, and Batched is often faster; the rule rarely
     takes the waves there. At 10⁻⁶ the exponential M2L takes 0.19–0.61× Rotation's M2L on
@@ -966,6 +970,14 @@ narrows its blocks on levels of fewer blocks than threads, with no bit changed (
 amended at H6.G). The dense, class and Batched tables of a rank take at most the node budget
 over the ranks per node (8 GiB by default, at most 1 GiB a rank), so the levels a rank batches
 depend on the ranks per node, as for Laplace's node rule (amended at CH6.2h and CH4.0).
+Since CH4.3b2c the diagonal form's time rule (`HelmholtzDiagonal::Auto`) is the builder's
+default (amended at CH4.3b2c): on a level in its range (k a ≥ 2.8) the bound's classes take the
+form where a cost model of whole level calls per machine class (fitted at one rank per node) puts
+it below the level's other M2L on the level's agreed V lists, RCR's or, on a level of D8's rule,
+the waves' at the resolving degree (then the cheaper of the form and RCR); the form's scratch at
+most the node budget over the ranks per node, else RCR whole on every rank. So the levels it takes
+depend on the machine class and, where the budget binds, on the ranks per node; its costs at many
+ranks per node are CH4.3f's.
 
 ### 6.5 Device path
 
@@ -1662,7 +1674,7 @@ these.
 | D5 | Source types in the first release | charges, real and complex, with potentials and gradients; dipoles when C6.4 exists for Laplace |
 | D6 | Order of H4 and H6 | H6 first by default (Sections 7 and 10); H4 first only if D1 puts most of the work at kD of several hundred or more and loose tolerances |
 | D7 | Host back ends for the φ step | the product as the default and reference; FFTW through RLST 0.12 behind the optional `fftw` feature (CH4.6), with the GPL warning; rustfft as a fast default without FFTW if S9 shows it deterministic per box and faster than the product, decided per machine (Homebrew's FFTW on the M3 Max has no SIMD); all behind a trait internal to `tetraleaf-exec`, since RLST provides none (its DF4) |
-| D8 | Whether the exponential M2L may become a default on low-frequency levels | after CH6.2, as Laplace's T11 decides for `PlaneWave`. Signed off at CH6.2h (2026-11-08), amended at CH6.1g and CH6.1h (2026-11-11): `Auto` takes it by the rule of Section 5.3 |
+| D8 | Whether the exponential M2L may become a default on low-frequency levels | after CH6.2, as Laplace's T11 decides for `PlaneWave`. Signed off at CH6.2h (2026-11-08), amended at CH6.1g and CH6.1h (2026-11-11): `Auto` takes it by the rule of Section 5.3; amended at CH4.3b2c (2026-11-22): unless the diagonal form's time rule, the default since, moves the level (Sections 5.3, 6.4) |
 | D9 | What "within noise" means in constraint 1 of Section 2 | the run-to-run spread of the Laplace baseline, repeated on each machine of record before the change, per benchmark; plus the C3S.4 throughput gate |
 | D10 | cubek-fft on the device | after S5 (CH0.5): adopt it (a new dependency, and the cubecl pin moved to the current 0.11.x, 0.11.3 on 2026-10-22, if 0.3.1 is needed), contribute twiddle tables and radix 3 and 5 upstream first, or keep the transform as a GEMM |
 | D11 | The maximum leaf width c_leaf (Section 3.7) | from S8: the largest c_leaf at which P2P and leaf costs stay within 10 % of their best on W1 and W3, expected between 0.5 and 1 |
@@ -1948,6 +1960,10 @@ these.
   recommend"): Section 3.5, the calibrated rule's high-frequency branch refitted (excess linear
   in L, raised by 2 for the constant density, capped by CH3.3's branch), CH3.3's rule kept
   beside it, and the example table's calibrated degrees on levels 2 and 3.
+- **Amended at CH4.3b2c, 2026-11-22** (`tetraleaf-validate/results/helmholtz-ch4-3b2c.md` §5, §9; PR
+  #251, its questions 1–5, signed off by the user, "Q1-5 as recommended"): Section 5.3, D8's bullet,
+  a level of D8's rule keeps the waves unless the diagonal form's time rule moves it; Section 6.4,
+  the time rule the builder's default; Section 12, D8's row.
 
 ## Appendix B. The stability check behind Section 3.6
 
