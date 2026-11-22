@@ -684,6 +684,19 @@ calibrated|ch3-3` to `helmholtz_accuracy` (beside `s7`) and `helmholtz_boxes` (t
 runs the task's scans and verifications, `ch4-3c2-pairs.py` the pair evidence from spike S7's
 curves, `ch4-3c2-tables.py` the report's tables. Its report is `results/helmholtz-ch4-3c2.md`.
 
+Helmholtz CH4.3c3 (the constant density in the calibration; docs/helmholtz/tasks/CH4.3c3.md)
+added `helmholtz_calibrate --density random|planewave|constant` (`Case::density`; the header's
+"Density:" line), `helmholtz_calibration::{point_workload, PointLine}` (a `point:` line's workload
+field carries a density other than the random charges as `W1/constant`, so `fit` and `refit` read
+old and new files alike; unit-tested), and to `refit` CH4.3c2's fit and rule (`DegreeRule::CH4_3C2`)
+and the default as rules, the refit under the least raised cap (CH3.3's branch with its coefficient
+raised by 0.01 from 0.80 to the first that admits a covering fit, at most `MAX_CAP` 1.20) and a
+margin table of the points of another density; `--rule ch4-3c2` in `helmholtz_accuracy` and
+`helmholtz_boxes`. `tools/helmholtz/ch4-3c3-runs.sh` runs the task's scans (`scans`, `scans-low`)
+and verifications (`verify-w1`, `verify-matrix`, `verify-w1-all`, `times`), `ch4-3c3-tables.py`
+makes the report's tables (`scans`, `margin`, `matrix`). Its report is
+`results/helmholtz-ch4-3c3.md`.
+
 Helmholtz CH4.3b2c (the diagonal form's time rule by default; docs/helmholtz/tasks/CH4.3b2c.md)
 changed no harness code: the library's default is `HelmholtzDiagonal::Auto` since, and
 `Case::new` and the example's `--diagonal` keep `off` named, so that the earlier reports' runs

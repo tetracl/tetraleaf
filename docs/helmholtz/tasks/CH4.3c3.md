@@ -131,6 +131,27 @@ launch per node (`srun -N1 -n1` per launch, in parallel); raw outputs to
   sum can cancel at one degree); the three-in-a-row criterion guards it, and the curves are in the
   report.
 
+## Results
+- The `--density` option, the point lines with the density and `refit`'s margin table, the cap
+  search and CH4.3c2's rule beside the default (`tetraleaf-validate`); tested.
+- Scans (jobs 663686–663689; 663696 added x = 6.8, below the plan's range, once the refit proved to
+  lower the degrees there): the constant density needs 0–3 degrees over CH4.3c2's fit; CH4.3c2's
+  rule one short at x = 216 (10⁻³, 10⁻⁷) and x = 13.5, 10⁻⁸ (kD = 250 and 500), 1–2 too many at
+  x ≤ 54: wrong both ways.
+- CH4.3c2's rule on today's trees with the constant density (job 663690): within ε, at most 0.94 ε.
+- The refit: the plan's capped refit (CH3.3's branch) has no covering rule (x = 13.5, 10⁻⁸ needs 28,
+  CH3.3's 27); `refit` raises the cap's coefficient to the least that admits one, 0.82: C = 2.00,
+  a = −0.55, b = −4.66, d = 2 (a departure from the plan's construction, put to the user in the
+  report's question 2 with the alternatives). Made the default on the branch; CH4.3c2's rule kept
+  as `DegreeRule::CH4_3C2`.
+- Pair evidence: at most 4.8 ε at k a = 45 … 256 (the guard 19–42 ε).
+- FMM evidence (jobs 663699, 663700): the matrix's 174 runs within ε (at most 0.44 ε), W1 with the
+  three densities within ε (at most 0.65 ε). Times (job 663701): 0.86–0.93× at 10⁻³, 0.98–1.02×
+  at 10⁻⁶ and 10⁻⁸.
+
 ## Pending runs
+- None.
 
 ## Open questions
+- For sign-off (the report §8): the acceptance as read; the refit as the default (or CH4.3c2's
+  rule kept, or d = 6 with the cap 0.82); proposal §3.5 amended.

@@ -4406,3 +4406,49 @@ request, using this template:
 - Laplace: not touched (the Helmholtz builder's constant, Helmholtz tests, scripts, docs).
 - Follow-ups: CH4.5's Also (c_leaf 4 at many ranks per node, its line); the empty-box rule's X
   entries of source-free leaves noted in the report §5, not followed up (their P2L adds nothing).
+
+## 2026-11-22: CH4.3c3 The constant density in the calibration
+- Done:
+  - `tetraleaf-validate`: `helmholtz_calibrate --density random|planewave|constant`;
+    `helmholtz_calibration::{point_workload, PointLine}` (a point line's workload field carries the
+    density, `W1/constant`; `fit` and `refit` read old and new files); `refit` prints CH4.3c2's fit
+    and rule beside the default, fits form C under the least raised cap (CH3.3's branch, its
+    coefficient from 0.80 by 0.01) and a margin table; `--rule ch4-3c2` in `helmholtz_accuracy` and
+    `helmholtz_boxes`.
+  - `tetraleaf-exec`: `DegreeRule::CALIBRATED` the refit on the worst density, for sign-off
+    (C = 2.00, a = −0.55, b = −4.66, d = 2, cap 0.82); CH4.3c2's rule kept as
+    `DegreeRule::CH4_3C2`; the module docs and doctest.
+  - `tools/helmholtz/ch4-3c3-runs.sh` (`scans`, `scans-low`, `verify-w1`, `verify-matrix`,
+    `verify-w1-all`, `times`), `ch4-3c3-tables.py` (`scans`, `margin`, `matrix`). Report
+    `tetraleaf-validate/results/helmholtz-ch4-3c3.md`; record `docs/helmholtz/tasks/CH4.3c3.md`.
+- Tests: `tests/helmholtz/degree.rs`: the default covers `MEASURED` and `MEASURED_CONSTANT` (the
+  constant density's 36 degrees, exact), lies at or below its cap's rule everywhere on the grid
+  (above CH3.3's by one at 39 of 5,763 points, x = 8–21, ε ≤ 10^{−6.7}), at most S7's and
+  monotone; CH4.3c2's rule kept and its three misses of the constant density named;
+  `helmholtz_calibration`'s point-line round trip with each density, old lines and malformed ones.
+- Measurements (Kathleen, `singlenode`, 1 × 40, jobs 663686–663701, 6.8 node-hours; the pair evidence
+  on the M6):
+  - 14 level scans of W1 with the constant density, kD = 250, 500, 1000, x = 6.8–216: it needs
+    0–3 degrees over CH4.3c2's random-charge fit, more at larger x (+2–3 at x = 216, 0–1 at
+    x ≤ 54); CH4.3c2's +2 is one short at x = 216 (10⁻³, 10⁻⁷) and at x = 13.5, 10⁻⁸ (two of
+    three trees, 0.51 and 0.85 ε at p = 27), 1–2 too many at x ≤ 54;
+  - CH4.3c2's rule on today's trees (c_leaf 4) with the constant density within ε, at most 0.94 ε;
+  - the refit over 234 points: no rule under CH3.3's branch covers x = 13.5 at 10⁻⁸ (28 against
+    27); under the cap 0.82 total excess 349 (CH4.3c2's rule 472, not covering); 0–2 degrees below
+    CH4.3c2's at x = 4–108, one above at x = 13.5 and 10⁻⁸, 0–2 above at x ≥ 150;
+  - pair evidence: S7's worst pair at the refit's degree at most 4.8 ε at k a = 45 … 256, within
+    the FMM's confirmed 19–42 ε;
+  - FMM evidence: CH3.1c's matrix and CH3.3's held-out cases (174 runs each rule) within ε, at most
+    0.44 ε (CH4.3c2's 0.64 ε); W1 at kD = 250, 500, 1000, three densities, 10⁻⁸ … 10⁻³, within ε,
+    at most 0.65 ε (CH4.3c2's 0.94 ε); errors up at 10⁻³ (within 0.65 ε), down at 10⁻⁸;
+  - times, the rules alternated on one node: W1's evaluation 0.86–0.93× at 10⁻³, 0.98–1.02× at
+    10⁻⁶ and 10⁻⁸;
+  - raw outputs in `~/projects/fmm-archive/kathleen/runs/ch4-3c3/`.
+- Checks: see the PR (fmt; Clippy default, examples, workspace all-targets; rustdoc `-D warnings`;
+  the default and workspace tests at opt-level 1, 1,384 and 1,428 passed; the MPI list at 2 and 4
+  ranks at opt-level 1). Not run: `cargo deny` (no manifest change), Laplace's benchmarks (no
+  Laplace path), 8 ranks (no distributed code).
+- Decisions: the report's questions 1–3 for sign-off (the acceptance as read; the refit the
+  default; proposal §3.5 amended).
+- Laplace: not touched (the Helmholtz degree rule, the harness, scripts, docs).
+- Follow-ups: CH4.4's Also (the constant density on the low-frequency trees, its line).
