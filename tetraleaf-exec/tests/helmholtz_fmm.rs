@@ -4254,6 +4254,130 @@ fn scenarios() -> Vec<Scenario> {
     ]
 }
 
+/// The scenario of [`check_form_leaves`] (Helmholtz CH4.3e): Gaussian clusters at kD = 40,
+/// whose leaves under c_leaf 2 (at most 2 λ = 0.31 wide, so from level 2 on) lie on levels 2–5,
+/// levels 2 and 3 at k a 8.7 and 4.3, in the diagonal form's range at ε = 10⁻⁴.
+fn form_leaves_scenario() -> Scenario {
+    Scenario {
+        name: "clusters, kD = 40, ε = 1e-4, complex charges, gradients",
+        layout: Layout::Clusters,
+        n: (2000, None),
+        k: (40.0, 0.0),
+        degrees: Degrees::Tolerance(1e-4),
+        bound: ERROR_FACTOR * 1e-4,
+        charges: ChargeKind::Complex,
+        gradients: true,
+        debug: true,
+        empty_rank0: false,
+    }
+}
+
+/// Leaves on the diagonal form's levels (Helmholtz CH4.3e; proposal §3.7): under
+/// [`DEFAULT_C_LEAF`] (2) with leaves of up to 64 points and the W and X rules off (so their pairs
+/// stay far), the time rule at [`FREE_DIAGONAL`] (the form wherever the bound passes a class)
+/// puts the form on a level that holds occupied leaves, which M2P (their W entries) and P2L (X
+/// entries of the next finer level naming them) touch, summed over the ranks (the caller
+/// asserts it). The errors against
+/// the direct sum within the scenario's bound and within [`DIAGONAL_RATIO`] of the same tree with
+/// the form off; 2 threads and on P ranks the one-rank FMM bit for bit. The machine's costs
+/// printed. Returns the occupied leaves on the form's levels and the W and X entries touching
+/// them, summed over the ranks.
+fn check_form_leaves(scenario: &Scenario, comm: &SimpleCommunicator) -> [usize; 3] {
+    let name = scenario.name;
+    let kind = scenario.charges;
+    let inputs = Inputs::new(scenario, 1, comm);
+    let base = default_builder(scenario)
+        .max_points_per_leaf(64)
+        .c_leaf(DEFAULT_C_LEAF);
+    let (fmm, plain) = run(&base, &inputs, kind, comm);
+    let plain_errors = errors(scenario, &inputs, &plain, 0, comm);
+    drop(fmm);
+    let mut found = [0usize; 3];
+    for (costs_name, costs) in [
+        ("free form costs", Some(FREE_DIAGONAL)),
+        ("its machine's costs", None),
+    ] {
+        let what = format!("{name}, c_leaf 2, the time rule at {costs_name}");
+        let form = base
+            .clone()
+            .diagonal(HelmholtzDiagonal::Auto)
+            .diagonal_costs(costs);
+        let (fmm, want) = run(&form, &inputs, kind, comm);
+        let nlevels = fmm.nlevels();
+        let op = fmm.operator();
+        let classes: Vec<usize> = (0..nlevels)
+            .map(|l| op.diagonal_classes(l).map_or(0, |c| c.len()))
+            .collect();
+        let plan = fmm.plan();
+        let leaves = plan.index().leaves();
+        let by_level = fmm.leaves_by_level();
+        // Per level: occupied leaves, the W entries of its leaves (M2P into them), and the X
+        // entries of the next finer level that name its leaves (P2L out of them).
+        let mut local = vec![0u64; 3 * nlevels];
+        for l in 0..nlevels {
+            local[3 * l] = by_level[l][1] as u64;
+            local[3 * l + 1] = plan.level(l).w().len() as u64;
+            if l + 1 < nlevels {
+                local[3 * l + 2] = plan
+                    .level(l + 1)
+                    .x()
+                    .entries()
+                    .iter()
+                    .filter(|&&j| leaves.level(j as usize) == l)
+                    .count() as u64;
+            }
+        }
+        let mut summed = vec![0u64; 3 * nlevels];
+        comm.all_reduce_into(&local[..], &mut summed[..], SystemOperation::sum());
+        let form_levels: Vec<(usize, usize, [u64; 3])> = (0..nlevels)
+            .filter(|&l| classes[l] > 0)
+            .map(|l| {
+                (
+                    l,
+                    classes[l],
+                    [summed[3 * l], summed[3 * l + 1], summed[3 * l + 2]],
+                )
+            })
+            .collect();
+        drop(fmm);
+        let errors = errors(scenario, &inputs, &want, 0, comm);
+        if comm.rank() == 0 {
+            println!(
+                "{what}: (level, classes, [occupied leaves, W entries, X entries naming them]) \
+                 {form_levels:?}; φ {:.3e} against {:.3e} ({:.3}×), ∇φ {:.3e} against {:.3e}",
+                errors.0,
+                plain_errors.0,
+                errors.0 / plain_errors.0,
+                errors.1,
+                plain_errors.1,
+            );
+        }
+        assert!(
+            errors.0 < scenario.bound && errors.1 < scenario.bound,
+            "{what}: errors {errors:?}, bound {:.1e}",
+            scenario.bound
+        );
+        assert!(
+            errors.0 <= DIAGONAL_RATIO * plain_errors.0
+                && errors.1 <= DIAGONAL_RATIO * plain_errors.1,
+            "{what}: errors {errors:?} against {plain_errors:?} without the diagonal form"
+        );
+        if costs.is_some() {
+            for (_, _, counts) in &form_levels {
+                if counts[0] > 0 {
+                    found[0] += counts[0] as usize;
+                    found[1] += counts[1] as usize;
+                    found[2] += counts[2] as usize;
+                }
+            }
+        }
+        let (_, threaded) = run(&form.clone().threads(2), &inputs, kind, comm);
+        assert_same(&format!("{what}: 2 threads"), &threaded, &want, comm);
+        check_one_rank(&what, &form, &inputs, kind, &want, comm);
+    }
+    found
+}
+
 /// The scenarios of [`check_resolving_degree`], at ε = 10⁻⁷ and 10⁻⁸: the clusters at
 /// kD = 1 (their deep levels at κ_l ≤ 0.08) and the cube at complex kD = 20 + 2i.
 fn resolving_scenarios() -> Vec<Scenario> {
@@ -4430,6 +4554,14 @@ fn helmholtz_fmm() {
     // The time rule at matched accuracy (CH4.3b2a): the form on a raised level.
     let classes = check_time_rule_raised(&time_rule_scenario(), &comm);
     assert!(classes > 0, "no raised level took the form");
+    // Leaves on the form's levels under c_leaf 2 (CH4.3e): occupied, and touched by M2P and by
+    // P2L (level 3: 84 leaves, 735 W and 1,040 X entries on the M6).
+    let [occupied, w_entries, x_entries] = check_form_leaves(&form_leaves_scenario(), &comm);
+    assert!(
+        occupied > 0 && w_entries > 0 && x_entries > 0,
+        "no occupied leaf on a level of the form with W or X entries: {occupied} leaves, \
+         {w_entries} W and {x_entries} X entries"
+    );
     // The V rule after the plan (CH4.3b2b): the sphere under the leaf rule.
     check_v_after_plan(&sphere_scenario(), &comm);
     // The V rule's price per box on raised levels (CH4.3b2d): the sphere at 10⁻⁷.

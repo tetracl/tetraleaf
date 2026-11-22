@@ -74,7 +74,7 @@ How it is read:
   kD = 40, ε = 10⁻⁴, c_leaf 2, leaves of up to 64 points, the W and X rules off (so W and X pairs stay
   far), the time rule at free form costs (the form wherever the bound passes a class, whatever the
   machine class): asserts that some level running the form holds occupied leaves, that M2P (W
-  entries) or P2L (X entries) touch those leaves, and that the form runs on more than one level;
+  entries) and P2L (X entries) touch those leaves;
   the errors against the direct sum within the scenario's bound and within `DIAGONAL_RATIO` (1.1) of
   the same tree with the form off; 2 threads and the one-rank FMM bit for bit. The same at the
   default costs printed (no assertion on which levels the machine's costs take).
