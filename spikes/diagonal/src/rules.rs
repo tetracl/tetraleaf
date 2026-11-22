@@ -6,7 +6,9 @@
 //!   off at CH0.7 as S7's output for S6), and off its grid S7's closed form
 //!   max(⌈6 log₁₀(1/ε)⌉ − 2, ⌈x + (ln 1/ε)^{2/3} x^{1/3}⌉);
 //! - [`calibrated`]: CH3.3's `DegreeRule::CALIBRATED`, the full FMM's rule
-//!   (`tetraleaf-exec/src/helmholtz/degree.rs`, copied).
+//!   (`tetraleaf-exec/src/helmholtz/degree.rs`, copied) until Helmholtz CH4.3c2;
+//! - [`refit`]: CH4.3c2's `DegreeRule::CALIBRATED`, the full FMM's rule since then (copied
+//!   for CH4.3d1; `tests/lengths.rs` pins it to the product's values).
 //!
 //! Every rule is taken at x = Re(k) a, a the circumradius, as the FMM's rule is.
 
@@ -32,6 +34,19 @@ pub fn calibrated(x: f64, eps: f64) -> usize {
     let plateau = rounded_up((0.30 * l + 0.25) * l + 2.60);
     let high = rounded_up(x + 0.80 * (1.0 / eps).ln().powf(2.0 / 3.0) * x.cbrt());
     plateau.max(high)
+}
+
+/// CH4.3c2's calibrated rule: CH3.3's plateau and the refitted high-frequency branch
+/// ⌈min(x + max(0, e(ε)) x^{1/3} + 5, x + 0.80 (ln 1/ε)^{2/3} x^{1/3})⌉,
+/// e(ε) = 2.30 (ln 1/ε)^{2/3} − 0.75 L − 5.73, L = log₁₀(1/ε).
+pub fn refit(x: f64, eps: f64) -> usize {
+    let l = (1.0 / eps).log10();
+    let plateau = rounded_up((0.30 * l + 0.25) * l + 2.60);
+    let ln23 = (1.0 / eps).ln().powf(2.0 / 3.0);
+    let excess = 2.30 * ln23 - 0.75 * l - 5.73;
+    let branch = x + excess.max(0.0) * x.cbrt() + 5.0;
+    let cap = x + 0.80 * ln23 * x.cbrt();
+    plateau.max(rounded_up(branch.min(cap)))
 }
 
 /// S7's closed form.

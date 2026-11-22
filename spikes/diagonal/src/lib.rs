@@ -15,13 +15,17 @@
 //! - [`transfer`]: the transfer function in double-double, its bound and its interpolation
 //!   in ŝ · t̂;
 //! - [`classes`]: the 34 reflection classes of the 316 offsets and their grid permutations;
-//! - [`rules`]: the degree rules (proposal §3.5's formula, S7's p*, CH3.3's calibrated);
-//! - [`run`]: one unit of the sweep, every class, placement and variant at one (k, p).
+//! - [`rules`]: the degree rules (proposal §3.5's formula, S7's p*, CH3.3's calibrated,
+//!   CH4.3c2's refit);
+//! - [`run`]: one unit of the sweep, every class, placement and variant at one (k, p);
+//! - [`lengths`]: one unit of the scan of T's length (Helmholtz CH4.3d1), every class and
+//!   placement at one (k, p) and several lengths.
 //!
 //! SPIKE_REPORT.md has the method, the measurements and the answers.
 
 pub mod classes;
 pub mod grid;
+pub mod lengths;
 pub mod rules;
 pub mod run;
 pub mod signature;

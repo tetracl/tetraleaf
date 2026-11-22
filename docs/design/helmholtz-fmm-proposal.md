@@ -474,8 +474,13 @@ the circumsphere radius, bandwidth 2P − 2, one-box separation). Spike S6 confi
 reading in full 3D (their 2007 report's text gives the same a, bandwidth, grid
 (2P − 1)(4P − 3) and separation): Sections 3.5 and 5.4 need no correction of the scheme.
 A bandwidth P − 1 truncates T to an error of order 1; ⌈3(P − 1)/2⌉ is no longer the
-truncated M2L, though at k a 5.7–45 and ε ≤ 10⁻⁶ its rounding is far smaller (a shorter T
-trading truncation for stability; CH4.3's to analyse).
+truncated M2L, though at k a 5.7–45 and ε ≤ 10⁻⁶ its rounding is far smaller. (Amended at
+CH4.3d1.) CH4.3d1 analysed shorter lengths at the FMM's degrees, per pair against RCR's error:
+⌈3(P − 1)/2⌉ is within it on no class from k a 11.3; the shortest lengths within it save 0–16 %
+of a level's samples and take two classes from RCR on one level of W1 at 10⁻⁸; no rule computable
+before the run reaches them safely (the excess-bandwidth length 2ka + 1.8 (log₁₀ 1/ε)^{2/3}
+(2ka)^{1/3} fails at k a 11–32, a Gegenbauer-tail model keeps 2P − 2 almost everywhere). The
+bandwidth stays 2P − 2.
 
 **The rule.** The M2L is chosen per offset class on a level, not per level:
 
@@ -1964,6 +1969,10 @@ these.
   #251, its questions 1–5, signed off by the user, "Q1-5 as recommended"): Section 5.3, D8's bullet,
   a level of D8's rule keeps the waves unless the diagonal form's time rule moves it; Section 6.4,
   the time rule the builder's default; Section 12, D8's row.
+- **Amended at CH4.3d1, 2026-11-22** (`tetraleaf-validate/results/helmholtz-ch4-3d1.md` §7, §8; PR
+  #252, its questions 1–3, signed off by the user, "Q1-3 as recommended"): Section 3.6, the
+  shorter transfer function analysed (⌈3(P − 1)/2⌉ and the excess-bandwidth length per pair at the
+  FMM's degrees) and 2P − 2 kept; review 2026-11-12, M8, closed with it.
 
 ## Appendix B. The stability check behind Section 3.6
 

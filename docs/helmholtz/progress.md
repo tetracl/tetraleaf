@@ -4333,3 +4333,40 @@ request, using this template:
   node) off the list until CH4.5, with an Also on CH8.0; 5, W3 at kD = 200 closed.
 - Laplace: not touched (Helmholtz modules of `tetraleaf-exec`, the harness's docs, scripts).
 - Follow-ups: CH4.3f (added, question 4; its roadmap line); CH8.0's Also (added, question 4).
+
+## 2026-11-22: CH4.3d1 The transfer function's length, per pair
+- Done:
+  - CH4.3d split into CH4.3d1 (the pair sweep, which may recommend) and CH4.3d2 (the FMM, which
+    confirms) by the size rule and the H6 gate's rule of pair and FMM evidence.
+  - S6's spike (`spikes/diagonal`): `lengths` (the scan of T's length per unit: S6's references,
+    the f64 chain at each length from T's partial sums, the chain in double-double at p ≤ 100),
+    `transfer::log10_tail` (Gegenbauer's tail at the radius 2a, the truncation model),
+    `rules::refit` (CH4.3c2's rule, pinned to `tetraleaf-exec`'s degrees), `examples/lengths.rs`;
+    `run_unit` unchanged. `tools/helmholtz/ch4-3d1-tables.py`. Report
+    `tetraleaf-validate/results/helmholtz-ch4-3d1.md`; record `docs/helmholtz/tasks/CH4.3d1.md`.
+- Tests: `spikes/diagonal/tests/lengths.rs`: the scan at 2P − 2 is S6's `f64:2P-2` variant bit for
+  bit (34 classes, real and damped); the double-double chain at 2P − 2 within 10⁻²⁰ of RCR; the
+  tail against double-double; the lengths; the rule against the product's; 1 and 3 threads bit for
+  bit.
+- Measurements (locust, 70 threads, 2026-11-22; 194 units, real k and η = 0.1, k a 2.83–216.5,
+  10⁻³–10⁻⁸ at the FMM's degrees, 34 classes, three placements, 387,804 rows):
+  - the shortest lengths within RCR's error (max(1.1 × RCR's, RCR's + 0.1 ε) per placement and
+    norm): 1–10 degrees below
+    2p at k a 22.6–32, 6–28 at k a ≥ 45, 2p at k a 11.3–16 and 10⁻⁶–10⁻⁷; their
+    grid 0.84–1.00 of 2p's samples on W1's diagonal levels; two classes from RCR (k a 27.1, 10⁻⁸);
+  - ⌈3(P − 1)/2⌉ admissible on no class at k a ≥ 11.3; Song and Chew's 2ka + 1.8 (log₁₀ 1/ε)^{2/3}
+    (2ka)^{1/3} safe for real k at k a ≥ 45 (0.92–1.00 of the samples), failing on 1–4 classes at
+    k a 11–32 (68 of 4,356 classes, up to 7× RCR's error per pair); the γ needed 0.1 to 2.3;
+  - the tail model with C_τ = 0.041: 67× loose in the median; its rule safe on all 4,356 classes the
+    bound takes, 2p on 126 of 134 rows (0.970–0.994 on the rest);
+  - the rounding within 2E at every length but six rows at k a 2.83 (2.0–2.7 E);
+  - raw rows in `~/projects/fmm-archive/locust/runs/ch4-3d1/`.
+- Checks: see the PR (fmt; Clippy default, examples, workspace all-targets; rustdoc; the default and
+  workspace tests at opt-level 1; the spike's Clippy, tests with the ignored ones, every spike
+  built). Not run: the MPI list (no MPI crate changed), `cargo deny` (no manifest change), Laplace's
+  benchmarks (no Laplace path).
+- Decisions: the report's questions 1–3, signed off 2026-11-22 by the user on #252: "Q1-3 as recommended": 1, the acceptance as
+  read; 2, CH4.3d2 not run (closed unrun), 2P − 2 kept; 3, proposal §3.6 amended to the finding
+  (Appendix A), review 2026-11-12, M8, closed.
+- Laplace: not touched (a spike, a script and docs).
+- Follow-ups: none (CH4.3d2 closed unrun).

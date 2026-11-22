@@ -9,13 +9,13 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-22): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
-item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1, CH4.3b2a, CH4.3b2b, CH4.3b2d, CH4.3c1 and CH4.3c2.
-CH4.3b2c (signed off 2026-11-22: the diagonal form's time rule the builder's default, evaluation
-0.37–0.99× at matched accuracy on W1 and W3 on Kathleen and locust; D8 amended; CH4.3f added off the
-list). Next CH4.3d, CH4.3e and CH4.3c3; the FFT track stays item
-11. The project was renamed tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and
-CH0.6 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in
-this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
+item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1–CH4.3b2d, CH4.3c1 and CH4.3c2 (CH4.3b2c on 2026-11-22:
+the diagonal form's time rule the builder's default). CH4.3d was split into CH4.3d1 (the pair sweep)
+and CH4.3d2 (the FMM); CH4.3d1 signed off 2026-11-22 (2P − 2 kept, CH4.3d2 closed unrun, §3.6
+amended). Next CH4.3e and CH4.3c3; the FFT track stays item 11. The project was renamed tetraleaf
+on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c.
+The history of this line until H6.G is in `progress.md` and in this file's history
+(`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
 `git show 8475009:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
@@ -88,7 +88,7 @@ the measured product leaves an FFT about 1–2 % of the run, so items 10 and 11 
    CH4.2's trusted path; split on 2026-11-19)
 9. CHA.11 The Helmholtz wave levels in one place (added on 2026-11-19 at the H1 gate, the
    user on #230: "CHA.11 + measure first (Recommended)"; review 2026-11-19, L1)
-10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3), CH4.4, CH4.5 (CH4.1a first
+10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3; CH4.3d as CH4.3d1 and CH4.3d2, split on 2026-11-22), CH4.4, CH4.5 (CH4.1a first
     measures the product conversions against RCR and stops to ask before CH4.2 whether item 11
     moves ahead: review 2026-11-19, A5)
 11. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
@@ -825,12 +825,25 @@ task's full line is in its record or report and its progress entry
   the random-charge fit); the rule refitted on the worst density if the margin is wrong either
   way, verified as CH4.3c2, for sign-off. *Needs:* CH4.3c2. *Machines:* Kathleen. *Sign-off:* the
   rule, if it changes.
-- [ ] **CH4.3d The transfer function's length.** *Done when:* (S6 §6) whether a shorter
+- CH4.3d The transfer function's length. *Done when:* (S6 §6) whether a shorter
   transfer function (⌈3(P − 1)/2⌉, whose rounding stays far below 2P − 2's at k a 6–45, S6's
   report §6) earns a truncation analysis; (review 2026-11-12, M8) the excess-bandwidth length
   L ≈ 2ka + c (2ka)^{1/3} of the high-frequency FMM literature, between S6's last two, in the
   same sweep: truncation and rounding per class against RCR, and the FMM where one earns it; any
-  adoption for sign-off. *Needs:* CH4.3a.
+  adoption for sign-off. *Needs:* CH4.3a. Split on 2026-11-22 into CH4.3d1 (the pair sweep and
+  the truncation model, which may recommend) and CH4.3d2 (the FMM, which confirms), by the size
+  rule of `/next-task` and the H6 gate's rule of pair and FMM evidence (a spike sweep on locust,
+  then a change to the tables and the time rule with runs on Kathleen).
+- [x] **CH4.3d1 The transfer function's length, per pair.** Report:
+  `tetraleaf-validate/results/helmholtz-ch4-3d1.md`; record `docs/helmholtz/tasks/CH4.3d1.md`. S6's
+  chain scanned in T's length at the FMM's degrees (locust): the shortest lengths within RCR's error
+  save 0–16 % of a W1 diagonal level's samples (two classes from RCR at k a 27, 10⁻⁸); ⌈3(P − 1)/2⌉
+  fails everywhere, Song and Chew's length fails at k a 11–32, Gegenbauer's tail is safe but keeps
+  2p (0–3 %). *Sign-off:* the report's questions 1–3, signed off 2026-11-22 by the user on #252: "Q1-3 as recommended": the acceptance
+  as read; CH4.3d2 not run, 2P − 2 kept; proposal §3.6 amended, review M8 closed.
+- [x] **CH4.3d2 The shorter transfer function in the FMM.** Closed unrun by CH4.3d1's sign-off
+  (question 2, signed off 2026-11-22 by the user on #252: "Q1-3 as recommended"): T's length stays 2P − 2; no length rule computable
+  before the run safely reaches the few per cent the shortest lengths would save.
 - [ ] **CH4.3e c_leaf re-decided with the rule.** *Done when:* (since CH4.0d3's c_leaf 2, signed
   off on #219) c_leaf re-decided with CH4.3b's default (at c_leaf 2 the census's first pass put
   leaves on high-frequency levels on 9 trees at 10⁻⁶; proposal §3.7 keeps W and X lists off
