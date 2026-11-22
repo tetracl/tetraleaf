@@ -95,7 +95,7 @@ const DEEPEST: usize = DEEPEST_LEVEL as usize;
 /// docs/helmholtz/roadmap.md (signed off on 2026-10-28; spikes/census/SPIKE_REPORT.md
 /// §3), the largest c_leaf with no high-frequency leaf on any reference workload at
 /// tolerances 10⁻⁶ and 10⁻⁸. The default of `HelmholtzFmmBuilder::c_leaf` is
-/// [`DEFAULT_C_LEAF`] since Helmholtz CH4.0d3.
+/// [`DEFAULT_C_LEAF`] since Helmholtz CH4.0d3 (2; 4 since CH4.3e).
 pub const C_LEAF: f64 = 1.0;
 
 /// The kind of a wavenumber (CONVENTIONS §3.15, "Kernel and factors").

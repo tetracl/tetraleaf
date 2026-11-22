@@ -4255,8 +4255,9 @@ fn scenarios() -> Vec<Scenario> {
 }
 
 /// The scenario of [`check_form_leaves`] (Helmholtz CH4.3e): Gaussian clusters at kD = 40,
-/// whose leaves under c_leaf 2 (at most 2 λ = 0.31 wide, so from level 2 on) lie on levels 2–5,
-/// levels 2 and 3 at k a 8.7 and 4.3, in the diagonal form's range at ε = 10⁻⁴.
+/// whose leaves under [`DEFAULT_C_LEAF`] (4: at most 4 λ = 0.63 wide, so the leaf rule binds
+/// nowhere; the tree's leaves are split by points) lie on levels 2–5, levels 2 and 3 at k a 8.7
+/// and 4.3, in the diagonal form's range at ε = 10⁻⁴.
 fn form_leaves_scenario() -> Scenario {
     Scenario {
         name: "clusters, kD = 40, ε = 1e-4, complex charges, gradients",
@@ -4273,7 +4274,7 @@ fn form_leaves_scenario() -> Scenario {
 }
 
 /// Leaves on the diagonal form's levels (Helmholtz CH4.3e; proposal §3.7): under
-/// [`DEFAULT_C_LEAF`] (2) with leaves of up to 64 points and the W and X rules off (so their pairs
+/// [`DEFAULT_C_LEAF`] with leaves of up to 64 points and the W and X rules off (so their pairs
 /// stay far), the time rule at [`FREE_DIAGONAL`] (the form wherever the bound passes a class)
 /// puts the form on a level that holds occupied leaves, which M2P (their W entries) and P2L (X
 /// entries of the next finer level naming them) touch, summed over the ranks (the caller
@@ -4297,7 +4298,7 @@ fn check_form_leaves(scenario: &Scenario, comm: &SimpleCommunicator) -> [usize; 
         ("free form costs", Some(FREE_DIAGONAL)),
         ("its machine's costs", None),
     ] {
-        let what = format!("{name}, c_leaf 2, the time rule at {costs_name}");
+        let what = format!("{name}, c_leaf {DEFAULT_C_LEAF}, the time rule at {costs_name}");
         let form = base
             .clone()
             .diagonal(HelmholtzDiagonal::Auto)
@@ -4554,8 +4555,8 @@ fn helmholtz_fmm() {
     // The time rule at matched accuracy (CH4.3b2a): the form on a raised level.
     let classes = check_time_rule_raised(&time_rule_scenario(), &comm);
     assert!(classes > 0, "no raised level took the form");
-    // Leaves on the form's levels under c_leaf 2 (CH4.3e): occupied, and touched by M2P and by
-    // P2L (level 3: 84 leaves, 735 W and 1,040 X entries on the M6).
+    // Leaves on the form's levels under the default c_leaf (CH4.3e): occupied, and touched by
+    // M2P and by P2L (level 3: 84 leaves, 735 W and 1,040 X entries on the M6).
     let [occupied, w_entries, x_entries] = check_form_leaves(&form_leaves_scenario(), &comm);
     assert!(
         occupied > 0 && w_entries > 0 && x_entries > 0,
