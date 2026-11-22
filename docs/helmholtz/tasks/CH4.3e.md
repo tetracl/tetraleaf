@@ -113,7 +113,23 @@ leaf size the library's rule), each case once with `--c-leaf 1,2,4,8` and once w
 - Risk: the debug cost of the new check (a clusters FMM at kD = 40 with the diagonal tables).
 
 ## Pending runs
-<filled in step 6>
+None. The runs are done (raw outputs in `~/projects/fmm-archive/{kathleen,locust}/runs/ch4-3e/`):
+- Kathleen, `singlenode`, one rank on 40 cores, at fc3b38d: job 663653 (node-c11b-012, 2026-11-22
+  14:19–14:53, `w1` and W1 at kD = 1000), 663654 (node-c11a-021, 14:20–14:34, `w2`), 663655
+  (node-c11a-021, 14:34–15:18, `w3` and W3 resolved at kD = 100); 74 launches, every one exit 0;
+- locust 14:21–14:40, `w1 w3` at 1 × 72, 40 launches, every one exit 0, the 1-minute load 1.3
+  before and at most 44.7 during (the runs' own threads).
+
+## Results
+The report: tetraleaf-validate/results/helmholtz-ch4-3e.md. Under the time rule leaves lie on
+levels whose M2L is the form (or RCR at k a ≥ 2.8) at every c_leaf from 1 to 8 (a leaf of c_leaf
+λ has k a ≤ 5.4 c_leaf, in the form's range from k a 2.8), on W2 with W and X lists; every run within
+ε (at most 0.27 ε in φ, 0.44 ε in ∇φ). c_leaf 4 puts build plus one evaluation at 0.874× (Kathleen)
+and 0.790× (locust) c_leaf 2's, from the under-resolved W3 at kD = 500 (0.26–0.36×), the rest the
+same tree or 0.93–0.98×; c_leaf 8 only 1–3 % more, from the same case; c_leaf 1 1.42–1.52×. Built:
+`DEFAULT_C_LEAF` = 4, for sign-off.
 
 ## Open questions
-<filled when they arise>
+The report's §6, for sign-off: 1, the acceptance as read; 2, c_leaf 4 the default (or 8, or 2);
+3, proposal §3.7 and §5.1 amended to the finding (leaves may lie on high-frequency levels), D11's
+row amended.
