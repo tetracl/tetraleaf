@@ -132,10 +132,13 @@ pub struct UnitLengths {
     pub seconds: f64,
 }
 
+/// Points and their charges.
+type Cloud = (Vec<[Dd; 3]>, Vec<Complex<Dd>>);
+
 /// Per placement: the sources, the double-double multipole and its f64 signature (ring
 /// after ring), as `run` forms them.
 struct Shared {
-    sources: Vec<(Vec<[Dd; 3]>, Vec<Complex<Dd>>)>,
+    sources: Vec<Cloud>,
     multipoles: Vec<Vec<Complex<Dd>>>,
     sig64: Vec<Vec<Complex<f64>>>,
 }

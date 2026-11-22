@@ -190,9 +190,9 @@ pub fn log10_tail(z2: Complex<f64>, z: Complex<f64>, l: usize, l_max: usize) -> 
     let mut offset = 0.0f64;
     let mut logs = Vec::with_capacity(l_max - l);
     // h1 holds h_m at the top of iteration m (m ≥ 1).
-    for m in 1..=l_max {
+    for (m, jm) in j.iter().enumerate().skip(1) {
         if m > l {
-            let jm = j[m].abs();
+            let jm = jm.abs();
             if jm > 0.0 {
                 logs.push(((2 * m + 1) as f64 * jm * h1.abs()).log10() + offset);
             }
