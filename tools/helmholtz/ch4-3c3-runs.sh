@@ -13,11 +13,10 @@
 #   one level's degree from ⌊x⌋ − 2 upward, every other level held at CH3.3's hold rule at
 #   10⁻¹⁰, Rotation, ε = 10⁻³ … 10⁻⁸ at ε/2) on W1 with the constant density at every level of
 #   x = 13.5 … 216.5, each a launch of its own: kD = 250 levels 2–4 (`w1c-250`, one launch),
-#   kD = 500 levels 2–5 (`w1c-500-l<l>`), kD = 1000 levels 2–6 (`w1c-1000-l<l>`), kD = 1000's
-#   levels 2 and 3 in two launches each, ε = 10⁻³ … 10⁻⁵ from ⌊x⌋ − 2 (`-a`) and
-#   ε = 10⁻⁶ … 10⁻⁸ from 4 below CH4.3c2's random-charge degree at 10⁻⁶ (`-b`: 231 and 122);
-#   FIRST_<name> (the name's dashes as underscores) overrides a launch's first degree, for a
-#   rerun from lower when a degree is met at the first one;
+#   kD = 500 levels 2–5 (`w1c-500-l<l>`), kD = 1000 levels 2–6 (`w1c-1000-l<l>`; on a
+#   Kathleen node about 20 s per degree at kD = 500 and 110 s at kD = 1000, so kD = 1000's
+#   level 2 takes about 70 min); FIRST_<name> (the name's dashes as underscores) names a
+#   launch's first degree;
 # - `verify-w1`: W1 with the constant density at kD = 250, 500 and 1000 (`helmholtz_boxes`, the
 #   samples only) at 10⁻⁸, 10⁻⁷, 10⁻⁶ and 10⁻³, Rotation and `helmholtz_boxes`' default, under the
 #   rule as built (RULE, default `calibrated`; or a rule by its constants
@@ -79,13 +78,9 @@ scans)
     for l in 5 4 3 2; do
         scan "w1c-500-l$l" 500 "$l" "$ALL"
     done
-    for l in 6 5 4; do
+    for l in 6 5 4 3 2; do
         scan "w1c-1000-l$l" 1000 "$l" "$ALL"
     done
-    scan w1c-1000-l3-a 1000 3 1e-3,1e-4,1e-5
-    scan w1c-1000-l3-b 1000 3 1e-6,1e-7,1e-8 122
-    scan w1c-1000-l2-a 1000 2 1e-3,1e-4,1e-5
-    scan w1c-1000-l2-b 1000 2 1e-6,1e-7,1e-8 231
     ;;
 verify-w1)
     rule=${RULE:-calibrated}

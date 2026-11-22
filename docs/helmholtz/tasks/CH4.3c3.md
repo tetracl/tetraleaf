@@ -32,10 +32,9 @@ What the items mean here:
   10⁻³ … 10⁻⁸) on W1 with the constant density at every level of x from 13.5 to 216: kD = 250
   levels 2–4 (x = 54.1, 27.1, 13.5), kD = 500 levels 2–5 (108.3, 54.1, 27.1, 13.5), kD = 1000
   levels 2–6 (216.5, 108.3, 54.1, 27.1, 13.5): 12 scans, the largest degree at one x the
-  measured one. Where one launch would exceed a 6 h job (kD = 1000's levels 2 and 3) the scan
-  runs as two launches, ε = 10⁻³ … 10⁻⁵ from ⌊x⌋ − 2 and ε = 10⁻⁶ … 10⁻⁸ from `--first` 4 below
-  CH4.3c2's random-charge degree at 10⁻⁶; a degree met at a launch's first degree is "≤ p" and
-  writes no point, and is then rerun from lower.
+  measured one. (The plan first split kD = 1000's levels 2 and 3 into two launches by ε; a
+  degree there costs about 110 s on a Kathleen node, not CH4.3c2's estimate of 10 min, so every
+  scan is one launch.)
   The trees are the library's defaults of today (c_leaf 4 since CH4.3e; CH4.3c2 scanned at 2):
   the rule serves the default, and the scans' levels at x ≥ 13.5 hold the same boxes' far fields.
 - **The margin.** Per scanned (x, ε): the constant density's degree p_c against CH4.3c2's fit
@@ -112,10 +111,8 @@ with `run.sbatch` (`singlenode`, 6 h, two jobs at a time) or a 4-node `small` jo
 launch per node (`srun -N1 -n1` per launch, in parallel); raw outputs to
 `~/projects/fmm-archive/kathleen/runs/ch4-3c3/`. Accuracy runs; times read, never asserted.
 
-1. **Scans** (`ch4-3c3-runs.sh scans-<kd>`, ONLY= per launch): the 12 scans above, kD = 1000's
-   levels 2 and 3 in two launches each. Cost: about 1 min per degree at kD = 500 (CH4.3c2's W1
-   scans), unmeasured at kD = 1000 with the hold (a first launch measures it, and the rest are
-   packed into jobs from it). Decides p_c.
+1. **Scans** (`ch4-3c3-runs.sh scans`, ONLY= per launch): the 12 scans above. Cost measured by
+   the first jobs: about 20 s per degree at kD = 500 and 110 s at kD = 1000. Decides p_c.
 2. **Margin and refit** (on the Mac): `ch4-3c3-tables.py margin`, `helmholtz_calibrate refit`
    over CH4.3c2's archived scans and step 1's. Decides whether the margin stands.
 3. **Verification**: the rule unchanged, `ch4-3c3-runs.sh verify-w1` (W1, constant density,
