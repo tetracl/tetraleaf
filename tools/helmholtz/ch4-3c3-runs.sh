@@ -16,7 +16,8 @@
 #   kD = 500 levels 2–5 (`w1c-500-l<l>`), kD = 1000 levels 2–6 (`w1c-1000-l<l>`; on a
 #   Kathleen node about 20 s per degree at kD = 500 and 110 s at kD = 1000, so kD = 1000's
 #   level 2 takes about 70 min); FIRST_<name> (the name's dashes as underscores) names a
-#   launch's first degree;
+#   launch's first degree; `scans-low` the same below the plan's range, at x = 6.8 (kD = 250
+#   level 5, kD = 500 level 6), where a refit that lowers the degrees reaches;
 # - `verify-w1`: W1 with the constant density at kD = 250, 500 and 1000 (`helmholtz_boxes`, the
 #   samples only) at 10⁻⁸, 10⁻⁷, 10⁻⁶ and 10⁻³, Rotation and `helmholtz_boxes`' default, under the
 #   rule as built (RULE, default `calibrated`; or a rule by its constants
@@ -82,6 +83,10 @@ scans)
         scan "w1c-1000-l$l" 1000 "$l" "$ALL"
     done
     ;;
+scans-low)
+    scan w1c-250-l5 250 5 "$ALL"
+    scan w1c-500-l6 500 6 "$ALL"
+    ;;
 verify-w1)
     rule=${RULE:-calibrated}
     for kd in 250 500 1000; do
@@ -91,7 +96,7 @@ verify-w1)
     done
     ;;
 *)
-    echo "usage: $0 scans|verify-w1 <out-dir>" >&2
+    echo "usage: $0 scans|scans-low|verify-w1 <out-dir>" >&2
     exit 2
     ;;
 esac

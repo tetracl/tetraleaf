@@ -74,6 +74,10 @@ use tetraleaf_validate::helmholtz_workloads::Workload;
 /// about 4, `spikes/truncation/SPIKE_REPORT.md` §3).
 const PLATEAU_X: f64 = 4.0;
 
+/// The largest coefficient of CH3.3's branch that `refit` tries as the refit's cap (Helmholtz
+/// CH4.3c3).
+const MAX_CAP: f64 = 1.20;
+
 /// The degrees of levels 0..`LEVELS` passed to the FMM (more than any tree has).
 const LEVELS: usize = 64;
 
@@ -598,26 +602,39 @@ fn refit_files(files: &[String]) {
         }
     }
     // The default's construction (Helmholtz CH4.3c2): C ≤ CH3.3 with CH3.3's branch as its cap
-    // everywhere, which can only lower a degree between the decades of `cap_grid`.
-    let refit = rules
+    // everywhere, which can only lower a degree between the decades of `cap_grid`. Where no
+    // rule under CH3.3's branch covers the points (Helmholtz CH4.3c3: W1's constant density at
+    // x = 13.5 and 10⁻⁸ needs a degree above CH3.3's rule), the cap's coefficient is raised from
+    // 0.80 by 0.01 to the first that admits a fit, at most `MAX_CAP`.
+    let mut cap_c = ch3_3.c;
+    let mut refit = rules
         .iter()
         .find(|(name, _)| *name == "C ≤ CH3.3")
-        .map(|&(_, rule)| DegreeRule {
-            cap: Some(ch3_3.c),
-            ..rule
-        });
-    if let Some(rule) = refit {
-        rules.push(("C ≤ CH3.3, capped", rule));
+        .map(|&(_, rule)| rule);
+    while refit.is_none() && cap_c < MAX_CAP - 1e-9 {
+        cap_c = ((cap_c + 0.01) * 100.0).round() / 100.0;
+        let cap = DegreeRule::gd(ch3_3.gamma, ch3_3.alpha, ch3_3.beta, cap_c);
+        refit = fit_branch(&points, &ch3_3, BranchForm::Full, Some(&cap));
     }
-    println!("| rule | C | a | b | d | covers | Σ (rule − p) |");
-    println!("| --- | ---: | ---: | ---: | ---: | --- | ---: |");
+    let refit = refit.map(|rule| DegreeRule {
+        cap: Some(cap_c),
+        ..rule
+    });
+    let refit_name = format!("C ≤ cap {cap_c:.2}, capped");
+    match refit {
+        Some(rule) => rules.push((refit_name.as_str(), rule)),
+        None => println!("form C under a cap up to {MAX_CAP}: no rule fits"),
+    }
+    println!("| rule | C | a | b | d | cap | covers | Σ (rule − p) |");
+    println!("| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |");
     for (name, rule) in &rules {
         println!(
-            "| {name} | {:.2} | {:.2} | {:.2} | {:.2} | {} | {} |",
+            "| {name} | {:.2} | {:.2} | {:.2} | {:.2} | {} | {} | {} |",
             rule.c,
             rule.a,
             rule.b,
             rule.d,
+            rule.cap.map_or("–".into(), |c| format!("{c:.2}")),
             covers(rule, &points),
             excess(rule)
         );
