@@ -338,10 +338,23 @@ For a box of degree p (P = p + 1), in the angular basis of §3.15 (S7's):
   (N_φ/2 − j) mod N_φ, y → −y j to −j mod N_φ, z → −z ring i to 2P − 2 − i, x ↔ y j to
   (N_φ/4 − j) mod N_φ, applied in that order.
 
+## 10. The transfer function's length (Helmholtz CH4.3d1)
+
+Added on 2026-11-22: `src/lengths.rs` and `examples/lengths.rs` scan T's length L from below
+⌈3(P − 1)/2⌉ and 2ka to 2P − 2 at the FMM's degrees (CH4.3c2's rule, `rules::refit`), on the 34
+classes and three placements, with the chain in double-double beside the f64 one at p ≤ 100
+(T's truncation and rounding apart) and the truncation model's sum (`transfer::log10_tail`);
+`tests/lengths.rs` holds the scan at 2P − 2 to this report's `f64:2P-2` variant bit for bit. The
+measurement and its recommendation (2P − 2 kept: the shortest lengths within RCR's error save
+0–16 % of a level's samples, and no a-priori rule safely reaches them; for sign-off) are in
+`tetraleaf-validate/results/helmholtz-ch4-3d1.md`; §6's bandwidth paragraph above stands as
+measured, at the formula's degrees.
+
 ## Files
 
 - `src/grid.rs`: the signature grid in double-double and its tables.
 - `src/signature.rs`: S → F and F → R per ring.
+- `src/lengths.rs`, `examples/lengths.rs`, `tests/lengths.rs`: the scan of T's length (§10).
 - `src/transfer.rs`: T in double-double (forward Legendre recurrence with snapshots), T built
   in f64, the bound's Hankel term (`log10_term`), interpolation in ψ (`Interp`).
 - `src/classes.rs`: the 34 classes and their sample permutations.

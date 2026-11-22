@@ -105,9 +105,10 @@ All in `spikes/diagonal` (the spikes workspace), plus the report and the records
   `--kinds`, `--ka`), units = the distinct p of the refit rule at 10⁻³ … 10⁻⁸ per (kind, k a)
   below the pruning cut; k a = S6's grid 2^{j/2}, j = 3..15, plus 216.5 and the four levels of
   kD = 500 (108.3, 54.1, 27.1, 13.5); kinds real and η = 0.1.
-- `examples/lengths_summary.rs` (new): the CSV reduced to the report's tables (L_min per
-  (kind, k a, ε, class); truncation against τ_L; rounding against E_L; the gain per level of
-  W1 and W3).
+- `tools/helmholtz/ch4-3d1-tables.py` (new; planned as an example `lengths_summary.rs`, written
+  as a script like the earlier tasks' table scripts): the CSV reduced to the report's tables
+  (L_min per (kind, k a, ε, class); the named lengths; truncation against τ_L; rounding against
+  E_L; the gain per level of W1; three length rules).
 - `tests/lengths.rs` (new): the tests below. `lib.rs` and `SPIKE_REPORT.md` (a short section
   pointing at CH4.3d1's report), `spikes/README.md`'s row.
 - Report `tetraleaf-validate/results/helmholtz-ch4-3d1.md`; the summary as
@@ -171,7 +172,27 @@ tetraleaf-spike-diagonal --release` (with `--include-ignored` once), `cargo chec
 - Risk: the spike's degree rule copied from `tetraleaf-exec` drifts; test 5 pins it.
 
 ## Pending runs
-None yet.
+None. The sweep ran on locust on 2026-11-22 (194 units, 387,804 rows, 26 minutes at 70 threads;
+`/data/ucahtbe/runs/ch4-3d1/`, archived in `~/projects/fmm-archive/locust/runs/ch4-3d1/`).
+
+## Results
+Report `tetraleaf-validate/results/helmholtz-ch4-3d1.md`.
+- The shortest lengths within RCR's error (an oracle) save 0–16 % of the grid's samples on W1's
+  diagonal levels (3–14 % at k a ≥ 22.6, none at k a 13.5 for ε ≤ 10⁻⁶) and take two classes from
+  RCR on one level (k a 27.1, 10⁻⁸; 6 of 316 offsets).
+- ⌈3(P − 1)/2⌉ is admissible on no class at k a ≥ 11.3. Song and Chew's 2ka + 1.8 (log₁₀ 1/ε)^{2/3}
+  (2ka)^{1/3} is safe for real k at k a ≥ 45 (0–8 % of the samples) and fails on 1–4 classes at
+  k a 11–32 (up to 7× RCR's error per pair). No one constant fits (γ −0.1 to 2.4).
+- Gegenbauer's tail at 2a bounds T's truncation with C_τ = 0.041 (67× in the median); its rule is
+  safe on all 4,356 classes the bound takes, and returns 2p on 126 of 134 rows (0–3 %).
+- The rounding stays within 2E at every length but six rows at k a 2.83 (2.0–2.7 E).
+- The "earns CH4.3d2" criterion of this plan is met only by the oracle (≥ 5 % on some level, two
+  classes from RCR); no rule computable before the run meets it safely. The report recommends not
+  running CH4.3d2 (question 2).
+- Deviations: the table script in Python (above). Step 6's tolerance was a guess before the
+  measurement: test 2 asserts a drop of two orders, not three (the nearest class's truncation
+  falls only like 0.87^l; the plan said "orders of magnitude").
 
 ## Open questions
-None yet.
+The report's §7, for sign-off: 1, the acceptance as read; 2, CH4.3d2 not run (2P − 2 kept);
+3, the proposal's §3.6 amended to the finding, review M8 closed.
