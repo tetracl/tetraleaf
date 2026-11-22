@@ -48,6 +48,38 @@ def launches(arg):
 b2a.launches = launches
 
 
+def choices(path):
+    """CH4.3b2a's `choices`, but a level that a forced run does not list (its plan converted the
+    level's V pairs, or put it out of the rule's range) offers no option from that run; the
+    level is left out where the machine run does not list it."""
+    main, levels, ka = b2a.runs(path)
+    if not {"defaults", "machine", "form", "rcr"} <= set(levels):
+        return []
+    out = []
+    for l, (p, ran, seconds) in sorted(levels["defaults"].items()):
+        if l not in ka or ka[l] < b2a.MIN_KA or l not in levels["machine"]:
+            continue
+        own = b2a.kind(ran)
+        if own == "other":
+            continue
+        options = {"waves" if own == "waves" else "rcr": seconds}
+        ran_f = "–"
+        if l in levels["form"]:
+            _, ran_f, s_f = levels["form"][l]
+            if b2a.kind(ran_f) == "form":
+                options["form"] = s_f
+        if l in levels["rcr"]:
+            _, ran_r, s_r = levels["rcr"][l]
+            if b2a.kind(ran_r) == "rcr" and "rcr" not in options:
+                options["rcr"] = s_r
+        p_m, ran_m, s_m = levels["machine"][l]
+        out.append((l, p_m, ka[l], options, own, b2a.kind(ran_m), s_m, ran_f))
+    return out
+
+
+b2a.choices = choices
+
+
 def ordered(path):
     """The runs of a launch in its order: per run (setting, main row, evaluation s, {level: (p,
     ran, M2L s)}, build row)."""
