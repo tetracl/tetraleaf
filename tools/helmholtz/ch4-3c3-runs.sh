@@ -21,7 +21,17 @@
 # - `verify-w1`: W1 with the constant density at kD = 250, 500 and 1000 (`helmholtz_boxes`, the
 #   samples only) at 10⁻⁸, 10⁻⁷, 10⁻⁶ and 10⁻³, Rotation and `helmholtz_boxes`' default, under the
 #   rule as built (RULE, default `calibrated`; or a rule by its constants
-#   `γ,α,β,C,a,b,d[,cap]`), on today's trees (c_leaf 4).
+#   `γ,α,β,C,a,b,d[,cap]`), on today's trees (c_leaf 4);
+# - `verify-matrix`: CH4.3c2's verification of a changed rule, CH3.1c's matrix and CH3.3's
+#   held-out cases (`helmholtz_accuracy`) under Rotation (the near rules off) and the library's
+#   defaults (`--m2l auto-pw --near-v cost --near-wx cost`), against ε, under the rule as built
+#   and CH4.3c2's (`--rule ch4-3c2`, the errors and times before);
+# - `verify-w1-all`: W1 at kD = 250, 500 and 1000 (`helmholtz_boxes`, the samples only) at 10⁻⁸,
+#   10⁻⁷, 10⁻⁶ and 10⁻³, the random charges, the plane wave's trace and the constant density,
+#   Rotation and `helmholtz_boxes`' default, under the rule as built and CH4.3c2's;
+# - `times`: W1 at kD = 1000 and 500 (`helmholtz_boxes`, the random charges), each case twice
+#   under each rule, the rules alternated (the rule, CH4.3c2's, the rule, CH4.3c2's), Rotation
+#   and the default, as CH4.3c2's report §7.
 # Each launch's output in <out-dir>/<name>.md (stderr in <name>.err), a line per launch in
 # <out-dir>/runs.log. BLAS threads 1. Accuracy runs; times are read on Kathleen only
 # (exclusive nodes), never asserted. TIMEOUT (default 21000) bounds a launch; ONLY (a
@@ -95,8 +105,61 @@ verify-w1)
             --per-box 0 --rule "$rule"
     done
     ;;
+verify-matrix)
+    A=helmholtz_accuracy
+    for rule in calibrated ch4-3c2; do
+        for m2l in rotation defaults; do
+            if [ $m2l = rotation ]; then
+                R=(--rule "$rule" --m2l rotation)
+            else
+                R=(--rule "$rule" --m2l auto-pw --near-v cost --near-wx cost)
+            fi
+            n=$rule-$m2l
+            # CH3.1c's matrix (its §6) with W3 at kD = 100 also at 10⁻⁸, as CH3.3 verified.
+            launch "$n-w1" $A --workload w1 --kd 10,30,100,500 --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            launch "$n-w3" $A --workload w3 --kd 10,30,100 --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            for d in cube sphere plummer clusters; do
+                launch "$n-w4-$d" $A --workload "w4-$d:100000" --kd 1,10,100 \
+                    --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            done
+            launch "$n-w1-real" $A --workload w1 --kd 100 --eps 1e-3,1e-6 --charges real \
+                "${R[@]}"
+            launch "$n-w1-complex-k" $A --workload w1 --kd 100 --kim 10 --eps 1e-3,1e-6 \
+                "${R[@]}"
+            # CH3.3's held-out cases.
+            launch "$n-w2" $A --workload w2 --kd 30,100 --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            launch "$n-w1-held" $A --workload w1 --kd 50,150 --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            for d in cube plummer; do
+                launch "$n-w4-$d-held" $A --workload "w4-$d:100000" --kd 3,30 \
+                    --eps 1e-3,1e-6,1e-8 "${R[@]}"
+            done
+            launch "$n-w1-mid" $A --workload w1 --kd 100 --eps 1e-4,1e-7 "${R[@]}"
+        done
+    done
+    ;;
+verify-w1-all)
+    for kd in 250 500 1000; do
+        for density in random planewave constant; do
+            for rule in calibrated ch4-3c2; do
+                launch "w1-$kd-$density-$rule" helmholtz_boxes --workload w1 --kd "$kd" \
+                    --eps 1e-8,1e-7,1e-6,1e-3 --m2l rotation,default --density "$density" \
+                    --per-box 0 --rule "$rule"
+            done
+        done
+    done
+    ;;
+times)
+    for kd in 1000 500; do
+        for i in 1 2; do
+            for rule in calibrated ch4-3c2; do
+                launch "w1-$kd-$rule-$i" helmholtz_boxes --workload w1 --kd "$kd" \
+                    --eps 1e-3,1e-6,1e-8 --m2l rotation,default --per-box 0 --rule "$rule"
+            done
+        done
+    done
+    ;;
 *)
-    echo "usage: $0 scans|scans-low|verify-w1 <out-dir>" >&2
+    echo "usage: $0 scans|scans-low|verify-w1|verify-matrix|verify-w1-all|times <out-dir>" >&2
     exit 2
     ;;
 esac

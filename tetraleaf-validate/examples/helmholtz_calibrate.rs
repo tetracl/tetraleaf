@@ -32,12 +32,14 @@
 //!   `fit_branch` (A: ⌈x + (a L + b) x^{1/3}⌉; B: with an offset d; C: with C (ln 1/ε)^{2/3}
 //!   added to the excess too), B and C also capped at CH3.3's rule on `cap_grid`; prints each
 //!   rule's constants, whether it covers every point, its total excess, and every point
-//!   against each rule. Since Helmholtz CH4.3c3 also beside CH4.3c2's fit (d = 3) and the
-//!   default (`DegreeRule::CALIBRATED`, d = 5), the refit C ≤ CH3.3 with CH3.3's branch as its
-//!   `cap` (the default's construction), the points of every density (the files' points of a
+//!   against each rule. Since Helmholtz CH4.3c3 also beside CH4.3c2's fit (d = 3), CH4.3c2's
+//!   rule (`DegreeRule::CH4_3C2`, d = 5) and the default (`DegreeRule::CALIBRATED`), the refit
+//!   C ≤ CH3.3 with CH3.3's branch as its `cap` (CH4.3c2's construction; where no rule under
+//!   CH3.3's branch covers the points, under the branch with the least larger coefficient that
+//!   admits one, by 0.01 to `MAX_CAP`), the points of every density (the files' points of a
 //!   density other than the random charges carry it, `helmholtz_calibration::PointLine`), and
-//!   a table of the margin at each such point: its degree against the fit's, the default's and
-//!   the refit's.
+//!   a table of the margin at each such point: its degree against the fit's, CH4.3c2's rule's
+//!   and the refit's.
 //!
 //! Options of the scans: `--workload w` (as `helmholtz_accuracy`: `w1`, `w2`, `w3`,
 //! `w3:<n>`, `w4-<distribution>:<n>`), `--density random|planewave|constant` (Helmholtz
@@ -582,11 +584,12 @@ fn refit_files(files: &[String]) {
     // CH4.3c2's fit, before its raise by 2 for the constant density (its report §3).
     let ch4_3c2_fit = DegreeRule {
         d: 3.0,
-        ..DegreeRule::CALIBRATED
+        ..DegreeRule::CH4_3C2
     };
     let mut rules = vec![
         ("CH3.3", ch3_3),
         ("CH4.3c2 fit", ch4_3c2_fit),
+        ("CH4.3c2", DegreeRule::CH4_3C2),
         ("default", DegreeRule::CALIBRATED),
     ];
     for (name, form, cap) in [
@@ -664,7 +667,7 @@ fn refit_files(files: &[String]) {
         return;
     }
     // The margin (Helmholtz CH4.3c3): at each point of another density its degree against
-    // CH4.3c2's fit (the margin needed over it), the default (its spare) and the refit.
+    // CH4.3c2's fit (the margin needed over it), CH4.3c2's rule (its spare) and the refit.
     println!();
     println!(
         "Margin at the {} points of a density other than the random charges:",
@@ -672,8 +675,8 @@ fn refit_files(files: &[String]) {
     );
     println!();
     println!(
-        "| source | workload | kD | level | x | ε | p at ε/2 | fit | p − fit | default | \
-         default − p | refit | refit − default |"
+        "| source | workload | kD | level | x | ε | p at ε/2 | fit | p − fit | CH4.3c2 | \
+         CH4.3c2 − p | refit | refit − CH4.3c2 |"
     );
     println!(
         "| --- | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
@@ -684,7 +687,7 @@ fn refit_files(files: &[String]) {
         let (p, fit, default) = (
             point.degree as i64,
             at(&ch4_3c2_fit),
-            at(&DegreeRule::CALIBRATED),
+            at(&DegreeRule::CH4_3C2),
         );
         let (refit, change) = refit.map_or(("–".into(), "–".into()), |r| {
             (at(&r).to_string(), format!("{:+}", at(&r) - default))

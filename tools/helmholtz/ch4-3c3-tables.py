@@ -11,8 +11,8 @@ at each ε of 10⁻³ … 10⁻⁸ (a launch split by ε, kD = 1000's levels 2 a
 both files). `margin` takes, per x (to 0.1), the largest degree over the scans of a density other
 than the random charges, and prints per ε: that degree p_c, the random charges' measured degree
 at the same x (CH4.3c2's report §2 at x = 27–216; CH3.3's at x = 13.57, W4's clusters), CH4.3c2's
-fit (d = 3) and the default (d = 5) at the scan's x, p_c − fit (the margin needed) and
-default − p_c (the default's spare), with a last line per x of the largest margin needed and the
+fit (d = 3) and CH4.3c2's rule (d = 5, the default before CH4.3c3) at the scan's x, p_c − fit (the
+margin needed) and rule − p_c (the rule's spare), with a last line per x of the largest margin needed and the
 smallest spare. Python 3 standard library only; prints Markdown.
 """
 
@@ -38,7 +38,7 @@ def up(v):
 
 
 def degree(x, eps, d):
-    """`DegreeRule::CALIBRATED` with offset d (5 the default, 3 CH4.3c2's fit)."""
+    """`DegreeRule::CH4_3C2` with offset d (5 CH4.3c2's rule, 3 its fit)."""
     big_l = math.log10(1 / eps)
     ln23 = math.log(1 / eps) ** (2 / 3)
     plateau = up((0.30 * big_l + 0.25) * big_l + 2.60)
@@ -92,8 +92,8 @@ def margin(files):
         elif p == best[0]:
             best[2].append(source)
     print(
-        "| x | ε | p_c | kD/level | random | fit (d = 3) | default (d = 5) | p_c − fit | "
-        "default − p_c |"
+        "| x | ε | p_c | kD/level | random | fit (d = 3) | CH4.3c2 (d = 5) | p_c − fit | "
+        "CH4.3c2 − p_c |"
     )
     print("| ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |")
     summary = []
@@ -114,7 +114,7 @@ def margin(files):
             )
         summary.append((key, max(needed), min(spare)))
     print()
-    print("| x | largest p_c − fit | smallest default − p_c |")
+    print("| x | largest p_c − fit | smallest CH4.3c2 − p_c |")
     print("| ---: | ---: | ---: |")
     for key, n, s in summary:
         print(f"| {key} | {n:+d} | {s:+d} |")
