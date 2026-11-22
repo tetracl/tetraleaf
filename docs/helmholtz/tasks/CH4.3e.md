@@ -130,7 +130,8 @@ same tree or 0.93–0.98×; c_leaf 8 only 1–3 % more, from the same case; c_le
 `DEFAULT_C_LEAF` = 4, for sign-off.
 
 ## Open questions
-The report's §6, for sign-off: 1, the acceptance as read; 2, c_leaf 4 the default (or 8, or 2),
+Signed off 2026-11-22 by the user on #253: "Q1-3 as recommended" (D11's row, proposal §3.7, §5.1,
+§5.7 and Appendix A amended). The report's §6: 1, the acceptance as read; 2, c_leaf 4 the default (or 8, or 2),
 with an Also on CH4.5 (c_leaf 4 at many ranks per node); 3, proposal §3.7, §5.1 and §5.7 amended to
 the finding (leaves may lie on levels of k a ≥ 2.8; under-resolved inputs get leaves up to c_leaf
 λ), D11's row amended.

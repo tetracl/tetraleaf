@@ -4400,8 +4400,9 @@ request, using this template:
   ranks; `helmholtz_fmm` one rank at opt-level 0 1,315 s at load 24–27 on the M6, the test's first
   version, not comparable with CH4.3b2c's 700.5 s at load 2–4). Not run: `cargo deny` (no manifest change), Laplace's benchmarks (no Laplace path), 8
   ranks (no distributed code).
-- Decisions: the report's questions 1–3 for sign-off (the acceptance as read; c_leaf 4 the default,
-  D11 amended, with an Also on CH4.5; proposal §3.7, §5.1 and §5.7 amended to the finding).
+- Decisions: the report's questions 1–3, signed off 2026-11-22 by the user on #253: "Q1-3 as
+  recommended": 1, the acceptance as read; 2, c_leaf 4 the default (D11 amended), with an Also on
+  CH4.5; 3, proposal §3.7, §5.1 and §5.7 amended to the finding (Appendix A).
 - Laplace: not touched (the Helmholtz builder's constant, Helmholtz tests, scripts, docs).
 - Follow-ups: CH4.5's Also (c_leaf 4 at many ranks per node, its line); the empty-box rule's X
   entries of source-free leaves noted in the report §5, not followed up (their P2L adds nothing).

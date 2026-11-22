@@ -281,6 +281,8 @@ keeps X entries of source-free leaves, whose P2L adds nothing; not followed up.)
 
 ## 6. Questions for sign-off
 
+Signed off 2026-11-22 by the user on #253: "Q1-3 as recommended" (questions 1–3 below).
+
 1. **The acceptance as read**: c_leaf re-decided on W1–W3 under the default (the time rule),
    "leaves on high-frequency levels" measured as built (levels of k a ≥ 2.8, with the M2L each ran),
    §3.7's "W and X lists off them" checked rather than enforced (the census, the errors, the

@@ -144,7 +144,7 @@ use crate::threading::REQUIRED_MPI_THREADING;
 const DEEPEST: usize = DEEPEST_LEVEL as usize;
 
 /// The default maximum leaf width in wavelengths of [`HelmholtzFmmBuilder::c_leaf`], 4
-/// (Helmholtz CH4.3e, for sign-off; tetraleaf-validate/results/helmholtz-ch4-3e.md): two levels
+/// (Helmholtz CH4.3e, signed off 2026-11-22, D11 amended; tetraleaf-validate/results/helmholtz-ch4-3e.md): two levels
 /// coarser than D11's [`C_LEAF`](super::C_LEAF) where the leaf rule binds. A leaf of c_leaf λ has
 /// k a ≤ 5.4 c_leaf, so at every c_leaf ≥ 1 leaves lie on levels of k a ≥ 2.8, the diagonal form's
 /// range, whatever their M2L (the form, RCR, the plane waves or none); the leaf operators do not

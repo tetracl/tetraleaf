@@ -867,7 +867,7 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   ranks per node. Its debug cost: the one-rank run at opt-level 0 700.5 s at load 2–4 on the M6
   (CH4.3b2d 703 s), 39.5 s at opt-level 1.
   Since Helmholtz CH4.3e (docs/helmholtz/tasks/CH4.3e.md; tetraleaf-validate/results/helmholtz-ch4-3e.md)
-  `DEFAULT_C_LEAF` is 4 (2 since CH4.0d3; for sign-off): a leaf of c_leaf λ has k a ≤ 5.4 c_leaf,
+  `DEFAULT_C_LEAF` is 4 (2 since CH4.0d3; signed off on #253, 2026-11-22, D11 amended): a leaf of c_leaf λ has k a ≤ 5.4 c_leaf,
   so at every c_leaf ≥ 1 leaves lie on levels of k a ≥ 2.8 (the form's range) whatever their M2L,
   the leaf operators not depending on the regime; c_leaf 4 gains on under-resolved trees (W3 at
   N = 10⁶, kD = 500: 0.26–0.36× c_leaf 2's build plus one evaluation). `tests/helmholtz/leaf_rule.rs` checks it two levels coarser than
