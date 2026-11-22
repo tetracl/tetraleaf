@@ -15,8 +15,8 @@ times are read, never asserted.
    at every level of x = 6.8–216 at kD = 250, 500 and 1000 (14 scans, §2) need 0–3 degrees over
    CH4.3c2's random-charge fit (§3). The +2 that CH4.3c2 chose is wrong both ways: **one short**
    at x = 216 (10⁻³ and 10⁻⁷) and at x = 13.5, 10⁻⁸ (two of the three trees), exactly enough at
-   x = 108 and 10⁻⁷–10⁻⁸, and **1–2 too many** at x = 6.8–54, where the constant density needs no
-   more than the random charges.
+   x = 108 and 10⁻⁷–10⁻⁸, and **up to 2 too many** at x ≤ 54, where the constant density needs at
+   most one degree more than the random charges at x ≤ 27 and 1–2 at x = 54.
 2. **The refit on the worst density.** CH4.3c2's procedure over CH3.3's points, CH4.3c2's
    random-charge scans and this task's constant-density scans (234 points) cannot keep CH4.3c2's
    cap (CH3.3's branch): x = 13.5 at 10⁻⁸ needs 28, CH3.3's rule gives 27. The least raised cap
@@ -30,7 +30,8 @@ times are read, never asserted.
 
    no hand-chosen offset. It covers every measured degree with a total excess of 349 (CH4.3c2's
    rule covers 230 of the 234 with 472); against CH4.3c2's rule it is 0–2 degrees lower at
-   x = 4–108, one higher at x = 13.5 and 10⁻⁸, and 0–2 higher at x ≥ 150 (§4). It is the
+   x ≤ 150 but one higher at x = 8–21 and ε ≤ 2 · 10⁻⁷ (where it exceeds CH3.3's rule, x = 13.5 at
+   10⁻⁸ among them), and −1 to +2 beyond x = 150 (§4). It is the
    default on this branch, for sign-off (`DegreeRule::CALIBRATED`; CH4.3c2's rule kept as
    `DegreeRule::CH4_3C2`).
 3. **Pair evidence.** S7's worst pair at the refit's degree is at most 4.8 ε at k a = 45 … 256
@@ -105,12 +106,12 @@ CH4.3c2's rule (d = 5, the fit raised by 2):
 | 27.06 | 10⁻³ … 10⁻⁸ | 32, 35, 37, 39, 42, 44 | 32, 34, 37, 39, 41, 44 | 32, 35, 37, 40, 42, 44 | 34, 37, 39, 41, 43, 44 | −1 … 0 | 0 … +2 |
 | 54.13 | 10⁻³ … 10⁻⁸ | 60, 63, 67, 70, 72, 75 | 58, 62, 65, 68, 71, 74 | 59, 63, 66, 69, 72, 74 | 61, 65, 68, 71, 74, 76 | 0 … +1 | +1 … +2 |
 | 108.25 | 10⁻³ … 10⁻⁸ | 114, 119, 123, 127, 131, 134 | 112, 117, 121, 126, 129, 132 | 113, 118, 122, 126, 129, 132 | 115, 120, 124, 128, 131, 134 | +1 … +2 | 0 … +1 |
-| 216.51 | 10⁻³ … 10⁻⁸ | 225, 230, 236, 240, 245, 248 | 218, 225, 230, 235, 240, 244 | 222, 228, 233, 238, 242, 246 | 224, 230, 235, 240, 244, 248 | +2 … +3 | **−1** … 0 |
+| 216.51 | 10⁻³ … 10⁻⁸ | 225, 230, 236, 240, 245, 248 | 218, 225, 230, 235, 240, 244 | 222, 228, 234, 238, 242, 246 | 224, 230, 236, 240, 244, 248 | +2 … +3 | **−1** … 0 |
 
-The constant density's excess over the random charges grows with x: none at x ≤ 27 (at
+The constant density's excess over the random charges grows with x: at most 1 at x ≤ 27 (at
 x = 13.5 the random row is another workload's), 1–2 at x = 54–108, 4–7 at x = 216. CH4.3c2's
 +2, one offset for every x, is too small at x = 216 (10⁻³ and 10⁻⁷) and x = 13.5 (10⁻⁸) and too
-large at x ≤ 54 (spare 1–2 at 10⁻³ … 10⁻⁵). By the plan's criterion (too small: a degree above
+large at x ≤ 54 (spare up to 2). By the plan's criterion (too small: a degree above
 the rule; too large: a refit on the worst density 2 or more below the rule at a measured point)
 it is wrong both ways, so the rule is refitted.
 
@@ -158,7 +159,7 @@ refit lies above CH3.3's rule at 39 points, by one degree each, at x = 8–21 an
 the plan did not have, bound the refit there exactly: 11 and 13 at 10⁻³ and 10⁻⁴, as measured.
 The refit is at most S7's closed form and monotone in x and ε on the tests' grids. Below x = 6.8
 the plateau decides most degrees and no scan used the constant density (CH3.3's plateau scans are
-the random charges'); the refit is one degree below CH4.3c2's at x ≈ 4–7 and 10⁻³, which CH4.4's
+the random charges'); the refit is 1–2 degrees below CH4.3c2's at x ≈ 4–7 and 10⁻³, which CH4.4's
 sweep checks with the constant density (an Also on CH4.4).
 
 ## 5. Pair evidence
@@ -273,7 +274,7 @@ against 0.64 ε).
 
 1. The acceptance as read: the margin measured by level scans with W1's constant density at
    x = 13.5–216 (and 6.8) at kD = 250, 500 and 1000 (§2, §3); found wrong both ways (one short at
-   x = 216 and x = 13.5, 10⁻⁸; 1–2 too many at x ≤ 54), so refitted on the worst density and
+   x = 216 and x = 13.5, 10⁻⁸; up to 2 too many at x ≤ 54), so refitted on the worst density and
    verified as CH4.3c2 (§4–§6)?
 2. Adopt the refit as the default (`DegreeRule::CALIBRATED`: C = 2.00, a = −0.55, b = −4.66,
    d = 2, capped by x + 0.82 (ln 1/ε)^{2/3} x^{1/3}; CH4.3c2's rule kept as

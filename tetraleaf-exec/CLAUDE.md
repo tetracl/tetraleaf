@@ -519,7 +519,8 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   the one-rank run on the M6 (47 s with CH6.1e's iprec 2 on the second scenario, on a
   loaded M6).
 - The degree rule (Helmholtz CH3.3; the `helmholtz::degree` module docs;
-  tetraleaf-validate/results/helmholtz-ch3-3.md): `degree` is `DegreeRule::CALIBRATED`,
+  tetraleaf-validate/results/helmholtz-ch3-3.md): `degree` is `DegreeRule::CALIBRATED`, as
+  CH3.3 left it (its constants since CH4.3c3 at the end of this paragraph)
   max(⌈0.30 L² + 0.25 L + 2.60⌉, ⌈x + 0.80 (ln 1/ε)^{2/3} x^{1/3}⌉) with L = log₁₀(1/ε),
   x = Re(k) a, calibrated in the full FMM (every measured degree at ε/2 covered, 10⁻⁸ ≤ ε
   ≤ 10⁻³, x ≤ 65, checked at x = 108 by CH3.3 and at x = 216 and 108 by Helmholtz CH4.0c,

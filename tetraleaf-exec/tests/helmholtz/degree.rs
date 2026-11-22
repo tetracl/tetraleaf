@@ -214,7 +214,7 @@ fn the_calibrated_rule_is_at_most_s7s_and_monotone() {
 /// max(⌈0.30 L² + 0.25 L + 2.60⌉, ⌈x + 0.82 (ln 1/ε)^{2/3} x^{1/3}⌉), everywhere on
 /// 4 ≤ x ≤ 512 and 10⁻⁸ ≤ ε ≤ 10⁻³ by tenths of a decade; above CH3.3's rule by one at 39 of
 /// those 5,763 points (x = 8–21 and ε ≤ 10^{−6.7}, where the constant density needs it), and
-/// below it at x ≥ 43 by 6–9 degrees at 10⁻³ and 1–3 at 10⁻⁸. CH4.3c2's rule at most CH3.3's
+/// below it at x = 54–216 by 6–9 degrees at 10⁻³ and 1–3 at 10⁻⁸. CH4.3c2's rule at most CH3.3's
 /// everywhere (its construction), equal to it at x ≤ 7.
 #[test]
 fn the_calibrated_rule_is_at_most_its_cap() {

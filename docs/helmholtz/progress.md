@@ -4431,11 +4431,12 @@ request, using this template:
   - 14 level scans of W1 with the constant density, kD = 250, 500, 1000, x = 6.8–216: it needs
     0–3 degrees over CH4.3c2's random-charge fit, more at larger x (+2–3 at x = 216, 0–1 at
     x ≤ 54); CH4.3c2's +2 is one short at x = 216 (10⁻³, 10⁻⁷) and at x = 13.5, 10⁻⁸ (two of
-    three trees, 0.51 and 0.85 ε at p = 27), 1–2 too many at x ≤ 54;
+    three trees, 0.51 and 0.85 ε at p = 27), up to 2 too many at x ≤ 54;
   - CH4.3c2's rule on today's trees (c_leaf 4) with the constant density within ε, at most 0.94 ε;
   - the refit over 234 points: no rule under CH3.3's branch covers x = 13.5 at 10⁻⁸ (28 against
     27); under the cap 0.82 total excess 349 (CH4.3c2's rule 472, not covering); 0–2 degrees below
-    CH4.3c2's at x = 4–108, one above at x = 13.5 and 10⁻⁸, 0–2 above at x ≥ 150;
+    CH4.3c2's at x ≤ 150 but one above at x = 8–21 and ε ≤ 2 · 10⁻⁷ (39 grid points), −1 to +2
+    beyond x = 150;
   - pair evidence: S7's worst pair at the refit's degree at most 4.8 ε at k a = 45 … 256, within
     the FMM's confirmed 19–42 ε;
   - FMM evidence: CH3.1c's matrix and CH3.3's held-out cases (174 runs each rule) within ε, at most

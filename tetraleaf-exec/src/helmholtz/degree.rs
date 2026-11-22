@@ -55,8 +55,9 @@
 //! constant density needs one degree above CH3.3's rule at x = 13.5 and 10⁻⁸. CH4.3c2's rule
 //! ([`DegreeRule::CH4_3C2`], the random-charge fit raised by 2 by hand, capped by CH3.3's
 //! branch) missed four of the constant density's degrees by one (x = 216 at 10⁻³ and 10⁻⁷,
-//! x = 13.5 at 10⁻⁸) and over-resolved others by up to 3; the refit is 0–2 degrees below it at
-//! x = 4–108, one above it at x = 13.5, 10⁻⁸, and 0–2 above it at x ≥ 150. Spike S7's per-pair worst
+//! x = 13.5 at 10⁻⁸) and over-resolved others by up to 2. Against it the refit is 0–2 degrees
+//! lower at x ≤ 150, but one higher at x = 8–21 and ε ≤ 2 · 10⁻⁷ (x = 13.5 at 10⁻⁸ among them),
+//! and −1 to +2 beyond x = 150. Spike S7's per-pair worst
 //! case and the FMM's errors under it are CH4.3c3's report's. Beyond x = 216 it is an
 //! extrapolation. The excess is taken at least 0 (outside the measured range, above about
 //! ε = 2 · 10⁻³).

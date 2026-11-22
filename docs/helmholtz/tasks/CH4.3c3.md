@@ -136,7 +136,7 @@ launch per node (`srun -N1 -n1` per launch, in parallel); raw outputs to
   search and CH4.3c2's rule beside the default (`tetraleaf-validate`); tested.
 - Scans (jobs 663686–663689; 663696 added x = 6.8, below the plan's range, once the refit proved to
   lower the degrees there): the constant density needs 0–3 degrees over CH4.3c2's fit; CH4.3c2's
-  rule one short at x = 216 (10⁻³, 10⁻⁷) and x = 13.5, 10⁻⁸ (kD = 250 and 500), 1–2 too many at
+  rule one short at x = 216 (10⁻³, 10⁻⁷) and x = 13.5, 10⁻⁸ (kD = 250 and 500), up to 2 too many at
   x ≤ 54: wrong both ways.
 - CH4.3c2's rule on today's trees with the constant density (job 663690): within ε, at most 0.94 ε.
 - The refit: the plan's capped refit (CH3.3's branch) has no covering rule (x = 13.5, 10⁻⁸ needs 28,

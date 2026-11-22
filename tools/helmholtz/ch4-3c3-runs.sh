@@ -4,7 +4,7 @@
 # examples were built in release:
 #
 #     cargo build --release -p tetraleaf-validate --example helmholtz_calibrate \
-#         --example helmholtz_boxes
+#         --example helmholtz_boxes --example helmholtz_accuracy
 #     tools/helmholtz/ch4-3c3-runs.sh <stage> <out-dir>
 #
 # Stages, each launch one example on one rank × THREADS threads (default: the machine's
