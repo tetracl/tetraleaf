@@ -699,7 +699,7 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   `tests/helmholtz/rcr_split.rs`' rule alone.
 - The diagonal M2L (Helmholtz CH4.2b1; the `helmholtz::operator` module docs, "M2L"; the
   private `src/helmholtz/operator_diagonal.rs`; docs/helmholtz/tasks/CH4.2b1.md):
-  `HelmholtzDiagonal` (`Off`, the default until CH4.3; `Rule` at the FMM's tolerance;
+  `HelmholtzDiagonal` (`Off`, the builder's default until CH4.3b2c and the operator's own; `Rule` at the FMM's tolerance;
   `Tolerance(ε)` named), `HelmholtzOperator::{with_diagonal, with_diagonal_budget,
   with_diagonal_sources, with_diagonal_chunk, diagonal_classes, diagonal_counts,
   diagonal_bytes}`, `HelmholtzFmmBuilder::{diagonal, diagonal_budget}` (per node, default
@@ -759,7 +759,7 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   `DIAGONAL_RATIO` of Rotation's, the classes within the direct build's and the same on every
   rank, 2 threads and the one-rank FMM bit for bit.
   Since Helmholtz CH4.3b1 (docs/helmholtz/tasks/CH4.3b1.md; tetraleaf-validate/results/helmholtz-ch4-3b1.md)
-  the time rule, `HelmholtzDiagonal::Auto` (opt-in until CH4.3b2; the operator module docs, "M2L"):
+  the time rule, `HelmholtzDiagonal::Auto` (opt-in until CH4.3b2c, the builder's default since; the operator module docs, "M2L"):
   the bound's classes of a level taken only where `DiagonalCosts` (per machine class,
   `DIAGONAL_COSTS_X86` from Kathleen, `DIAGONAL_COSTS_NEON` from locust, `diagonal_costs(isa)`;
   each unit a (p + 1)² + b (p + 1)³ thread-ns of a whole level call, wall × threads, fitted by
@@ -850,6 +850,16 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   `check_defaults` the default `PerBox`. Its debug cost: the one-rank run at opt-level 0 703 s
   at load 2.5–4 on the M6 (before the self-review's two runs on the unraised sphere), 39 s at
   opt-level 1.
+  Since Helmholtz CH4.3b2c (docs/helmholtz/tasks/CH4.3b2c.md; tetraleaf-validate/results/helmholtz-ch4-3b2c.md)
+  the time rule is the default: `HelmholtzFmmBuilder::new` takes `HelmholtzDiagonal::Auto`, and so
+  does the enum's `Default` (as `HelmholtzM2l`'s since CH3.2d); the operator's own default before
+  `with_diagonal` stays `Off` (`DiagonalSettings`), so the operator tests keep theirs. With named
+  degrees the default takes no level (no tolerance); with a tolerance the levels it takes depend on
+  the machine class of `diagonal_costs`, as Batched's crossover and the near rules' do.
+  `tests/helmholtz_fmm.rs`'s `default_builder` names `Off` (the settings before, as it names the
+  tree and the near rules), so every other check keeps its reference; `check_defaults` asserts the
+  default `Auto`, names it in its settings (bit for bit), and prints the levels and classes it put
+  on the form (on the M6 the sphere's level 2, all 34 classes, at 10⁻³).
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
   count. No `unsafe`, no atomics, no global pool; per-thread scratch created at
