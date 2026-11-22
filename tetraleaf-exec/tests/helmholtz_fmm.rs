@@ -464,8 +464,9 @@ fn builder(scenario: &Scenario) -> HelmholtzFmmBuilder {
 /// The scenario's settings with the library's default M2L ([`HelmholtzM2l::Auto`] since
 /// Helmholtz CH3.2d); `builder` names Rotation, the reference of every check. The tree and
 /// the near pairs stay those before Helmholtz CH4.0d3's defaults (32 points per leaf, D11's
-/// c_leaf, the V, W and X rules off), which the checks name where they vary them;
-/// `check_defaults` checks the library's.
+/// c_leaf, the V, W and X rules off), and the M2L that before Helmholtz CH4.3b2c's default
+/// (the diagonal form off), which the checks name where they vary them; `check_defaults`
+/// checks the library's.
 fn default_builder(scenario: &Scenario) -> HelmholtzFmmBuilder {
     let k = Wavenumber::new(scenario.k.0, scenario.k.1).unwrap();
     HelmholtzFmmBuilder::new(k, scenario.degrees.clone())
@@ -476,6 +477,7 @@ fn default_builder(scenario: &Scenario) -> HelmholtzFmmBuilder {
         .c_leaf(C_LEAF)
         .near_v(VNear::Off)
         .near_wx(WxNear::Off)
+        .diagonal(HelmholtzDiagonal::Off)
 }
 
 /// Builds and evaluates; panics on an error.
@@ -3783,7 +3785,9 @@ fn check_leaf_sizes(scenario: &Scenario, comm: &SimpleCommunicator) {
 /// the errors against the direct sum within the scenario's bound, 2 threads and on P ranks
 /// the one-rank FMM bit for bit. Since Helmholtz CH4.0h also the build by part
 /// ([`check_build_timings`]); the 2 threads build the tables on the pool, the one thread
-/// serially, so the two outputs' bits also hold the parallel tables to the serial ones.
+/// serially, so the two outputs' bits also hold the parallel tables to the serial ones. Since
+/// Helmholtz CH4.3b2c the default diagonal M2L is the time rule ([`HelmholtzDiagonal::Auto`]),
+/// named in the same settings.
 fn check_defaults(scenario: &Scenario, comm: &SimpleCommunicator) {
     let inputs = Inputs::new(scenario, 1, comm);
     let kind = scenario.charges;
@@ -3804,12 +3808,21 @@ fn check_defaults(scenario: &Scenario, comm: &SimpleCommunicator) {
     assert_eq!(fmm.near_v(), VNear::CostModel, "{name}");
     assert_eq!(fmm.near_wx(), WxNear::CostModel, "{name}");
     assert_eq!(fmm.v_raised_price(), VRaisedPrice::PerBox, "{name}");
+    assert_eq!(fmm.operator().diagonal(), HelmholtzDiagonal::Auto, "{name}");
     check_build_timings(name, &defaults, &inputs, comm);
     let (phi, grad) = errors(scenario, &inputs, &output, 0, comm);
+    // The levels the default's time rule put on the diagonal form, and its classes there
+    // (depending on the machine class's costs; printed, not asserted).
+    let diagonal: Vec<(usize, usize)> = (0..fmm.nlevels())
+        .filter_map(|level| {
+            let classes = fmm.operator().diagonal_classes(level)?;
+            (!classes.is_empty()).then_some((level, classes.len()))
+        })
+        .collect();
     if comm.rank() == 0 {
         println!(
-            "{name}: {points} points per leaf, {} levels, leaf level {}: φ {phi:.2e}, ∇φ \
-             {grad:.2e}",
+            "{name}: {points} points per leaf, {} levels, leaf level {}, (level, classes) on \
+             the diagonal form {diagonal:?}: φ {phi:.2e}, ∇φ {grad:.2e}",
             fmm.nlevels(),
             fmm.min_leaf_level(),
         );
@@ -3825,7 +3838,8 @@ fn check_defaults(scenario: &Scenario, comm: &SimpleCommunicator) {
         .c_leaf(DEFAULT_C_LEAF)
         .near_v(VNear::CostModel)
         .v_raised_price(VRaisedPrice::PerBox)
-        .near_wx(WxNear::CostModel);
+        .near_wx(WxNear::CostModel)
+        .diagonal(HelmholtzDiagonal::Auto);
     let (_, output_named) = run(&named, &inputs, kind, comm);
     assert_same(&format!("{name}: named"), &output_named, &output, comm);
     let (_, threaded) = run(&defaults.clone().threads(2), &inputs, kind, comm);

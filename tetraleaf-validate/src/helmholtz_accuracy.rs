@@ -53,7 +53,8 @@
 //!   [`Row::plane_wave_raise`] the setting and [`Row::translation_degrees`] each level's
 //!   translation degree.
 //!   [`Case::diagonal`] (Helmholtz CH4.2b2) the diagonal M2L on the RCR levels
-//!   (`HelmholtzFmmBuilder::diagonal`, off by default, the library's until CH4.3);
+//!   (`HelmholtzFmmBuilder::diagonal`, off by default here, the library's until Helmholtz
+//!   CH4.3b2c, whose default is the time rule `Auto`);
 //!   [`Row::diagonal_classes`] per level the classes it took, [`Row::diagonal_pairs`] the
 //!   pairs on each form, [`Row::diagonal_seconds`] the level call's passes and parts,
 //!   [`Row::diagonal_conversions`] the conversions computed, [`Row::diagonal_build`] the
@@ -218,7 +219,8 @@ pub struct Case {
     pub rcr_split: Option<RcrSplit>,
     /// The diagonal M2L on the RCR levels (`HelmholtzFmmBuilder::diagonal`, Helmholtz
     /// CH4.2b2; [`HelmholtzDiagonal::Off`] in [`Case::new`], the library's default until
-    /// CH4.3; named always, as `near_v`).
+    /// Helmholtz CH4.3b2c, whose default is [`HelmholtzDiagonal::Auto`]; named always, as
+    /// `near_v`, so that the earlier reports' runs repeat).
     pub diagonal: HelmholtzDiagonal,
     /// The diagonal M2L's transfer functions' build (`HelmholtzFmmBuilder::diagonal_build`,
     /// Helmholtz CH4.2c2; [`TransferBuild::Direct`] in [`Case::new`], named always, so that

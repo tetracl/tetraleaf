@@ -239,8 +239,10 @@
 //! f64 only (§3.15, "Precision and range"): f32's range is untested (the factors reach
 //! about 10³⁴ at iprec 3).
 //!
-//! The diagonal form (Helmholtz CH4.2b1; proposal §3.6, §5.4; opt-in until CH4.3,
-//! [`with_diagonal`](HelmholtzOperator::with_diagonal), default [`HelmholtzDiagonal::Off`])
+//! The diagonal form (Helmholtz CH4.2b1; proposal §3.6, §5.4;
+//! [`with_diagonal`](HelmholtzOperator::with_diagonal), the operator's default
+//! [`HelmholtzDiagonal::Off`]; `HelmholtzFmmBuilder`'s [`HelmholtzDiagonal::Auto`] since
+//! Helmholtz CH4.3b2c)
 //! runs on the levels whose M2L is RCR's under the setting above (no waves, no Dense, Classes
 //! or Batched tables), so it composes with every [`HelmholtzM2l`]: each offset class c of
 //! such a level with E(l, c) ≤ θ ε ([`diagonal_rule_classes`]: the bound of
@@ -271,8 +273,8 @@
 //! the level call to rounding. Its tables are not cached; their build time is
 //! [`TableTimings::diagonal`].
 //!
-//! The time rule (Helmholtz CH4.3b1, [`HelmholtzDiagonal::Auto`], opt-in until CH4.3b2) takes
-//! the bound's classes of a level only where a cost model of the level calls puts the diagonal
+//! The time rule (Helmholtz CH4.3b1, [`HelmholtzDiagonal::Auto`], the builder's default since
+//! CH4.3b2c) takes the bound's classes of a level only where a cost model of the level calls puts the diagonal
 //! level below the M2L the level would run otherwise ([`DiagonalCosts`], per machine class,
 //! [`diagonal_costs`]; named by [`with_diagonal_costs`](HelmholtzOperator::with_diagonal_costs)):
 //! S → F and F → R per box with a V row, the diagonal pair per pair of a diagonal class, RCR's
