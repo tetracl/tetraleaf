@@ -88,7 +88,7 @@ the measured product leaves an FFT about 1–2 % of the run, so items 10 and 11 
    CH4.2's trusted path; split on 2026-11-19)
 9. CHA.11 The Helmholtz wave levels in one place (added on 2026-11-19 at the H1 gate, the
    user on #230: "CHA.11 + measure first (Recommended)"; review 2026-11-19, L1)
-10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3), CH4.4, CH4.5 (CH4.1a first
+10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3; CH4.3d as CH4.3d1 and CH4.3d2, split on 2026-11-22), CH4.4, CH4.5 (CH4.1a first
     measures the product conversions against RCR and stops to ask before CH4.2 whether item 11
     moves ahead: review 2026-11-19, A5)
 11. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
@@ -825,12 +825,30 @@ task's full line is in its record or report and its progress entry
   the random-charge fit); the rule refitted on the worst density if the margin is wrong either
   way, verified as CH4.3c2, for sign-off. *Needs:* CH4.3c2. *Machines:* Kathleen. *Sign-off:* the
   rule, if it changes.
-- [ ] **CH4.3d The transfer function's length.** *Done when:* (S6 §6) whether a shorter
+- CH4.3d The transfer function's length. *Done when:* (S6 §6) whether a shorter
   transfer function (⌈3(P − 1)/2⌉, whose rounding stays far below 2P − 2's at k a 6–45, S6's
   report §6) earns a truncation analysis; (review 2026-11-12, M8) the excess-bandwidth length
   L ≈ 2ka + c (2ka)^{1/3} of the high-frequency FMM literature, between S6's last two, in the
   same sweep: truncation and rounding per class against RCR, and the FMM where one earns it; any
-  adoption for sign-off. *Needs:* CH4.3a.
+  adoption for sign-off. *Needs:* CH4.3a. Split on 2026-11-22 into CH4.3d1 (the pair sweep and
+  the truncation model, which may recommend) and CH4.3d2 (the FMM, which confirms), by the size
+  rule of `/next-task` and the H6 gate's rule of pair and FMM evidence (a spike sweep on locust,
+  then a change to the tables and the time rule with runs on Kathleen).
+- [ ] **CH4.3d1 The transfer function's length, per pair.** *Done when:* S6's chain on the 34
+  classes and three placements, real k and η = 0.1, k a 2.8–216, ε 10⁻³–10⁻⁸ at the FMM's degrees
+  (CH4.3c2's rule), with T's length L scanned from below ⌈3(P − 1)/2⌉ and 2ka to 2P − 2 (the
+  excess-bandwidth lengths among them): per class T's truncation (double-double chain against
+  double-double RCR), its rounding against the bound E at length L, and the total against the
+  direct sum; the shortest length within RCR's error per (k a, ε, class); a truncation model
+  against the measurement; what a length rule gains on W1's and W3's levels (grid size, classes
+  taken from RCR at 10⁻⁸); whether CH4.3d2 runs, for sign-off. *Needs:* CH4.3a. *Machines:*
+  locust. *Sign-off:* CH4.3d2's go-ahead and its rule.
+- [ ] **CH4.3d2 The shorter transfer function in the FMM.** *Done when:* (if CH4.3d1's sign-off
+  says so) the length rule signed off at CH4.3d1 in `tetraleaf-ref`'s bound and transfer
+  function and `tetraleaf-tables`' builds (opt-in), the grid shortened with it if signed off, the
+  time rule's costs refitted for it; W1 and W3 at 10⁻³–10⁻⁸ against the default: errors within
+  1.1×, the evaluation and build per level; the default for sign-off. *Needs:* CH4.3d1 and its
+  sign-off. *Machines:* Kathleen, locust. *Sign-off:* the default.
 - [ ] **CH4.3e c_leaf re-decided with the rule.** *Done when:* (since CH4.0d3's c_leaf 2, signed
   off on #219) c_leaf re-decided with CH4.3b's default (at c_leaf 2 the census's first pass put
   leaves on high-frequency levels on 9 trees at 10⁻⁶; proposal §3.7 keeps W and X lists off
@@ -848,7 +866,7 @@ task's full line is in its record or report and its progress entry
   to levels and classes, with no error concentrated at a class boundary and the worst box at
   most 100 ε (proposal §9.1, amended at CH4.0b); time, memory and build cost per k. Also
   (CH4.0b's sign-off 2): the plane wave's trace at kD = 500 and 1000 beside §9.1's charges.
-  *Needs:* CH4.3a–CH4.3e, CH1.4. *Machines:* Kathleen.
+  *Needs:* CH4.3a–CH4.3e (CH4.3d2 only if CH4.3d1's sign-off runs it), CH1.4. *Machines:* Kathleen.
 - [ ] **CH4.5 Host performance against FMM3D at matched accuracy.** As C6.8, setup apart,
   one node, on CH4.4's sweep. Also (review 2026-11-19, A6, B6, B8): ours at 1 × N (one rank,
   N threads, as a threaded caller runs it) beside the best split; FMM3D's OpenMP binding
