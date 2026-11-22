@@ -93,11 +93,11 @@ use mpi::collective::SystemOperation;
 use mpi::traits::CommunicatorCollectives;
 use tetraleaf_exec::geometry::{Domain, radius};
 use tetraleaf_exec::helmholtz::{
-    ChargeKind, Charges, DEFAULT_DENSE_BUDGET, DegreeRule, Degrees, DiagonalCosts, DiagonalCounts,
-    DiagonalTimes, HelmholtzDiagonal, HelmholtzFmm, HelmholtzFmmBuilder, HelmholtzFmmError,
-    HelmholtzM2l, LevelShape, Output, PlaneWaveCounts, PlaneWavePrecision, PlaneWaveRaise,
-    PlaneWaveSplit, PlaneWaveTimes, RcrSplit, TransferBuild, VAfterPlan, VCosts, VNear,
-    VRaisedPrice, Wavenumber, WxNear, diagonal_rule_classes,
+    ChargeKind, Charges, DEFAULT_DENSE_BUDGET, DEFAULT_DIAGONAL_BUILD, DegreeRule, Degrees,
+    DiagonalCosts, DiagonalCounts, DiagonalTimes, HelmholtzDiagonal, HelmholtzFmm,
+    HelmholtzFmmBuilder, HelmholtzFmmError, HelmholtzM2l, LevelShape, Output, PlaneWaveCounts,
+    PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, PlaneWaveTimes, RcrSplit, TransferBuild,
+    VAfterPlan, VCosts, VNear, VRaisedPrice, Wavenumber, WxNear, diagonal_rule_classes,
 };
 use tetraleaf_exec::operator::{M2L_BLOCK_TARGETS, MulAdd, P2pChoice};
 use tetraleaf_math::Complex;
@@ -311,6 +311,23 @@ impl Case {
             v_after_plan: VAfterPlan::Off,
             v_costs: None,
             v_raised_price: None,
+        }
+    }
+
+    /// A case of [`Case::new`]'s charges, samples and seed under the library's defaults, every
+    /// setting `HelmholtzFmmBuilder::new`'s (Helmholtz CH4.4a): M2L by [`HelmholtzM2l::Auto`],
+    /// the diagonal form's time rule ([`HelmholtzDiagonal::Auto`]) with the library's
+    /// [`DEFAULT_DIAGONAL_BUILD`], the V, W and X rules of the cost model; every other setting
+    /// is already the library's in [`Case::new`] (`None`, or the builder's own value).
+    /// [`Case::new`] keeps its named settings so that the earlier reports' runs repeat.
+    pub fn defaults(workload: Workload, k: (f64, f64), degrees: Degrees) -> Self {
+        Self {
+            m2l: HelmholtzM2l::Auto,
+            diagonal: HelmholtzDiagonal::Auto,
+            diagonal_build: DEFAULT_DIAGONAL_BUILD,
+            near_v: VNear::CostModel,
+            near_wx: WxNear::CostModel,
+            ..Self::new(workload, k, degrees)
         }
     }
 }
@@ -884,6 +901,9 @@ pub struct Row {
     /// the plan, summed over the ranks (`HelmholtzFmm::raised_v_shapes`; on the raised levels
     /// under `VRaisedPrice::PerBox`); empty where nothing was counted.
     pub raised_v_shapes: Vec<[u64; 2]>,
+    /// The FMM's resident memory over its build and evaluations (Helmholtz CH4.4a), `None`
+    /// where some rank cannot reset and read its peak ([`Memory`]).
+    pub memory: Option<Memory>,
     /// The relative ℓ2 errors [φ, ∇φ] per vector, then over all vectors.
     pub errors: Vec<[f64; 2]>,
     /// The checksum of the whole output.
@@ -1075,6 +1095,85 @@ fn signature_scratch<C: CommunicatorCollectives>(
         .collect()
 }
 
+/// The FMM's resident memory over its build and evaluations, in bytes (Helmholtz CH4.4a;
+/// [`Row::memory`]). Per rank: the resident size right before the build, after the peak was
+/// reset to it ([`reset_peak_resident`]), and the peak after the last evaluation
+/// ([`peak_resident`]); the growth is the peak less the size before, so the harness's own
+/// arrays (the points, the charges, the oracle, FMM3D's outputs) are left out, and the FMM's
+/// output is in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Memory {
+    /// The largest growth of one rank.
+    pub growth_max: u64,
+    /// The growths summed over the ranks (on one node, the node's).
+    pub growth_sum: u64,
+    /// The resident sizes before the build, summed over the ranks.
+    pub before_sum: u64,
+    /// The peaks, summed over the ranks.
+    pub peak_sum: u64,
+}
+
+impl Memory {
+    /// The reduction of every rank's (before, peak): `None` unless every rank read both.
+    ///
+    /// # Collective operation
+    ///
+    /// On `comm`, every rank.
+    pub fn reduce<C: CommunicatorCollectives>(
+        before: Option<u64>,
+        peak: Option<u64>,
+        comm: &C,
+    ) -> Option<Self> {
+        let (ok, before, peak) = match (before, peak) {
+            (Some(b), Some(p)) => (1u64, b, p.max(b)),
+            _ => (0, 0, 0),
+        };
+        let mut all = 0u64;
+        comm.all_reduce_into(&ok, &mut all, SystemOperation::min());
+        let mut sums = [0u64; 3];
+        comm.all_reduce_into(
+            &[before, peak, peak - before][..],
+            &mut sums[..],
+            SystemOperation::sum(),
+        );
+        let mut growth_max = 0u64;
+        comm.all_reduce_into(&(peak - before), &mut growth_max, SystemOperation::max());
+        (all == 1).then_some(Self {
+            growth_max,
+            growth_sum: sums[2],
+            before_sum: sums[0],
+            peak_sum: sums[1],
+        })
+    }
+}
+
+/// A field of `/proc/self/status` in bytes (`VmRSS`, `VmHWM`), `None` elsewhere.
+fn proc_status_bytes(field: &str) -> Option<u64> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    let kib: u64 = status
+        .lines()
+        .find_map(|l| l.strip_prefix(field)?.strip_prefix(':'))?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()?;
+    Some(kib * 1024)
+}
+
+/// Resets this process's peak resident size to its current one (Linux ≥ 4.0: `5` written to
+/// `/proc/self/clear_refs`) and returns the current resident size (`VmRSS`) in bytes; `None`
+/// where either fails (macOS, a restricted `/proc`).
+pub fn reset_peak_resident() -> Option<u64> {
+    std::fs::write("/proc/self/clear_refs", "5").ok()?;
+    proc_status_bytes("VmRSS")
+}
+
+/// This process's peak resident size (`VmHWM`) in bytes since the last
+/// [`reset_peak_resident`]; `None` where it cannot be read.
+pub fn peak_resident() -> Option<u64> {
+    proc_status_bytes("VmHWM")
+}
+
 /// [`run`], also returning this rank's output and the FMM's domain.
 ///
 /// # Collective operation
@@ -1099,6 +1198,8 @@ pub fn run_output<C: CommunicatorCollectives>(
     let (rank, size) = (comm.rank() as usize, comm.size() as usize);
     let block = problem.block(rank, size);
     let points = &problem.points[block.clone()];
+    // The resident size before the build, the peak reset to it (Helmholtz CH4.4a).
+    let resident_before = reset_peak_resident();
     comm.barrier();
     let start = Instant::now();
     let mut builder = HelmholtzFmmBuilder::new(k, case.degrees.clone())
@@ -1225,6 +1326,7 @@ pub fn run_output<C: CommunicatorCollectives>(
         }
     }
     let output = output.expect("at least one evaluation");
+    let memory = Memory::reduce(resident_before, peak_resident(), comm);
     let errors = errors(&output, problem, &block, oracle, comm);
     let checksum = reduce_checksum(checksum(&output, block.start), comm);
     let mut leaves = 0usize;
@@ -1521,6 +1623,7 @@ pub fn run_output<C: CommunicatorCollectives>(
             .raised_v_shapes()
             .map(|shapes| shapes.iter().map(|s| [s.leaves, s.pairs]).collect())
             .unwrap_or_default(),
+        memory,
         errors,
         checksum,
     };

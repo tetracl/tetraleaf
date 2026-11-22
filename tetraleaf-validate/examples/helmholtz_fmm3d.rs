@@ -38,12 +38,27 @@
 //! - `--workload w`: `w1` (default), `w2`, `w3` (ten points per wavelength), `w3:<n>`,
 //!   `w4-<cube|sphere|plummer|clusters>:<n>`;
 //! - `--kd x`: Re kD (default 10); `--kim y`: Im kD (default 0);
-//! - `--charges real|complex` (default complex), `--samples n` (default 1000).
+//! - `--charges real|complex` (default complex), `--samples n` (default 1000);
+//! - `--density random|planewave|constant` (Helmholtz CH4.4a; default `random`, §9.1's
+//!   charges; `helmholtz_accuracy::Density`: a plane wave's trace, complex charges only, or a
+//!   constant), in the problem file's charges, so `problem` and `compare` take the same.
 //!
 //! `compare` also takes `--eps e,…` (default 1e-3; each value is also the token of
 //! FMM3D's files, as given), `--fmm3d label=PREFIX,…` (FMM3D's runs, for example one per
 //! build variant; none to run ours alone), `--threads t` (default 1),
-//! `--oracle-threads t` (default `--threads`) and `--p2p` (default `auto`).
+//! `--oracle-threads t` (default `--threads`), `--p2p` (default `auto`) and `--settings
+//! harness|defaults` (Helmholtz CH4.4a): `harness` (the default, so that CH3.6's runs
+//! repeat) is `Case::new`'s named settings (M2L by Rotation, the diagonal form off),
+//! `defaults` the library's, every one (`Case::defaults`).
+//!
+//! Helmholtz CH4.4a also added to `compare`: a last column "memory GB", ours the FMM's
+//! resident growth over its build and evaluation summed over the ranks, with the largest
+//! rank's (`helmholtz_accuracy::Memory`; Linux only, else a dash), FMM3D's the driver's peak
+//! resident size at the token (`helmholtz_fmm3d::maxrss`, from the log's `maxrss:` line that
+//! `tools/fmm3d/run.sh` writes; the driver's own input and output arrays included); a table
+//! "Build" after the main one, a row per ε: our build, its parts (`BUILD_PARTS`, the slowest
+//! rank's each) and the evaluation; and in the log, per ε, each level's k a, degree, V pairs
+//! and the M2L that ran.
 //!
 //! Run in release mode, on any number of ranks for `compare` (each rank passes a
 //! contiguous block of the points, rank 0 prints), with one BLAS thread. One charge
@@ -55,13 +70,15 @@ use std::path::{Path, PathBuf};
 
 use mpi::Threading;
 use mpi::traits::*;
-use tetraleaf_exec::helmholtz::{ChargeKind, Degrees};
+use tetraleaf_exec::helmholtz::{ChargeKind, Degrees, HelmholtzM2l};
 use tetraleaf_exec::operator::P2pChoice;
 use tetraleaf_validate::bench::{cores, cpu_model, target};
 use tetraleaf_validate::fmm_accuracy::Distribution;
-use tetraleaf_validate::helmholtz_accuracy::{Case, Oracle, Problem, complex_k, run_output};
+use tetraleaf_validate::helmholtz_accuracy::{
+    BUILD_PARTS, Case, Density, Oracle, Problem, Row, complex_k, run_output,
+};
 use tetraleaf_validate::helmholtz_fmm3d::{
-    Crosscheck, Grid, Values, crosscheck, crosscheck_values, problem_bytes, read_full,
+    Crosscheck, Grid, Values, crosscheck, crosscheck_values, maxrss, problem_bytes, read_full,
     read_sampled, sample_errors, seconds,
 };
 use tetraleaf_validate::helmholtz_workloads::{SEED, Workload};
@@ -73,6 +90,8 @@ struct Arguments {
     kd: f64,
     kim: f64,
     charges: ChargeKind,
+    density: Density,
+    defaults: bool,
     samples: usize,
     out: Option<PathBuf>,
     problem: Option<PathBuf>,
@@ -108,7 +127,8 @@ fn arguments() -> Arguments {
     let usage = || -> ! {
         eprintln!(
             "usage: helmholtz_fmm3d problem|compare|errors [--workload w1|w2|w3|w3:<n>|w4-<distribution>:<n>] \
-             [--kd x] [--kim y] [--charges real|complex] [--samples n] [--out FILE] \
+             [--kd x] [--kim y] [--charges real|complex] [--density random|planewave|constant] \
+             [--settings harness|defaults] [--samples n] [--out FILE] \
              [--eps e,…] [--fmm3d label=PREFIX,…] [--reference e] [--problem FILE] \
              [--threads t] [--oracle-threads t] [--p2p auto|reference|<isa>]; got {args:?}"
         );
@@ -123,6 +143,8 @@ fn arguments() -> Arguments {
         kd: 10.0,
         kim: 0.0,
         charges: ChargeKind::Complex,
+        density: Density::Random,
+        defaults: false,
         samples: 1000,
         out: None,
         problem: None,
@@ -147,6 +169,16 @@ fn arguments() -> Arguments {
                 _ => None,
             }
             .map(|c| parsed.charges = c)
+            .is_some(),
+            "--density" => Density::from_name(value)
+                .map(|d| parsed.density = d)
+                .is_some(),
+            "--settings" => match value.as_str() {
+                "harness" => Some(false),
+                "defaults" => Some(true),
+                _ => None,
+            }
+            .map(|d| parsed.defaults = d)
             .is_some(),
             "--samples" => value.parse().map(|v| parsed.samples = v).is_ok(),
             "--out" => {
@@ -193,6 +225,7 @@ fn arguments() -> Arguments {
         rest = tail;
     }
     let valid = rest.is_empty()
+        && !(parsed.density == Density::PlaneWave && parsed.charges == ChargeKind::Real)
         && parsed.threads > 0
         && parsed.samples > 0
         && match parsed.step.as_str() {
@@ -235,11 +268,12 @@ fn fail(message: String) -> ! {
 }
 
 /// One FMM3D output: its sampled values, its full values if written, its seconds and
-/// threads.
+/// threads, and its launch's peak resident bytes if the log has them.
 struct Fmm3dRun {
     sampled: Values,
     full: Option<Values>,
     seconds: Option<(f64, usize)>,
+    memory: Option<u64>,
 }
 
 /// Reads `PREFIX-<token>.out`, `PREFIX-<token>.full.out` (if present) and the seconds of
@@ -287,13 +321,12 @@ fn read_run(prefix: &Path, token: &str, problem: &Problem) -> Fmm3dRun {
         }
         full
     });
-    let seconds = std::fs::read_to_string(name(".log"))
-        .ok()
-        .and_then(|log| seconds(&log, token));
+    let log = std::fs::read_to_string(name(".log")).ok();
     Fmm3dRun {
         sampled,
         full,
-        seconds,
+        seconds: log.as_deref().and_then(|log| seconds(log, token)),
+        memory: log.as_deref().and_then(|log| maxrss(log, token)),
     }
 }
 
@@ -351,6 +384,59 @@ fn worst_boxes(check: &Crosscheck, j: usize, count: usize) -> String {
         worst.join(", "),
         boxes.len()
     )
+}
+
+/// Bytes as GB with two decimals.
+fn gigabytes(bytes: u64) -> String {
+    format!("{:.2}", bytes as f64 / 1e9)
+}
+
+/// Our memory cell: the growth summed over the ranks and the largest rank's, in GB.
+fn our_memory(row: &Row) -> String {
+    row.memory.map_or("–".into(), |m| {
+        format!(
+            "{} (rank ≤ {})",
+            gigabytes(m.growth_sum),
+            gigabytes(m.growth_max)
+        )
+    })
+}
+
+/// What ran on level `l` of `row`: the diagonal form with its classes, the exponential M2L,
+/// the tables of Dense, Classes or Batched (Auto's tables are Batched's), RCR, or nothing (no
+/// V pairs).
+fn level_m2l(row: &Row, l: usize) -> String {
+    let classes = row.diagonal_classes.get(l).copied().unwrap_or(0);
+    if row.v_pairs.get(l).copied().unwrap_or(0) == 0 {
+        "–".into()
+    } else if classes > 0 {
+        format!("diagonal {classes}/34")
+    } else if row.plane_wave.get(l).is_some_and(Option::is_some) {
+        "waves".into()
+    } else if row.dense_levels.get(l).copied().unwrap_or(false) {
+        match row.m2l {
+            HelmholtzM2l::Auto => "Batched".into(),
+            m2l => format!("{m2l:?}"),
+        }
+    } else {
+        "RCR".into()
+    }
+}
+
+/// The log's lines of a run's levels: k a, degree, V pairs and the M2L that ran.
+fn levels_log(row: &Row) -> String {
+    (0..row.levels)
+        .map(|l| {
+            format!(
+                "{l}: k a {:.2}, p {}, {} V pairs, {}",
+                row.diagonal_model.get(l).map_or(0.0, |m| m[0]),
+                row.degrees.get(l).copied().unwrap_or(0),
+                row.v_pairs.get(l).copied().unwrap_or(0),
+                level_m2l(row, l)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 /// The step `errors`: FMM3D's runs at the samples against the case's oracle, one row per
@@ -422,12 +508,17 @@ fn errors(arguments: &Arguments, case: &Case, problem: &Problem, workload: Workl
 fn main() {
     let arguments = arguments();
     let workload = workload(&arguments.workload, arguments.kd).expect("checked");
-    let mut case = Case::new(
+    let mut case = if arguments.defaults {
+        Case::defaults
+    } else {
+        Case::new
+    }(
         workload,
         (arguments.kd, arguments.kim),
         Degrees::Tolerance(1e-3),
     );
     case.charges = arguments.charges;
+    case.density = arguments.density;
     case.samples = arguments.samples;
     case.p2p = arguments.p2p;
     let problem = Problem::new(&case);
@@ -436,10 +527,11 @@ fn main() {
         let out = arguments.out.as_ref().expect("checked");
         std::fs::write(out, &bytes).unwrap_or_else(|e| fail(format!("{}: {e}", out.display())));
         println!(
-            "helmholtz_fmm3d: {} at kD = {} + {}i: {} points, {} samples -> {}",
+            "helmholtz_fmm3d: {} at kD = {} + {}i, {} charges: {} points, {} samples -> {}",
             workload.name(),
             arguments.kd,
             arguments.kim,
+            case.density.name(),
             problem.len(),
             problem.sample.len(),
             out.display()
@@ -506,7 +598,8 @@ fn main() {
         println!();
         println!(
             "Machine: {}, {}, {}; ours on {} ranks × {} threads; BLAS threads: \
-             OPENBLAS_NUM_THREADS={}; N = {}, {} sampled targets, one {} charge vector",
+             OPENBLAS_NUM_THREADS={}; N = {}, {} sampled targets, one {} charge vector \
+             ({}); our settings: {}",
             cpu_model(),
             cores(),
             target(),
@@ -518,6 +611,12 @@ fn main() {
             match case.charges {
                 ChargeKind::Real => "real",
                 ChargeKind::Complex => "complex",
+            },
+            case.density.name(),
+            if arguments.defaults {
+                "the library's defaults (Case::defaults)"
+            } else {
+                "the harness's (Case::new: M2L by Rotation, the diagonal form off)"
             },
         );
         if let Some((token, run)) = &reference {
@@ -534,13 +633,15 @@ fn main() {
         println!();
         println!(
             "| Workload | N | kD | ε | code | threads | p by level | build s | run s | φ | ∇φ \
-             | all φ | all ∇φ | worst box φ / ε, ∇φ / ε | worst box / all (φ / ∇φ) of boxes | checksum |"
+             | all φ | all ∇φ | worst box φ / ε, ∇φ / ε | worst box / all (φ / ∇φ) of boxes | checksum \
+             | memory GB |"
         );
         println!(
             "| --- | ---: | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: \
-             | ---: | --- | --- | --- |"
+             | ---: | --- | --- | --- | ---: |"
         );
     }
+    let mut build_rows: Vec<String> = Vec::new();
     for (j, token) in arguments.eps.iter().enumerate() {
         let eps: f64 = token.parse().expect("checked");
         case.degrees = Degrees::Tolerance(eps);
@@ -577,7 +678,7 @@ fn main() {
         }
         let errors = row.errors.last().expect("an entry over all vectors");
         println!(
-            "| {} | {} | {kd} | {token} | ours ({}) | {} × {} | {} | {:.2} | {:.2} | {:.2e} | {:.2e} | {} | {:016x} |",
+            "| {} | {} | {kd} | {token} | ours ({}) | {} × {} | {} | {:.2} | {:.2} | {:.2e} | {:.2e} | {} | {:016x} | {} |",
             workload.name(),
             problem.len(),
             row.p2p,
@@ -590,7 +691,18 @@ fn main() {
             errors[1],
             crosscheck_cells(check.as_ref(), eps),
             row.checksum,
+            our_memory(row),
         );
+        build_rows.push(format!(
+            "| {token} | {:.2} | {} | {:.2} |",
+            row.build,
+            row.build_parts
+                .iter()
+                .map(|s| format!("{s:.3}"))
+                .collect::<Vec<_>>()
+                .join(" | "),
+            row.evaluate
+        ));
         for ((label, _), runs) in arguments.fmm3d.iter().zip(&fmm3d) {
             let run = &runs[j];
             let e = sample_errors(&run.sampled, &oracle, 0);
@@ -616,12 +728,13 @@ fn main() {
                 (format!("{s:.2}"), t.to_string())
             });
             println!(
-                "| {} | {} | {kd} | {token} | FMM3D {label} | {threads} | eps = {token} | – | {time} | {:.2e} | {:.2e} | {} | – |",
+                "| {} | {} | {kd} | {token} | FMM3D {label} | {threads} | eps = {token} | – | {time} | {:.2e} | {:.2e} | {} | – | {} |",
                 workload.name(),
                 problem.len(),
                 e[0],
                 e[1],
                 crosscheck_cells(check.as_ref(), eps),
+                run.memory.map_or("–".into(), gigabytes),
             );
         }
         eprintln!(
@@ -632,5 +745,25 @@ fn main() {
             row.leaves,
             grid.level
         );
+        eprintln!(
+            "{} kD = {kd} ε = {token}: by level, {}",
+            workload.name(),
+            levels_log(row)
+        );
+    }
+    if root {
+        println!();
+        println!("## Build");
+        println!();
+        println!(
+            "Ours, seconds, each part the slowest rank's (`helmholtz_accuracy::BUILD_PARTS`); \
+             the parts from \"RCR tables\" to \"scratch\" lie within \"operator\"."
+        );
+        println!();
+        println!("| ε | build | {} | evaluation |", BUILD_PARTS.join(" | "));
+        println!("| --- |{}", " ---: |".repeat(BUILD_PARTS.len() + 2));
+        for line in &build_rows {
+            println!("{line}");
+        }
     }
 }
