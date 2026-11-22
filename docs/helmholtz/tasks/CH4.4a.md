@@ -62,7 +62,7 @@ boundary", which is CH4.4b's. How it is read (to be confirmed in the PR):
 - **Memory per k**: ours the resident growth of the FMM over its build and evaluation (Linux: the
   peak `VmHWM` after resetting it through `/proc/self/clear_refs` right before the build, less
   `VmRSS` then), the largest rank's and the sum over the node's ranks; FMM3D's the driver's peak
-  resident size per eps (GNU `time`'s maximum RSS, one driver launch per eps; the driver's input
+  resident size per eps (`tools/fmm3d/maxrss.py`: getrusage's peak of the child, one driver launch per eps; the driver's input
   and output arrays included, 13 doubles a point, stated beside it).
 
 ## Read first
@@ -86,8 +86,9 @@ convention, dependency or manifest change):
    carries the charges); `compare` prints our memory and FMM3D's peak RSS (from the driver's log,
    a line `maxrss: token=<eps> kb=<n>`), a table "Build" (a row per ε: the build, its parts, the
    evaluation) and in the log each level's degree, k a, M2L and the form's classes.
-3. `tools/fmm3d/run.sh` (`helmholtz`): the driver launched once per eps under GNU `time` where
-   it takes `-f` (`H_TIME`), appending the `maxrss:` line to the log; a case
+3. `tools/fmm3d/run.sh` (`helmholtz`): the driver launched once per eps under a new
+   `tools/fmm3d/maxrss.py` (getrusage's peak of the child; Kathleen's compute nodes have no GNU
+   `time`), appending the `maxrss:` line to the log; a case
    `<workload>@<kD>[/<density>]`; `H_SETTINGS` (passed as `--settings`); the README's
    `helmholtz` section.
 4. `tools/helmholtz/ch4-4a-runs.sh` (the stages below, each a call of `run.sh helmholtz` with its

@@ -13,7 +13,7 @@
 # our side under the library's defaults (`H_SETTINGS=defaults`) at ε = 10⁻³, 10⁻⁶, 10⁻⁸, FMM3D at
 # the same eps (the variants of VARIANTS, by default `default fastker`; `default` alone on the
 # density cases) and `default` at 10⁻¹² for the full-target crosscheck, no one-thread cases, and
-# under GNU time FMM3D's peak memory per eps. `tools/helmholtz/ch4-4a-tables.py` makes the
+# FMM3D's peak memory per eps (tools/fmm3d/maxrss.py). `tools/helmholtz/ch4-4a-tables.py` makes the
 # report's tables from <out-dir>'s helmholtz-<case>.md. Stages:
 #   smoke    W1 at kD = 10, and W2 at kD = 10 with the constant density (a check of the script)
 #   low      W1 and W2 at kD = 10, 30, 100, 250; W3 resolved at kD = 10, 30

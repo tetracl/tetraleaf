@@ -723,7 +723,7 @@ build and evaluations, per rank the peak `VmHWM` after `reset_peak_resident` wro
 example `--settings harness|defaults`, `--density`, a last column "memory GB", a table "Build" and
 the levels in the log. `tests/helmholtz_accuracy.rs` (`check_defaults`) holds `Case::defaults` to an
 FMM built by `HelmholtzFmmBuilder::new` with nothing else set, bit for bit. `tools/fmm3d/run.sh
-helmholtz` takes `<workload>@<kD>/<density>`, `H_SETTINGS` and GNU time's memory per eps;
+helmholtz` takes `<workload>@<kD>/<density>`, `H_SETTINGS` and FMM3D's memory per eps (`tools/fmm3d/maxrss.py`);
 `tools/helmholtz/ch4-4a-runs.sh` runs the task's stages, `ch4-4a-tables.py` makes the report's
 tables. Its report is `results/helmholtz-ch4-4a.md`.
 

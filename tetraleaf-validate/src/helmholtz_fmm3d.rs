@@ -257,17 +257,15 @@ pub fn seconds(log: &str, token: &str) -> Option<(f64, usize)> {
 /// From the driver's log, the peak resident size in bytes of the driver's launch at `token`
 /// (Helmholtz CH4.4a): the last line `maxrss: token=<token> kb=<n>`, which
 /// `tools/fmm3d/run.sh helmholtz` appends after a launch of the driver at that one token
-/// under GNU `time` (its maximum resident set in KiB); `None` without one.
+/// under `tools/fmm3d/maxrss.py` (its peak resident set in KiB); `None` without one, or
+/// if the last line of the token has no number.
 pub fn maxrss(log: &str, token: &str) -> Option<u64> {
-    log.lines()
-        .filter_map(|line| {
-            let mut words = line.strip_prefix("maxrss: ")?.split_whitespace();
-            (words.next()?.strip_prefix("token=")? == token)
-                .then(|| words.next()?.strip_prefix("kb=")?.parse::<u64>().ok())
-                .flatten()
-        })
-        .last()
-        .map(|kib| kib * 1024)
+    let mut words = log.lines().rev().find_map(|line| {
+        let mut words = line.strip_prefix("maxrss: ")?.split_whitespace();
+        (words.next()?.strip_prefix("token=")? == token).then_some(words)
+    })?;
+    let kib: u64 = words.next()?.strip_prefix("kb=")?.parse().ok()?;
+    Some(kib * 1024)
 }
 
 /// §9.1's relative ℓ2 errors [φ, ∇φ] of `values` at the sampled targets against vector

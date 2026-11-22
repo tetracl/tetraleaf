@@ -15,6 +15,7 @@ nothing of it is committed (its sources, builds and outputs stay under `FMM3D_RO
 | `driver.f90` | the FMM3D side: reads a problem file, checks FMM3D's normalisation, times FMM3D's setup and its calls, writes φ and ∇φ at the sampled targets |
 | `run.sh` | the steps of a machine's comparison: `problems`, `sweep`, `match`, `time`, and `crosscheck` (the two codes' outputs against each other at every point); `helmholtz` (CH3.6, below) |
 | `helmholtz.py` | Helmholtz CH1.4: the driver's Helmholtz modes from Python (problem and output files, the two-point check and the identification of FMM3D's conventions, the error norms) and the R12 sweep; Python 3.9 standard library only |
+| `maxrss.py` | Helmholtz CH4.4a: runs a command and appends its peak resident set to a file (`maxrss: <label> kb=<n>`), for FMM3D's memory per eps; Python 3.9 standard library only |
 | `hfmm3d-levels.patch` | Helmholtz CH6.2d: per-level timers and the plane-wave switch `FMM3D_PW_LEVEL` in `hfmm3d`'s main routine, for the variants `timed` and `fastker-timed` ("Per level (CH6.2d)" below) |
 
 Our side is the sweep `t9-fmm3d` of `tools/scaling/run.sh` (and `t9-device`, our CUDA
@@ -182,12 +183,12 @@ Helmholtz CH4.4a (docs/helmholtz/tasks/CH4.4a.md) added:
   names (`h-w1-kd500-planewave.bin`, `helmholtz-w1-kd500-planewave.md`);
 - `H_SETTINGS`: `harness` (the default, CH3.6's: `Case::new`, M2L by Rotation, the diagonal
   form off) or `defaults` (the library's every default, `Case::defaults`);
-- FMM3D's memory: where GNU time takes `-f` (`H_TIME`, by default `/usr/bin/time` if so; not
-  macOS's), the driver runs once per eps under it and appends `maxrss: token=<eps> kb=<n>`
-  (its peak resident set) to its log, which `compare` prints in its last column "memory GB"
+- FMM3D's memory: the driver runs once per eps under `maxrss.py` (in place of GNU time, which
+  Kathleen's compute nodes lack), which appends `maxrss: token=<eps> kb=<n>` (its peak
+  resident set, getrusage's) to its log; `compare` prints it in its last column "memory GB"
   beside ours (the FMM's resident growth over its build and evaluation, summed over the
   ranks; Linux only). FMM3D's figure is the whole driver's, with its input and output arrays.
-  Without GNU time the driver runs once at every eps, as before.
+  `H_MAXRSS=0` runs the driver once at every eps, as before, without the memory.
 
 `tools/helmholtz/ch4-4a-runs.sh` runs CH4.4a's stages through this step, and
 `tools/helmholtz/ch4-4a-tables.py` makes its report's tables.

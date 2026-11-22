@@ -57,9 +57,9 @@
 #             thread for both codes, without the crosscheck (helmholtz-<case>-t1.md); the
 #             full outputs are removed unless H_KEEP is set. Helmholtz CH4.4a: a case may end
 #             in /<density> (random, planewave or constant: helmholtz_fmm3d's --density,
-#             in the problem file and the names); where GNU time runs (`/usr/bin/time -f`,
-#             not macOS's), the driver runs once per eps under it and appends
-#             `maxrss: token=<eps> kb=<n>` to its log, FMM3D's peak memory at that eps
+#             in the problem file and the names); the driver runs once per eps under
+#             tools/fmm3d/maxrss.py, which appends `maxrss: token=<eps> kb=<n>` to its
+#             log, FMM3D's peak memory at that eps (H_MAXRSS=0: one launch, no memory)
 #
 # Every launch's file starts with the command, the machine (CPU, the variant's
 # build-info.txt) and, under Slurm, the job, or elsewhere the load before; macOS waits for
@@ -103,8 +103,8 @@
 #   H_P2P       ours: the P2P kernel (default auto)
 #   H_SETTINGS  ours: harness (default, CH3.6's: M2L by Rotation, the diagonal form off) or
 #               defaults (the library's every default; Helmholtz CH4.4a)
-#   H_TIME      the GNU time command of the per-eps launches (default /usr/bin/time where it
-#               takes -f, else none: one launch at every eps, no memory)
+#   H_MAXRSS    1 (default): the driver once per eps under tools/fmm3d/maxrss.py; 0: once
+#               at every eps, no memory (CH3.6's)
 #   DRY_RUN     if set, print the commands only
 
 set -eu
@@ -149,10 +149,7 @@ H_EPS=${H_EPS:-"1e-3,1e-6,1e-8"}
 H_REFERENCE=${H_REFERENCE:-1e-12}
 H_P2P=${H_P2P:-auto}
 H_SETTINGS=${H_SETTINGS:-harness}
-if [ -z "${H_TIME+set}" ]; then
-    H_TIME=
-    if /usr/bin/time -f '%M' true >/dev/null 2>&1; then H_TIME=/usr/bin/time; fi
-fi
+H_MAXRSS=${H_MAXRSS:-1}
 TIMEOUT=${TIMEOUT:-7200}
 QUIET=${QUIET:-200}
 case "$(uname -s)" in
@@ -362,18 +359,18 @@ helmholtz_case() {
         if [ "$first" = 1 ] && [ "$withref" = 1 ]; then tokens="$H_EPS,$H_REFERENCE"; fi
         pre=$OUT/h/$name-$variant
         driver=$FMM3D_ROOT/$variant/bin/fmm3d_driver
-        if [ -n "$H_TIME" ]; then
-            command="for t in ${tokens//,/ }: OMP_NUM_THREADS=$fthreads $limit $H_TIME -a -o $pre.log \
--f 'maxrss: token=\$t kb=%M' $driver helmholtz $prob $pre $kd 0 \$t 1 1"
+        if [ "$H_MAXRSS" = 1 ]; then
+            command="for t in ${tokens//,/ }: OMP_NUM_THREADS=$fthreads $limit python3 \
+tools/fmm3d/maxrss.py $pre.log token=\$t -- $driver helmholtz $prob $pre $kd 0 \$t 1 1"
         else
             command="OMP_NUM_THREADS=$fthreads $limit $driver helmholtz $prob $pre $kd 0 $tokens 1 1"
         fi
         echo "[$(date '+%H:%M:%S')] $name: $command"
         header "$pre.log" "$variant" "$command"
-        if [ -n "$H_TIME" ]; then
+        if [ "$H_MAXRSS" = 1 ]; then
             for t in ${tokens//,/ }; do
                 # shellcheck disable=SC2086 # $limit is a command and its argument, or empty
-                OMP_NUM_THREADS=$fthreads $limit "$H_TIME" -a -o "$pre.log" -f "maxrss: token=$t kb=%M" \
+                OMP_NUM_THREADS=$fthreads $limit python3 tools/fmm3d/maxrss.py "$pre.log" "token=$t" -- \
                     "$driver" helmholtz "$prob" "$pre" "$kd" 0 "$t" 1 1 >>"$pre.log" 2>&1 ||
                     echo "FAILED: FMM3D $variant at $t" | tee -a "$pre.log"
             done
