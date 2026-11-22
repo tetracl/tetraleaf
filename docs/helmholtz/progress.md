@@ -4288,3 +4288,47 @@ request, using this template:
   names; the pre-rename branch bundled in `~/projects/fmm-archive/ch4-3c2-pre-rename/`).
 - Follow-ups: CH4.3b2c measures the form's default on these degrees (its *Needs*); CH4.3c3
   measures the constant density's margin (its line).
+
+## 2026-11-22: CH4.3b2c The diagonal form by default
+- Done:
+  - `tetraleaf_exec::helmholtz`: `HelmholtzFmmBuilder::new` takes `HelmholtzDiagonal::Auto` (the
+    time rule of CH4.3b1–CH4.3b2a), and so does the enum's `Default`; `DiagonalSettings` names `Off`,
+    so the operator's own default before `with_diagonal` is unchanged. For sign-off. Docs: the
+    builder, the enum, the operator module's "M2L" (the levels depend on the ranks per node where
+    the scratch budget binds, and on the machine class of the costs).
+  - `tests/helmholtz_fmm.rs`: `default_builder` names `Off` (the settings before); `check_defaults`
+    asserts the default `Auto`, names it in its settings and prints the levels it took.
+  - `tetraleaf-validate`: docs only (`Case::new` keeps `Off` named so earlier runs repeat).
+  - `tools/helmholtz/ch4-3b2c-runs.sh` (`w1`, `w3`, `reverse`, `repeat`, `ranks`) and
+    `ch4-3b2c-tables.py`. Report `tetraleaf-validate/results/helmholtz-ch4-3b2c.md`; record
+    `docs/helmholtz/tasks/CH4.3b2c.md`.
+- Tests: `check_defaults` (the sphere at kD = 30, 10⁻³: on the M6 the default takes level 2, all 34
+  classes; against the direct sum, the same settings named bit for bit, 2 threads, the one-rank FMM
+  at 2 and 4 ranks); `check_diagonal_auto` and `check_time_rule_raised` unchanged.
+- Measurements (Kathleen jobs 663643, node-c11b-048, and 663644, node-c11a-058, `singlenode`; locust
+  1 × 72 and 72 × 1): W1 at kD = 100–1000 and W3 at N = 10⁶, kD = 200 and 500, 10⁻³–10⁻⁸, the default
+  against the defaults, both run orders, the options forced per level:
+  - errors 0.991–1.034× on every case, 1 × N and N × 1;
+  - evaluation 0.37–0.99× on Kathleen, 0.44–0.99× on locust (geometric mean of both orders); build
+    plus one evaluation 0.56–1.15× and 0.76–1.06×, above 1.01 only where under 0.3 s or Kathleen's
+    run order;
+  - choices within 1.05× on 75/78 levels (Kathleen, 1.46 s lost of 41.7 s) and 82/90 (locust, 0.28 s
+    of 12.5 s); the misses CH4.3b2a's (W3's dense levels, two raised W1 levels); the form takes 45
+    and 40 levels from Auto's waves (D8's choice moves);
+  - the fallback at 40 × 1 (W1 at kD = 1000) runs levels 2–3 on RCR whole, errors 1.000×; at one rank
+    per core it binds on more levels (W3 at kD = 500; W1 at kD = 500 at 72 × 1);
+  - at 40 × 1 the waves on W3 at kD = 500's level 4 (10⁻⁸) cost 8× their one-rank time (18 s lost,
+    the defaults' too); every rank builds the diagonal tables (about 10 s at 40 × 1);
+  - W3 at kD = 200 on Kathleen (CH4.3b2a's question 4): a run-order drift, the same computation
+    9–20 % slower the second time in a launch; the default first ran 0.68–0.90×;
+  - raw outputs in `~/projects/fmm-archive/{kathleen,locust}/runs/ch4-3b2c*/`.
+- Checks: see the PR (fmt; Clippy default, examples, workspace all-targets; rustdoc `-D warnings`;
+  the default and workspace tests at opt-level 1, 1,381 and 1,425 passed; the MPI list at 2 and 4
+  ranks at opt-level 1; `helmholtz_fmm` one rank at opt-level 0 700.5 s at load 2–4 on the M6).
+  Not run: `cargo deny` (no manifest change), Laplace's benchmarks (no Laplace path), 8 ranks (no
+  distributed code).
+- Decisions: the report's questions 1–5 for sign-off: the acceptance as read; `Auto` the default;
+  D8 amended (the time rule may move a level from Auto's waves); CH4.3f (the time rule's costs at
+  many ranks per node) off the list until CH4.5, with an Also on CH8.0; W3 at kD = 200 closed.
+- Laplace: not touched (Helmholtz modules of `tetraleaf-exec`, the harness's docs, scripts).
+- Follow-ups: CH4.3f (proposed, question 4; its roadmap line); CH8.0's Also (proposed, question 4).

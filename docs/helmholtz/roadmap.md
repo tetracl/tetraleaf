@@ -7,18 +7,15 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/tasks/<ID>.md`; each milestone's gate report is
 `docs/helmholtz/gates/<milestone>.md`.
 
-Status (2026-11-21): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
+Status (2026-11-22): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
-item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1, CH4.3b2a, CH4.3b2b, CH4.3b2d (signed off 2026-11-21:
-the raised levels' V crossover priced per box before the plan, one plan, `VRaisedPrice::PerBox` the
-default) and CH4.3c1 (C₀ = 200 confirmed at p ≥ 72 against a double-double reference); CH4.3c2
-(signed off 2026-11-21: the high-frequency degrees refitted, raised by 2 for the constant density
-and capped by CH3.3's rule; §3.5 amended). The project was renamed tetraleaf on 2026-11-21. Next
-CH4.3b2c (the form by default, on the refitted degrees), then CH4.3d, CH4.3e and CH4.3c3 (the
-constant density in the calibration); CH4.2d off the list; the FFT
-track stays item 11. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7,
-CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
-(`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
+item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1, CH4.3b2a, CH4.3b2b, CH4.3b2d, CH4.3c1 and CH4.3c2.
+CH4.3b2c (the diagonal form's time rule the builder's default: evaluation 0.37–0.99× at matched
+accuracy on W1 and W3 on Kathleen and locust) waits for its sign-off (questions 1–5: the default,
+D8 amended, CH4.3f proposed off the list). Next CH4.3d, CH4.3e and CH4.3c3; the FFT track stays item
+11. The project was renamed tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and
+CH0.6 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in
+this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
 `git show 8475009:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
@@ -97,7 +94,7 @@ the measured product leaves an FFT about 1–2 % of the run, so items 10 and 11 
 11. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
 
 Off the list, in file order: CH0.8b, CH0.5 and H0.G; CH4.0f (the user, 2026-11-12, on #211);
-CH4.2d (added at CH4.2b2, off the list until CH4.5; the user on #239, 2026-11-20: "All 4 questions as recommended.");
+CH4.3f (proposed at CH4.3b2c, its question 4, off the list until CH4.5); CH4.2d (added at CH4.2b2, off the list until CH4.5; the user on #239, 2026-11-20: "All 4 questions as recommended.");
 CH4.0k (added at CH4.0h; the user, 2026-11-16, on #221: off the list; kept off at CH4.0j, on
 #223); CH4.0l (added at CH4.0i;
 the user, 2026-11-16, on #222: off the list);
@@ -799,22 +796,13 @@ task's full line is in its record or report and its progress entry
   orders), the raised levels −0.12 to −0.98 s per case on W1, errors 0.58–1.00×; `PerBox` the default.
   *Sign-off:* the report's questions 1–3: signed off 2026-11-21 by the user on #247, "All sign off questions as recommended": 1, the acceptance as read; 2, `PerBox` the
   default; 3, `VAfterPlan` stays opt-in, no task.
-- [ ] **CH4.3b2c The diagonal form by default.** *Done when:* W1 and W3 at 10⁻³–10⁻⁸ on Kathleen
-  and locust, the defaults with `HelmholtzDiagonal::Auto` (as CH4.3b2a and CH4.3b2b leave it)
-  against the defaults (with CH4.3b2d's `VRaisedPrice::PerBox`, the default since its sign-off):
-  the errors within 1.1×, the evaluation and the build per level; the order
-  between the waves, the form and RCR per level (D8 amended here if it moves); the whole-level
-  fallback at 40 × 1 (W1 at kD = 1000, levels 2–3); `Auto` the default (`HelmholtzDiagonal`, `Off`
-  until here) for sign-off. Also (CH4.3b1's report): the model's misses on W3's small dense levels
-  (the waves kept where the form was 1.1–1.9× faster; in CH4.3b2a's final runs 1.07–2.10×, and two
-  raised W1 levels); the constants at many ranks per node (fitted at one rank per node). Also
-  (CH4.3b2a's report §5.2, its question 4): W3 at kD = 200 on Kathleen ran 1.03–1.12× the defaults'
-  evaluation with every choice within 1.05× (the same waves level slower in the time rule's run):
-  repeated, and spread separated from a placement effect of the form's buffers (CH4.3b2b's runs
-  saw it too: same-plan runs of one launch up to 30 % apart, later runs slower; its report §1).
-  *Needs:* CH4.3b2a, CH4.3b2b, CH4.3b2d (added at CH4.3b2b, its question 3), CH4.3c2 (added at
-  CH4.3c1, its question 2: the form's default measured on the refitted degrees). *Machines:*
-  Kathleen, locust. *Sign-off:* the default.
+- [x] **CH4.3b2c The diagonal form by default.** Report:
+  `tetraleaf-validate/results/helmholtz-ch4-3b2c.md`; record `docs/helmholtz/tasks/CH4.3b2c.md`.
+  `HelmholtzDiagonal::Auto` the builder's default (the operator's own stays `Off`): W1 and W3 at
+  10⁻³–10⁻⁸ on Kathleen and locust errors 0.991–1.034×, evaluation 0.37–0.99× (both run orders),
+  choices within 1.05× on 75/78 and 82/90 levels; the fallback at 40 × 1 (W1 at kD = 1000, levels
+  2–3) as built; W3 at kD = 200 on Kathleen a run-order drift. *Sign-off:* the report's questions
+  1–5, pending on the PR.
 - CH4.3c The high-frequency degrees refit, and C₀ at large degrees. Split on 2026-11-21 (by the
   size rule of `/next-task`: two independent studies, pairs on the M6 and a calibration on
   Kathleen) into CH4.3c1 and CH4.3c2.
@@ -847,6 +835,13 @@ task's full line is in its record or report and its progress entry
   leaves on high-frequency levels on 9 trees at 10⁻⁶; proposal §3.7 keeps W and X lists off
   them; CH4.0d3's report §4), on W1–W3's trees, for sign-off (D11). *Needs:* CH4.3b2c.
   *Machines:* Kathleen.
+- [ ] **CH4.3f The time rule's costs at many ranks per node.** (Proposed at CH4.3b2c, its question
+  4, for sign-off; off the list until CH4.5.) *Done when:* the waves' cost per box at one rank per
+  core on W3's dense levels explained (Kathleen 40 × 1, W3 at kD = 500, 10⁻⁸, level 4: 20.5 s
+  against 2.5 s at 1 × 40, the form 2.6 s; CH4.3b2c's report §8) and the time rule's costs fitted per
+  ranks per node (or read from the rank's share), the dense-level misses at one rank per node (3.5 %
+  and 2.2 % of the levels' time, its §5) refitted or closed, verified as CH4.3b2a on Kathleen and
+  locust at 1 × N and N × 1. *Needs:* CH4.3b2c. *Machines:* Kathleen, locust.
 - [ ] **CH4.4 kD sweep, with the FMM3D gate.** *Done when:* the FMM against the direct sum on
   W1 to kD = 1000, W2 to 500 and W3 to 200, beside `hfmm3d`; the full-target crosscheck mapped
   to levels and classes, with no error concentrated at a class boundary and the worst box at
@@ -1033,6 +1028,11 @@ task's full line is in its record or report and its progress entry
     `// SAFETY:` comment on every block, root CLAUDE.md's `unsafe` rule amended in the same PR.
   - Laplace's tables in the same window behind an option, its default and outputs unchanged
     (constraint 1), or left out with the reason.
+  - Also (proposed at CH4.3b2c, its question 4, for sign-off): the diagonal form's transfer
+    functions and conversions, built on every rank (about 10 s at 40 × 1 on Kathleen), and its
+    signatures' scratch budget per rank, which at one rank per core keeps the form off W1 at
+    kD = 1000's levels 2–3 and W3 at kD = 500's level 5 (40 × 1) and levels 2–5 (72 × 1 on
+    locust; CH4.3b2c's report §7, §8).
   *Done when:* the outputs bit for bit the private tables' at 1, 2 and 4 ranks (CI) and at
   40 ranks per node on Kathleen; the resident memory per node at 40 × 1, 10 × 4 and 1 × 40
   against private copies; the evaluation at 40 × 1 against 4 × 10 and 1 × 40 on W1 at
