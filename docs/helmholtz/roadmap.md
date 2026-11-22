@@ -88,7 +88,7 @@ the measured product leaves an FFT about 1–2 % of the run, so items 10 and 11 
    CH4.2's trusted path; split on 2026-11-19)
 9. CHA.11 The Helmholtz wave levels in one place (added on 2026-11-19 at the H1 gate, the
    user on #230: "CHA.11 + measure first (Recommended)"; review 2026-11-19, L1)
-10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3; CH4.3d as CH4.3d1 and CH4.3d2, split on 2026-11-22), CH4.4, CH4.5 (CH4.1a first
+10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3; CH4.3d as CH4.3d1 and CH4.3d2, split on 2026-11-22), CH4.4 (CH4.4a, CH4.4b; split on 2026-11-22), CH4.5 (CH4.1a first
     measures the product conversions against RCR and stops to ask before CH4.2 whether item 11
     moves ahead: review 2026-11-19, A5)
 11. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
@@ -859,15 +859,28 @@ task's full line is in its record or report and its progress entry
   ranks per node (or read from the rank's share), the dense-level misses at one rank per node (3.5 %
   and 2.2 % of the levels' time, its §5) refitted or closed, verified as CH4.3b2a on Kathleen and
   locust at 1 × N and N × 1. *Needs:* CH4.3b2c. *Machines:* Kathleen, locust.
-- [ ] **CH4.4 kD sweep, with the FMM3D gate.** *Done when:* the FMM against the direct sum on
-  W1 to kD = 1000, W2 to 500 and W3 to 200, beside `hfmm3d`; the full-target crosscheck mapped
-  to levels and classes, with no error concentrated at a class boundary and the worst box at
-  most 100 ε (proposal §9.1, amended at CH4.0b); time, memory and build cost per k. Also
-  (CH4.0b's sign-off 2): the plane wave's trace at kD = 500 and 1000 beside §9.1's charges. Also
-  (CH4.3c3's report §4): the constant density on the sweep's low-frequency trees, whose plateau
-  levels (x < 6.8) no constant-density scan covers and where the refit is 1–2 degrees below
-  CH4.3c2's at x ≈ 4–7 and 10⁻³.
-  *Needs:* CH4.3a–CH4.3e, CH1.4. *Machines:* Kathleen.
+- CH4.4 kD sweep, with the FMM3D gate. Split on 2026-11-22 (the size rule: a sweep on Kathleen beside
+  FMM3D, and a new error mapping) into CH4.4a and CH4.4b; together their *Done when* is §10's:
+  the FMM against the direct sum on W1 to kD = 1000, W2 to 500 and W3 to 200, beside `hfmm3d`; the
+  full-target crosscheck mapped to levels and classes, with no error concentrated at a class boundary
+  and the worst box at most 100 ε (proposal §9.1, amended at CH4.0b); time, memory and build cost per
+  k.
+- [ ] **CH4.4a The kD sweep beside FMM3D.** *Done when:* the FMM under the library's defaults and
+  `hfmm3d` (`default`, `fastker`) against the same sampled direct sum on W1 at kD = 10–1000, W2 to
+  500, W3 resolved to 100 and at N = 10⁶ for kD = 200 and 500, at 10⁻³, 10⁻⁶ and 10⁻⁸, ours within
+  ε; the full-target crosscheck against FMM3D at 10⁻¹² with our worst box at most 100 ε; time,
+  memory and build cost per k for both codes (our build by part). Also (CH4.0b's sign-off 2): the
+  plane wave's trace at kD = 500 and 1000 beside §9.1's charges. Also (CH4.3c3's report §4): the
+  constant density on the sweep's low-frequency trees, whose plateau levels (x < 6.8) no
+  constant-density scan covers and where the refit is 1–2 degrees below CH4.3c2's at x ≈ 4–7 and
+  10⁻³. *Needs:* CH4.3a–CH4.3e, CH1.4. *Machines:* Kathleen.
+- [ ] **CH4.4b The crosscheck mapped to levels and classes.** *Done when:* on CH4.4a's cases whose
+  trees run the diagonal form or RCR at k a ≥ 2.8, the full-target crosscheck's box errors split by
+  level (CH4.0b's level parts, one level's degree raised at a time) and, on the form's levels, by
+  the form's classes against RCR (the level run all-RCR), with no error concentrated at a class
+  boundary: neither in the classes beside the bound's threshold (proposal §3.6's choice per (level,
+  class)) nor at the levels where the M2L changes (the regimes, the waves, the form); the worst
+  boxes' levels and classes named. *Needs:* CH4.4a. *Machines:* Kathleen.
 - [ ] **CH4.5 Host performance against FMM3D at matched accuracy.** As C6.8, setup apart,
   one node, on CH4.4's sweep. Also (review 2026-11-19, A6, B6, B8): ours at 1 × N (one rank,
   N threads, as a threaded caller runs it) beside the best split; FMM3D's OpenMP binding
