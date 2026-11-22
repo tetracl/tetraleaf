@@ -246,6 +246,9 @@ limits a shorter T.
 
 ## 8. Questions for sign-off
 
+Signed off 2026-11-22, all three as recommended (the user on #252: "Q1-3 as recommended"):
+CH4.3d2 is closed unrun, 2P − 2 stays, and the proposal's §3.6 is amended (its Appendix A).
+
 1. **The acceptance as read.** CH4.3d1 answers CH4.3d's pair questions: truncation and rounding
    per class against RCR, the excess-bandwidth length in the same sweep, the shortest lengths,
    a truncation model. "The FMM where one earns it" is CH4.3d2's. *Recommended*: accept.

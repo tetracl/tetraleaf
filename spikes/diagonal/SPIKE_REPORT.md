@@ -346,7 +346,7 @@ classes and three placements, with the chain in double-double beside the f64 one
 (T's truncation and rounding apart) and the truncation model's sum (`transfer::log10_tail`);
 `tests/lengths.rs` holds the scan at 2P − 2 to this report's `f64:2P-2` variant bit for bit. The
 measurement and its recommendation (2P − 2 kept: the shortest lengths within RCR's error save
-0–16 % of a level's samples, and no a-priori rule safely reaches them; for sign-off) are in
+0–16 % of a level's samples, and no a-priori rule safely reaches them; signed off 2026-11-22) are in
 `tetraleaf-validate/results/helmholtz-ch4-3d1.md`; §6's bandwidth paragraph above stands as
 measured, at the formula's degrees.
 

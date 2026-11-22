@@ -201,5 +201,6 @@ Report `tetraleaf-validate/results/helmholtz-ch4-3d1.md`.
   falls only like 0.87^l; the plan said "orders of magnitude").
 
 ## Open questions
-The report's §7, for sign-off: 1, the acceptance as read; 2, CH4.3d2 not run (2P − 2 kept);
-3, the proposal's §3.6 amended to the finding, review M8 closed.
+None. The report's §8, questions 1–3, signed off 2026-11-22 by the user on #252: "Q1-3 as recommended": the acceptance as read;
+CH4.3d2 not run (closed unrun), 2P − 2 kept; the proposal's §3.6 amended (Appendix A), review M8
+closed.

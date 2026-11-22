@@ -4365,7 +4365,8 @@ request, using this template:
   workspace tests at opt-level 1; the spike's Clippy, tests with the ignored ones, every spike
   built). Not run: the MPI list (no MPI crate changed), `cargo deny` (no manifest change), Laplace's
   benchmarks (no Laplace path).
-- Decisions: the report's questions 1–3 for sign-off (recommended: the acceptance as read; CH4.3d2
-  not run, 2P − 2 kept; proposal §3.6 amended to the finding, review M8 closed).
+- Decisions: the report's questions 1–3, signed off 2026-11-22 by the user on #252: "Q1-3 as recommended": 1, the acceptance as
+  read; 2, CH4.3d2 not run (closed unrun), 2P − 2 kept; 3, proposal §3.6 amended to the finding
+  (Appendix A), review 2026-11-12, M8, closed.
 - Laplace: not touched (a spike, a script and docs).
-- Follow-ups: CH4.3d2 (its line; run only if question 2 says so).
+- Follow-ups: none (CH4.3d2 closed unrun).

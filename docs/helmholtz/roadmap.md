@@ -11,8 +11,8 @@ Status (2026-11-22): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 202
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
 item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1–CH4.3b2d, CH4.3c1 and CH4.3c2 (CH4.3b2c on 2026-11-22:
 the diagonal form's time rule the builder's default). CH4.3d was split into CH4.3d1 (the pair sweep)
-and CH4.3d2 (the FMM); CH4.3d1 is done on its branch (2P − 2 recommended, CH4.3d2 not run, for
-sign-off). Next CH4.3e and CH4.3c3; the FFT track stays item 11. The project was renamed tetraleaf
+and CH4.3d2 (the FMM); CH4.3d1 signed off 2026-11-22 (2P − 2 kept, CH4.3d2 closed unrun, §3.6
+amended). Next CH4.3e and CH4.3c3; the FFT track stays item 11. The project was renamed tetraleaf
 on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c.
 The history of this line until H6.G is in `progress.md` and in this file's history
 (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
@@ -839,13 +839,11 @@ task's full line is in its record or report and its progress entry
   chain scanned in T's length at the FMM's degrees (locust): the shortest lengths within RCR's error
   save 0–16 % of a W1 diagonal level's samples (two classes from RCR at k a 27, 10⁻⁸); ⌈3(P − 1)/2⌉
   fails everywhere, Song and Chew's length fails at k a 11–32, Gegenbauer's tail is safe but keeps
-  2p (0–3 %). *Sign-off:* the report's questions 1–3 (recommended: CH4.3d2 not run, 2P − 2 kept).
-- [ ] **CH4.3d2 The shorter transfer function in the FMM.** *Done when:* (if CH4.3d1's sign-off
-  says so) the length rule signed off at CH4.3d1 in `tetraleaf-ref`'s bound and transfer
-  function and `tetraleaf-tables`' builds (opt-in), the grid shortened with it if signed off, the
-  time rule's costs refitted for it; W1 and W3 at 10⁻³–10⁻⁸ against the default: errors within
-  1.1×, the evaluation and build per level; the default for sign-off. *Needs:* CH4.3d1 and its
-  sign-off. *Machines:* Kathleen, locust. *Sign-off:* the default.
+  2p (0–3 %). *Sign-off:* the report's questions 1–3, signed off 2026-11-22 by the user on #252: "Q1-3 as recommended": the acceptance
+  as read; CH4.3d2 not run, 2P − 2 kept; proposal §3.6 amended, review M8 closed.
+- [x] **CH4.3d2 The shorter transfer function in the FMM.** Closed unrun by CH4.3d1's sign-off
+  (question 2, signed off 2026-11-22 by the user on #252: "Q1-3 as recommended"): T's length stays 2P − 2; no length rule computable
+  before the run safely reaches the few per cent the shortest lengths would save.
 - [ ] **CH4.3e c_leaf re-decided with the rule.** *Done when:* (since CH4.0d3's c_leaf 2, signed
   off on #219) c_leaf re-decided with CH4.3b's default (at c_leaf 2 the census's first pass put
   leaves on high-frequency levels on 9 trees at 10⁻⁶; proposal §3.7 keeps W and X lists off
@@ -863,7 +861,7 @@ task's full line is in its record or report and its progress entry
   to levels and classes, with no error concentrated at a class boundary and the worst box at
   most 100 ε (proposal §9.1, amended at CH4.0b); time, memory and build cost per k. Also
   (CH4.0b's sign-off 2): the plane wave's trace at kD = 500 and 1000 beside §9.1's charges.
-  *Needs:* CH4.3a–CH4.3e (CH4.3d2 only if CH4.3d1's sign-off runs it), CH1.4. *Machines:* Kathleen.
+  *Needs:* CH4.3a–CH4.3e, CH1.4. *Machines:* Kathleen.
 - [ ] **CH4.5 Host performance against FMM3D at matched accuracy.** As C6.8, setup apart,
   one node, on CH4.4's sweep. Also (review 2026-11-19, A6, B6, B8): ours at 1 × N (one rank,
   N threads, as a threaded caller runs it) beside the best split; FMM3D's OpenMP binding
