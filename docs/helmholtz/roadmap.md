@@ -10,9 +10,9 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 Status (2026-11-22): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
 item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1, CH4.3b2a, CH4.3b2b, CH4.3b2d, CH4.3c1 and CH4.3c2.
-CH4.3b2c (the diagonal form's time rule the builder's default: evaluation 0.37–0.99× at matched
-accuracy on W1 and W3 on Kathleen and locust) waits for its sign-off (questions 1–5: the default,
-D8 amended, CH4.3f proposed off the list). Next CH4.3d, CH4.3e and CH4.3c3; the FFT track stays item
+CH4.3b2c (signed off 2026-11-22: the diagonal form's time rule the builder's default, evaluation
+0.37–0.99× at matched accuracy on W1 and W3 on Kathleen and locust; D8 amended; CH4.3f added off the
+list). Next CH4.3d, CH4.3e and CH4.3c3; the FFT track stays item
 11. The project was renamed tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and
 CH0.6 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in
 this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
@@ -94,7 +94,7 @@ the measured product leaves an FFT about 1–2 % of the run, so items 10 and 11 
 11. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
 
 Off the list, in file order: CH0.8b, CH0.5 and H0.G; CH4.0f (the user, 2026-11-12, on #211);
-CH4.3f (proposed at CH4.3b2c, its question 4, off the list until CH4.5); CH4.2d (added at CH4.2b2, off the list until CH4.5; the user on #239, 2026-11-20: "All 4 questions as recommended.");
+CH4.3f (added at CH4.3b2c, off the list until CH4.5; the user on #251, 2026-11-22: "Q1-5 as recommended"); CH4.2d (added at CH4.2b2, off the list until CH4.5; the user on #239, 2026-11-20: "All 4 questions as recommended.");
 CH4.0k (added at CH4.0h; the user, 2026-11-16, on #221: off the list; kept off at CH4.0j, on
 #223); CH4.0l (added at CH4.0i;
 the user, 2026-11-16, on #222: off the list);
@@ -118,7 +118,7 @@ The proposal's Section 12, plus D0. A decision is recorded here when the user ta
 | D5 | Source types of the first release | real and complex charges, potentials and gradients; dipoles once C6.4 exists for Laplace (note: Laplace dipoles were merged in Phase 6 T8 and T8d, so the condition is met) | – | CH1.1 | signed off 2026-10-29: charges now, dipoles later; §3.15 fixes real and complex charges with potentials and gradients, and dipoles get a later, separate task; that task is CH9.0, added at the H1 gate (the user, 2026-11-19, on #230: "Add CH9.0 (Recommended)") |
 | D6 | Order of H4 and H6 | H6 first | H3.G | CH6.1, CH4.1 | signed off 2026-11-02 (H3 gate, question 2): "i agree with the recommendations", H6 first, as recommended; on the gate report's reason (§3.3): the calibrated degrees cut the low-frequency share of the far field at kD = 500 to about half (an estimate), and the FMM is slowest against FMM3D on low-frequency trees at tight ε, which H6 targets |
 | D7 | Host back ends of the φ step | the product as default and reference; FFTW behind the optional `fftw` feature; rustfft if S9 finds it deterministic per box and faster, decided per machine | CH0.9 | CHR.3, CH4.6 | open |
-| D8 | Exponential M2L as a default on low-frequency levels | after CH6.2 | CH6.2h | CH7.5d | signed off 2026-11-08 (CH6.2h, questions 1–5; the user: "1–5 as recommended"): `Auto` takes the exponential M2L by default where p_l ≥ d_pw (Batched's crossover + 1; 12 on AVX-512 with two planes), CH6.1e's rule gives a quadrature (ε ≥ 10⁻⁶) and Im κ_l < 5π, f64 only; no boxes term (Batched's few-box levels to CH4.0); proposal §5.3 and §6.4 amended. Amended 2026-11-11 (CH6.1g, question 2; the user: "Lift for 10⁻⁸–10⁻⁷ only (Recommended)"): `Auto` also takes it at 10⁻⁸ ≤ ε < 10⁻⁷, where the rule runs iprec 3 at the raised degree max(p_l, 32), and not at 10⁻⁷ ≤ ε < 10⁻⁶ until CH6.1h; proposal §5.3 amended. Amended 2026-11-11 (CH6.1h, question 2; the user: "Lift it (Recommended)"): `Auto` also takes it at 10⁻⁷ ≤ ε < 10⁻⁶, with the raised degree on the M2L alone there (`PlaneWaveRaise::Rule`); proposal §5.3 amended |
+| D8 | Exponential M2L as a default on low-frequency levels | after CH6.2 | CH6.2h | CH7.5d | signed off 2026-11-08 (CH6.2h, questions 1–5; the user: "1–5 as recommended"): `Auto` takes the exponential M2L by default where p_l ≥ d_pw (Batched's crossover + 1; 12 on AVX-512 with two planes), CH6.1e's rule gives a quadrature (ε ≥ 10⁻⁶) and Im κ_l < 5π, f64 only; no boxes term (Batched's few-box levels to CH4.0); proposal §5.3 and §6.4 amended. Amended 2026-11-11 (CH6.1g, question 2; the user: "Lift for 10⁻⁸–10⁻⁷ only (Recommended)"): `Auto` also takes it at 10⁻⁸ ≤ ε < 10⁻⁷, where the rule runs iprec 3 at the raised degree max(p_l, 32), and not at 10⁻⁷ ≤ ε < 10⁻⁶ until CH6.1h; proposal §5.3 amended. Amended 2026-11-11 (CH6.1h, question 2; the user: "Lift it (Recommended)"): `Auto` also takes it at 10⁻⁷ ≤ ε < 10⁻⁶, with the raised degree on the M2L alone there (`PlaneWaveRaise::Rule`); proposal §5.3 amended. Amended 2026-11-22 (CH4.3b2c, question 3; the user on #251, 2026-11-22: "Q1-5 as recommended"): with the diagonal form's time rule the builder's default, a level of D8's rule in its range (k a ≥ 2.8) keeps the waves unless the form beats them at the level's resolving degree, then runs the cheaper of the form and RCR; proposal §5.3, §6.4 and §12 amended |
 | D9 | What "within noise" means for Laplace's benchmarks (constraint 1) | the run-to-run spread of the Laplace baseline, repeated on each machine before the change, per benchmark; plus the C3S.4 throughput gate | – | CHR.2, CH2.0 | signed off 2026-10-26: as recommended, the measured spread of the baseline per benchmark and machine, plus the C3S.4 gate. Clarified 2026-10-26 (CHR.2): one-sided, slower than `main` by more than the spread fails, faster passes when the outputs are bit for bit identical; from CH2.0 on five runs per side in the order A B B A A B B A A B, the spread max − min of `main`'s five run medians, never pooled with the branch's. Amended 2026-10-31 (CH2.0, the user: "as recommended"): a failing row may be repeated once and the repeat counts, with both results reported. Amended 2026-10-31 (the machine move, the user: "Amend: M6 replaces M3 Max"): the M6 (`tools/m6/machine.md`) replaces the M3 Max as a machine of record, its C3S.4 reference `spikes/p2p-simd/results-m6.md` |
 | D10 | cubek-fft on the device | after S5: adopt, contribute upstream first, or keep the transform as a GEMM | CH0.5 | CH7.4 | open |
 | D11 | Maximum leaf width c_leaf | from S8: the largest c_leaf with P2P and leaf costs within 10 % of their best on W1 and W3 (expected 0.5 to 1) | CH0.8a | CH3.0 | signed off 2026-10-28: as recommended (CH0.8a report §9, question 1), c_leaf = 1 by the revised rule, the largest c_leaf with no high-frequency leaf on any workload at 10⁻⁶ and 10⁻⁸, replacing the rule of this row, which is degenerate; a first-pass value that CH0.8b may revise with S6's constants and S7's p; amended at CH4.0d3 (the user on #219, 2026-11-14: "I agree with the recommendation"): the builder's default c_leaf = 2 (`DEFAULT_C_LEAF`), `C_LEAF` = 1 stays the leaf rule's constant, CH4.3 re-decides |
@@ -802,7 +802,8 @@ task's full line is in its record or report and its progress entry
   10⁻³–10⁻⁸ on Kathleen and locust errors 0.991–1.034×, evaluation 0.37–0.99× (both run orders),
   choices within 1.05× on 75/78 and 82/90 levels; the fallback at 40 × 1 (W1 at kD = 1000, levels
   2–3) as built; W3 at kD = 200 on Kathleen a run-order drift. *Sign-off:* the report's questions
-  1–5, pending on the PR.
+  1–5, signed off 2026-11-22 by the user on #251, 2026-11-22: "Q1-5 as recommended": the acceptance as read; `Auto` the default; D8 amended
+  (proposal §5.3, §6.4); CH4.3f added off the list, with an Also on CH8.0; W3 at kD = 200 closed.
 - CH4.3c The high-frequency degrees refit, and C₀ at large degrees. Split on 2026-11-21 (by the
   size rule of `/next-task`: two independent studies, pairs on the M6 and a calibration on
   Kathleen) into CH4.3c1 and CH4.3c2.
@@ -835,8 +836,8 @@ task's full line is in its record or report and its progress entry
   leaves on high-frequency levels on 9 trees at 10⁻⁶; proposal §3.7 keeps W and X lists off
   them; CH4.0d3's report §4), on W1–W3's trees, for sign-off (D11). *Needs:* CH4.3b2c.
   *Machines:* Kathleen.
-- [ ] **CH4.3f The time rule's costs at many ranks per node.** (Proposed at CH4.3b2c, its question
-  4, for sign-off; off the list until CH4.5.) *Done when:* the waves' cost per box at one rank per
+- [ ] **CH4.3f The time rule's costs at many ranks per node.** (Added at CH4.3b2c, its question
+  4, signed off 2026-11-22; off the list until CH4.5.) *Done when:* the waves' cost per box at one rank per
   core on W3's dense levels explained (Kathleen 40 × 1, W3 at kD = 500, 10⁻⁸, level 4: 20.5 s
   against 2.5 s at 1 × 40, the form 2.6 s; CH4.3b2c's report §8) and the time rule's costs fitted per
   ranks per node (or read from the rank's share), the dense-level misses at one rank per node (3.5 %
@@ -1028,7 +1029,7 @@ task's full line is in its record or report and its progress entry
     `// SAFETY:` comment on every block, root CLAUDE.md's `unsafe` rule amended in the same PR.
   - Laplace's tables in the same window behind an option, its default and outputs unchanged
     (constraint 1), or left out with the reason.
-  - Also (proposed at CH4.3b2c, its question 4, for sign-off): the diagonal form's transfer
+  - Also (added at CH4.3b2c, its question 4, signed off 2026-11-22): the diagonal form's transfer
     functions and conversions, built on every rank (about 10 s at 40 × 1 on Kathleen), and its
     signatures' scratch budget per rank, which at one rank per core keeps the form off W1 at
     kD = 1000's levels 2–3 and W3 at kD = 500's level 5 (40 × 1) and levels 2–5 (72 × 1 on

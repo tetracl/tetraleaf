@@ -157,4 +157,7 @@ Debug test time (opt-level 0, one rank, the M6): `helmholtz_fmm` 700.5 s at load
 703 s); at opt-level 1 39.5 s.
 
 ## Open questions
-The report's §9, questions 1–5, for sign-off.
+The report's §9, questions 1–5: signed off 2026-11-22 by the user on #251, 2026-11-22: "Q1-5 as recommended": 1, the acceptance as read; 2,
+`HelmholtzDiagonal::Auto` the default; 3, D8 amended (proposal §5.3, §6.4, §12 and Appendix A, in
+this PR); 4, CH4.3f added off the list until CH4.5, with an Also on CH8.0; 5, W3 at kD = 200 on
+Kathleen closed as run-order drift.

@@ -4327,8 +4327,9 @@ request, using this template:
   ranks at opt-level 1; `helmholtz_fmm` one rank at opt-level 0 700.5 s at load 2–4 on the M6).
   Not run: `cargo deny` (no manifest change), Laplace's benchmarks (no Laplace path), 8 ranks (no
   distributed code).
-- Decisions: the report's questions 1–5 for sign-off: the acceptance as read; `Auto` the default;
-  D8 amended (the time rule may move a level from Auto's waves); CH4.3f (the time rule's costs at
-  many ranks per node) off the list until CH4.5, with an Also on CH8.0; W3 at kD = 200 closed.
+- Decisions: the report's questions 1–5, signed off 2026-11-22 by the user on #251, 2026-11-22: "Q1-5 as recommended": 1, the acceptance as
+  read; 2, `Auto` the default; 3, D8 amended (the time rule may move a level from Auto's waves;
+  proposal §5.3, §6.4, §12 and Appendix A); 4, CH4.3f (the time rule's costs at many ranks per
+  node) off the list until CH4.5, with an Also on CH8.0; 5, W3 at kD = 200 closed.
 - Laplace: not touched (Helmholtz modules of `tetraleaf-exec`, the harness's docs, scripts).
-- Follow-ups: CH4.3f (proposed, question 4; its roadmap line); CH8.0's Also (proposed, question 4).
+- Follow-ups: CH4.3f (added, question 4; its roadmap line); CH8.0's Also (added, question 4).

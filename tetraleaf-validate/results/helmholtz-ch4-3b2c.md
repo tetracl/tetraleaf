@@ -309,6 +309,10 @@ node with threads (CH4.0's dense budget, CH4.1b); one copy of the tables per nod
 
 ## 9. Questions for sign-off
 
+Signed off 2026-11-22 by the user on #251, 2026-11-22: "Q1-5 as recommended": 1, the acceptance as read; 2, `Auto` the default; 3, D8 amended
+(proposal §5.3, §6.4, §12); 4, CH4.3f added off the list until CH4.5, with an Also on CH8.0; 5, W3
+at kD = 200 on Kathleen closed.
+
 1. **The acceptance as read** (the plan's reading of the roadmap line): the errors within 1.1× on
    every case of W1 and W3 at 10⁻³–10⁻⁸ on Kathleen and locust (0.991–1.034×, §3); the evaluation
    and the build per level (§4, §7, §8); the order per level (§5); the whole-level fallback at
