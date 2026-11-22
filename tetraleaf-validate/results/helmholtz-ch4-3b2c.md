@@ -15,12 +15,14 @@ now are and proposes it as the default.
 2. **Matched accuracy** (§3): the default errs 0.991–1.034× the current defaults' (φ and ∇φ) on
    every case of W1 (kD = 100–1000) and W3 (N = 10⁶, kD = 200, 500) at 10⁻³–10⁻⁸, on Kathleen
    (1 × 40) and locust (1 × 72), and at 40 × 1 and 72 × 1.
-3. **The evaluation** (§4): over both run orders, 0.37–0.99× the defaults' on Kathleen and
-   0.44–0.99× on locust; no case slower. Largest on W1 at kD = 1000 (0.37×, 0.44×) and kD = 500
+3. **The evaluation** (§4): the geometric mean of the two run orders 0.37–0.99× the defaults' on
+   Kathleen and 0.44–0.99× on locust, no case above 1 (a single order up to 1.09×, W3 at kD = 200
+   on Kathleen with the defaults first, §6, and 1.01× on W1 at kD = 100, 10⁻⁷). Largest on W1 at kD = 1000 (0.37×, 0.44×) and kD = 500
    (0.47–0.74×) and W3 at kD = 500 (0.64–0.72×); least at 10⁻⁷–10⁻⁸ on W1 at kD ≤ 200 and on W3
    at kD = 200 (0.86–0.99×). The build grows by the diagonal tables (0.01–2.0 s at one rank per
-   node); build plus one evaluation 0.59–1.11× at one rank per node (above 1.01 only W3 at
-   kD = 200 on Kathleen in the off-first order, §6, and W1 at kD = 100, 10⁻⁷, 1.08× of 0.29 s).
+   node); build plus one evaluation, in either order, 0.56–1.15× on Kathleen and 0.76–1.06× on
+   locust at one rank per node, above 1.01 only on W1 at kD = 100 (0.1–0.3 s in all, the tables'
+   build) and on W3 at kD = 200 on Kathleen with the defaults first (§6).
 4. **The order per level** (§5): the form takes 45 of Kathleen's and 40 of locust's levels with
    waves, and every RCR level of W1 at kD ≥ 500 and W3 at kD = 500 it reaches; RCR takes one level
    from the waves on Kathleen and two on locust. Within 1.05× of the fastest option on 75 of 78
@@ -29,13 +31,17 @@ now are and proposes it as the default.
    CH4.3b2a. This moves D8's choice under `Auto` (question 3).
 5. **The whole-level fallback** (§7): at 40 × 1 on W1 at kD = 1000, 10⁻⁶, levels 2 and 3 (whose
    scratch does not fit a rank's 205 MiB) run RCR whole on every rank although the model takes the
-   form there; levels 4–7 take the form; errors 1.000×, the evaluation 53.0 s against 63.7 s.
+   form there; levels 4–7 take the form; errors 1.000×, the evaluation 53.0 s against 63.7 s. At
+   one rank per core it binds on more levels (§8): W3 at kD = 500's level 5 at 40 × 1, and at
+   72 × 1 on locust (114 MiB per rank) W1 at kD = 500's level 2 and W3 at kD = 500's levels 2–5,
+   where the default then runs as the defaults do (0.99–1.00×).
 6. **Many ranks per node** (§8): at 40 × 1 and 72 × 1 the choices are within 1.05× on 16 of 17 and
    19 of 20 levels, but the one miss on Kathleen costs 18 s: on W3 at kD = 500, 10⁻⁸, level 4 the
    waves take 20.5 s at 40 × 1 against 2.5 s at 1 × 40 (the waves pass 19.0 s against 0.83 s),
    while the form takes 2.6 s; the one-rank constant does not see it. And every rank builds every
    diagonal table (about 10 s at 40 × 1 on Kathleen, 1.0 s at 72 × 1 on locust): build plus one
-   evaluation 0.91–1.22× at 40 × 1. Question 4: a follow-up task.
+   evaluation 0.91–1.22× at 40 × 1. With the fallback of item 5, the form reaches few coarse levels
+   at one rank per core. Question 4: a follow-up task.
 7. **W3 at kD = 200 on Kathleen** (§6, CH4.3b2a's question 4): a run-order effect of Kathleen's
    node, not the form. With the defaults first the time rule ran 1.06–1.09× their evaluation, with
    it first 0.68–0.90×; within one launch of `off, auto, off, auto` the second `off` ran 1.09–1.20×
@@ -69,7 +75,8 @@ now are and proposes it as the default.
   `ch4-3b2c-b/` (`repeat`, `ranks`, `reverse`); `~/projects/fmm-archive/locust/runs/ch4-3b2c/`
   (every stage and `load.log`).
 - **Tables**: `tools/helmholtz/ch4-3b2c-tables.py errors|choices|summary|build|repeat|order`
-  (the first three CH4.3b2a's, with a level a forced run does not list left out of its options).
+  (the first three CH4.3b2a's, with a level a forced run does not list left out of its options;
+  `order` takes Kathleen's two directories, `kathleen=<ch4-3b2c>,<ch4-3b2c-b>`).
 
 ## 2. The change
 
@@ -155,9 +162,11 @@ and their geometric mean, the build, and the levels whose M2L changed.
 
 The build's diagonal tables (the build's part "diagonal tables", the interpolated build) cost
 0.03–0.63 s on Kathleen at 1 × 40 (2.0 s on W1 at kD = 1000) and 0.01–0.15 s on locust (0.61 s);
-the plane-wave tables of the levels taken are no longer built. Build plus one evaluation:
-0.59–1.11× on Kathleen (above 1.0 W3 at kD = 200 in the off-first order, §6, and W1 at kD = 100,
-10⁻⁷, 1.08× of 0.29 s) and 0.76–1.01× on locust.
+the plane-wave tables of the levels taken are no longer built. Build plus one evaluation, in
+either order: 0.56–1.15× on Kathleen and 0.76–1.06× on locust. Above 1.01 only on W1 at kD = 100
+(Kathleen 10⁻⁷ 1.08× and 1.15×, 10⁻⁸ 1.10× auto first; locust 1.02–1.06× auto first; 0.1–0.3 s in
+all, where the diagonal tables' 0.01–0.04 s are the difference) and on W3 at kD = 200 (Kathleen
+with the defaults first, 1.07–1.11×, §6; locust 1.01–1.02×).
 
 ## 5. The order per level
 
@@ -228,8 +237,11 @@ waves' level 4 within it 13–22 % slower (0.314 → 0.364 s at 10⁻³, 0.383 �
 0.682 → 0.818 s at 10⁻⁷, 0.741 → 0.838 s at 10⁻⁸), while the form's levels 2 and 3 run alike in
 both `auto` runs: the drift is the launch's on Kathleen's two-socket node, not a placement effect of
 the form's buffers (on W1 the time rule's ratio is the lower one when it runs first in 9 of 13
-cases, at most 0.10 apart). CH4.3b2b's "later runs slower"
-is the same effect. Kathleen reports of evaluation ratios should alternate the order, as this one
+cases, at most 0.10 apart). The `repeat` launch does not separate "second in the launch" from
+"after the form's buffers" for the third run (it follows `auto`), and an `off, off` control was not
+run; the conclusion rests on the reversed order, where the time rule first is the faster, and on
+the form's own levels running alike in both `auto` runs. CH4.3b2b's "later runs slower" is the same
+effect. Kathleen reports of evaluation ratios should alternate the order, as this one
 and CH4.3b2d's did.
 
 ## 7. The whole-level fallback at 40 × 1
@@ -269,9 +281,14 @@ The time rule's constants are fitted at one rank per node (CH4.3b1). At one rank
 | locust | 72 × 1 | W3, kD = 500, 10⁻⁶ | 10.62 | 10.58 | 1.00 | 2.31 → 2.19 (0) |
 | locust | 72 × 1 | W3, kD = 500, 10⁻⁸ | 18.77 | 18.64 | 0.99 | 2.78 → 2.64 (0) |
 
-Errors 0.997–1.034× (§3). The choices (with the three costs, the first four rows per machine): 16
-of 17 levels within 1.05× on Kathleen (17.97 s lost of 41.47 s), 19 of 20 on locust (0.20 s of
-35.06 s). The two misses:
+Errors 0.997–1.034× (§3). The scratch budget per rank (8 GiB per node over the ranks: 205 MiB at
+40 × 1, 114 MiB at 72 × 1) makes the whole-level fallback of §7 bind on more levels: at 40 × 1 W3
+at kD = 500's level 5 (4 ranks over at 10⁻⁶, 40 at 10⁻⁸), at 72 × 1 W1 at kD = 500's level 2 (54
+and 72 ranks over) and W3 at kD = 500's levels 2–5 (14–72 ranks over), which then keep RCR or the
+waves; so on locust's W3 the default runs as the defaults do (1.00×, no diagonal tables). The
+forced-form run falls back on the same levels, so the scores below do not see the form there. The
+choices (with the three costs, the first four rows per machine): 16 of 17 levels within 1.05× on
+Kathleen (17.97 s lost of 41.47 s), 19 of 20 on locust (0.20 s of 35.06 s). The two misses:
 
 - **Kathleen, W3 at kD = 500, 10⁻⁸, level 4** (p_w = 44, k a 27.1): the waves 20.54 s, the form
   2.57 s, RCR 14.86 s; the default keeps the waves (8.0× the best). At 1 × 40 the same level's
@@ -286,8 +303,8 @@ of 17 levels within 1.05× on Kathleen (17.97 s lost of 41.47 s), 19 of 20 on lo
 
 Every rank builds every diagonal table serially (the interpolated build by ring, per rank): 9.8–
 10.9 s at 40 × 1 on Kathleen, 1.0 s at 72 × 1 on locust. Build plus one evaluation at 40 × 1:
-0.91–1.22× the defaults' (above 1 on W1 at kD = 500: 1.22× at 10⁻⁶, 1.12× at 10⁻⁸); from the
-second evaluation on, the default wins on every case. The documented advice stays a few ranks per
+0.91–1.22× the defaults' (above 1 on W1 at kD = 500: 1.22× at 10⁻⁶, 1.12× at 10⁻⁸, and W3 at
+kD = 500, 10⁻⁸: 1.02×); from the second evaluation on, the default wins on every case. The documented advice stays a few ranks per
 node with threads (CH4.0's dense budget, CH4.1b); one copy of the tables per node is CH8.0.
 
 ## 9. Questions for sign-off
@@ -300,8 +317,10 @@ node with threads (CH4.0's dense budget, CH4.1b); one copy of the tables per nod
    *Recommended: accept.*
 2. **`Auto` the default** (§2): `HelmholtzFmmBuilder`'s and the enum's default
    `HelmholtzDiagonal::Auto`, the operator's own default `Off`. *Recommended: adopt*: the
-   evaluation 0.37–0.99× at matched accuracy on every case at one rank per node on both machines,
-   build plus one evaluation at most 1.11×. *Alternative:* keep `Off` until question 4's task.
+   evaluation 0.37–0.99× (geometric mean of both orders) at matched accuracy on every case at one
+   rank per node on both machines; build plus one evaluation at most 1.15×, above 1.01 only where it
+   is under 0.3 s or Kathleen's run order (§4); at one rank per core 0.38–1.00× per evaluation, the
+   build up to 10 s more (§8). *Alternative:* keep `Off` until question 4's task.
 3. **D8 amended** (§5): under the default, a level that D8's rule gives the exponential M2L keeps
    it unless the time rule moves it (the form, where it beats the waves at the level's resolving
    degree, then the cheaper of the form and RCR). *Recommended:* amend D8's row and the proposal's
@@ -313,7 +332,9 @@ node with threads (CH4.0's dense budget, CH4.1b); one copy of the tables per nod
    at one rank (3.5 % and 2.2 % of the levels' time) refitted or closed, verified as CH4.3b2a on
    Kathleen and locust at 1 × N and N × 1. *Recommended:* add CH4.3f off the priority list,
    reconsidered at CH4.5 (which compares ours at 1 × N with the best split), with an Also on CH8.0
-   (the diagonal tables per rank, about 10 s at 40 × 1). *Alternative:* on the list after CH4.3c3,
-   before CH4.4.
+   (the diagonal tables built on every rank, about 10 s at 40 × 1, and the signatures' scratch
+   budget per rank, which at one rank per core keeps the form off W1 at kD = 1000's levels 2–3,
+   W3 at kD = 500's level 5 at 40 × 1 and levels 2–5 at 72 × 1, §7, §8). *Alternative:* on the list
+   after CH4.3c3, before CH4.4.
 5. **W3 at kD = 200 on Kathleen** (§6): closed as Kathleen's run-order drift (the same computation
    9–20 % slower the second time in a launch), not the form; no task. *Recommended: accept.*

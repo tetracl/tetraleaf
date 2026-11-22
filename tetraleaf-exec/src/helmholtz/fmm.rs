@@ -855,9 +855,12 @@ impl HelmholtzFmmBuilder {
     /// rule's model puts it below the M2L the level would run otherwise, RCR's or, under
     /// [`HelmholtzM2l::Auto`], the exponential M2L's at the level's resolving degree
     /// ([`diagonal_costs`](Self::diagonal_costs)), so with named degrees the default takes no
-    /// level either. The output is deterministic and on P ranks the one-rank FMM's bit for bit;
-    /// under the default the levels it takes depend on the machine class of the costs, as
-    /// Batched's crossover and the near rules' do.
+    /// level either. The output is deterministic, and on P ranks the one-rank FMM's bit for bit
+    /// where every level runs the same M2L: the form's scratch budget is per node over the ranks
+    /// per node ([`diagonal_budget`](Self::diagonal_budget)), so where it binds the levels that
+    /// take the form depend on the ranks per node, as the dense tables' do. Under the default the
+    /// levels also depend on the machine class of the costs, as Batched's crossover and the near
+    /// rules' do.
     ///
     /// # Panics
     ///

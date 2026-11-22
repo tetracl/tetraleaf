@@ -8,7 +8,7 @@ form's time rule by default; docs/helmholtz/tasks/CH4.3b2c.md), from the launche
     python3 tools/helmholtz/ch4-3b2c-tables.py summary <machine>=<dir>[:<prefix>] …
     python3 tools/helmholtz/ch4-3b2c-tables.py build   <machine>=<dir>[:<prefix>] …
     python3 tools/helmholtz/ch4-3b2c-tables.py repeat  <machine>=<dir>[:<prefix>] …
-    python3 tools/helmholtz/ch4-3b2c-tables.py order   <machine>=<dir> …
+    python3 tools/helmholtz/ch4-3b2c-tables.py order   <machine>=<dir>[,<dir>…] …
 
 <prefix> keeps the launches whose names start with it (`run`, `reverse`, `repeat`, `ranks`).
 `errors`, `choices` and `summary` are CH4.3b2a's (`ch4-3b2a-tables.py`): per launch the time
@@ -18,8 +18,8 @@ the fastest; their summary per ε. `build` prints per launch the build and its o
 the defaults' and the time rule's, and the evaluation. `repeat` prints per launch of
 `--diagonal off,auto,off,auto` each run's evaluation and its levels' M2L seconds in launch order
 (the spread: the two `off` runs; the place in the launch: each run against the one before).
-`order` pairs each `run-` launch (off first) with its `reverse-` launch (auto first): the time
-rule's evaluation over the defaults' in each order. No timing is asserted; the numbers go into
+`order` pairs each `run-` launch (off first) with its `reverse-` launch (auto first), found in
+any of the directories named: the time rule's evaluation over the defaults' in each order. No timing is asserted; the numbers go into
 tetraleaf-validate/results/helmholtz-ch4-3b2c.md.
 """
 
@@ -154,10 +154,12 @@ def order_table(args):
     print("| --- | --- | ---: | ---: | ---: |")
     for arg in args:
         machine, where = arg.split("=", 1)
-        for path in sorted(pathlib.Path(where).glob("run-*.md")):
+        dirs = [pathlib.Path(d) for d in where.split(",")]
+        for path in sorted(p for d in dirs for p in d.glob("run-*.md")):
             case = path.stem[len("run-"):]
-            other = path.with_name(f"reverse-{case}.md")
-            if not other.exists():
+            other = next((d / f"reverse-{case}.md" for d in dirs
+                          if (d / f"reverse-{case}.md").exists()), None)
+            if other is None:
                 continue
             ratios = []
             for p in (path, other):

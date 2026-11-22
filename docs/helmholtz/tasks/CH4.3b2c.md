@@ -85,7 +85,7 @@ How it is read:
   example's `--diagonal` default `off`); its docs and `CLAUDE.md` say the library's default.
 - `tools/helmholtz/ch4-3b2c-runs.sh` (stages `w1`, `w3`, `reverse`, `repeat`, `ranks`, `smoke`)
   and `ch4-3b2c-tables.py` (CH4.3b2a's `errors`, `choices`, `summary` imported, plus `build`,
-  `repeat` and `ranks`); the report `tetraleaf-validate/results/helmholtz-ch4-3b2c.md`.
+  `repeat` and `order`); the report `tetraleaf-validate/results/helmholtz-ch4-3b2c.md`.
 - On sign-off: D8 amended in the roadmap's decision table and the proposal's §5.3 and §6.4, with
   a line in Appendix A.
 - No convention, no dependency, no `tetraleaf-plan` interface, no Laplace file.
@@ -128,7 +128,33 @@ one-rank `helmholtz_fmm` at opt-level 0 against its budget.
 - Risk: the debug test time of `check_defaults` grows by the diagonal tables of the sphere.
 
 ## Pending runs
-(filled in step 6)
+None. The runs are done (raw outputs in `~/projects/fmm-archive/{kathleen,locust}/runs/ch4-3b2c*/`):
+- Kathleen job 663643 (node-c11b-048, `singlenode`, 2026-11-22 11:44–12:14), `w1 w3` at 1 × 40,
+  21 launches, every one exit 0; job 663644 (node-c11a-058, 11:45–12:21), `repeat ranks reverse`,
+  30 launches, every one exit 0;
+- locust 11:45–12:08, `w1 w3 repeat reverse ranks`, 50 launches, every one exit 0, the load sampled
+  every 30 s (1-minute load within the runs' own processes: at most 53 under 72 threads, 73 under
+  72 ranks). A first start at 11:45 was stopped after 8 launches by mistake and restarted from
+  scratch; its outputs were deleted.
+
+## Results
+The report: tetraleaf-validate/results/helmholtz-ch4-3b2c.md. The default errs 0.991–1.034× the
+defaults' on every case (both machines, 1 × N and N × 1); the evaluation 0.37–0.99× on Kathleen and
+0.44–0.99× on locust (the geometric mean of both run orders); the choices within 1.05× on 75/78 and
+82/90 levels; the fallback at 40 × 1 runs W1 at kD = 1000's levels 2–3 on RCR whole, and at one rank
+per core it binds on more levels (W3 at kD = 500 at 40 × 1 and 72 × 1, W1 at kD = 500 at 72 × 1). At
+40 × 1 the waves on W3 at kD = 500's level 4 (10⁻⁸) cost 8× their one-rank time (18 s lost, the
+defaults too) and every rank builds the diagonal tables (about 10 s). W3 at kD = 200 on Kathleen is a
+run-order drift (the same computation 9–20 % slower the second time in a launch), not the form.
+
+The self-review (a subagent, with the plan, proposal §2 and §10 and the branch) found no blocking
+code issue; it corrected the report's build-plus-evaluation range (both run orders), added the
+fallback at one rank per core on more levels (locust's 72 × 1), and asked for the rustdoc of
+`HelmholtzFmmBuilder::diagonal` to say that the levels depend on the ranks per node where the budget
+binds; all applied.
+
+Debug test time (opt-level 0, one rank, the M6): `helmholtz_fmm` 700.5 s at load 2–4 (CH4.3b2d
+703 s); at opt-level 1 39.5 s.
 
 ## Open questions
-(filled when they arise)
+The report's §9, questions 1–5, for sign-off.
