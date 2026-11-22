@@ -253,15 +253,17 @@ fn the_points_per_leaf_never_fall_with_the_tolerance() {
 }
 
 #[test]
-fn the_default_leaf_width_is_two_wavelengths_one_level_coarser() {
-    assert_eq!(DEFAULT_C_LEAF, 2.0 * C_LEAF);
+fn the_default_leaf_width_is_four_wavelengths_two_levels_coarser() {
+    // Helmholtz CH4.3e (2, one level coarser, from CH4.0d3 until then).
+    assert_eq!(DEFAULT_C_LEAF, 4.0 * C_LEAF);
     for kd in kd_sweep() {
         let k = Wavenumber::new(kd, 0.0).unwrap();
         let narrow = min_leaf_level(&k, &cube(0.0, 1.0), C_LEAF);
         let wide = min_leaf_level(&k, &cube(0.0, 1.0), DEFAULT_C_LEAF);
-        // One level coarser, but never above the root, and at the cap both may hold 16.
+        // Two levels coarser, but never above the root; where c_leaf 1's level is capped at 16
+        // (its own level 17 or deeper) the default's is 15 or 16.
         assert!(
-            wide == narrow.saturating_sub(1) || (narrow == 16 && wide == 16),
+            wide == narrow.saturating_sub(2) || (narrow == 16 && wide >= 15),
             "kD = {kd}: {wide} against {narrow}"
         );
     }

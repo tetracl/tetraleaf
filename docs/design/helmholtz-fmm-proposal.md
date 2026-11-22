@@ -549,18 +549,23 @@ wavelengths and P2M and L2P at p ≈ 33.
 
 The builder therefore refines every box that contains points and is wider than c_leaf λ, in
 addition to the points-per-leaf rule, with c_leaf from spike S8 (initially between 0.5 and
-1, decision D11; the builder's default 2 since CH4.0d3, amended at CH4.0d3). Consequences:
+1, decision D11; the builder's default 2 since CH4.0d3, amended at CH4.0d3; 4 since CH4.3e,
+amended at CH4.3e). Consequences (amended at CH4.3e):
 
-- every leaf is on a low-frequency level, and so are the W- and X-list operators: M2P reads
-  boxes smaller than its target leaf, and P2L writes boxes smaller than its source leaf. The
-  high-frequency levels carry only M2M, L2L and V lists (at c_leaf 2 the census's first pass
-  found leaves on high-frequency levels; CH4.3 re-decides c_leaf with its rule; amended at
-  CH4.0d3);
+- a leaf has k a ≤ 5.4 c_leaf, so at every c_leaf ≥ 1 leaves lie on levels of k a ≥ 2.8, the
+  diagonal form's range (Section 3.6), whatever M2L the level runs (the form, RCR, the plane
+  waves, or none where every V pair is near), and with them W and X lists (M2P reads boxes
+  smaller than its target leaf, P2L writes boxes smaller than its source leaf). The leaf
+  operators do not depend on the M2L's regime: they run at the level's degree, which the degree
+  rule covers (Section 3.5; x ≤ 5.4 c_leaf, 21.8 at c_leaf 4). CH4.3e measured such trees within
+  ε on W1–W3 at c_leaf 1–8 (tetraleaf-validate/results/helmholtz-ch4-3e.md), where the first
+  pass of the census had assumed every leaf low frequency;
 - every P2P pair lies within about 2√3 c_leaf λ, so the phase k r stays below about
   22 c_leaf radians (Section 5.7), and below 44 c_leaf with V pairs made near pairs (4√3
-  c_leaf λ; the default since CH4.0d3, amended at CH4.0d3);
-- under-resolved inputs get more, sparser leaves instead of high-frequency ones; S8 measures
-  the cost on the reference workloads (Section 9.1).
+  c_leaf λ; the default since CH4.0d3, amended at CH4.0d3), 176 radians at c_leaf 4;
+- under-resolved inputs get leaves up to c_leaf λ wide (4 λ by default), not more and sparser
+  ones: on W3 at N = 10⁶ and kD = 500, c_leaf 4 took build plus one evaluation to 0.26–0.36× c_leaf
+  2's (amended at CH4.3e).
 
 If `tetraleaf-octree` already takes a maximum depth or width, the builder passes it. Otherwise a
 maximum leaf width is added to `tetraleaf-octree` as an optional parameter that defaults to none,
@@ -615,9 +620,10 @@ Per particle: the real orthonormal harmonics by recursion, and the radial functi
 recursion in the stable direction (j_n downward, Miller's method; h_n upward), for real and
 complex arguments. As for Laplace, one thread per particle or per target, and the points
 in leaf-scaled coordinates (CONVENTIONS §3.13), so the radial argument is (k r_leaf) times
-a scaled distance of order one. Section 3.7 keeps every leaf, and with it every M2P and P2L,
-on a low-frequency level: P2M and L2P arguments stay below k a_leaf ≤ 5.4 c_leaf, and the
-M2P and P2L arguments below k times a few leaf widths.
+a scaled distance of order one. Leaves may lie on levels whose M2L is high frequency (Section
+3.7, amended at CH4.3e); the leaf operators do not depend on that regime: P2M and L2P arguments
+stay below k a_leaf ≤ 5.4 c_leaf (21.8 at the default c_leaf 4), and the M2P and P2L arguments
+below k times a few leaf widths, at the level's degree from the degree rule.
 
 ### 5.2 M2M and L2L: rotation, coaxial translation, rotation back
 
@@ -817,8 +823,10 @@ kernels in `tetraleaf-simd` for NEON and AVX2 + FMA (AVX-512 with C6.7), with ve
 sincos and exp, under an accuracy contract like simd-p2p.md's, on a loop skeleton shared
 with Laplace where constraint 1 of Section 2 holds (Section 6.2). The phase k r is formed
 from k r_leaf (a per-tree constant formed in f64) times the leaf-scaled distance; with the
-leaf rule of Section 3.7 it stays below about 22 c_leaf radians, and the accuracy contract
-covers that range (for Yukawa, κ r up to the pruning cut). The cost per pair is several
+leaf rule of Section 3.7 it stays below about 22 c_leaf radians (44 c_leaf with V pairs made
+near pairs, 176 radians at the default c_leaf 4; amended at CH4.3e), and the accuracy contract
+covers that range: the sine and cosine are tested to |k r| ≤ 2¹⁰ (for Yukawa, κ r up to the
+pruning cut). The cost per pair is several
 times Laplace's; it is measured in CH2.4 and CH3.4, not assumed, with green-kernels'
 Helmholtz and modified-Helmholtz kernels (on their own RLST 0.10.2, CHR.2) as an external
 baseline after a convention check, as its Laplace kernel was in Phase 3S. The device kernels
@@ -1973,6 +1981,12 @@ these.
   #252, its questions 1–3, signed off by the user, "Q1-3 as recommended"): Section 3.6, the
   shorter transfer function analysed (⌈3(P − 1)/2⌉ and the excess-bandwidth length per pair at the
   FMM's degrees) and 2P − 2 kept; review 2026-11-12, M8, closed with it.
+- **Amended at CH4.3e, 2026-11-22** (`tetraleaf-validate/results/helmholtz-ch4-3e.md` §6; PR
+  #253, its questions 1–3, signed off by the user, "Q1-3 as recommended"): Section 3.7, leaves on
+  levels of k a ≥ 2.8 whatever their M2L, with W and X lists, the leaf operators independent of
+  the regime, under-resolved inputs with leaves up to c_leaf λ, and the builder's c_leaf 4;
+  Section 5.1, the leaves' arguments; Section 5.7, the phase range (176 radians at c_leaf 4,
+  the sine and cosine tested to 2¹⁰); D11 amended.
 
 ## Appendix B. The stability check behind Section 3.6
 

@@ -691,6 +691,15 @@ repeat. `tools/helmholtz/ch4-3b2c-runs.sh` runs the task's stages (`w1`, `w3`, `
 `ranks`), `ch4-3b2c-tables.py` makes the report's tables (CH4.3b2a's `errors`, `choices` and
 `summary`, and `build`, `repeat`, `order`). Its report is `results/helmholtz-ch4-3b2c.md`.
 
+Helmholtz CH4.3e (c_leaf re-decided with the time rule; docs/helmholtz/tasks/CH4.3e.md) changed
+no harness code: `tools/helmholtz/ch4-3e-runs.sh` runs W1–W3 under the library's defaults named
+(`--diagonal auto --diagonal-build interpolated`) at `--c-leaf 1,2,4,8` and reversed (`fwd-*`,
+`rev-*`; stages `w1`, `w2`, `w3`, `large`), and `ch4-3e-tables.py` makes the report's tables
+(`census`: the occupied leaves on the levels whose M2L is the form or RCR at k a ≥ 2.8, from the
+column "M2L" and the tables "Time rule", "Leaves" and "Leaf operators", with the W and X
+interactions touching them; `summary`, `cases`, `errors`). Its report is
+`results/helmholtz-ch4-3e.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

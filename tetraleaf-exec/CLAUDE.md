@@ -645,7 +645,7 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   `helmholtz::default_max_points_per_leaf(tolerance, isa)` unless named (256 on x86; on NEON
   128 at ε ≥ 10⁻⁷ or named degrees, 256 below; the multipole planes not read; agreed over
   the ranks in step 2's all-reduce, max; Laplace's `fmm::default_max_points_per_leaf`
-  untouched), `DEFAULT_C_LEAF` = 2 (D11's `C_LEAF` = 1 stays the leaf rule's constant and
+  untouched), `DEFAULT_C_LEAF` = 2 (4 since CH4.3e; D11's `C_LEAF` = 1 stays the leaf rule's constant and
   the census tests'), `VNear::CostModel` and `WxNear::CostModel`. `tests/helmholtz_fmm.rs`'s
   `default_builder` names the settings before (32 points, `C_LEAF`, the three rules off), so
   every other check keeps its tree and pairs; `check_defaults` (the sphere with a tolerance,
@@ -866,6 +866,20 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   binds (one rank per core on W1 at kD ≥ 500 and W3 at kD = 500) the default's levels depend on the
   ranks per node. Its debug cost: the one-rank run at opt-level 0 700.5 s at load 2–4 on the M6
   (CH4.3b2d 703 s), 39.5 s at opt-level 1.
+  Since Helmholtz CH4.3e (docs/helmholtz/tasks/CH4.3e.md; tetraleaf-validate/results/helmholtz-ch4-3e.md)
+  `DEFAULT_C_LEAF` is 4 (2 since CH4.0d3; signed off on #253, 2026-11-22, D11 amended): a leaf of c_leaf λ has k a ≤ 5.4 c_leaf,
+  so at every c_leaf ≥ 1 leaves lie on levels of k a ≥ 2.8 (the form's range) whatever their M2L,
+  the leaf operators not depending on the regime; c_leaf 4 gains on under-resolved trees (W3 at
+  N = 10⁶, kD = 500: 0.26–0.36× c_leaf 2's build plus one evaluation). `tests/helmholtz/leaf_rule.rs` checks it two levels coarser than
+  `C_LEAF`; `check_form_leaves` in `tests/helmholtz_fmm.rs` (Gaussian clusters at kD = 40, 10⁻⁴,
+  `DEFAULT_C_LEAF`, 64 points per leaf, the W and X rules off) the form at free costs on a level
+  with occupied leaves into which M2P and out of which P2L compute (`far_interactions`; level 3:
+  84 leaves, 7,660 point interactions each way on the M6), the errors within the bound and
+  `DIAGONAL_RATIO` of the form off, the machine's costs printed, 2 threads and the one-rank FMM bit
+  for bit. Its debug cost: the one-rank run at opt-level 0 1,315 s at load 24–27 on the M6 (the
+  test's first version, at c_leaf 2; not comparable with CH4.3b2c's 700.5 s at load 2–4, not
+  measured quiet); at opt-level 1 36.6 s at c_leaf 2 and 76.8 s at the final 4, the second at load
+  24–28 (CH4.3b2c 39.5 s quiet); CI's MPI list 103.8 and 118.8 s at 2 and 4 ranks on the M6.
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
   count. No `unsafe`, no atomics, no global pool; per-thread scratch created at
