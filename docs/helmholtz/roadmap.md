@@ -9,12 +9,11 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-22): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
-item 10 CH4.1, CH4.2, CH4.2c, CH4.3a, CH4.3b1–CH4.3b2d, CH4.3c1 and CH4.3c2 (CH4.3b2c on 2026-11-22:
-the diagonal form's time rule the builder's default). CH4.3d was split into CH4.3d1 (the pair sweep)
-and CH4.3d2 (the FMM); CH4.3d1 signed off 2026-11-22 (2P − 2 kept, CH4.3d2 closed unrun, §3.6
-amended). Next CH4.3e and CH4.3c3; the FFT track stays item 11. The project was renamed tetraleaf
-on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c.
-The history of this line until H6.G is in `progress.md` and in this file's history
+item 10 CH4.1, CH4.2, CH4.2c, CH4.3a–CH4.3d (CH4.3d2 closed unrun) and CH4.3c1–c2. CH4.3e (c_leaf
+with the time rule: leaves on the form's levels at every c_leaf, c_leaf 4 proposed) is on its PR for
+sign-off; next CH4.3c3, then CH4.4 and CH4.5; the FFT track stays item 11. The project was renamed
+tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7,
+CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
 (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
 `git show 8475009:docs/helmholtz/roadmap.md`.
 
@@ -844,11 +843,11 @@ task's full line is in its record or report and its progress entry
 - [x] **CH4.3d2 The shorter transfer function in the FMM.** Closed unrun by CH4.3d1's sign-off
   (question 2, signed off 2026-11-22 by the user on #252: "Q1-3 as recommended"): T's length stays 2P − 2; no length rule computable
   before the run safely reaches the few per cent the shortest lengths would save.
-- [ ] **CH4.3e c_leaf re-decided with the rule.** *Done when:* (since CH4.0d3's c_leaf 2, signed
-  off on #219) c_leaf re-decided with CH4.3b's default (at c_leaf 2 the census's first pass put
-  leaves on high-frequency levels on 9 trees at 10⁻⁶; proposal §3.7 keeps W and X lists off
-  them; CH4.0d3's report §4), on W1–W3's trees, for sign-off (D11). *Needs:* CH4.3b2c.
-  *Machines:* Kathleen.
+- [x] **CH4.3e c_leaf re-decided with the rule.** Report: `tetraleaf-validate/results/helmholtz-ch4-3e.md`;
+  record `docs/helmholtz/tasks/CH4.3e.md`. Under the time rule leaves lie on the form's levels at every
+  c_leaf from 1 to 8 (W2 with W and X lists), every run within ε; c_leaf 4 0.874× (Kathleen) and 0.790×
+  (locust) c_leaf 2's build plus one evaluation, from the under-resolved W3 (0.26–0.36×); `DEFAULT_C_LEAF`
+  4 built. *Sign-off:* the report's questions 1–3 (c_leaf 4; §3.7, §5.1 and D11 amended), pending.
 - [ ] **CH4.3f The time rule's costs at many ranks per node.** (Added at CH4.3b2c, its question
   4, signed off 2026-11-22; off the list until CH4.5.) *Done when:* the waves' cost per box at one rank per
   core on W3's dense levels explained (Kathleen 40 × 1, W3 at kD = 500, 10⁻⁸, level 4: 20.5 s
