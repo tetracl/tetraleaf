@@ -29,8 +29,14 @@
 //!   ⌈x + (C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉ in one of the [`BranchForm`]s beside a
 //!   given plateau, optionally at most a cap's rule on [`cap_grid`]; [`CH3_3_LEVELS`] are
 //!   CH3.3's level points as data.
+//! - **Point lines** (Helmholtz CH4.3c3). The example writes one `point:` line per measured
+//!   degree; [`PointLine`] reads one back, with the charges' [`Density`] carried in its
+//!   workload field ([`point_workload`]), so that the fits tell the densities apart and read
+//!   the files written before the density was named.
 
 use tetraleaf_exec::helmholtz::DegreeRule;
+
+use crate::helmholtz_accuracy::Density;
 
 /// The consecutive degrees that must each meet a target (module documentation).
 pub const RUN: usize = 3;
@@ -249,6 +255,69 @@ pub fn ch3_3_level_points() -> Vec<Point> {
                 .map(move |(&epsilon, degree)| Point { x, epsilon, degree })
         })
         .collect()
+}
+
+/// The workload field of a `point:` line (Helmholtz CH4.3c3): the workload's name with its
+/// spaces as underscores (`W1`, `W4_cube_(N_=_100000)`), followed by `/` and the density's
+/// [`name`](Density::name) for a density other than [`Density::Random`] (`W1/constant`), so
+/// that lines written before the density was named read as the random charges.
+pub fn point_workload(workload: &str, density: Density) -> String {
+    let name = workload.replace(' ', "_");
+    match density {
+        Density::Random => name,
+        other => format!("{name}/{}", other.name()),
+    }
+}
+
+/// One `point:` line of the `helmholtz_calibrate` example, after the prefix `point: `:
+/// `<kind> <workload> <kd> <level> <x> <ε> <p at ε/2> <p at ε> <S7>` (module documentation).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PointLine {
+    /// The scan, `plateau` or `level`.
+    pub kind: String,
+    /// The workload's name as written, without the density ([`point_workload`]).
+    pub workload: String,
+    /// The charges' density, from the workload field.
+    pub density: Density,
+    /// kD as written (`500`, or `100+10i` for complex k).
+    pub kd: String,
+    /// The scanned level (for a plateau scan the first level, 2).
+    pub level: usize,
+    /// The measured point: x, ε and the smallest degree meeting ε/2.
+    pub point: Point,
+    /// The smallest degree meeting ε.
+    pub full: usize,
+    /// S7's degree at the same x and ε.
+    pub s7: usize,
+}
+
+impl PointLine {
+    /// Reads a line's fields (after `point: `); `None` for a line of another shape, an
+    /// unknown density or a field that does not parse.
+    pub fn parse(line: &str) -> Option<Self> {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        let [kind, workload, kd, level, x, epsilon, half, full, s7] = fields[..] else {
+            return None;
+        };
+        let (workload, density) = match workload.split_once('/') {
+            None => (workload, Density::Random),
+            Some((name, density)) => (name, Density::from_name(density)?),
+        };
+        Some(Self {
+            kind: kind.to_string(),
+            workload: workload.to_string(),
+            density,
+            kd: kd.to_string(),
+            level: level.parse().ok()?,
+            point: Point {
+                x: x.parse().ok()?,
+                epsilon: epsilon.parse().ok()?,
+                degree: half.parse().ok()?,
+            },
+            full: full.parse().ok()?,
+            s7: s7.parse().ok()?,
+        })
+    }
 }
 
 /// The step of b in [`fit_branch`]: b is the smallest multiple of it that covers the points.
@@ -634,5 +703,45 @@ mod tests {
         assert!((step_above(0.051) - 0.10).abs() < 1e-12);
         assert!((step_above(0.05) - 0.10).abs() < 1e-12);
         assert!((step_above(-0.07) - -0.05).abs() < 1e-12);
+    }
+
+    /// A point line written with each density reads back with its fields and density; a line
+    /// written before the density was named reads as the random charges; other lines are
+    /// refused (Helmholtz CH4.3c3).
+    #[test]
+    fn point_lines_carry_the_density() {
+        for density in [Density::Random, Density::PlaneWave, Density::Constant] {
+            let workload = point_workload("W4 cube (N = 100000)", density);
+            let line = format!("level {workload} 1000 2 216.4956 1e-8 247 245 260");
+            let parsed = PointLine::parse(&line).expect("parses");
+            assert_eq!(parsed.density, density, "{line}");
+            assert_eq!(parsed.workload, "W4_cube_(N_=_100000)");
+            assert_eq!(parsed.kind, "level");
+            assert_eq!(parsed.kd, "1000");
+            assert_eq!(parsed.level, 2);
+            assert_eq!(
+                parsed.point,
+                Point {
+                    x: 216.4956,
+                    epsilon: 1e-8,
+                    degree: 247
+                }
+            );
+            assert_eq!((parsed.full, parsed.s7), (245, 260));
+        }
+        assert_eq!(point_workload("W1", Density::Random), "W1");
+        assert_eq!(point_workload("W1", Density::Constant), "W1/constant");
+        let old = PointLine::parse("plateau W1 10 2 2.1651 1e-3 6 5 9").expect("parses");
+        assert_eq!((old.density, old.kd.as_str()), (Density::Random, "10"));
+        for bad in [
+            "",
+            "level W1 500 2 108.25 1e-3 112 111",
+            "level W1 500 2 108.25 1e-3 112 111 120 9",
+            "level W1/smooth 500 2 108.25 1e-3 112 111 120",
+            "level W1 500 two 108.25 1e-3 112 111 120",
+            "level W1 500 2 108.25 1e-3 11.5 111 120",
+        ] {
+            assert_eq!(PointLine::parse(bad), None, "{bad}");
+        }
     }
 }

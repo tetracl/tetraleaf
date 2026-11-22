@@ -32,10 +32,19 @@
 //!   `fit_branch` (A: ⌈x + (a L + b) x^{1/3}⌉; B: with an offset d; C: with C (ln 1/ε)^{2/3}
 //!   added to the excess too), B and C also capped at CH3.3's rule on `cap_grid`; prints each
 //!   rule's constants, whether it covers every point, its total excess, and every point
-//!   against each rule.
+//!   against each rule. Since Helmholtz CH4.3c3 also beside CH4.3c2's fit (d = 3), CH4.3c2's
+//!   rule (`DegreeRule::CH4_3C2`, d = 5) and the default (`DegreeRule::CALIBRATED`), the refit
+//!   C ≤ CH3.3 with CH3.3's branch as its `cap` (CH4.3c2's construction; where no rule under
+//!   CH3.3's branch covers the points, under the branch with the least larger coefficient that
+//!   admits one, by 0.01 to `MAX_CAP`), the points of every density (the files' points of a
+//!   density other than the random charges carry it, `helmholtz_calibration::PointLine`), and
+//!   a table of the margin at each such point: its degree against the fit's, CH4.3c2's rule's
+//!   and the refit's.
 //!
 //! Options of the scans: `--workload w` (as `helmholtz_accuracy`: `w1`, `w2`, `w3`,
-//! `w3:<n>`, `w4-<distribution>:<n>`), `--kd x,…`, `--kim y`, `--eps e,…` (default
+//! `w3:<n>`, `w4-<distribution>:<n>`), `--density random|planewave|constant` (Helmholtz
+//! CH4.3c3: the charges, `Case::density`; §9.1's random charges by default, the plane wave's
+//! trace with complex charges only), `--kd x,…`, `--kim y`, `--eps e,…` (default
 //! 1e-3,…,1e-8 by decades), `--scan plateau|levels`, `--first p`, `--max-degree p`
 //! (default S7's degree at the scanned x and the smallest ε, plus 8: S7's per-pair worst
 //! case bounds the full FMM's), `--min-x x`, `--level l`, `--hold-eps e`, `--hold γ,α,β,C`,
@@ -56,15 +65,20 @@ use mpi::traits::*;
 use tetraleaf_exec::helmholtz::{ChargeKind, DegreeRule, Degrees, Wavenumber, s7_degree};
 use tetraleaf_validate::bench::{cores, cpu_model, target};
 use tetraleaf_validate::fmm_accuracy::Distribution;
-use tetraleaf_validate::helmholtz_accuracy::{Case, Oracle, Problem, complex_k, run};
+use tetraleaf_validate::helmholtz_accuracy::{Case, Density, Oracle, Problem, complex_k, run};
 use tetraleaf_validate::helmholtz_calibration::{
-    BranchForm, CH3_3_LEVELS, Curve, Point, ch3_3_level_points, covers, fit, fit_branch,
+    BranchForm, CH3_3_LEVELS, Curve, Point, PointLine, ch3_3_level_points, covers, fit, fit_branch,
+    point_workload,
 };
 use tetraleaf_validate::helmholtz_workloads::Workload;
 
 /// Plateau points with x at most this go to the plateau's fit (S7: p is flat in k a below
 /// about 4, `spikes/truncation/SPIKE_REPORT.md` §3).
 const PLATEAU_X: f64 = 4.0;
+
+/// The largest coefficient of CH3.3's branch that `refit` tries as the refit's cap (Helmholtz
+/// CH4.3c3).
+const MAX_CAP: f64 = 1.20;
 
 /// The degrees of levels 0..`LEVELS` passed to the FMM (more than any tree has).
 const LEVELS: usize = 64;
@@ -79,6 +93,7 @@ enum Scan {
 /// The command line of the scans.
 struct Arguments {
     workload: String,
+    density: Density,
     kds: Vec<f64>,
     kim: f64,
     epsilons: Vec<f64>,
@@ -121,15 +136,18 @@ fn workload(name: &str, kd: f64) -> Option<Workload> {
 fn arguments(args: &[String]) -> Arguments {
     let usage = || -> ! {
         eprintln!(
-            "usage: helmholtz_calibrate [--workload w] [--kd x,…] [--kim y] [--eps e,…] \
+            "usage: helmholtz_calibrate [--workload w] [--density random|planewave|constant] \
+             [--kd x,…] [--kim y] [--eps e,…] \
              [--scan plateau|levels] [--first p] [--max-degree p] [--min-x x] [--level l] \
              [--hold-eps e] [--hold γ,α,β,C] [--samples n] [--threads t] [--charges real|complex], \
-             or helmholtz_calibrate fit <files…>; got {args:?}"
+             or helmholtz_calibrate fit <files…>, or helmholtz_calibrate refit [files…]; \
+             got {args:?}"
         );
         std::process::exit(2);
     };
     let mut parsed = Arguments {
         workload: "w1".into(),
+        density: Density::Random,
         kds: vec![10.0],
         kim: 0.0,
         epsilons: (3..=8).map(|d| 10f64.powi(-d)).collect(),
@@ -151,6 +169,9 @@ fn arguments(args: &[String]) -> Arguments {
                 parsed.workload = value.clone();
                 workload(value, 1.0).is_some()
             }
+            "--density" => Density::from_name(value)
+                .map(|d| parsed.density = d)
+                .is_some(),
             "--kd" => list(value).map(|v| parsed.kds = v).is_some(),
             "--kim" => value.parse().map(|v| parsed.kim = v).is_ok(),
             "--eps" => list(value).map(|v| parsed.epsilons = v).is_some(),
@@ -194,6 +215,7 @@ fn arguments(args: &[String]) -> Arguments {
         || !parsed.hold_epsilon.is_none_or(|e| valid(&e))
         || parsed.threads == 0
         || parsed.first == Some(0)
+        || (parsed.density == Density::PlaneWave && parsed.charges == ChargeKind::Real)
     {
         usage();
     }
@@ -213,6 +235,7 @@ fn shown(degree: Option<usize>, first: usize) -> String {
 struct Scanned<'a> {
     kind: &'a str,
     workload: String,
+    density: Density,
     kd: String,
     level: usize,
     x: f64,
@@ -251,7 +274,7 @@ fn report(arguments: &Arguments, scanned: &Scanned<'_>, curve: &Curve, k: &Waven
             println!(
                 "point: {} {} {} {} {} {epsilon:e} {half} {full} {}",
                 scanned.kind,
-                scanned.workload.replace(' ', "_"),
+                point_workload(&scanned.workload, scanned.density),
                 scanned.kd,
                 scanned.level,
                 scanned.x,
@@ -287,12 +310,15 @@ fn scans(arguments: &Arguments) {
             arguments.threads,
             std::env::var("OPENBLAS_NUM_THREADS").unwrap_or_else(|_| "unset".into()),
         );
+        println!();
+        println!("Density: {}", arguments.density.name());
     }
     for &kd in &arguments.kds {
         let workload = workload(&arguments.workload, kd).expect("checked");
         let k = Wavenumber::new(kd, arguments.kim).expect("a valid wavenumber");
         let mut case = Case::new(workload, (kd, arguments.kim), Degrees::PerLevel(vec![]));
         case.charges = arguments.charges;
+        case.density = arguments.density;
         case.samples = arguments.samples;
         let problem = Problem::new(&case);
         let oracle = Oracle::sharded(
@@ -380,6 +406,7 @@ fn scans(arguments: &Arguments) {
                     "level"
                 },
                 workload: workload.name(),
+                density: arguments.density,
                 kd: kd_string.clone(),
                 level,
                 x,
@@ -387,9 +414,10 @@ fn scans(arguments: &Arguments) {
             if root {
                 println!();
                 println!(
-                    "## {} kD = {kd_string}, N = {}: {} {}",
+                    "## {} kD = {kd_string}, N = {}, {} density: {} {}",
                     scanned.workload,
                     problem.len(),
+                    scanned.density.name(),
                     if arguments.scan == Scan::Plateau {
                         "plateau, levels ≥ 2".to_string()
                     } else {
@@ -430,6 +458,29 @@ fn scans(arguments: &Arguments) {
     }
 }
 
+/// The `point:` lines of a saved scan output; panics on a malformed one.
+fn point_lines(file: &str, text: &str) -> Vec<PointLine> {
+    text.lines()
+        .filter_map(|l| l.strip_prefix("point: "))
+        .map(|line| {
+            PointLine::parse(line)
+                .unwrap_or_else(|| panic!("{file}: a malformed point line: {line}"))
+        })
+        .collect()
+}
+
+/// A point line's columns `kind | workload | kD | level`, the density after the workload's
+/// name where it is not the random charges.
+fn line_name(line: &PointLine) -> String {
+    format!(
+        "{} | {} | {} | {}",
+        line.kind,
+        point_workload(&line.workload, line.density),
+        line.kd,
+        line.level
+    )
+}
+
 /// The `fit` mode of the module documentation.
 fn fit_files(files: &[String]) {
     let mut plateau = Vec::new();
@@ -437,28 +488,14 @@ fn fit_files(files: &[String]) {
     let mut lines = Vec::new();
     for file in files {
         let text = std::fs::read_to_string(file).unwrap_or_else(|e| panic!("{file}: {e}"));
-        for line in text.lines().filter_map(|l| l.strip_prefix("point: ")) {
-            let f: Vec<&str> = line.split_whitespace().collect();
-            let [kind, workload, kd, level, x, epsilon, half, full, s7] = f[..] else {
-                panic!("{file}: a malformed point line: {line}");
-            };
-            let parse = |v: &str| v.parse::<f64>().unwrap_or_else(|_| panic!("{line}"));
-            let point = Point {
-                x: parse(x),
-                epsilon: parse(epsilon),
-                degree: parse(half) as usize,
-            };
+        for line in point_lines(file, &text) {
+            let point = line.point;
             if point.x <= PLATEAU_X {
                 plateau.push(point);
             } else {
                 others.push(point);
             }
-            lines.push((
-                point,
-                format!("{kind} | {workload} | {kd} | {level}"),
-                parse(full) as usize,
-                parse(s7) as usize,
-            ));
+            lines.push((point, line_name(&line), line.full, line.s7));
         }
     }
     println!("# Helmholtz degree calibration: the fit");
@@ -504,23 +541,19 @@ fn refit_files(files: &[String]) {
             (0..6).map(move |_| format!("CH3.3 | {workload} | {kd} | {level}"))
         })
         .collect();
+    // The positions in `points` of the points of a density other than the random charges.
+    let mut other_density = Vec::new();
     for file in files {
         let text = std::fs::read_to_string(file).unwrap_or_else(|e| panic!("{file}: {e}"));
-        for line in text.lines().filter_map(|l| l.strip_prefix("point: ")) {
-            let f: Vec<&str> = line.split_whitespace().collect();
-            let [kind, workload, kd, level, x, epsilon, half, _, _] = f[..] else {
-                panic!("{file}: a malformed point line: {line}");
-            };
-            let parse = |v: &str| v.parse::<f64>().unwrap_or_else(|_| panic!("{line}"));
-            if kind != "level" || parse(x) <= PLATEAU_X {
+        for line in point_lines(file, &text) {
+            if line.kind != "level" || line.point.x <= PLATEAU_X {
                 continue;
             }
-            points.push(Point {
-                x: parse(x),
-                epsilon: parse(epsilon),
-                degree: parse(half) as usize,
-            });
-            names.push(format!("{kind} | {workload} | {kd} | {level}"));
+            if line.density != Density::Random {
+                other_density.push(points.len());
+            }
+            points.push(line.point);
+            names.push(line_name(&line));
         }
     }
     let ch3_3 = DegreeRule::CH3_3;
@@ -548,7 +581,17 @@ fn refit_files(files: &[String]) {
             .map(|p| rule.degree(p.x, p.epsilon) as i64 - p.degree as i64)
             .sum::<i64>()
     };
-    let mut rules = vec![("CH3.3", ch3_3)];
+    // CH4.3c2's fit, before its raise by 2 for the constant density (its report §3).
+    let ch4_3c2_fit = DegreeRule {
+        d: 3.0,
+        ..DegreeRule::CH4_3C2
+    };
+    let mut rules = vec![
+        ("CH3.3", ch3_3),
+        ("CH4.3c2 fit", ch4_3c2_fit),
+        ("CH4.3c2", DegreeRule::CH4_3C2),
+        ("default", DegreeRule::CALIBRATED),
+    ];
     for (name, form, cap) in [
         ("A", BranchForm::Linear, None),
         ("B", BranchForm::LinearOffset, None),
@@ -561,15 +604,40 @@ fn refit_files(files: &[String]) {
             None => println!("form {name}: no rule fits"),
         }
     }
-    println!("| rule | C | a | b | d | covers | Σ (rule − p) |");
-    println!("| --- | ---: | ---: | ---: | ---: | --- | ---: |");
+    // The default's construction (Helmholtz CH4.3c2): C ≤ CH3.3 with CH3.3's branch as its cap
+    // everywhere, which can only lower a degree between the decades of `cap_grid`. Where no
+    // rule under CH3.3's branch covers the points (Helmholtz CH4.3c3: W1's constant density at
+    // x = 13.5 and 10⁻⁸ needs a degree above CH3.3's rule), the cap's coefficient is raised from
+    // 0.80 by 0.01 to the first that admits a fit, at most `MAX_CAP`.
+    let mut cap_c = ch3_3.c;
+    let mut refit = rules
+        .iter()
+        .find(|(name, _)| *name == "C ≤ CH3.3")
+        .map(|&(_, rule)| rule);
+    while refit.is_none() && cap_c < MAX_CAP - 1e-9 {
+        cap_c = ((cap_c + 0.01) * 100.0).round() / 100.0;
+        let cap = DegreeRule::gd(ch3_3.gamma, ch3_3.alpha, ch3_3.beta, cap_c);
+        refit = fit_branch(&points, &ch3_3, BranchForm::Full, Some(&cap));
+    }
+    let refit = refit.map(|rule| DegreeRule {
+        cap: Some(cap_c),
+        ..rule
+    });
+    let refit_name = format!("C ≤ cap {cap_c:.2}, capped");
+    match refit {
+        Some(rule) => rules.push((refit_name.as_str(), rule)),
+        None => println!("form C under a cap up to {MAX_CAP}: no rule fits"),
+    }
+    println!("| rule | C | a | b | d | cap | covers | Σ (rule − p) |");
+    println!("| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |");
     for (name, rule) in &rules {
         println!(
-            "| {name} | {:.2} | {:.2} | {:.2} | {:.2} | {} | {} |",
+            "| {name} | {:.2} | {:.2} | {:.2} | {:.2} | {} | {} | {} |",
             rule.c,
             rule.a,
             rule.b,
             rule.d,
+            rule.cap.map_or("–".into(), |c| format!("{c:.2}")),
             covers(rule, &points),
             excess(rule)
         );
@@ -594,6 +662,44 @@ fn refit_files(files: &[String]) {
             print!(" {} |", rule.degree(point.x, point.epsilon));
         }
         println!();
+    }
+    if other_density.is_empty() {
+        return;
+    }
+    // The margin (Helmholtz CH4.3c3): at each point of another density its degree against
+    // CH4.3c2's fit (the margin needed over it), CH4.3c2's rule (its spare) and the refit.
+    println!();
+    println!(
+        "Margin at the {} points of a density other than the random charges:",
+        other_density.len()
+    );
+    println!();
+    println!(
+        "| source | workload | kD | level | x | ε | p at ε/2 | fit | p − fit | CH4.3c2 | \
+         CH4.3c2 − p | refit | refit − CH4.3c2 |"
+    );
+    println!(
+        "| --- | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+    );
+    for &i in &other_density {
+        let (point, name) = (points[i], &names[i]);
+        let at = |rule: &DegreeRule| rule.degree(point.x, point.epsilon) as i64;
+        let (p, fit, default) = (
+            point.degree as i64,
+            at(&ch4_3c2_fit),
+            at(&DegreeRule::CH4_3C2),
+        );
+        let (refit, change) = refit.map_or(("–".into(), "–".into()), |r| {
+            (at(&r).to_string(), format!("{:+}", at(&r) - default))
+        });
+        println!(
+            "| {name} | {:.3} | {:e} | {p} | {fit} | {:+} | {default} | {:+} | {refit} | \
+             {change} |",
+            point.x,
+            point.epsilon,
+            p - fit,
+            default - p
+        );
     }
 }
 

@@ -4,11 +4,13 @@
 //! ```text
 //! helmholtz_boxes [CASE] [--eps e,…] [--m2l rotation|default,…] [--study single|levels]
 //!     [--margin m] [--offset x,y,z] [--leaf-size n] [--raise-factor f] [--worst n]
-//!     [--per-box s] [--full-max n] [--rule calibrated|ch3-3|γ,α,β,C,a,b,d[,cap]] [--threads t]
+//!     [--per-box s] [--full-max n] [--rule calibrated|ch3-3|ch4-3c2|γ,α,β,C,a,b,d[,cap]] [--threads t]
 //! ```
 //!
 //! `--rule ch3-3` (Helmholtz CH4.3c2) runs CH3.3's degree rule (`DegreeRule::CH3_3`) in place
 //! of the library's default under the same tolerance, for the errors before the refit;
+//! `--rule ch4-3c2` (Helmholtz CH4.3c3) CH4.3c2's rule (`DegreeRule::CH4_3C2`), the default
+//! before CH4.3c3's refit;
 //! `--rule γ,α,β,C,a,b,d[,cap]` a `DegreeRule` of those constants (the refit's offset varied).
 //!
 //! One case on one rank, against the direct sum (`tetraleaf_validate::helmholtz_boxes`): at
@@ -110,7 +112,7 @@ fn arguments() -> Arguments {
              [--density random|planewave|constant] [--charges real|complex] [--eps e] \
              [--m2l rotation|default] [--study single|levels] [--margin m] [--offset x,y,z] \
              [--leaf-size n|uniform] [--raise-factor f] [--worst n] [--per-box s] \
-             [--full-max n] [--rule calibrated|ch3-3|γ,α,β,C,a,b,d[,cap]] [--threads t]; \
+             [--full-max n] [--rule calibrated|ch3-3|ch4-3c2|γ,α,β,C,a,b,d[,cap]] [--threads t]; \
              got {args:?}"
         );
         std::process::exit(2);
@@ -204,6 +206,7 @@ fn arguments() -> Arguments {
             "--rule" => match value.as_str() {
                 "calibrated" => Some(None),
                 "ch3-3" => Some(Some(DegreeRule::CH3_3)),
+                "ch4-3c2" => Some(Some(DegreeRule::CH4_3C2)),
                 constants => match constants
                     .split(',')
                     .map(|v| v.parse::<f64>().ok())

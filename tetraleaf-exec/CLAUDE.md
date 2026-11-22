@@ -223,9 +223,11 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   docs; docs/helmholtz/tasks/CH3.1a.md): `Degrees` (a tolerance, the rule `degree` at
   Re(k) a, degree 0 on levels 0 and 1, which nothing reads; or degrees named per level;
   `Degrees::resolve_with` another `DegreeRule`, the builder's `degree_rule`, default
-  `DegreeRule::CALIBRATED`, CH3.3's plateau with CH4.3c2's high-frequency branch, capped by
-  CH3.3's branch through `DegreeRule::cap`;
-  `DegreeRule::CH3_3` the rule before, kept for the runs before and after)
+  `DegreeRule::CALIBRATED`, CH3.3's plateau with CH4.3c3's high-frequency branch (refitted on
+  the worst density, W1's constant density among the points), capped by
+  x + 0.82 (ln 1/ε)^{2/3} x^{1/3} through `DegreeRule::cap` (signed off on #254);
+  `DegreeRule::CH4_3C2` and `DegreeRule::CH3_3` the rules before, kept for the runs before and
+  after)
   and `HelmholtzOperator` for real and complex k, real and complex charges and
   m vectors (Yukawa is `OperatorError::Yukawa`, CH2.1's path). Level l works in its own
   units at k̂_l = k r_l; a box holds r_l φ̃ there as a chunk does, so P2L scales its
@@ -517,14 +519,20 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   the one-rank run on the M6 (47 s with CH6.1e's iprec 2 on the second scenario, on a
   loaded M6).
 - The degree rule (Helmholtz CH3.3; the `helmholtz::degree` module docs;
-  tetraleaf-validate/results/helmholtz-ch3-3.md): `degree` is `DegreeRule::CALIBRATED`,
+  tetraleaf-validate/results/helmholtz-ch3-3.md): `degree` is `DegreeRule::CALIBRATED`, as
+  CH3.3 left it (its constants since CH4.3c3 at the end of this paragraph)
   max(⌈0.30 L² + 0.25 L + 2.60⌉, ⌈x + 0.80 (ln 1/ε)^{2/3} x^{1/3}⌉) with L = log₁₀(1/ε),
   x = Re(k) a, calibrated in the full FMM (every measured degree at ε/2 covered, 10⁻⁸ ≤ ε
   ≤ 10⁻³, x ≤ 65, checked at x = 108 by CH3.3 and at x = 216 and 108 by Helmholtz CH4.0c,
   W1 at kD = 1000 within ε in ℓ2 (tetraleaf-validate/results/helmholtz-ch4-0c.md); an
   extrapolation beyond, below S7's p* there; CH3.3's 10⁻¹⁸ to 10⁻¹ compared the two formulas
   and is not a measured range, review 2026-11-12 M6);
-  S7's closed form, the default before, is `s7_degree`, the per-pair bound. Tests of single pairs or chains (`tests/helmholtz/operator.rs`) take `s7_degree`;
+  S7's closed form, the default before, is `s7_degree`, the per-pair bound. Since Helmholtz
+  CH4.3c3 (docs/helmholtz/tasks/CH4.3c3.md; tetraleaf-validate/results/helmholtz-ch4-3c3.md) the
+  default is the refit on the worst density (signed off on #254, proposal §3.5): C = 2.00, a = −0.55, b = −4.66, d = 2,
+  capped by x + 0.82 (ln 1/ε)^{2/3} x^{1/3} (CH4.3c2's rule, `DegreeRule::CH4_3C2`, missed four
+  of the constant density's scanned degrees by one); `tests/helmholtz/degree.rs` holds it to
+  `MEASURED` and `MEASURED_CONSTANT` and to its cap, and CH4.3c2's rule to its misses. Tests of single pairs or chains (`tests/helmholtz/operator.rs`) take `s7_degree`;
   tests of the whole FMM the default. `DegreeRule`'s ceilings forgive 10⁻⁹. A change of
   the constants is a recalibration: rerun `tetraleaf-validate`'s `helmholtz_calibrate` and
   the verification of the report, and update `tests/helmholtz/degree.rs`'s `MEASURED`.
