@@ -892,9 +892,9 @@ task's full line is in its record or report and its progress entry
 - [ ] **CH4.7 The form choice prices the tables' build for small trees.** (Proposed at CH4.5, its
   question 4; off the list.) *Done when:* the time rule (or the leaf rule) weighs the build of
   Batched's matrices and the diagonal tables against the evaluation where one solve is the use, so
-  that Kathleen's trees of N ≤ 1.2·10⁴ at 10⁻³ (CH4.5 §3.4: Batched at p = 11, 73 of 81 ms of the
-  build) are not slower than FMM3D's call, verified on CH4.5's small cases on Kathleen and locust
-  with the large cases unchanged. *Needs:* CH4.5. *Machines:* Kathleen, locust.
+  that the six Kathleen rows they explain (CH4.5 §3.4: W1 and W2 at kD = 30 and W3 at kD = 10, both
+  densities, 10⁻³; Batched at p = 11, 15–101 ms of the build) are not slower than FMM3D's call,
+  verified on CH4.5's small cases on Kathleen and locust with the large cases unchanged. *Needs:* CH4.5. *Machines:* Kathleen, locust.
 - [ ] **CH4.6 The optional FFTW back end of the φ step.** *Done when:* against the product to
   round-off; per-box plans with bits the same across batch positions, sizes and threads, and
   fingerprints all-gathered; off by default, a default build linking no FFTW, cargo-deny, a CI

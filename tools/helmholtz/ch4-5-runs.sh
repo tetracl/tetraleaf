@@ -118,7 +118,9 @@ problem() {
     fi
 }
 
-# `repeat`: FMM3D's calls per launch for the problem file prob: 2 below 10⁶ points, else 1.
+# `repeat`: FMM3D's calls per launch for the problem file prob: 2 below 10⁶ points, else 1. N is
+# read with GNU od (Kathleen, locust); macOS's od misreads the 8-byte integer, so DRY_RUN there
+# may show the wrong REPEAT.
 repeat() {
     local n
     n=$(od -An -t d8 -j 8 -N 8 "$prob" 2> /dev/null | tr -d ' ')

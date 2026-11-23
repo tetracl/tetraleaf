@@ -27,12 +27,14 @@ CH4.4a's sweep (`helmholtz-ch4-4a.md`), with CH4.0e's splits and one-sided rule
   split (0.06–0.97× FMM3D's call on Kathleen, 0.08–0.43× on locust; W1 and the plane wave at
   kD = 1000 0.06–0.11× and 0.08–0.10×), and at 1 × N but for one row each, W3 at kD = 30 at 10⁻³
   (1.16× on Kathleen; 1.09× with the constant density on locust).
-- **Where FMM3D is faster** (§3.4): ten rows of N ≤ 1.2·10⁴ on Kathleen at the best split, seven
+- **Where FMM3D is faster** (§3.4): ten rows of N ≤ 1.1·10⁴ on Kathleen at the best split, seven
   of them at 10⁻³ (1.1–4.4×; at 10⁻⁶ and 10⁻⁸ W2 and W3 at kD = 10, 1.3–1.4×), calls of 5–104 ms. Our
-  evaluation is faster there too (0.15–0.74× FMM3D's call less its tree); our build is not: on
-  Kathleen's 40 threads the form choice takes the shallow tree with Batched at p = 11, whose
-  matrices take 0.07–0.2 s, where locust's 72 threads take a deeper tree (diagonal and Batched at
-  p = 7, 0.006 s). Proposed follow-up CH4.7 (question 4). On locust no case loses at the best split.
+  evaluation is faster there too (0.15–0.74× FMM3D's call less its tree); our build is not. On six
+  of them (W1 and W2 at kD = 30 and W3 at kD = 10, both densities, 10⁻³) Kathleen's costs choose a
+  shallow tree with Batched at p = 11 at every split, whose matrices take 15–101 ms, where locust's
+  choose one level deeper (the diagonal form, then Batched at p = 7, 6 ms); the other four (W2 at
+  kD = 10, W3 at kD = 10 at 10⁻⁸) are a few milliseconds of fixed overhead. Proposed follow-up CH4.7
+  (question 4). On locust no case loses at the best split.
 - **Setup apart** (§4): FMM3D's setup (its tree, timed once apart) is 0.2–23 % of its call for
   N ≥ 10⁵; our evaluation alone over FMM3D's call less its tree is 0.03–0.52× there.
 - **One rank per node** (§5, the H4 gate's figures; CH4.0k): at 1 × N the steps every rank repeats
@@ -44,15 +46,15 @@ CH4.4a's sweep (`helmholtz-ch4-4a.md`), with CH4.0e's splits and one-sided rule
 - **Memory** (§6): FMM3D's peak over our FMM's resident growth at the best split (the node's sum),
   N ≥ 10⁵: 2.5× (0.18–24×) on Kathleen, 2.2× (0.38–13×) on locust, geometric means; the measures
   differ (FMM3D's whole process, its arrays included; our FMM's growth). FMM3D `default` needs
-  442–447 GB at kD = 1000 at 3·10⁻³ and 10⁻³ (locust) and fails on Kathleen's node there and on W2 at
-  kD = 500 at 10⁻³ (exit 137, 180 GB).
+  442–447 GB at kD = 1000 at 3·10⁻³ and 10⁻³ (locust; beyond Kathleen's node, CH4.4a), and fails on
+  Kathleen on W2 at kD = 500 at 3·10⁻³ and 10⁻³ (exit 137, the node's 180 GB).
 - **c_leaf** (§7, CH4.3e's Also): on W3 at N = 10⁶, kD = 500, c_leaf 4 takes 0.29–0.74× c_leaf 2's
   build plus one evaluation on Kathleen at every split and at 40 × 1, and 0.24–0.89× on locust at the
   four splits; at 72 × 1 0.80–1.11× (1.11 at 10⁻⁶).
 - **FMM3D's OpenMP binding** (§8, B8): at its defaults (libgomp: no `OMP_PROC_BIND`, threads
   unbound), stated in every log; bound (`OMP_PLACES=cores OMP_PROC_BIND=close`) it is 1.01–1.14×
   slower on Kathleen and 0.99–1.04× on locust on five large cases: the comparison stands unbound.
-- **Checksums** (§10): every case's checksum is the same at every split and in both launches on
+- **Checksums** (§9): every case's checksum is the same at every split and in both launches on
   both machines (624 launches each), and so are c_leaf's on Kathleen including 40 × 1; at 72 × 1 on
   locust the scratch budget per rank (114 MiB) sends W3's levels 2–3 to RCR instead of the diagonal
   form (CH4.3b2c §8), a different plan with its own checksum, the same in both launches.
@@ -117,8 +119,8 @@ splits and N × 1 (40 × 1, 72 × 1), launches a and b.
 ## 2. The matches
 
 Per case, ε and variant, ours' errors and FMM3D's at each rule's match, with Kathleen's errors of
-ours (locust's differ in the last digits; Kathleen's give two eps that locust's do not, on W2 at
-kD = 100 and W1 at kD = 30 with the constant density, §11).
+ours (locust's differ in the last digits; its matches, in the archive's tables, differ on two rows
+of small cases, §11).
 
 <details><summary>Kathleen's matches (one row per case, ε and variant)</summary>
 
@@ -293,7 +295,7 @@ locust (72 cores):
 | closest | N ≥ 10⁶ | 1e-8 | 8 | 0.16 (0.09–0.37) | 0.21 (0.12–0.51) | 0.13 (0.06–0.35) | – |
 | one-sided | all | 1e-3 | 26 | 0.25 (0.08–0.88) | 0.42 (0.12–1.25) | 0.11 (0.03–0.40) [25] | – |
 | one-sided | all | 1e-6 | 26 | 0.25 (0.08–1.16) | 0.39 (0.14–1.62) | 0.12 (0.04–0.45) [25] | w2-kd10 |
-| one-sided | all | 1e-8 | 26 | 0.26 (0.09–0.80) | 0.32 (0.11–1.47) | 0.18 (0.06–0.40) [25] | – |
+| one-sided | all | 1e-8 | 26 | 0.25 (0.09–0.80) | 0.31 (0.11–1.47) | 0.17 (0.05–0.40) [25] | – |
 | one-sided | N ≥ 10⁵ | 1e-3 | 14 | 0.15 (0.08–0.41) | 0.30 (0.12–0.91) | 0.08 (0.03–0.23) | – |
 | one-sided | N ≥ 10⁵ | 1e-6 | 14 | 0.15 (0.08–0.33) | 0.26 (0.14–0.57) | 0.09 (0.04–0.27) | – |
 | one-sided | N ≥ 10⁵ | 1e-8 | 14 | 0.19 (0.09–0.37) | 0.23 (0.11–0.51) | 0.15 (0.06–0.35) | – |
@@ -398,7 +400,7 @@ match and its ratios.
 | w1-kd10 | 796 | 1e-8 | 4x18 | 0.002 | 0.002 | 0.003 | 0.003, 0.002, 0.005 | default, 1e-4 (1.3), 0.005, 0.000 | 0.64, 1.02 | 0.32 | fastker, 1e-3, 0.004 | 0.80, 1.28 |
 | w1-kd30 | 7162 | 1e-3 | 4x18 | 0.014 | 0.004 | 0.018 | 0.015, 0.004, 0.020 | fastker, 3e-3 (3.8), 0.020, 0.002 | 0.88, 0.99 | 0.20 | fastker, 3e-3, 0.020 | 0.88, 0.99 |
 | w1-kd30 | 7162 | 1e-6 | 4x18 | 0.012 | 0.006 | 0.018 | 0.016, 0.008, 0.024 | default, 3e-4 (10.7), 0.030, 0.001 | 0.60, 0.79 | 0.21 | default, 3e-4, 0.030 | 0.60, 0.79 |
-| w1-kd30 | 7162 | 1e-8 | 4x18 | 0.011 | 0.011 | 0.022 | 0.015, 0.011, 0.026 | default, 1e-9 (1.2), 0.069, 0.002 | 0.32, 0.37 | 0.16 | default, >1e-9, 0.069 | 0.32, 0.37 |
+| w1-kd30 | 7162 | 1e-8 | 4x18 | 0.011 | 0.011 | 0.022 | 0.015, 0.011, 0.026 | default, 1e-9 (1.2), 0.069, 0.002 | 0.32, 0.37 | 0.16 | fastker, 1e-4, 0.211 | 0.10, 0.12 |
 | w1-kd100 | 79578 | 1e-3 | 4x18 | 0.035 | 0.031 | 0.066 | 0.066, 0.034, 0.101 | fastker, 3e-3 (7.9), 0.282, 0.006 | 0.23, 0.36 | 0.11 | default, 3e-4, 0.327 | 0.20, 0.31 |
 | w1-kd100 | 79578 | 1e-6 | 4x18 | 0.051 | 0.039 | 0.090 | 0.077, 0.043, 0.120 | default, 1e-5 (2.2), 0.378, 0.007 | 0.24, 0.32 | 0.11 | fastker, 3e-7, 0.591 | 0.15, 0.20 |
 | w1-kd100 | 79578 | 1e-8 | 2x36 | 0.053 | 0.108 | 0.161 | 0.067, 0.109, 0.176 | fastker, 3e-7 (4.7), 0.591, 0.005 | 0.27, 0.30 | 0.18 | fastker, 3e-7, 0.591 | 0.27, 0.30 |
@@ -428,7 +430,7 @@ match and its ratios.
 | w2-kd500 | 3188840 | 1e-8 | 4x18 | 1.152 | 3.825 | 4.978 | 2.615, 3.712, 6.327 | fastker, 3e-7 (18.4), 33.144, 0.299 | 0.15, 0.19 | 0.12 | fastker, 3e-7, 33.144 | 0.15, 0.19 |
 | w3-kd10 | 4032 | 1e-3 | 2x36 | 0.009 | 0.003 | 0.012 | 0.009, 0.004, 0.013 | default, 3e-3 (2.9), 0.037, 0.016 | 0.32, 0.36 | 0.15 | default, 3e-3, 0.037 | 0.32, 0.36 |
 | w3-kd10 | 4032 | 1e-6 | 4x18 | 0.007 | 0.004 | 0.011 | 0.011, 0.004, 0.015 | default, 3e-4 (1.1), 0.028, 0.016 | 0.40, 0.54 | 0.31 | default, 1e-4, 0.041 | 0.27, 0.37 |
-| w3-kd10 | 4032 | 1e-8 | 4x18 | 0.010 | 0.007 | 0.017 | 0.013, 0.007, 0.020 | default, 3e-9 (7.9), 0.070, 0.018 | 0.25, 0.29 | 0.14 | default, >3e-9, 0.070 | 0.25, 0.29 |
+| w3-kd10 | 4032 | 1e-8 | 4x18 | 0.010 | 0.007 | 0.017 | 0.013, 0.007, 0.020 | default, 3e-9 (7.9), 0.070, 0.018 | 0.25, 0.29 | 0.14 | fastker, 1e-4, 0.080 | 0.21, 0.26 |
 | w3-kd30 | 108849 | 1e-3 | 8x9 | 0.041 | 0.035 | 0.076 | 0.128, 0.040, 0.168 | default, 1e-3 (3.8), 0.193, 0.045 | 0.39, 0.87 | 0.24 | default, 3e-3, 0.185 | 0.41, 0.91 |
 | w3-kd30 | 108849 | 1e-6 | 8x9 | 0.036 | 0.068 | 0.104 | 0.130, 0.062, 0.192 | default, 3e-4 (6.8), 0.381, 0.036 | 0.27, 0.50 | 0.20 | default, 3e-4, 0.381 | 0.27, 0.50 |
 | w3-kd30 | 108849 | 1e-8 | 4x18 | 0.029 | 0.145 | 0.174 | 0.054, 0.142, 0.195 | fastker, 1e-9 (2.1), 0.511, 0.036 | 0.34, 0.38 | 0.31 | fastker, >1e-9, 0.511 | 0.34, 0.38 |
@@ -482,13 +484,20 @@ On Kathleen FMM3D is faster at the best split on ten rows, all of N ≤ 1.2·10�
 at kD = 30 (4.37× and 1.98×), W2 and W3 at kD = 10, W1 and W2 at kD = 30 with the constant density,
 W3 at kD = 10 with it (1.14–2.68×); at 10⁻⁶ and 10⁻⁸ W2 at kD = 10 (1.26–1.32×) and W3 at kD = 10 at
 10⁻⁸ (1.41×). FMM3D's calls are 5–104 ms. (At 1 × 40 also W3 at kD = 30 at 10⁻³, N = 1.1·10⁵,
-1.16×.) Our evaluation is faster on every one of them (0.15–0.74× the
-call less its tree); our build is what loses. On W1 at kD = 30, 10⁻³ (Kathleen, 1 × 40) the build is
-81 ms, 73 ms of it "matrices" (Batched's, at p = 11 on leaf level 2, 2,448 V pairs), against 20 ms
-at 10⁻⁶ (the diagonal form there). On locust the same case builds in 15 ms: at 72 threads the form
-choice takes one level deeper (the diagonal form at level 2, Batched at p = 7 on level 3, 6 ms of
-tables). The time rule prices the evaluation, not the tables' build; for one solve on a small tree
-the build is the cost. Question 4 proposes it as CH4.7.
+1.16×.) Our evaluation is faster on every one of them (0.15–0.74× the call less its tree); our build
+is what loses. On W1 at kD = 30, 10⁻³ (Kathleen, 1 × 40) the build is 81 ms, 73 ms of it "matrices"
+(Batched's, at p = 11 on leaf level 2, 2,448 V pairs), against 20 ms at 10⁻⁶ (the diagonal form
+there). Batched's matrices are 73–101 ms of the build on W1 and W2 at kD = 30 (both densities) and
+15–16 ms on W3 at kD = 10 (both densities), all at 10⁻³; on W2 at kD = 10 (every ε) and W3 at kD = 10
+at 10⁻⁸ no matrices are built and the build is 4–20 ms of fixed steps. On locust the same W1 case
+builds in 15 ms: its costs (NEON, not AVX-512) choose one level deeper at every split (the diagonal
+form at level 2, Batched at p = 7 on level 3, 6 ms of tables), where Kathleen's choose the shallow
+tree at every split too. The time rule prices the evaluation, not the tables' build; for one solve
+on a small tree the build is the cost. Question 4 proposes it as CH4.7 for the six rows it explains.
+
+Under the one-sided match the same rows lose, and also W1 at kD = 10 on Kathleen (N = 796, our
+error 10⁻¹⁵, so only FMM3D's direct sum is as accurate: 2.55–2.60×, calls of 2 ms) and W2 at kD = 10 at 10⁻⁶ on
+locust (1.16×, FMM3D's direct sum against our 5·10⁻⁸).
 
 ## 4. Setup apart
 
@@ -496,7 +505,10 @@ FMM3D's tree, timed once apart, is 0.2–14 % of its call on the trees of N ≥ 
 0.4–23 % on locust (W1 at kD = 1000: 0.73–0.92 s of 110–166 s on locust; W3 at kD = 100: 0.65 s of
 8–13 s). Our evaluation alone over FMM3D's
 call less its tree (the repeated-solve measure), N ≥ 10⁵, geometric means: Kathleen 0.10, 0.12,
-0.18 and locust 0.09, 0.10, 0.15 at 10⁻³, 10⁻⁶, 10⁻⁸ (ranges in §3.1). Our build is 8–63 % of
+0.18 and locust 0.09, 0.10, 0.15 at 10⁻³, 10⁻⁶, 10⁻⁸ (ranges in §3.1). Over all 26 cases the range
+on locust reaches 1.60 on one row (W3 at kD = 10 with the constant density, 10⁻³), where the tree,
+timed apart, took 16 ms of an 18 ms call against 2 ms at the case's other eps: one noisy timing of a
+call of milliseconds. Our build is 8–63 % of
 build plus evaluation at the best split on the trees of N ≥ 10⁶ (the most at 10⁻³, the least on
 W3 at kD = 100 at 10⁻⁸); the first evaluation beside the second is in each archived output's Build
 table.
@@ -793,7 +805,10 @@ locust:
 
 FMM3D `default` at kD = 1000 (locust; not run on Kathleen, CH4.4a's question 3): 135–191 s per call
 against `fastker`'s 110–178 s, peaks 442–447 GB at 3·10⁻³ and 10⁻³ and 186–198 GB below, against
-`fastker`'s 118 GB and 44–58 GB; `fastker` is the faster variant at every eps there. On Kathleen
+`fastker`'s 118 GB and 44–58 GB. It is timed (`time-w1-kd1000*.md` in locust's archive) but not in
+the comparison's tables, whose variants are the grid's (`fastker` alone at kD = 1000): it is 1.2 %
+and 0.2 % faster than `fastker` at 3·10⁻⁴ and 10⁻⁴ and slower at every other eps, so no ratio changes
+by more than about 1 %. On Kathleen
 `default` failed on W2 at kD = 500 at 3·10⁻³ and 10⁻³ (exit 137, Slurm's oom_kill, the node's 180 GB;
 job 663814's peak 188.7 GB) and in both timed launches at 10⁻³; it is no row's match there.
 
@@ -904,8 +919,9 @@ cleaf4: 3 case-ε pairs, 30 launches; checksums differing: 3
   ('w3-n1000000-kd500', '1e-6'): ['3581e2114c15f0af', '844472e608c0b6b7']
   ('w3-n1000000-kd500', '1e-8'): ['57f34d85ca090362', '757353c1a55303a9']
 
-Ours is rank- and thread-count invariant at the defaults on every case (constraints 2 and 9). The
-locust c_leaf difference is the 72 × 1 split's plan (§0).
+Ours is rank- and thread-count invariant at the defaults on every case over the four splits of each
+machine and, on Kathleen, at 40 × 1 (constraints 2 and 9). At 72 × 1 on locust the defaults build a
+different plan (§0, §7): its own checksum, the same in both launches.
 
 ## 10. FMM3D's errors on both machines
 
@@ -964,7 +980,9 @@ locust detached under `setsid nohup`), the eps lists by `ch4-5-tables.py eps <gr
    Alternative: put it on the list after H4's gate.
 4. **CH4.7, new: the form choice prices the tables' build for small trees** (§3.4). *Done when:* the
    time rule (or the leaf rule) weighs the build of Batched's matrices and the diagonal tables
-   against the evaluation where one solve is the use, so that Kathleen's trees of N ≤ 1.1·10⁵ at 10⁻³
-   are not slower than FMM3D's call, verified on CH4.5's small cases on Kathleen and locust with
-   the large cases unchanged. *Recommended:* add it, off the list (the rows lose 0.01–0.07 s).
-   Alternative: on the list before the H4 gate.
+   against the evaluation where one solve is the use, so that the six Kathleen rows the matrices
+   explain (W1 and W2 at kD = 30 and W3 at kD = 10, both densities, 10⁻³; N ≤ 1.2·10⁴) are not
+   slower than FMM3D's call, verified on CH4.5's small cases on Kathleen and locust with the large
+   cases unchanged; the other four rows (a few milliseconds of fixed steps) are out of its scope.
+   *Recommended:* add it, off the list (the ten rows lose 0.002–0.074 s). Alternative: on the list
+   before the H4 gate.

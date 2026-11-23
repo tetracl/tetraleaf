@@ -174,7 +174,9 @@ runs of the tools only, small, not timed).
 - `ch4-5-tables.py` changed with the data in: setup apart left out where FMM3D's tree is not below
   its call (one case, a call of milliseconds); the closest match's variant the faster only among
   those within a decade of the closer match (`fastker` sums the smallest trees directly at every
-  eps, 10¹⁰ off ours). The selftest on CH4.0e's rows passes after both.
+  eps, 10¹⁰ off ours); and, from the self-review, the one-sided match's variant one with a match at
+  least as accurate as ours before one without (two locust rows at 10⁻⁸). The selftest on CH4.0e's
+  rows passes after all three.
 - FMM3D `default` failed (exit 137, the node's memory) on W2 at kD = 500 at 3·10⁻³ and 10⁻³ on
   Kathleen; a row, not a stop.
 
