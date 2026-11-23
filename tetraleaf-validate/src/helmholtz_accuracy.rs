@@ -95,9 +95,10 @@ use tetraleaf_exec::geometry::{Domain, radius};
 use tetraleaf_exec::helmholtz::{
     ChargeKind, Charges, DEFAULT_DENSE_BUDGET, DEFAULT_DIAGONAL_BUILD, DegreeRule, Degrees,
     DiagonalCosts, DiagonalCounts, DiagonalTimes, HelmholtzDiagonal, HelmholtzFmm,
-    HelmholtzFmmBuilder, HelmholtzFmmError, HelmholtzM2l, LevelShape, Output, PlaneWaveCounts,
-    PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, PlaneWaveTimes, RcrSplit, TransferBuild,
-    VAfterPlan, VCosts, VNear, VRaisedPrice, Wavenumber, WxNear, diagonal_rule_classes,
+    HelmholtzFmmBuilder, HelmholtzFmmError, HelmholtzM2l, LevelShape, M2lOverride, Output,
+    PlaneWaveCounts, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, PlaneWaveTimes, RcrSplit,
+    TransferBuild, VAfterPlan, VCosts, VNear, VRaisedPrice, Wavenumber, WxNear,
+    diagonal_rule_classes,
 };
 use tetraleaf_exec::operator::{M2L_BLOCK_TARGETS, MulAdd, P2pChoice};
 use tetraleaf_math::Complex;
@@ -126,6 +127,9 @@ pub struct Case {
     /// The degree rule under a tolerance (`HelmholtzFmmBuilder::degree_rule`, Helmholtz
     /// CH4.3c2; `None` the library's, `DegreeRule::CALIBRATED`).
     pub degree_rule: Option<DegreeRule>,
+    /// Levels' degrees or M2L in place of the setting's (`HelmholtzFmmBuilder::m2l_overrides`,
+    /// Helmholtz CH4.4b; a measurement setting, none in [`Case::new`] and [`Case::defaults`]).
+    pub m2l_overrides: Vec<M2lOverride>,
     /// Real or complex charges.
     pub charges: ChargeKind,
     /// The charges' values (Helmholtz CH4.0b; [`Density::Random`], §9.1's, by default).
@@ -300,6 +304,7 @@ impl Case {
             max_points_per_leaf: None,
             c_leaf: None,
             degree_rule: None,
+            m2l_overrides: Vec::new(),
             empty_boxes: true,
             near_v: VNear::Off,
             near_wx: WxNear::Off,
@@ -1266,6 +1271,9 @@ pub fn run_output<C: CommunicatorCollectives>(
     }
     if let Some(rule) = case.degree_rule {
         builder = builder.degree_rule(rule);
+    }
+    if !case.m2l_overrides.is_empty() {
+        builder = builder.m2l_overrides(case.m2l_overrides.clone());
     }
     let mut fmm: HelmholtzFmm<'_, f64, C> = builder.build(points, points, comm)?;
     let build = slowest(start.elapsed().as_secs_f64(), comm);

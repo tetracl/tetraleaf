@@ -16,13 +16,19 @@
 //! - **The levels.** The error of one run minus that of a run with one level's degree raised
 //!   is that level's part of the error ([`level_shares`]): with the levels' parts adding up,
 //!   the errors of the run are their sum plus a rest.
+//! - **The classes** (Helmholtz CH4.4b). Each diagonal class's bound over the rule's threshold
+//!   ([`class_ratios`]) and its decade below it ([`threshold_decade`]), for the runs with a
+//!   level's classes beside the threshold on RCR; the reference grown by the worst boxes'
+//!   points ([`Reference::extend`]).
 
 use std::collections::HashMap;
 use std::thread;
 
-use tetraleaf_exec::helmholtz::Output;
+use tetraleaf_exec::helmholtz::{Output, TransferBuild};
 use tetraleaf_math::Complex;
+use tetraleaf_ref::helmholtz::diagonal::THETA;
 use tetraleaf_ref::helmholtz::p2p::direct_sum;
+use tetraleaf_tables::helmholtz::diagonal::class_bounds;
 
 use crate::SplitMix64;
 use crate::helmholtz_accuracy::Problem;
@@ -81,6 +87,48 @@ impl Reference {
             potential: potential.into_iter().map(|v| v * scale).collect(),
             gradient: gradient.into_iter().map(|g| g.map(|v| v * scale)).collect(),
         }
+    }
+
+    /// The reference with `more` targets too (positions in the problem's points): the direct
+    /// sum at the new ones alone ([`Reference::at`] on `threads` threads), merged in order;
+    /// bit for bit `Reference::at` of the union, since each value depends on its target alone
+    /// (Helmholtz CH4.4b: every point of the worst boxes after the sampled reference).
+    pub fn extend(
+        &self,
+        k: Complex<f64>,
+        problem: &Problem,
+        vector: usize,
+        more: &[usize],
+        threads: usize,
+    ) -> Self {
+        let new: Vec<usize> = more
+            .iter()
+            .copied()
+            .filter(|i| self.targets.binary_search(i).is_err())
+            .collect();
+        let added = Self::at(k, problem, vector, new, threads);
+        let n = self.targets.len() + added.targets.len();
+        let mut merged = Self {
+            targets: Vec::with_capacity(n),
+            potential: Vec::with_capacity(n),
+            gradient: Vec::with_capacity(n),
+        };
+        let (mut a, mut b) = (0, 0);
+        while a < self.targets.len() || b < added.targets.len() {
+            let take_old = b == added.targets.len()
+                || (a < self.targets.len() && self.targets[a] < added.targets[b]);
+            let (source, j) = if take_old {
+                a += 1;
+                (self, a - 1)
+            } else {
+                b += 1;
+                (&added, b - 1)
+            };
+            merged.targets.push(source.targets[j]);
+            merged.potential.push(source.potential[j]);
+            merged.gradient.push(source.gradient[j]);
+        }
+        merged
     }
 
     /// The RMS over the targets of |φ| and of |∇φ|.
@@ -238,6 +286,30 @@ pub fn worst_boxes(boxes: &[BoxError], field: usize, count: usize) -> Vec<BoxErr
     });
     sorted.truncate(count);
     sorted
+}
+
+/// Each diagonal class's bound over the rule's threshold, E(l, c)/(θ ε), on a level of degree
+/// `p` and wavenumber `k_hat` in its units (k r_l) at tolerance `epsilon` with the transfer
+/// functions of `build` in f64 (Helmholtz CH4.4b): `tetraleaf_tables`' `class_bounds` with the
+/// build's constants, by class index (`tetraleaf_ref::helmholtz::diagonal::classes()`). A
+/// class passes the rule where the ratio is at most 1 (`diagonal_rule_classes`).
+pub fn class_ratios(p: usize, k_hat: Complex<f64>, epsilon: f64, build: TransferBuild) -> Vec<f64> {
+    class_bounds(p, k_hat, build.bound_constants(false))
+        .into_iter()
+        .map(|e| e / (THETA * epsilon))
+        .collect()
+}
+
+/// The decade of a class's [`class_ratios`] entry below the threshold: 0 for (0.1, 1], 1 for
+/// (0.01, 0.1], and so on; `None` above 1 (the class fails the rule and runs RCR).
+pub fn threshold_decade(ratio: f64) -> Option<usize> {
+    if ratio.is_nan() || ratio > 1.0 {
+        return None;
+    }
+    if ratio <= 0.0 {
+        return Some(usize::MAX);
+    }
+    Some((-ratio.log10()).floor().max(0.0) as usize)
 }
 
 /// The (i, j, k) of a [`Grid`] key.
@@ -438,6 +510,52 @@ mod tests {
         let at = level_parts_at(&base, &raised, 0);
         assert_eq!(at[0], [1.0, 0.0]);
         assert_eq!(at[2], [0.0, 1.0]);
+    }
+
+    #[test]
+    fn extend_is_the_reference_of_the_union() {
+        use crate::helmholtz_accuracy::Case;
+        use crate::helmholtz_workloads::Workload;
+        use tetraleaf_exec::helmholtz::Degrees;
+        let case = Case::new(Workload::W1, (10.0, 0.0), Degrees::Tolerance(1e-3));
+        let problem = Problem::new(&case);
+        let k = Complex::new(10.0, 0.0);
+        let first = vec![3, 40, 41, 700];
+        let more = [41, 5, 702, 3, 300];
+        let base = Reference::at(k, &problem, 0, first.clone(), 2);
+        let grown = base.extend(k, &problem, 0, &more, 3);
+        let mut union = first;
+        union.extend_from_slice(&more);
+        assert_eq!(grown, Reference::at(k, &problem, 0, union, 1));
+        assert_eq!(grown.targets, vec![3, 5, 40, 41, 300, 700, 702]);
+    }
+
+    #[test]
+    fn class_ratios_and_the_rule() {
+        use tetraleaf_exec::helmholtz::diagonal_rule_classes;
+        for (p, k_hat, epsilon) in [
+            (32, Complex::new(7.8, 0.0), 1e-8),
+            (44, Complex::new(15.6, 0.0), 1e-8),
+            (20, Complex::new(5.0, 0.2), 1e-6),
+        ] {
+            for build in [TransferBuild::Direct, TransferBuild::Interpolated] {
+                let ratios = class_ratios(p, k_hat, epsilon, build);
+                assert_eq!(ratios.len(), 34);
+                let passing: Vec<usize> = (0..34).filter(|&c| ratios[c] <= 1.0).collect();
+                assert_eq!(
+                    passing,
+                    diagonal_rule_classes::<f64>(p, k_hat, epsilon, build),
+                    "p {p}, k̂ {k_hat:?}, ε {epsilon:e}, {build:?}"
+                );
+            }
+        }
+        assert_eq!(threshold_decade(1.5), None);
+        assert_eq!(threshold_decade(f64::NAN), None);
+        assert_eq!(threshold_decade(1.0), Some(0));
+        assert_eq!(threshold_decade(0.11), Some(0));
+        assert_eq!(threshold_decade(0.1), Some(1));
+        assert_eq!(threshold_decade(0.05), Some(1));
+        assert_eq!(threshold_decade(0.002), Some(2));
     }
 
     #[test]
