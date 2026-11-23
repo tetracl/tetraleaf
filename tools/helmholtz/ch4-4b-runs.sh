@@ -16,8 +16,9 @@
 # (`--m2l defaults`), one ε, `--study levels,m2l` (each level raised and on RCR by an override;
 # each level whose M2L is not RCR on RCR; the form's classes by decade below the bound's threshold
 # on RCR), the reference at every point to N = 2·10⁵ and above at §9.1's samples, two targets per
-# box of the deepest level and every point of the 8 worst boxes of φ and of ∇φ (`--refine 8`), the
-# sample cached for the case's other ε (<out-dir>/cache). The CH4.4a cases whose trees run the
+# box of the deepest level and every point of the 8 worst boxes of φ and of ∇φ (`--refine 8`) and of
+# the boxes at the centres of the domain's faces, W1's tangent points (`--refine-faces`), the sample
+# cached for the case's other ε (<out-dir>/cache). The CH4.4a cases whose trees run the
 # diagonal form or RCR at k a ≥ 2.8 (its logs, "by level"). Stages:
 #   smoke    W1 at kD = 30, 10⁻⁶ (a check of the script)
 #   low      W1, W2 at kD = 30 (10⁻⁶), 100, 250; the constant density on W1, W2 at kD = 30
@@ -48,7 +49,8 @@ fi
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 TIMEOUT=${TIMEOUT:-5400}
 EPS=${EPS:-1e-3 1e-6 1e-8}
-COMMON=(--m2l defaults --study levels,m2l --refine 8 --worst 8 --reference-cache "$out/cache")
+COMMON=(--m2l defaults --study levels,m2l --refine 8 --refine-faces --worst 8
+    --reference-cache "$out/cache")
 
 # `mpi`: the launcher of one rank with every core.
 mpi() {

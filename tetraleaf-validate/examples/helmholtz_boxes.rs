@@ -20,7 +20,9 @@
 //! run and one of these runs' parts (their share of the error, their worst box and ℓ2 over the
 //! first run's, their part at the worst ∇φ target). `--refine n` adds every point of the n worst
 //! boxes of φ and of ∇φ (by the sampled reference) to the reference, so their maxima are
-//! exact. `--raise-by d,…` runs the level of `--raise-levels` (default: the level with the
+//! exact; `--refine-faces` adds every point of the deepest level's boxes at the centres of the
+//! domain's faces (W1's six tangent points with the points' bounding cube, where CH4.4a found
+//! the worst boxes; a sample of two per box missed them). `--raise-by d,…` runs the level of `--raise-levels` (default: the level with the
 //! largest part at the worst ∇φ box, from `--study levels`) at its degree as run plus d under
 //! the setting's M2L, a remedy's FMM evidence. `--reference-cache dir` stores the sampled
 //! reference (before `--refine`) in dir and reads it back in a launch of the same case and grid
@@ -100,6 +102,9 @@ struct Arguments {
     class_runs: bool,
     /// `--refine n`: every point of the n worst boxes of φ and of ∇φ in the reference.
     refine: usize,
+    /// `--refine-faces`: every point of the deepest level's boxes at the centres of the
+    /// domain's faces (W1's tangent points) in the reference.
+    refine_faces: bool,
     /// `--raise-by d,…`: the runs with a level's degree raised by d under the setting's M2L.
     raise_by: Vec<usize>,
     /// `--raise-levels l,…`: their levels (default: the level with the largest part at the
@@ -168,7 +173,7 @@ fn arguments() -> Arguments {
             "usage: helmholtz_boxes [--workload w] [--kd x] [--kim y] \
              [--density random|planewave|constant] [--charges real|complex] [--eps e] \
              [--m2l rotation|default|defaults] [--study single|levels|m2l|levels,m2l] \
-             [--class-runs] [--refine n] [--raise-by d,…] [--raise-levels l,…] \
+             [--class-runs] [--refine n] [--refine-faces] [--raise-by d,…] [--raise-levels l,…] \
              [--reference-cache dir] [--margin m] \
              [--offset x,y,z] [--leaf-size n|uniform] [--raise-factor f] [--worst n] \
              [--per-box s] [--full-max n] \
@@ -188,6 +193,7 @@ fn arguments() -> Arguments {
         m2l_study: false,
         class_runs: false,
         refine: 0,
+        refine_faces: false,
         raise_by: Vec::new(),
         raise_levels: None,
         reference_cache: None,
@@ -204,9 +210,13 @@ fn arguments() -> Arguments {
     let mut rest = &args[..];
     loop {
         if let [flag, tail @ ..] = rest
-            && flag == "--class-runs"
+            && (flag == "--class-runs" || flag == "--refine-faces")
         {
-            parsed.class_runs = true;
+            if flag == "--class-runs" {
+                parsed.class_runs = true;
+            } else {
+                parsed.refine_faces = true;
+            }
             rest = tail;
             continue;
         }
@@ -894,12 +904,29 @@ fn main() {
     // Every point of the worst boxes of the sampled measure (Helmholtz CH4.4b), so that their
     // maxima are exact.
     let mut refined = 0;
-    if args.refine > 0 && sampled < n {
-        let keys: std::collections::HashSet<u64> = [0, 1]
+    if (args.refine > 0 || args.refine_faces) && sampled < n {
+        let mut keys: std::collections::HashSet<u64> = [0, 1]
             .iter()
             .flat_map(|&f| worst_boxes(&boxes, f, args.refine))
             .map(|b| b.key)
             .collect();
+        if args.refine_faces {
+            // The boxes whose closure holds the centre of a face of the domain: the outermost
+            // layer along the face's normal, the two middle cells along the other axes.
+            let cells = 1u64 << grid.level;
+            let middle = |i: u64| cells >= 2 && (i == cells / 2 - 1 || i == cells / 2);
+            for &x in &problem.points {
+                let key = grid.box_of(x);
+                let c = cell(key);
+                let at_face = (0..3).any(|a| {
+                    (c[a] == 0 || c[a] == cells - 1)
+                        && (0..3).filter(|&b| b != a).all(|b| middle(c[b]))
+                });
+                if at_face {
+                    keys.insert(key);
+                }
+            }
+        }
         let more: Vec<usize> = (0..n)
             .filter(|&i| keys.contains(&grid.box_of(problem.points[i])))
             .collect();
@@ -921,8 +948,13 @@ fn main() {
         },
         if refined > 0 {
             format!(
-                ", and every point of the {refined} worst boxes of φ and ∇φ by that sample, {} \
+                ", and every point of the {refined} worst boxes of φ and ∇φ by that sample{}, {} \
                  targets more",
+                if args.refine_faces {
+                    " and of the boxes at the centres of the domain's faces"
+                } else {
+                    ""
+                },
                 reference.targets.len() - sampled
             )
         } else {

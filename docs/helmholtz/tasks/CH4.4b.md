@@ -169,7 +169,16 @@ D9 benchmarks.
 - Risk: the reference's cost at kD = 1000 (about 1.5 · 10⁵ targets × 8 · 10⁶ sources).
 
 ## Pending runs
-(filled in step 6)
+Kathleen, `singlenode`, 1 × 40, `--exclude=node-c11b-004,node-c11b-013`, outputs in
+`/scratch/scratch/ucahtbe/fmm/logs/ch4-4b/` (from 0d6749c's tree; built and smoke-checked in job
+663774, node-c11b-031, W1 at kD = 30, 10⁻⁶: worst box 3.34 / 8.26 ε, CH4.4a's figures):
+- 663775 `tools/helmholtz/ch4-4b-runs.sh … low`
+- 663776 `… mid`
+- 663777 `… w3`
+- 663778 `… w1-1000`
+- 663779 `… pw1000 remedy` (the 114.7 ε case and its remedy runs)
+
+Each decides the mapping of its cases; 663779 also the cause and the remedy (question 2).
 
 ## Open questions
 (filled when they arise)
