@@ -65,7 +65,9 @@
 //! Helmholtz CH4.5 added to `compare` `--evaluations n` (default 1, so that the earlier
 //! reports' runs repeat: n evaluations of each build, `Case::evaluations`, the row's time the
 //! last one's, the first's in the log beside the leaf size and c_leaf as built) and `--c-leaf c`
-//! (`Case::c_leaf`; the library's rule when absent); and to `errors` a failed run (no output
+//! (`Case::c_leaf`; the library's rule when absent), our build and evaluation to the
+//! millisecond in the main table and to 0.1 ms in "Build", which gains a last column "first
+//! evaluation"; and to `errors` a failed run (no output
 //! file) as a row, FMM3D's setup timed apart by the driver (a column "tree s",
 //! `helmholtz_fmm3d::tree_seconds`, from the `tree_s=` field of the driver's line) and the
 //! launch's peak resident size (a column "memory GB", from the log's `maxrss:` line).
@@ -757,7 +759,7 @@ fn main() {
         }
         let errors = row.errors.last().expect("an entry over all vectors");
         println!(
-            "| {} | {} | {kd} | {token} | ours ({}) | {} × {} | {} | {:.2} | {:.2} | {:.2e} | {:.2e} | {} | {:016x} | {} |",
+            "| {} | {} | {kd} | {token} | ours ({}) | {} × {} | {} | {:.3} | {:.3} | {:.2e} | {:.2e} | {} | {:016x} | {} |",
             workload.name(),
             problem.len(),
             row.p2p,
@@ -773,14 +775,15 @@ fn main() {
             our_memory(row),
         );
         build_rows.push(format!(
-            "| {token} | {:.2} | {} | {:.2} |",
+            "| {token} | {:.4} | {} | {:.4} | {:.4} |",
             row.build,
             row.build_parts
                 .iter()
-                .map(|s| format!("{s:.3}"))
+                .map(|s| format!("{s:.4}"))
                 .collect::<Vec<_>>()
                 .join(" | "),
-            row.evaluate
+            row.evaluate,
+            row.first_evaluate
         ));
         for ((label, _), runs) in arguments.fmm3d.iter().zip(&fmm3d) {
             let run = match &runs[j] {
@@ -861,8 +864,11 @@ fn main() {
              the parts from \"RCR tables\" to \"scratch\" lie within \"operator\"."
         );
         println!();
-        println!("| ε | build | {} | evaluation |", BUILD_PARTS.join(" | "));
-        println!("| --- |{}", " ---: |".repeat(BUILD_PARTS.len() + 2));
+        println!(
+            "| ε | build | {} | evaluation | first evaluation |",
+            BUILD_PARTS.join(" | ")
+        );
+        println!("| --- |{}", " ---: |".repeat(BUILD_PARTS.len() + 3));
         for line in &build_rows {
             println!("{line}");
         }
