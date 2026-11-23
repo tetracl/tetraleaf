@@ -2,10 +2,29 @@
 //! docs/helmholtz/tasks/CH4.0b.md). Prints Markdown on stdout.
 //!
 //! ```text
-//! helmholtz_boxes [CASE] [--eps e,…] [--m2l rotation|default,…] [--study single|levels]
-//!     [--margin m] [--offset x,y,z] [--leaf-size n] [--raise-factor f] [--worst n]
-//!     [--per-box s] [--full-max n] [--rule calibrated|ch3-3|ch4-3c2|γ,α,β,C,a,b,d[,cap]] [--threads t]
+//! helmholtz_boxes [CASE] [--eps e,…] [--m2l rotation|default|defaults,…]
+//!     [--study single|levels|m2l|levels,m2l] [--class-runs] [--refine n] [--raise-by d,…]
+//!     [--raise-levels l,…] [--margin m] [--offset x,y,z] [--leaf-size n] [--raise-factor f]
+//!     [--worst n] [--per-box s] [--full-max n]
+//!     [--rule calibrated|ch3-3|ch4-3c2|γ,α,β,C,a,b,d[,cap]] [--threads t]
 //! ```
+//!
+//! Helmholtz CH4.4b (the crosscheck mapped to levels and classes): `--m2l defaults` runs
+//! `Case::defaults`, every setting the library's (the diagonal form's time rule, the waves, the
+//! near rules); there `--study levels` raises one level at a time by an override
+//! (`M2lOverride`, its degree the rule's at ε × `--raise-factor` and its M2L RCR), the
+//! tolerance and every other level's choice kept. `--study m2l` runs each level whose M2L is
+//! not RCR on RCR at its degree as run, and on the form's levels the classes within a decade
+//! below the bound's threshold (E/(θ ε) in (0.1, 1]) and the next decade on RCR, each group in
+//! one run (`--class-runs`: each class of the first decade alone too); a table of the levels as
+//! run and one of these runs' parts (their share of the error, their worst box and ℓ2 over the
+//! first run's, their part at the worst ∇φ target). `--refine n` adds every point of the n worst
+//! boxes of φ and of ∇φ (by the sampled reference) to the reference, so their maxima are
+//! exact. `--raise-by d,…` runs the level of `--raise-levels` (default: the level with the
+//! largest part at the worst ∇φ box, from `--study levels`) at its degree as run plus d under
+//! the setting's M2L, a remedy's FMM evidence. `--reference-cache dir` stores the sampled
+//! reference (before `--refine`) in dir and reads it back in a launch of the same case and grid
+//! (another ε), whose header must match; the refinement is then computed for that launch.
 //!
 //! `--rule ch3-3` (Helmholtz CH4.3c2) runs CH3.3's degree rule (`DegreeRule::CH3_3`) in place
 //! of the library's default under the same tolerance, for the errors before the refit;
@@ -49,15 +68,18 @@ use std::time::Instant;
 
 use mpi::Threading;
 use mpi::traits::*;
-use tetraleaf_exec::helmholtz::{ChargeKind, DegreeRule, Degrees, HelmholtzM2l, Wavenumber};
+use tetraleaf_exec::helmholtz::{
+    ChargeKind, DegreeRule, Degrees, HelmholtzM2l, M2lOverride, OverrideM2l, Wavenumber,
+};
+use tetraleaf_math::Complex;
 use tetraleaf_validate::bench::{cores, cpu_model};
 use tetraleaf_validate::fmm_accuracy::Distribution;
 use tetraleaf_validate::helmholtz_accuracy::{
-    Case, Density, Oracle, Problem, Run, complex_k, run_output,
+    Case, Density, Oracle, Problem, Row, Run, complex_k, run_output,
 };
 use tetraleaf_validate::helmholtz_boxes::{
-    BoxError, Errors, Reference, box_sample, cell, face_closeness, level_parts_at, level_shares,
-    offsets, worst_boxes,
+    BoxError, Errors, Reference, box_sample, cell, class_ratios, face_closeness, level_parts_at,
+    level_shares, offsets, threshold_decade, worst_boxes,
 };
 use tetraleaf_validate::helmholtz_fmm3d::Grid;
 use tetraleaf_validate::helmholtz_workloads::{SEED, Workload};
@@ -70,8 +92,22 @@ struct Arguments {
     density: Density,
     charges: ChargeKind,
     eps: Vec<f64>,
-    default_m2l: Vec<bool>,
+    m2l: Vec<Setting>,
     levels: bool,
+    /// `--study m2l` (Helmholtz CH4.4b): each level's M2L on RCR, the form's classes by decade.
+    m2l_study: bool,
+    /// `--class-runs`: each class of the threshold's decade alone on RCR.
+    class_runs: bool,
+    /// `--refine n`: every point of the n worst boxes of φ and of ∇φ in the reference.
+    refine: usize,
+    /// `--raise-by d,…`: the runs with a level's degree raised by d under the setting's M2L.
+    raise_by: Vec<usize>,
+    /// `--raise-levels l,…`: their levels (default: the level with the largest part at the
+    /// worst ∇φ box, from `--study levels`).
+    raise_levels: Option<Vec<usize>>,
+    /// `--reference-cache dir`: the sampled reference stored there, and read back by a launch
+    /// of the same case and grid (another ε).
+    reference_cache: Option<String>,
     margin: Option<f64>,
     offset: [f64; 3],
     leaf_size: Option<String>,
@@ -83,6 +119,27 @@ struct Arguments {
     /// A degree rule in place of the default (`--rule ch3-3` or the constants, Helmholtz
     /// CH4.3c2).
     degree_rule: Option<DegreeRule>,
+}
+
+/// The FMM's settings of a run (`--m2l`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Setting {
+    /// `Case::new` with Rotation (CH4.0b's reference).
+    Rotation,
+    /// `Case::new` with the library's M2L (`Auto`), the form off.
+    Default,
+    /// `Case::defaults`: every setting the library's (Helmholtz CH4.4b).
+    Defaults,
+}
+
+impl Setting {
+    fn name(self) -> &'static str {
+        match self {
+            Setting::Rotation => "Rotation",
+            Setting::Default => "default",
+            Setting::Defaults => "defaults",
+        }
+    }
 }
 
 /// The workload of a name at kD (W1 and W3 resolved depend on it).
@@ -110,10 +167,12 @@ fn arguments() -> Arguments {
         eprintln!(
             "usage: helmholtz_boxes [--workload w] [--kd x] [--kim y] \
              [--density random|planewave|constant] [--charges real|complex] [--eps e] \
-             [--m2l rotation|default] [--study single|levels] [--margin m] [--offset x,y,z] \
-             [--leaf-size n|uniform] [--raise-factor f] [--worst n] [--per-box s] \
-             [--full-max n] [--rule calibrated|ch3-3|ch4-3c2|γ,α,β,C,a,b,d[,cap]] [--threads t]; \
-             got {args:?}"
+             [--m2l rotation|default|defaults] [--study single|levels|m2l|levels,m2l] \
+             [--class-runs] [--refine n] [--raise-by d,…] [--raise-levels l,…] \
+             [--reference-cache dir] [--margin m] \
+             [--offset x,y,z] [--leaf-size n|uniform] [--raise-factor f] [--worst n] \
+             [--per-box s] [--full-max n] \
+             [--rule calibrated|ch3-3|ch4-3c2|γ,α,β,C,a,b,d[,cap]] [--threads t]; got {args:?}"
         );
         std::process::exit(2);
     };
@@ -124,8 +183,14 @@ fn arguments() -> Arguments {
         density: Density::Random,
         charges: ChargeKind::Complex,
         eps: vec![1e-6],
-        default_m2l: vec![false],
+        m2l: vec![Setting::Rotation],
         levels: false,
+        m2l_study: false,
+        class_runs: false,
+        refine: 0,
+        raise_by: Vec::new(),
+        raise_levels: None,
+        reference_cache: None,
         margin: None,
         offset: [0.0; 3],
         leaf_size: None,
@@ -137,7 +202,17 @@ fn arguments() -> Arguments {
         degree_rule: None,
     };
     let mut rest = &args[..];
-    while let [flag, value, tail @ ..] = rest {
+    loop {
+        if let [flag, tail @ ..] = rest
+            && flag == "--class-runs"
+        {
+            parsed.class_runs = true;
+            rest = tail;
+            continue;
+        }
+        let [flag, value, tail @ ..] = rest else {
+            break;
+        };
         let ok = match flag.as_str() {
             "--workload" => {
                 parsed.workload = value.clone();
@@ -164,20 +239,45 @@ fn arguments() -> Arguments {
             "--m2l" => value
                 .split(',')
                 .map(|v| match v {
-                    "rotation" => Some(false),
-                    "default" => Some(true),
+                    "rotation" => Some(Setting::Rotation),
+                    "default" => Some(Setting::Default),
+                    "defaults" => Some(Setting::Defaults),
                     _ => None,
                 })
-                .collect::<Option<Vec<bool>>>()
-                .map(|d| parsed.default_m2l = d)
+                .collect::<Option<Vec<Setting>>>()
+                .map(|d| parsed.m2l = d)
                 .is_some(),
-            "--study" => match value.as_str() {
-                "single" => Some(false),
-                "levels" => Some(true),
-                _ => None,
+            "--study" => value
+                .split(',')
+                .map(|v| match v {
+                    "single" => Some((false, false)),
+                    "levels" => Some((true, false)),
+                    "m2l" => Some((false, true)),
+                    _ => None,
+                })
+                .collect::<Option<Vec<(bool, bool)>>>()
+                .map(|studies| {
+                    parsed.levels = studies.iter().any(|s| s.0);
+                    parsed.m2l_study = studies.iter().any(|s| s.1);
+                })
+                .is_some(),
+            "--refine" => value.parse().map(|v| parsed.refine = v).is_ok(),
+            "--reference-cache" => {
+                parsed.reference_cache = Some(value.clone());
+                true
             }
-            .map(|l| parsed.levels = l)
-            .is_some(),
+            "--raise-by" => value
+                .split(',')
+                .map(|v| v.parse::<usize>().ok().filter(|&d| d > 0))
+                .collect::<Option<Vec<usize>>>()
+                .map(|d| parsed.raise_by = d)
+                .is_some(),
+            "--raise-levels" => value
+                .split(',')
+                .map(|v| v.parse::<usize>().ok().filter(|&l| l >= 2))
+                .collect::<Option<Vec<usize>>>()
+                .map(|l| parsed.raise_levels = Some(l))
+                .is_some(),
             "--margin" => value
                 .parse::<f64>()
                 .ok()
@@ -380,11 +480,13 @@ fn run_row(m: &Measured, reference: &Reference) {
 }
 
 /// Prints the worst boxes of field `field` of `base` with their place, and with the levels'
-/// parts at their worst targets when `raised` is given.
+/// parts at their worst targets when `raised` is given, and the M2L runs' parts (Helmholtz
+/// CH4.4b) when `m2l` is.
 #[allow(clippy::too_many_arguments)]
 fn worst_table(
     base: &Measured,
     raised: Option<&[Option<Errors>]>,
+    m2l: Option<(&[Option<Errors>], &[&str])>,
     reference: &Reference,
     problem: &Problem,
     grid: &Grid,
@@ -400,18 +502,23 @@ fn worst_table(
         "Worst boxes of {name} (level {deepest}): the cell, its centre in the domain's unit \
          cube, the error over ε, the targets, whether a face lies on the domain's boundary, the \
          worst target's distance |v| from its box's centre on levels 2–{deepest} over the \
-         half-width (√3 at a corner){}.",
+         half-width (√3 at a corner){}{}.",
         if raised.is_some() {
-            ", and each level's part of its error"
+            ", and each level's part of its error (at least 0.1 of it)"
+        } else {
+            ""
+        },
+        if m2l.is_some() {
+            ", and each M2L run's part (at least 0.01 of it)"
         } else {
             ""
         }
     );
     println!();
     println!(
-        "| # | cell | centre | error / ε | targets | boundary | |v| / r, levels 2–{deepest} | level parts |"
+        "| # | cell | centre | error / ε | targets | boundary | |v| / r, levels 2–{deepest} | level parts | M2L parts |"
     );
-    println!("| ---: | --- | --- | ---: | ---: | --- | --- | --- |");
+    println!("| ---: | --- | --- | ---: | ---: | --- | --- | --- | --- |");
     for (rank, b) in worst_boxes(&base.boxes, field, count).iter().enumerate() {
         let c = cell(b.key);
         let centre: Vec<String> = c
@@ -435,8 +542,17 @@ fn worst_table(
                 .collect::<Vec<_>>()
                 .join(", ")
         });
+        let m2l_parts = m2l.map_or(String::new(), |(runs, labels)| {
+            level_parts_at(&base.errors, runs, j)
+                .iter()
+                .zip(labels)
+                .filter(|(p, _)| p[field] >= 0.01)
+                .map(|(p, label)| format!("{label}: {:.3}", p[field]))
+                .collect::<Vec<_>>()
+                .join("; ")
+        });
         println!(
-            "| {} | ({}, {}, {}) | ({}) | {:.2} | {} | {} | {} | {} |",
+            "| {} | ({}, {}, {}) | ({}) | {:.2} | {} | {} | {} | {} | {} |",
             rank + 1,
             c[0],
             c[1],
@@ -447,6 +563,7 @@ fn worst_table(
             if boundary { "yes" } else { "no" },
             profile.join(" "),
             parts,
+            m2l_parts,
         );
     }
 }
@@ -491,6 +608,149 @@ fn faces_table(base: &Measured, reference: &Reference, problem: &Problem, grid: 
     }
 }
 
+/// What ran on level `l` of `row`: the diagonal form with its classes, the exponential M2L,
+/// the tables of Dense, Classes or Batched (Auto's tables are Batched's), RCR, or nothing (no
+/// V pairs); as `helmholtz_fmm3d`'s log.
+fn level_m2l(row: &Row, l: usize) -> String {
+    let classes = row.diagonal_classes.get(l).copied().unwrap_or(0);
+    if row.v_pairs.get(l).copied().unwrap_or(0) == 0 {
+        "–".into()
+    } else if classes > 0 {
+        format!("diagonal {classes}/34")
+    } else if row.plane_wave.get(l).is_some_and(Option::is_some) {
+        "waves".into()
+    } else if row.dense_levels.get(l).copied().unwrap_or(false) {
+        match row.m2l {
+            HelmholtzM2l::Auto => "Batched".into(),
+            m2l => format!("{m2l:?}"),
+        }
+    } else {
+        "RCR".into()
+    }
+}
+
+/// A sampled reference stored as little-endian values after one header line that
+/// names the case, the grid and the sample (`--reference-cache`): per target its position (u64),
+/// φ (2 f64) and ∇φ (6 f64).
+fn write_reference(path: &std::path::Path, header: &str, reference: &Reference) {
+    let mut bytes = format!("{header}\n").into_bytes();
+    for (j, &i) in reference.targets.iter().enumerate() {
+        bytes.extend_from_slice(&(i as u64).to_le_bytes());
+        let p = reference.potential[j];
+        let g = reference.gradient[j];
+        for v in [
+            p.re, p.im, g[0].re, g[0].im, g[1].re, g[1].im, g[2].re, g[2].im,
+        ] {
+            bytes.extend_from_slice(&v.to_le_bytes());
+        }
+    }
+    let partial = path.with_extension("partial");
+    if let Err(e) = std::fs::write(&partial, &bytes).and_then(|()| std::fs::rename(&partial, path))
+    {
+        eprintln!(
+            "helmholtz_boxes: the reference cache {}: {e}",
+            path.display()
+        );
+    }
+}
+
+/// The reference of [`write_reference`] at `path` if its header is `header`, else `None`.
+fn read_reference(path: &std::path::Path, header: &str) -> Option<Reference> {
+    let bytes = std::fs::read(path).ok()?;
+    let line = bytes.iter().position(|&b| b == b'\n')?;
+    if &bytes[..line] != header.as_bytes() {
+        return None;
+    }
+    let body = &bytes[line + 1..];
+    let record = 8 * 9;
+    if body.len() % record != 0 {
+        return None;
+    }
+    let f = |at: &[u8]| f64::from_le_bytes(at.try_into().expect("8 bytes"));
+    let mut reference = Reference {
+        targets: Vec::new(),
+        potential: Vec::new(),
+        gradient: Vec::new(),
+    };
+    for r in body.chunks_exact(record) {
+        let v: Vec<f64> = (1..9).map(|i| f(&r[8 * i..8 * i + 8])).collect();
+        reference
+            .targets
+            .push(u64::from_le_bytes(r[..8].try_into().expect("8 bytes")) as usize);
+        reference.potential.push(Complex::new(v[0], v[1]));
+        reference.gradient.push([
+            Complex::new(v[2], v[3]),
+            Complex::new(v[4], v[5]),
+            Complex::new(v[6], v[7]),
+        ]);
+    }
+    Some(reference)
+}
+
+/// Level l's wavenumber in its units, k r_l, from the run's circumradius √3 r_l.
+fn k_hat(row: &Row, k: Complex<f64>, l: usize) -> Complex<f64> {
+    let r = row.circumradii[l] / 3f64.sqrt();
+    Complex::new(k.re * r, k.im * r)
+}
+
+/// The diagonal classes of level l as run, by decade below the rule's threshold: the classes
+/// of each decade (0: E/(θ ε) in (0.1, 1], 1: (0.01, 0.1], 2: the rest that pass), the classes
+/// that fail, and the largest ratio among those that pass. `None` where the level did not run
+/// the form.
+fn class_decades(
+    row: &Row,
+    k: Complex<f64>,
+    eps: f64,
+    l: usize,
+) -> Option<([Vec<usize>; 3], usize, f64)> {
+    if row.diagonal_classes.get(l).copied().unwrap_or(0) == 0 {
+        return None;
+    }
+    let ratios = class_ratios(
+        row.degrees[l],
+        k_hat(row, k, l),
+        eps,
+        row.diagonal_build_kind,
+    );
+    let mut decades: [Vec<usize>; 3] = Default::default();
+    let mut failing = 0;
+    let mut largest = 0.0f64;
+    for (c, &ratio) in ratios.iter().enumerate() {
+        match threshold_decade(ratio) {
+            None => failing += 1,
+            Some(d) => {
+                decades[d.min(2)].push(c);
+                largest = largest.max(ratio);
+            }
+        }
+    }
+    let passing: usize = decades.iter().map(Vec::len).sum();
+    if passing != row.diagonal_classes[l] {
+        eprintln!(
+            "helmholtz_boxes: level {l}: {} classes ran, the bound passes {passing}",
+            row.diagonal_classes[l]
+        );
+    }
+    Some((decades, failing, largest))
+}
+
+/// The worst box of each field over the run's, and the ℓ2 errors over the reference's
+/// targets, of `run` over `base`'s.
+fn ratios_to(run: &Measured, base: &Measured, reference: &Reference) -> ([f64; 2], [f64; 2]) {
+    let worst = |m: &Measured| {
+        m.boxes.iter().fold([0.0f64; 2], |w, b| {
+            [w[0].max(b.error[0]), w[1].max(b.error[1])]
+        })
+    };
+    let (w, wb) = (worst(run), worst(base));
+    let (l, lb) = (run.errors.l2(reference), base.errors.l2(reference));
+    let r = |a: f64, b: f64| if b > 0.0 { a / b } else { 0.0 };
+    (
+        [r(w[0], wb[0]), r(w[1], wb[1])],
+        [r(l[0], lb[0]), r(l[1], lb[1])],
+    )
+}
+
 fn main() {
     let args = arguments();
     let (universe, _) =
@@ -501,19 +761,22 @@ fn main() {
         std::process::exit(2);
     }
     let workload = workload(&args.workload, args.kd).expect("checked");
-    let (eps, default_m2l) = (args.eps[0], args.default_m2l[0]);
-    let m2l_of = |default: bool| {
-        if default {
-            HelmholtzM2l::Auto
-        } else {
-            HelmholtzM2l::Rotation
-        }
+    let (eps, setting) = (args.eps[0], args.m2l[0]);
+    let case_of = |setting: Setting, degrees: Degrees| {
+        let mut case = match setting {
+            Setting::Rotation => Case::new(workload, (args.kd, args.kim), degrees),
+            Setting::Default => Case {
+                m2l: HelmholtzM2l::Auto,
+                ..Case::new(workload, (args.kd, args.kim), degrees)
+            },
+            Setting::Defaults => Case::defaults(workload, (args.kd, args.kim), degrees),
+        };
+        case.charges = args.charges;
+        case.density = args.density;
+        case.degree_rule = args.degree_rule;
+        case
     };
-    let mut case = Case::new(workload, (args.kd, args.kim), Degrees::Tolerance(eps));
-    case.charges = args.charges;
-    case.density = args.density;
-    case.m2l = m2l_of(default_m2l);
-    case.degree_rule = args.degree_rule;
+    let mut case = case_of(setting, Degrees::Tolerance(eps));
     let setup = Instant::now();
     let problem = Problem::new(&case);
     let n = problem.len();
@@ -542,7 +805,6 @@ fn main() {
         setup.elapsed().as_secs_f64()
     );
 
-    let m2l_name = |default: bool| if default { "default" } else { "Rotation" };
     println!(
         "# The box study: {} at kD = {}{}, ε = {:e}, {} density, {}",
         workload.name(),
@@ -554,7 +816,7 @@ fn main() {
         },
         eps,
         args.density.name(),
-        m2l_name(default_m2l),
+        setting.name(),
     );
     println!();
     println!(
@@ -569,7 +831,7 @@ fn main() {
 
     // The first run fixes the grid of the box measure, and so the per-box sample.
     let first = measure(
-        format!("ε = {eps:e}, {}", m2l_name(default_m2l)),
+        format!("ε = {eps:e}, {}", setting.name()),
         eps,
         &case,
         &problem,
@@ -584,16 +846,72 @@ fn main() {
         level: first.run.row.levels - 1,
     };
     let start = Instant::now();
-    let reference = if n <= args.full_max {
-        Reference::every(k, &problem, 0, args.threads)
-    } else {
-        let targets = box_sample(&problem.points, &problem.sample, &grid, args.per_box, SEED);
-        Reference::at(k, &problem, 0, targets, args.threads)
-    };
+    // The sampled reference depends on the case, the grid and the sample alone, not on ε: a
+    // launch of another ε reads it from the cache (Helmholtz CH4.4b).
+    let header = format!(
+        "tetraleaf helmholtz_boxes reference 1: {} kD {} {} density {} charges {:?} N {n} \
+         domain {:?} level {} per box {} full max {} seed {SEED}",
+        workload.name(),
+        args.kd,
+        args.kim,
+        args.density.name(),
+        args.charges,
+        grid.domain,
+        grid.level,
+        args.per_box,
+        args.full_max,
+    );
+    let cache = args.reference_cache.as_ref().map(|dir| {
+        let name: String = header
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect();
+        let mut hash = 0xcbf2_9ce4_8422_2325u64;
+        for b in name.bytes() {
+            hash = (hash ^ u64::from(b)).wrapping_mul(0x100_0000_01b3);
+        }
+        std::path::Path::new(dir).join(format!("reference-{hash:016x}.bin"))
+    });
+    let cached = cache
+        .as_ref()
+        .and_then(|path| read_reference(path, &header));
+    let from_cache = cached.is_some();
+    let mut reference = cached.unwrap_or_else(|| {
+        let reference = if n <= args.full_max {
+            Reference::every(k, &problem, 0, args.threads)
+        } else {
+            let targets = box_sample(&problem.points, &problem.sample, &grid, args.per_box, SEED);
+            Reference::at(k, &problem, 0, targets, args.threads)
+        };
+        if let Some(path) = &cache {
+            write_reference(path, &header, &reference);
+        }
+        reference
+    });
+    let mut errors = Errors::of(&first.run.output, 0, &reference);
+    let mut boxes = errors.boxes(&reference, &problem.points, &grid);
+    let sampled = reference.targets.len();
+    // Every point of the worst boxes of the sampled measure (Helmholtz CH4.4b), so that their
+    // maxima are exact.
+    let mut refined = 0;
+    if args.refine > 0 && sampled < n {
+        let keys: std::collections::HashSet<u64> = [0, 1]
+            .iter()
+            .flat_map(|&f| worst_boxes(&boxes, f, args.refine))
+            .map(|b| b.key)
+            .collect();
+        let more: Vec<usize> = (0..n)
+            .filter(|&i| keys.contains(&grid.box_of(problem.points[i])))
+            .collect();
+        reference = reference.extend(k, &problem, 0, &more, args.threads);
+        refined = keys.len();
+        errors = Errors::of(&first.run.output, 0, &reference);
+        boxes = errors.boxes(&reference, &problem.points, &grid);
+    }
     println!(
-        "Reference: the direct sum at {} of {n} targets ({}), {:.1} s.",
+        "Reference: the direct sum at {} of {n} targets ({}{}), {:.1} s{}.",
         reference.targets.len(),
-        if reference.targets.len() == n {
+        if sampled == n {
             "every point".to_owned()
         } else {
             format!(
@@ -601,30 +919,62 @@ fn main() {
                 args.per_box, grid.level
             )
         },
-        start.elapsed().as_secs_f64()
+        if refined > 0 {
+            format!(
+                ", and every point of the {refined} worst boxes of φ and ∇φ by that sample, {} \
+                 targets more",
+                reference.targets.len() - sampled
+            )
+        } else {
+            String::new()
+        },
+        start.elapsed().as_secs_f64(),
+        if from_cache {
+            " (the sample read from the cache)"
+        } else {
+            ""
+        }
     );
-    let errors = Errors::of(&first.run.output, 0, &reference);
     let base = Measured {
-        boxes: errors.boxes(&reference, &problem.points, &grid),
+        boxes,
         errors,
         ..first
+    };
+    let row = base.run.row.clone();
+    let p_run = row.degrees.clone();
+    let measure_case = |label: String, case: &Case| {
+        measure(
+            label,
+            eps,
+            case,
+            &problem,
+            &oracle,
+            &reference,
+            Some(&grid),
+            args.threads,
+            &world,
+        )
+    };
+    let with_overrides = |overrides: Vec<M2lOverride>| Case {
+        m2l_overrides: overrides,
+        ..case.clone()
     };
 
     let mut runs = Vec::new();
     for &other_eps in &args.eps {
-        for &other_m2l in &args.default_m2l {
-            if (other_eps, other_m2l) == (eps, default_m2l) {
+        for &other in &args.m2l {
+            if (other_eps, other) == (eps, setting) {
                 continue;
             }
-            let other = Case {
-                degrees: Degrees::Tolerance(other_eps),
-                m2l: m2l_of(other_m2l),
-                ..case.clone()
+            let other_case = Case {
+                domain: case.domain,
+                max_points_per_leaf: case.max_points_per_leaf,
+                ..case_of(other, Degrees::Tolerance(other_eps))
             };
             runs.push(measure(
-                format!("ε = {other_eps:e}, {}", m2l_name(other_m2l)),
+                format!("ε = {other_eps:e}, {}", other.name()),
                 other_eps,
-                &other,
+                &other_case,
                 &problem,
                 &oracle,
                 &reference,
@@ -635,58 +985,132 @@ fn main() {
         }
     }
     let mut raised: Option<Vec<Option<Errors>>> = None;
+    let mut raised_to = vec![0usize; p_run.len()];
     if args.levels {
         let wavenumber = Wavenumber::new(args.kd, args.kim).expect("a valid wavenumber");
         let rule = args.degree_rule.unwrap_or(DegreeRule::CALIBRATED);
         let tight = Degrees::Tolerance(eps * args.raise_factor)
-            .resolve_with(&rule, &wavenumber, &base.run.domain, base.run.row.levels)
+            .resolve_with(&rule, &wavenumber, &base.run.domain, row.levels)
             .expect("a valid tolerance");
-        let degrees = base.run.row.degrees.clone();
-        let mut parts = vec![None; degrees.len()];
-        for l in 2..degrees.len() {
-            if base.run.row.v_pairs[l] == 0 {
-                continue;
+        let to = |l: usize| tight[l].max(p_run[l] + 1);
+        // Under the library's defaults one level raised and on RCR by an override, the
+        // tolerance and every other level's choice kept (Helmholtz CH4.4b); else CH4.0b's named
+        // degrees (which change the waves' precision and take the form off).
+        let raise_case = |levels: &[usize]| {
+            if setting == Setting::Defaults {
+                with_overrides(
+                    levels
+                        .iter()
+                        .map(|&l| M2lOverride {
+                            level: l,
+                            degree: Some(to(l)),
+                            m2l: OverrideM2l::Rcr,
+                        })
+                        .collect(),
+                )
+            } else {
+                let mut named = p_run.clone();
+                for &l in levels {
+                    named[l] = to(l);
+                }
+                Case {
+                    degrees: Degrees::PerLevel(named),
+                    ..case.clone()
+                }
             }
-            let mut named = degrees.clone();
-            named[l] = tight[l].max(degrees[l] + 1);
-            let raised_case = Case {
-                degrees: Degrees::PerLevel(named),
-                ..case.clone()
-            };
-            let m = measure(
-                format!("level {l} at {}", tight[l].max(degrees[l] + 1)),
-                eps,
-                &raised_case,
-                &problem,
-                &oracle,
-                &reference,
-                Some(&grid),
-                args.threads,
-                &world,
-            );
+        };
+        let mut parts = vec![None; p_run.len()];
+        let levels: Vec<usize> = (2..p_run.len()).filter(|&l| row.v_pairs[l] > 0).collect();
+        for &l in &levels {
+            raised_to[l] = to(l);
+            let m = measure_case(format!("level {l} at {}", to(l)), &raise_case(&[l]));
             parts[l] = Some(m.errors.clone());
             runs.push(m);
         }
-        let mut all = degrees.clone();
-        for l in 2..all.len() {
-            all[l] = tight[l].max(degrees[l] + 1);
-        }
-        let all_case = Case {
-            degrees: Degrees::PerLevel(all),
-            ..case.clone()
-        };
-        runs.push(measure(
+        runs.push(measure_case(
             "every level raised".into(),
-            eps,
-            &all_case,
-            &problem,
-            &oracle,
-            &reference,
-            Some(&grid),
-            args.threads,
-            &world,
+            &raise_case(&levels),
         ));
         raised = Some(parts);
+    }
+
+    // The M2L study (Helmholtz CH4.4b): each level whose M2L is not RCR on RCR at its degree
+    // as run; on the form's levels the classes by decade below the threshold on RCR.
+    let mut m2l_runs: Vec<Measured> = Vec::new();
+    if args.m2l_study {
+        for l in 2..p_run.len() {
+            let ran = level_m2l(&row, l);
+            if ran == "–" || ran == "RCR" {
+                continue;
+            }
+            m2l_runs.push(measure_case(
+                format!("level {l} RCR (was {ran})"),
+                &with_overrides(vec![M2lOverride {
+                    level: l,
+                    degree: None,
+                    m2l: OverrideM2l::Rcr,
+                }]),
+            ));
+            let Some((decades, _, _)) = class_decades(&row, k, eps, l) else {
+                continue;
+            };
+            for (d, classes) in decades.iter().enumerate().take(2) {
+                if classes.is_empty() {
+                    continue;
+                }
+                m2l_runs.push(measure_case(
+                    format!("level {l} decade {d} {classes:?} RCR"),
+                    &with_overrides(vec![M2lOverride {
+                        level: l,
+                        degree: None,
+                        m2l: OverrideM2l::RcrClasses(classes.clone()),
+                    }]),
+                ));
+            }
+            if args.class_runs {
+                for &c in &decades[0] {
+                    m2l_runs.push(measure_case(
+                        format!("level {l} class {c} RCR"),
+                        &with_overrides(vec![M2lOverride {
+                            level: l,
+                            degree: None,
+                            m2l: OverrideM2l::RcrClasses(vec![c]),
+                        }]),
+                    ));
+                }
+            }
+        }
+    }
+
+    // The degree raised by d under the setting's M2L (Helmholtz CH4.4b: a remedy's FMM
+    // evidence), on the levels named or the one with the largest part at the worst ∇φ box.
+    if !args.raise_by.is_empty() {
+        let levels = args.raise_levels.clone().unwrap_or_else(|| {
+            let Some(raised) = &raised else {
+                eprintln!("helmholtz_boxes: --raise-by needs --raise-levels or --study levels");
+                std::process::exit(2);
+            };
+            let worst = worst_boxes(&base.boxes, 1, 1);
+            let j = worst.first().map_or(0, |b| b.worst[1]);
+            let parts = level_parts_at(&base.errors, raised, j);
+            let level = (0..parts.len())
+                .max_by(|&a, &b| parts[a][1].total_cmp(&parts[b][1]))
+                .unwrap_or(2);
+            vec![level]
+        });
+        for l in levels.into_iter().filter(|&l| l < p_run.len()) {
+            for &d in &args.raise_by {
+                let degree = p_run[l] + d;
+                runs.push(measure_case(
+                    format!("level {l} at {degree} (+{d}), the setting's M2L"),
+                    &with_overrides(vec![M2lOverride {
+                        level: l,
+                        degree: Some(degree),
+                        m2l: OverrideM2l::Setting,
+                    }]),
+                ));
+            }
+        }
     }
 
     println!();
@@ -703,44 +1127,113 @@ fn main() {
     );
     println!("| --- | --- | ---: | --- | --- | --- | --- | --- | --- |");
     run_row(&base, &reference);
-    for m in &runs {
+    for m in runs.iter().chain(&m2l_runs) {
         run_row(m, &reference);
+    }
+
+    // The levels as run (Helmholtz CH4.4b).
+    println!();
+    println!(
+        "Levels as run: k a (Re k √3 r_l), the degree, the V pairs, the M2L; on the form's levels \
+         the classes that pass the bound by decade of E/(θ ε) below the threshold ((0.1, 1], \
+         (0.01, 0.1], below), those that fail (on RCR), and the largest E/(θ ε) that passes."
+    );
+    println!();
+    println!(
+        "| level | k a | p | V pairs | M2L | classes (0.1, 1] | (0.01, 0.1] | below | failing | largest E/(θ ε) |"
+    );
+    println!("| ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: |");
+    for l in 2..p_run.len() {
+        let (decades, failing, largest) = class_decades(&row, k, eps, l).map_or(
+            (String::new(), String::new(), String::new()),
+            |(d, f, w)| {
+                (
+                    format!("{:?} | {} | {}", d[0], d[1].len(), d[2].len()),
+                    f.to_string(),
+                    format!("{w:.3}"),
+                )
+            },
+        );
+        println!(
+            "| {l} | {:.2} | {} | {} | {} | {} | {failing} | {largest} |",
+            k.re * row.circumradii[l],
+            p_run[l],
+            row.v_pairs[l],
+            level_m2l(&row, l),
+            if decades.is_empty() {
+                " |  | ".to_owned()
+            } else {
+                decades
+            },
+        );
     }
 
     if let Some(raised) = &raised {
         let shares = level_shares(&base.errors, raised);
         println!();
         println!(
-            "Each level's part of the error (the rule's run minus the run with that level \
-             raised): its share of Σ|e|² over the reference's targets, and the rest."
+            "Each level's part of the error (the run minus the run with that level raised{}): its \
+             share of Σ|e|² over the reference's targets, and the rest.",
+            if setting == Setting::Defaults {
+                " and on RCR, every other level as the defaults choose"
+            } else {
+                ""
+            }
         );
         println!();
-        println!("| level | p | raised to | V pairs | share φ | share ∇φ |");
-        println!("| ---: | ---: | ---: | ---: | ---: | ---: |");
-        let row = &base.run.row;
+        println!("| level | p | M2L | raised to | V pairs | share φ | share ∇φ |");
+        println!("| ---: | ---: | --- | ---: | ---: | ---: | ---: |");
         for (l, share) in shares.iter().enumerate().take(raised.len()) {
             if raised[l].is_none() {
                 continue;
             }
-            let label = runs
-                .iter()
-                .find(|m| m.label.starts_with(&format!("level {l} ")))
-                .map_or(String::new(), |m| {
-                    m.label.rsplit(' ').next().unwrap_or("").into()
-                });
             println!(
-                "| {l} | {} | {label} | {} | {:.3} | {:.3} |",
-                row.degrees[l], row.v_pairs[l], share[0], share[1]
+                "| {l} | {} | {} | {} | {} | {:.3} | {:.3} |",
+                p_run[l],
+                level_m2l(&row, l),
+                raised_to[l],
+                row.v_pairs[l],
+                share[0],
+                share[1]
             );
         }
         let rest = shares.last().expect("the rest");
-        println!("| rest | | | | {:.3} | {:.3} |", rest[0], rest[1]);
+        println!("| rest | | | | | {:.3} | {:.3} |", rest[0], rest[1]);
     }
 
+    if !m2l_runs.is_empty() {
+        let parts: Vec<Option<Errors>> = m2l_runs.iter().map(|m| Some(m.errors.clone())).collect();
+        let shares = level_shares(&base.errors, &parts);
+        let worst = worst_boxes(&base.boxes, 1, 1);
+        let j = worst.first().map_or(0, |b| b.worst[1]);
+        let at = level_parts_at(&base.errors, &parts, j);
+        println!();
+        println!(
+            "The M2L's parts: each run's difference from the first run, its share of Σ|e|² over \
+             the reference's targets; the run's worst box and ℓ2 error over the first run's; the \
+             difference at the worst ∇φ box's worst target over the error there (φ, ∇φ)."
+        );
+        println!();
+        println!(
+            "| run | share φ | share ∇φ | worst box φ, ∇φ ÷ first | ℓ2 φ, ∇φ ÷ first | at the worst ∇φ target |"
+        );
+        println!("| --- | ---: | ---: | --- | --- | --- |");
+        for (i, m) in m2l_runs.iter().enumerate() {
+            let (w, l) = ratios_to(m, &base, &reference);
+            println!(
+                "| {} | {:.4} | {:.4} | {:.3}, {:.3} | {:.3}, {:.3} | {:.3}, {:.3} |",
+                m.label, shares[i][0], shares[i][1], w[0], w[1], l[0], l[1], at[i][0], at[i][1]
+            );
+        }
+    }
+
+    let m2l_parts: Vec<Option<Errors>> = m2l_runs.iter().map(|m| Some(m.errors.clone())).collect();
+    let m2l_labels: Vec<&str> = m2l_runs.iter().map(|m| m.label.as_str()).collect();
     for field in [1, 0] {
         worst_table(
             &base,
             raised.as_deref(),
+            (!m2l_parts.is_empty()).then_some((&m2l_parts[..], &m2l_labels[..])),
             &reference,
             &problem,
             &grid,
