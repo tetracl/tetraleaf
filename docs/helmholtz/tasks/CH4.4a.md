@@ -101,11 +101,11 @@ convention, dependency or manifest change):
 - The acceptance is the runs, each against the sampled f64 direct sum (and the crosscheck against
   FMM3D at 10⁻¹², whose own error at the samples is printed).
 - `check_defaults` (the MPI-owning test, one rank in CI, 2 and 4 ranks by hand; W1 at kD = 30,
-  10⁻⁶): the harness under `Case::defaults` against an FMM built with `HelmholtzFmmBuilder::new`
+  10⁻⁷, where the time rule weighs the form): the harness under `Case::defaults` against an FMM built with `HelmholtzFmmBuilder::new`
   and nothing set but charges, gradients and threads: the checksum bit for bit (the trusted path
   for "the library's defaults"); `Row::memory` present on Linux with peak ≥ before, absent on macOS.
 - Unit tests: the `maxrss:` line parsed (and a log without one); the densities' problem files
-  differ in the charges only.
+  differ in the charges only (`densities_change_the_charges_only`).
 - The FMM3D side of `compare` is CH3.6's, covered by `check_fmm3d_measures`.
 
 ## Checks
@@ -122,8 +122,10 @@ Kathleen, `singlenode` jobs (1 × 40, ≤ 6 h each), release, BLAS threads 1, ea
 - `smoke`: W1 at kD = 10 and W2 at kD = 10 with the constant density (the script, the memory lines);
 - `low`: W1 and W2 at kD = 10, 30, 100, 250; W3 at kD = 10, 30;
 - `const`: the constant density's cases;
-- `mid`: W1 and W2 at kD = 500, W1 at kD = 500 with the plane wave's trace;
-- `w1-1000`, `w1-1000-pw`: W1 at kD = 1000, random charges and the plane wave's trace;
+- `mid` (or `w1-500`, `w2-500` alone): W1 and W2 at kD = 500; `pw500`: W1 at kD = 500 with the
+  plane wave's trace;
+- `w1-1000`, `pw1000`: W1 at kD = 1000, random charges and the plane wave's trace (`fastker`
+  first, the reference, since `default` does not fit the node there);
 - `w3`: W3 resolved at kD = 100, W3 at N = 10⁶ for kD = 200, 500.
 Decides the acceptance. Raw outputs to `~/projects/fmm-archive/kathleen/runs/ch4-4a/`.
 
@@ -138,7 +140,31 @@ Decides the acceptance. Raw outputs to `~/projects/fmm-archive/kathleen/runs/ch4
   A worst box above 100 ε is a finding, reported as such, not a test change.
 
 ## Pending runs
-(filled in step 6)
+None. Kathleen, all finished (`tetraleaf-validate/results/helmholtz-ch4-4a.md` §1 names each job's
+node): 663705 (smoke), 663706 (`low const`), 663732 (`w2-500`), 663733 (`w1-1000`), 663734
+(`pw1000`), 663736 (`w1-500 pw500 w3`, the slow nodes excluded), 663737 (memory by ε order), 663735
+(the slow nodes' check). Superseded: 663707, 663710 (node-c11b-004) and 663708 (node-c11b-013), about
+3× slow (report §6); 663708 and 663709 lost FMM3D `default` at kD = 1000 to the node's memory and
+stopped `compare` (fixed: a failed FMM3D run is reported, the reference is `fastker` at kD = 1000).
+
+## Results
+`tetraleaf-validate/results/helmholtz-ch4-4a.md`. Ours within ε on all 78 case × ε points (at most
+0.76 ε); worst box at most 100 ε on all but W1 at kD = 1000 with the plane wave's trace at 10⁻⁸
+(114.7 ε in ∇φ, the box at a tangent point of the sphere and its cube; a finding, question 2); time
+0.09–0.95× FMM3D's faster variant at N ≥ 10⁵ (geometric mean 0.21), 0.08–0.17× on W1 at kD = 500
+and 1000; memory 21–29 GB at kD = 1000, where FMM3D `default` exceeds the node's 180 GB; the build
+16–19 s at kD = 1000, the RCR tables most of it.
+
+Local checks (the PR lists them): fmt; Clippy default, examples, workspace all-targets; rustdoc
+`-D warnings`; the default and workspace tests at opt-level 1 (1,386 and 1,430 passed, on the
+final code); `helmholtz_accuracy` at 2 and 4 ranks by hand; its
+one-rank debug run at opt-level 0 437.8 s at load 19–24 on the M6 (the crate notes 246 s at load
+2–3; not comparable).
 
 ## Open questions
-(filled when they arise)
+1. The acceptance as read, with FMM3D `fastker` the crosscheck's reference at kD = 1000 (the plan
+   named `default`, with 10⁻¹⁰ as the fallback; `default` does not fit the node there at any eps but
+   10⁻⁸). Report §8, question 1.
+2. The worst box above 100 ε (report §3, §8 question 2).
+3. FMM3D `default` at kD = 1000 for CH4.5 (§8 question 3).
+4. Our memory one ε per launch for CH4.5 (§8 question 4).
