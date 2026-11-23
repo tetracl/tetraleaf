@@ -306,6 +306,9 @@ Recommended: the first (question 2).
 
 ## 6. Questions for sign-off
 
+Signed off 2026-11-23 by the user on #256, "Q1-3 as recommended": all three as recommended below
+(proposal §9.1 amended).
+
 1. **The acceptance as read** (plan, "Acceptance"): CH4.4a's cases with a level of the form or RCR
    at k a ≥ 2.8; the levels' parts under the defaults by `M2lOverride` (a level raised and on RCR);
    the M2L's parts by each non-RCR level on RCR, and the form's classes by decade below the bound's

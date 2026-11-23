@@ -193,7 +193,9 @@ truncation, spread over three to six levels at the tangent points; the form, its
 threshold and Batched on RCR change nothing (220 runs, 1.000), the waves are at most 1.023× RCR
 (30 runs); the 114.7 ε box (114.80 here) is levels 2–5 at a tangent point, no single level or class;
 every level +1 gives 48.4 ε (+4 % evaluation), one level +2 89.4 ε; within D1 every worst box ≤ 68.2 ε.
-Questions 1–3 for sign-off (the report's §6).
+Questions 1–3 signed off 2026-11-23 by the user on #256, "Q1-3 as recommended" (the report's §6):
+the acceptance as read; §9.1's bound gated within D1 and reported beyond (proposal §9.1 amended,
+Appendix A); `M2lOverride` public.
 
 ## Open questions
 (filled when they arise)

@@ -4552,8 +4552,9 @@ request, using this template:
   one rank at opt-level 1 45.3 s (44.1 s before the self-review's check), at opt-level 0 1,009 s at
   load 11–19 on the M6 before it (CH4.3e 1,315 s at load 24–27; not comparable); CI green on #256. Not run: `cargo deny` (no
   manifest change), Laplace's benchmarks (no Laplace path), 8 ranks (no distributed code).
-- Decisions: the report's questions 1–3 for sign-off: the acceptance as read (the M2L criterion
-  one-sided); the 114.7 ε box: §9.1's bound for D1's range, beyond it reported (recommended), or a
-  recalibration (every level +1), or a raised bound; `M2lOverride` public.
+- Decisions: the report's questions 1–3, signed off 2026-11-23 by the user on #256: "Q1-3 as
+  recommended": the acceptance as read (the M2L criterion one-sided); §9.1's 100 ε bound gated
+  within D1's range (kD ≤ 500) and reported beyond it (proposal §9.1 amended, Appendix A);
+  `M2lOverride` kept public.
 - Laplace: not touched (the Helmholtz operator and builder, the harness, scripts, docs).
-- Follow-ups: depend on question 2 (a recalibration task under its alternative (b)).
+- Follow-ups: none (question 2's recalibration alternative not taken).

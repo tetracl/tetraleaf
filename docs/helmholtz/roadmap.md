@@ -10,9 +10,9 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 Status (2026-11-23): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
 item 10 CH4.1–CH4.3 (CH4.3d2 closed unrun) and CH4.4a. CH4.4b (the crosscheck mapped to levels and
-classes) is done in its PR: no error concentrated at a class boundary; CH4.4a's 114.7 ε box is the
-tangent-point placement on levels 2–5 beyond D1's kD ≤ 500, its remedy waiting for the sign-off of
-the report's questions; then CH4.5 closes H4's tasks; the FFT track stays item 11. The project was
+classes) is done: no error concentrated at a class boundary; CH4.4a's 114.7 ε box is the
+tangent-point placement on levels 2–5 beyond D1's kD ≤ 500, where §9.1's bound now reports it
+instead of gating it (signed off on #256); CH4.5 is next and closes H4's tasks; the FFT track stays item 11. The project was
 renamed tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and
 of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
 (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
@@ -879,7 +879,9 @@ task's full line is in its record or report and its progress entry
   over three to six levels; the form, its classes beside the bound's threshold and Batched on RCR
   change no worst box (220 runs, 1.000), the waves at most 1.023× RCR: no error concentrated at a
   class boundary. The 114.7 ε box is levels 2–5 at a tangent point (every level +1: 48.4 ε, +4 %
-  evaluation); within D1 every worst box ≤ 68.2 ε. *Sign-off:* the report's questions 1–3, pending.
+  evaluation); within D1 every worst box ≤ 68.2 ε. *Sign-off:* the report's questions 1–3, signed off
+  2026-11-23 by the user on #256: "Q1-3 as recommended": the acceptance as read (one-sided); §9.1's
+  100 ε bound gated within D1 (kD ≤ 500), reported beyond (proposal §9.1 amended); `M2lOverride` public.
 - [ ] **CH4.5 Host performance against FMM3D at matched accuracy.** As C6.8, setup apart,
   one node, on CH4.4's sweep. Also (review 2026-11-19, A6, B6, B8): ours at 1 × N (one rank,
   N threads, as a threaded caller runs it) beside the best split; FMM3D's OpenMP binding

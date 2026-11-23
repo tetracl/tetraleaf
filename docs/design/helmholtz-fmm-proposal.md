@@ -1488,10 +1488,17 @@ refers to the relative ℓ2 norm.
 The box measure, as CH3.6 built it (amended at H3.G): per box of the deepest level, the
 largest error at one of its targets over the reference's RMS over all targets, reported
 beside the all-target ℓ2 error. A gate checks it against a bound: the worst box at most
-100 ε (amended at CH4.0b). ε stays the relative ℓ2 tolerance, on which the degree rule is
-calibrated; pointwise the errors reach 10–60 ε near box corners, where the truncation is
-largest (tetraleaf-validate/results/helmholtz-ch4-0b.md), and a worst box above 100 ε is a finding
-as an ℓ2 miss is. CH4.4's "no error concentrated at a class boundary" is read with it.
+100 ε (amended at CH4.0b) within D1's range, kD ≤ 500; beyond it (W1 at kD = 1000 in H4's
+sweep) the worst box is reported, not gated (amended at CH4.4b: at a tangent point of W1 every
+level's truncation peaks at once, and the tree has a level more each time kD doubles; 114.7 ε
+with the plane wave's trace at kD = 1000 and 10⁻⁸, at most 68.2 ε within D1;
+tetraleaf-validate/results/helmholtz-ch4-4b.md §5). ε stays the relative ℓ2 tolerance, on which
+the degree rule is calibrated; pointwise the errors reach 10–60 ε near box corners, where the
+truncation is largest (tetraleaf-validate/results/helmholtz-ch4-0b.md), and a worst box above
+100 ε within D1 is a finding as an ℓ2 miss is. CH4.4's "no error concentrated at a class
+boundary" is read with it: on each level the default's worst box and ℓ2 at most 1.1× those of
+the level run by RCR at its degree, the form's classes beside the bound's threshold included
+(amended at CH4.4b; one-sided, since the waves may err less than RCR at their degree).
 
 ### 9.2 FMM3D as an independent reference
 
@@ -2014,6 +2021,12 @@ these.
   the regime, under-resolved inputs with leaves up to c_leaf λ, and the builder's c_leaf 4;
   Section 5.1, the leaves' arguments; Section 5.7, the phase range (176 radians at c_leaf 4,
   the sine and cosine tested to 2¹⁰); D11 amended.
+- **Amended at CH4.4b, 2026-11-23** (`tetraleaf-validate/results/helmholtz-ch4-4b.md` §4–§6; PR
+  #256, its questions 1–3, signed off by the user, "Q1-3 as recommended"): Section 9.1, the worst
+  box's 100 ε bound gated within D1's range (kD ≤ 500) and reported beyond it, the cause of the
+  one worst box above it (W1 at kD = 1000, the plane wave's trace, 10⁻⁸: 114.7 ε, the tangent-point
+  placement on levels 2–5 at once), and "no error concentrated at a class boundary" read
+  one-sided (the default at most 1.1× RCR on each level).
 
 ## Appendix B. The stability check behind Section 3.6
 
