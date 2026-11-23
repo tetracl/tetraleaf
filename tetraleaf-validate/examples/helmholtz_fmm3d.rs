@@ -62,6 +62,14 @@
 //! example killed for memory) prints a row "failed (no output)" with its peak memory where
 //! the log has it; the reference's output is still required.
 //!
+//! Helmholtz CH4.5 added to `compare` `--evaluations n` (default 1, so that the earlier
+//! reports' runs repeat: n evaluations of each build, `Case::evaluations`, the row's time the
+//! last one's, the first's in the log beside the leaf size and c_leaf as built) and `--c-leaf c`
+//! (`Case::c_leaf`; the library's rule when absent); and to `errors` a failed run (no output
+//! file) as a row, FMM3D's setup timed apart by the driver (a column "tree s",
+//! `helmholtz_fmm3d::tree_seconds`, from the `tree_s=` field of the driver's line) and the
+//! launch's peak resident size (a column "memory GB", from the log's `maxrss:` line).
+//!
 //! Run in release mode, on any number of ranks for `compare` (each rank passes a
 //! contiguous block of the points, rank 0 prints), with one BLAS thread. One charge
 //! vector, gradients on. Timings are wall times on this machine: ours the build and the
@@ -82,7 +90,7 @@ use tetraleaf_validate::helmholtz_accuracy::{
 };
 use tetraleaf_validate::helmholtz_fmm3d::{
     Crosscheck, Grid, Values, crosscheck, crosscheck_values, maxrss, problem_bytes, read_full,
-    read_sampled, sample_errors, seconds,
+    read_sampled, sample_errors, seconds, tree_seconds,
 };
 use tetraleaf_validate::helmholtz_workloads::{SEED, Workload};
 
@@ -104,6 +112,8 @@ struct Arguments {
     threads: usize,
     oracle_threads: Option<usize>,
     p2p: P2pChoice,
+    evaluations: usize,
+    c_leaf: Option<f64>,
 }
 
 /// The workload of a name at kD (W1 and W3 resolved depend on it).
@@ -133,7 +143,8 @@ fn arguments() -> Arguments {
              [--kd x] [--kim y] [--charges real|complex] [--density random|planewave|constant] \
              [--settings harness|defaults] [--samples n] [--out FILE] \
              [--eps e,…] [--fmm3d label=PREFIX,…] [--reference e] [--problem FILE] \
-             [--threads t] [--oracle-threads t] [--p2p auto|reference|<isa>]; got {args:?}"
+             [--threads t] [--oracle-threads t] [--p2p auto|reference|<isa>] \
+             [--evaluations n] [--c-leaf c]; got {args:?}"
         );
         std::process::exit(2);
     };
@@ -157,6 +168,8 @@ fn arguments() -> Arguments {
         threads: 1,
         oracle_threads: None,
         p2p: P2pChoice::Auto,
+        evaluations: 1,
+        c_leaf: None,
     };
     while let [flag, value, tail @ ..] = rest {
         let ok = match flag.as_str() {
@@ -219,6 +232,18 @@ fn arguments() -> Arguments {
                 .ok()
                 .filter(|c| c.resolve().is_ok())
                 .map(|c| parsed.p2p = c)
+                .is_some(),
+            "--evaluations" => value
+                .parse()
+                .ok()
+                .filter(|&n| n > 0)
+                .map(|n| parsed.evaluations = n)
+                .is_some(),
+            "--c-leaf" => value
+                .parse::<f64>()
+                .ok()
+                .filter(|c| c.is_finite() && *c > 0.0)
+                .map(|c| parsed.c_leaf = Some(c))
                 .is_some(),
             _ => false,
         };
@@ -463,14 +488,14 @@ fn levels_log(row: &Row, re_k: f64, domain: &Domain) -> String {
 /// The step `errors`: FMM3D's runs at the samples against the case's oracle, one row per
 /// token and run, with each run's errors over the first run's at the token.
 fn errors(arguments: &Arguments, case: &Case, problem: &Problem, workload: Workload) {
-    let runs: Vec<Vec<Fmm3dRun>> = arguments
+    let runs: Vec<Vec<Result<Fmm3dRun, Option<u64>>>> = arguments
         .fmm3d
         .iter()
         .map(|(_, prefix)| {
             arguments
                 .eps
                 .iter()
-                .map(|e| read_run(prefix, e, problem))
+                .map(|e| read_run_or_failed(prefix, e, problem))
                 .collect()
         })
         .collect();
@@ -496,31 +521,62 @@ fn errors(arguments: &Arguments, case: &Case, problem: &Problem, workload: Workl
     println!();
     println!(
         "N = {}, {} sampled targets; the ratios are each run's errors over the first run's \
-         ({}) at the same eps",
+         ({}) at the same eps; \"tree s\" FMM3D's setup (its subdivision rule, tree and sort) \
+         timed once apart from the calls, which include it (Helmholtz CH4.5), \"memory GB\" \
+         the launch's peak resident size",
         problem.len(),
         problem.sample.len(),
         arguments.fmm3d[0].0
     );
     println!();
-    println!("| Workload | N | kD | eps | run | threads | s | φ | ∇φ | φ ÷ first | ∇φ ÷ first |");
-    println!("| --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |");
+    println!(
+        "| Workload | N | kD | eps | run | threads | s | φ | ∇φ | φ ÷ first | ∇φ ÷ first | tree s \
+         | memory GB |"
+    );
+    println!(
+        "| --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+    );
+    let dash = || "–".to_owned();
     for (j, token) in arguments.eps.iter().enumerate() {
-        let first = sample_errors(&runs[0][j].sampled, &oracle, 0);
-        for ((label, _), run) in arguments.fmm3d.iter().zip(&runs) {
-            let run = &run[j];
+        let first = runs[0][j]
+            .as_ref()
+            .ok()
+            .map(|run| sample_errors(&run.sampled, &oracle, 0));
+        for ((label, prefix), run) in arguments.fmm3d.iter().zip(&runs) {
+            let run = match &run[j] {
+                Ok(run) => run,
+                Err(memory) => {
+                    println!(
+                        "| {} | {} | {} | {token} | {label} | – | failed (no output) | – | – | – | – \
+                         | – | {} |",
+                        workload.name(),
+                        problem.len(),
+                        arguments.kd,
+                        memory.map_or_else(dash, gigabytes),
+                    );
+                    continue;
+                }
+            };
             let e = sample_errors(&run.sampled, &oracle, 0);
-            let (time, threads) = run.seconds.map_or(("–".into(), "–".into()), |(s, t)| {
+            let (time, threads) = run.seconds.map_or((dash(), dash()), |(s, t)| {
                 (format!("{s:.3}"), t.to_string())
             });
+            let tree = std::fs::read_to_string(format!("{}.log", prefix.display()))
+                .ok()
+                .and_then(|log| tree_seconds(&log, token))
+                .map_or_else(dash, |s| format!("{s:.3}"));
+            let over = |i: usize| first.map_or_else(dash, |f| format!("{:.3}", e[i] / f[i]));
             println!(
-                "| {} | {} | {} | {token} | {label} | {threads} | {time} | {:.3e} | {:.3e} | {:.3} | {:.3} |",
+                "| {} | {} | {} | {token} | {label} | {threads} | {time} | {:.3e} | {:.3e} | {} | {} \
+                 | {tree} | {} |",
                 workload.name(),
                 problem.len(),
                 arguments.kd,
                 e[0],
                 e[1],
-                e[0] / first[0],
-                e[1] / first[1],
+                over(0),
+                over(1),
+                run.memory.map_or_else(dash, gigabytes),
             );
         }
     }
@@ -542,6 +598,8 @@ fn main() {
     case.density = arguments.density;
     case.samples = arguments.samples;
     case.p2p = arguments.p2p;
+    case.evaluations = arguments.evaluations;
+    case.c_leaf = arguments.c_leaf.or(case.c_leaf);
     let problem = Problem::new(&case);
     let bytes = problem_bytes(&problem, 0, SEED);
     if arguments.step == "problem" {
@@ -778,6 +836,15 @@ fn main() {
             row.min_leaf_level,
             row.leaves,
             grid.level
+        );
+        eprintln!(
+            "{} kD = {kd} ε = {token}: leaf size {}, c_leaf {}; {} evaluations, the first {:.3} s, the \
+             row's the last",
+            workload.name(),
+            row.max_points_per_leaf,
+            row.c_leaf,
+            case.evaluations,
+            row.first_evaluate,
         );
         eprintln!(
             "{} kD = {kd} ε = {token}: by level, {}",
