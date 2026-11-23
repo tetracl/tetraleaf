@@ -730,6 +730,24 @@ tables. Its report is `results/helmholtz-ch4-4a.md`. The one-rank debug run of
 `tests/helmholtz_accuracy.rs` took 437.8 s on the M6 at load 19–24 (16 s at opt-level 1), not
 comparable with CH4.0e's 246 s at load 2–3.
 
+Helmholtz CH4.4b (the crosscheck mapped to levels and classes; docs/helmholtz/tasks/CH4.4b.md)
+added `helmholtz_accuracy::Case::m2l_overrides` (`HelmholtzFmmBuilder::m2l_overrides`, empty in
+`Case::new` and `Case::defaults`), `helmholtz_boxes::{Reference::extend, class_ratios,
+threshold_decade}` (unit-tested: `extend` bit for bit `Reference::at` of the union, the ratios'
+passing classes `diagonal_rule_classes`'), and to the `helmholtz_boxes` example `--m2l defaults`
+(`Case::defaults`), `--study levels` under it by overrides (one level raised and on RCR, every
+other level the defaults'; CH4.0b's named degrees under `rotation` and `default`), `--study m2l`
+(each level whose M2L is not RCR on RCR at its degree as run, the form's classes by decade of
+E/(θ ε) on RCR, `--class-runs` each class of the first decade), `--refine n` (every point of the
+n worst boxes in the reference), `--refine-faces` (every point of the boxes at the centres of the
+domain's faces, W1's tangent points), `--refine-cells i,j,k;…` (of named boxes), `--all-levels`
+(the level study raises the levels without V pairs too), `--raise-by d,…`, `--raise-levels l,…|v`
+and `--raise-together` (levels' degrees raised under the defaults' M2L, one at a time or at once),
+`--reference-cache dir` (the sampled reference shared by a case's ε),
+and the tables "Levels as run", "The M2L's parts" and an M2L-parts column of the worst boxes.
+`tools/helmholtz/ch4-4b-runs.sh` runs the task's stages, `ch4-4b-tables.py` makes the report's
+tables. Its report is `results/helmholtz-ch4-4b.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

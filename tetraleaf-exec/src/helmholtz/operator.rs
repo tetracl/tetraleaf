@@ -426,6 +426,85 @@ pub use rcr::{
 };
 pub use tetraleaf_tables::helmholtz::diagonal::TransferBuild;
 
+/// One level's degree or M2L in place of the setting's, a measurement setting (Helmholtz
+/// CH4.4b: the box errors mapped to levels and classes; `HelmholtzFmmBuilder::m2l_overrides`,
+/// [`HelmholtzOperator::with_m2l_overrides`]). The other levels run as the setting gives them.
+/// Not a rule: no default sets one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct M2lOverride {
+    /// The level, at least 2; a level beyond the tree is ignored.
+    pub level: usize,
+    /// The level's degree in place of the one given (the rule's at the tolerance): the
+    /// settings' rules then read it, as they read the degree given (the waves' resolving
+    /// degree, the time rule, the form's classes); `None` keeps the degree given.
+    pub degree: Option<usize>,
+    /// The level's M2L.
+    pub m2l: OverrideM2l,
+}
+
+/// The M2L of a level an [`M2lOverride`] names.
+#[derive(Clone, Debug, PartialEq)]
+pub enum OverrideM2l {
+    /// The setting's choice on the level, at the override's degree.
+    Setting,
+    /// RCR (Rotation's level call), and no waves, diagonal form, Batched, Dense or Classes
+    /// tables there, at the level's degree: the degree named, else the degree it would run at
+    /// (the waves' resolving degree p_w where the setting raises it). So the level's M2L is
+    /// exact to its truncation; its translations' degree is the setting's
+    /// ([`PlaneWaveRaise`]), or the degree named.
+    Rcr,
+    /// The setting's choice on the level, with these diagonal classes (indices into
+    /// `tetraleaf_ref::helmholtz::diagonal::classes()`) run by RCR where the setting gives the
+    /// level the diagonal form: the classes are chosen first (the bound, the time rule), then
+    /// these taken off; with none left the level runs RCR.
+    RcrClasses(Vec<usize>),
+}
+
+/// Why an [`M2lOverride`] is refused.
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum OverrideError {
+    /// The level is below 2 (levels 0 and 1 have no M2L).
+    #[error("an M2L override names level {0}; the M2L runs on levels 2 and below")]
+    Level(usize),
+    /// A class index is not one of the diagonal form's classes.
+    #[error("an M2L override names class {class} of {count}")]
+    Class {
+        /// The class named.
+        class: usize,
+        /// The number of classes.
+        count: usize,
+    },
+    /// Two overrides name the same level.
+    #[error("two M2L overrides name level {0}")]
+    Repeated(usize),
+}
+
+impl M2lOverride {
+    /// Checks a list of overrides: levels at least 2, each named once, and the classes
+    /// within `tetraleaf_ref::helmholtz::diagonal::classes()`.
+    ///
+    /// # Errors
+    ///
+    /// The first [`OverrideError`] of the list.
+    pub fn check(overrides: &[M2lOverride]) -> Result<(), OverrideError> {
+        let count = tetraleaf_tables::helmholtz::diagonal::CLASS_COUNT;
+        for (i, o) in overrides.iter().enumerate() {
+            if o.level < 2 {
+                return Err(OverrideError::Level(o.level));
+            }
+            if overrides[..i].iter().any(|p| p.level == o.level) {
+                return Err(OverrideError::Repeated(o.level));
+            }
+            if let OverrideM2l::RcrClasses(classes) = &o.m2l
+                && let Some(&class) = classes.iter().find(|&&c| c >= count)
+            {
+                return Err(OverrideError::Class { class, count });
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Why [`HelmholtzOperator::new`] refused its inputs.
 #[derive(Clone, Copy, Debug, Error, PartialEq)]
 pub enum OperatorError {
@@ -914,6 +993,9 @@ struct Kernel<T: SimdScalar> {
     diagonal: Vec<Option<DiagonalLevel<T>>>,
     /// The levels the time rule took from the waves (Helmholtz CH4.3b2a), per level.
     from_waves: Vec<bool>,
+    /// The levels' degrees or M2L in place of the setting's (Helmholtz CH4.4b), a
+    /// measurement setting; empty by default.
+    overrides: Vec<M2lOverride>,
     /// The batched M2L's column kernel, on the P2P kernel's ISA (scalar for the reference).
     matrix: MatrixKernel<T>,
     /// The P2P kernel of `tetraleaf-simd`, or `None` for the reference.
@@ -1079,6 +1161,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
             diagonal_settings: DiagonalSettings::default(),
             diagonal: Vec::new(),
             from_waves: Vec::new(),
+            overrides: Vec::new(),
             matrix: MatrixKernel::detect(MulAdd::Separate),
             p2p: Some(P2pKernel::detect()),
         };
@@ -1521,7 +1604,24 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         let timings = &mut self.table_timings;
         let choice = kernel.m2l;
         let dense_budget = kernel.dense_budget;
-        let base = kernel.base_degrees.clone();
+        // The degrees given, with an override's in their place (Helmholtz CH4.4b): every rule
+        // below reads them as it reads the degrees given.
+        let mut base = kernel.base_degrees.clone();
+        for o in &kernel.overrides {
+            if let (Some(p), Some(slot)) = (o.degree, base.get_mut(o.level)) {
+                *slot = p;
+            }
+        }
+        // The levels an override puts on RCR, and the diagonal classes it takes off a level.
+        let mut forced_rcr = vec![false; base.len()];
+        let mut classes_off: Vec<Option<Vec<usize>>> = vec![None; base.len()];
+        for o in kernel.overrides.iter().filter(|o| o.level < base.len()) {
+            match &o.m2l {
+                OverrideM2l::Setting => {}
+                OverrideM2l::Rcr => forced_rcr[o.level] = true,
+                OverrideM2l::RcrClasses(classes) => classes_off[o.level] = Some(classes.clone()),
+            }
+        }
         let k_root = kernel.tables.k_hat(0);
         let tolerance = kernel.plane_wave_tolerance;
         // The levels with waves, which the builder's V rule reads too (Helmholtz CHA.11). Under
@@ -1590,7 +1690,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         let by_rule = choice == HelmholtzM2l::Auto
             || (choice == HelmholtzM2l::PlaneWave
                 && kernel.plane_wave_precision == PlaneWavePrecision::Rule);
-        let degrees: Vec<usize> = match (tolerance, &precisions) {
+        let mut degrees: Vec<usize> = match (tolerance, &precisions) {
             (Some(epsilon), Some(precisions)) if by_rule => base
                 .iter()
                 .zip(precisions)
@@ -1605,6 +1705,21 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
                 .collect(),
             _ => base.clone(),
         };
+        // An override's RCR (Helmholtz CH4.4b): no waves there, at the degree named, else at
+        // the degree the level would run at.
+        for (l, _) in forced_rcr.iter().enumerate().filter(|&(_, &f)| f) {
+            if let Some(levels) = precisions.as_mut() {
+                levels[l] = None;
+            }
+            from_waves[l] = false;
+            if kernel
+                .overrides
+                .iter()
+                .any(|o| o.level == l && o.degree.is_some())
+            {
+                degrees[l] = base[l];
+            }
+        }
         let translation = match kernel.plane_wave_raise.resolved(tolerance) {
             PlaneWaveRaise::Rule | PlaneWaveRaise::Level => &degrees,
             PlaneWaveRaise::Leaves | PlaneWaveRaise::M2l => &base,
@@ -1628,12 +1743,19 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
             .filter(|m2l| (0..m2l.nlevels()).any(|l| m2l.level(l).is_some()));
         timings.plane_waves += clock.elapsed();
         let clock = Instant::now();
+        // An override's RCR takes a level's tables away (Helmholtz CH4.4b).
+        let unforced = |mut levels: Vec<bool>| {
+            for (chosen, &forced) in levels.iter_mut().zip(&forced_rcr) {
+                *chosen &= !forced;
+            }
+            levels
+        };
         kernel.dense = (choice == HelmholtzM2l::Dense).then(|| {
-            let levels = DenseM2l::<T>::select(&degrees, dense_budget);
+            let levels = unforced(DenseM2l::<T>::select(&degrees, dense_budget));
             DenseM2l::build_on(k_root, &degrees, &levels, &parts)
         });
         kernel.classes = (choice == HelmholtzM2l::Classes).then(|| {
-            let levels = ClassM2l::<T>::select(&degrees, dense_budget);
+            let levels = unforced(ClassM2l::<T>::select(&degrees, dense_budget));
             ClassM2l::build_on(k_root, &degrees, &levels, &parts)
         });
         let max_degree = match choice {
@@ -1661,12 +1783,18 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
                     let bytes = BatchedM2l::<T>::level_bytes(p);
                     if bytes <= left {
                         left -= bytes;
-                        chosen[l] = true;
+                        // An override's RCR (Helmholtz CH4.4b) keeps the budget spent, so that
+                        // every other level's choice stays the setting's.
+                        chosen[l] = !forced_rcr[l];
                     }
                 }
                 chosen
             } else {
-                BatchedM2l::<T>::select_within(&degrees, dense_budget, max_degree)
+                unforced(BatchedM2l::<T>::select_within(
+                    &degrees,
+                    dense_budget,
+                    max_degree,
+                ))
             };
             BatchedM2l::build_on(k_root, &degrees, &levels, &parts)
         });
@@ -1704,10 +1832,16 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         // The diagonal form on the RCR levels where the rule takes some class (Helmholtz
         // CH4.2b1), after the RCR tables, whose wavenumbers it reads.
         let clock = Instant::now();
+        // An override's RCR takes every class off its level (Helmholtz CH4.4b).
+        let all: Vec<usize> = (0..tetraleaf_tables::helmholtz::diagonal::CLASS_COUNT).collect();
+        for (l, _) in forced_rcr.iter().enumerate().filter(|&(_, &f)| f) {
+            classes_off[l] = Some(all.clone());
+        }
         kernel.diagonal = diagonal::select::<T>(
             &kernel.diagonal_settings,
             tolerance,
             &rcr,
+            &classes_off,
             &costs,
             &degrees,
             |l| kernel.tables.k_hat(l),
@@ -1852,6 +1986,30 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
     /// The diagonal M2L's setting ([`with_diagonal`](Self::with_diagonal)).
     pub fn diagonal(&self) -> HelmholtzDiagonal {
         self.kernel.diagonal_settings.choice
+    }
+
+    /// Runs the levels the overrides name at their degree or M2L in place of the setting's
+    /// (Helmholtz CH4.4b; [`M2lOverride`], a measurement setting; default none), before or
+    /// after the other settings: the tables are chosen again. An override of a level beyond
+    /// the tree is ignored.
+    ///
+    /// # Panics
+    ///
+    /// If [`M2lOverride::check`] refuses the list.
+    pub fn with_m2l_overrides(mut self, overrides: Vec<M2lOverride>) -> Self {
+        if let Err(error) = M2lOverride::check(&overrides) {
+            panic!("{error}");
+        }
+        if self.kernel.overrides != overrides {
+            self.kernel.overrides = overrides;
+            self.select_tables();
+        }
+        self
+    }
+
+    /// The overrides ([`with_m2l_overrides`](Self::with_m2l_overrides)).
+    pub fn m2l_overrides(&self) -> &[M2lOverride] {
+        &self.kernel.overrides
     }
 
     /// Builds the diagonal form's transfer functions by `build` (Helmholtz CH4.2c2; default

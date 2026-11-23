@@ -602,13 +602,16 @@ impl<T: SimdScalar> DiagonalLevel<T> {
 /// and under [`HelmholtzDiagonal::Auto`] where [`diagonal_beats_rcr`] by `costs` and the
 /// level's shape (on a level whose exponential M2L [`wave_level_choice`] gave up as on the
 /// others, at its resolving degree in `degrees`, so that it runs the cheaper of the form and
-/// RCR there); `None` elsewhere. The transfer
-/// functions are built by the setting's build on `parts`, one part per (class, ring).
+/// RCR there); `None` elsewhere. The classes of `classes_off[l]` are then taken off level l
+/// (an [`M2lOverride`](super::M2lOverride), Helmholtz CH4.4b), the level `None` with none left.
+/// The transfer functions are built by the setting's build on `parts`, one part per (class,
+/// ring).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn select<T: SimdScalar>(
     settings: &DiagonalSettings,
     fmm_tolerance: Option<f64>,
     rcr: &[bool],
+    classes_off: &[Option<Vec<usize>>],
     costs: &DiagonalCosts,
     degrees: &[usize],
     k_hat: impl Fn(usize) -> Complex<f64>,
@@ -641,6 +644,13 @@ pub(super) fn select<T: SimdScalar>(
                 if !diagonal_beats_rcr(costs, p, &shape, &classes) {
                     return None;
                 }
+            }
+            let classes: Vec<usize> = match classes_off.get(l) {
+                Some(Some(off)) => classes.into_iter().filter(|c| !off.contains(c)).collect(),
+                _ => classes,
+            };
+            if classes.is_empty() {
+                return None;
             }
             let level = Level::new(k, 1.0);
             let clock = Instant::now();

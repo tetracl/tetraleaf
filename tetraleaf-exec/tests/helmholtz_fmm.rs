@@ -111,6 +111,17 @@
 //! `NEAR_ERROR_BOUND` of them, 2 threads and the one-rank FMM bit for bit; under Rotation
 //! nothing raised, no second plan, the setting off's output bit for bit.
 //!
+//! The M2L overrides (Helmholtz CH4.4b, `check_m2l_override`; a measurement setting): on the
+//! cube at kD = 40 + 2i and 10⁻⁷ under Auto at free form costs (level 2 the form, taken from the
+//! waves; deeper levels with waves): no override the setting's bits; RCR on the form's level the
+//! output of the time rule's RCR there (free RCR costs) bit for bit, and all its classes off the
+//! same; some classes off: the rest on the form, the errors within `DIAGONAL_RATIO`; RCR on a
+//! level with waves: no waves, the degree as run, the errors within `PLANE_WAVE_RATIO`; a degree
+//! above it under the setting's M2L there: that degree, the other levels the setting's; under
+//! Rotation with the form off, a level's degree named (RCR or the setting) the named degrees'
+//! FMM (`Degrees::PerLevel`) bit for bit; 2 threads and the one-rank FMM bit for bit; a level
+//! below 2 refused on every rank.
+//!
 //! Every comparison is agreed by an all-reduce, so a failure fails every rank. Run by hand
 //! at several ranks under a timeout, e.g. on macOS
 //! `cargo test -p tetraleaf-exec --test helmholtz_fmm --no-run`, then
@@ -130,11 +141,12 @@ use tetraleaf_exec::helmholtz::{
     C_LEAF, ChargeKind, Charges, DEFAULT_C_LEAF, DEFAULT_DENSE_BUDGET, DEFAULT_DENSE_NODE_BUDGET,
     DEFAULT_DIAGONAL_BUILD, DEFAULT_PLANE_WAVE_NODE_BUDGET, DIAGONAL_COSTS_NEON, Degrees,
     DensityError, DiagonalCosts, DiagonalTimes, HelmholtzDiagonal, HelmholtzFmm,
-    HelmholtzFmmBuilder, HelmholtzFmmError, HelmholtzM2l, LeafVShape, MIN_BUFFER_BOXES,
-    OperatorError, Output, PlaneWaveCounts, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit,
-    PlaneWaveTimes, RCR_PAIR_FEW_DEGREE, RcrSplit, TransferBuild, V_COSTS_NEON, VAfterPlan, VNear,
-    VRaisedPrice, Wavenumber, WxNear, auto_batched_max_degree, auto_batched_min_columns,
-    auto_m2l_mul_add, auto_plane_wave_min_degree, default_max_points_per_leaf, raised_crossover,
+    HelmholtzFmmBuilder, HelmholtzFmmError, HelmholtzM2l, LeafVShape, M2lOverride,
+    MIN_BUFFER_BOXES, OperatorError, Output, OverrideError, OverrideM2l, PlaneWaveCounts,
+    PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, PlaneWaveTimes, RCR_PAIR_FEW_DEGREE,
+    RcrSplit, TransferBuild, V_COSTS_NEON, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WxNear,
+    auto_batched_max_degree, auto_batched_min_columns, auto_m2l_mul_add,
+    auto_plane_wave_min_degree, default_max_points_per_leaf, raised_crossover,
 };
 use tetraleaf_exec::operator::{Isa, MulAdd, P2pChoice};
 use tetraleaf_math::Complex;
@@ -1870,6 +1882,247 @@ fn check_time_rule_raised(scenario: &Scenario, comm: &SimpleCommunicator) -> usi
         }
     }
     most
+}
+
+/// The M2L overrides (Helmholtz CH4.4b; the module documentation) on `scenario`, whose level
+/// 2 the form takes from the waves at free form costs. Returns the overrides checked.
+fn check_m2l_override(scenario: &Scenario, comm: &SimpleCommunicator) -> usize {
+    let inputs = &Inputs::new(scenario, 1, comm);
+    let kind = scenario.charges;
+    let debug = cfg!(debug_assertions);
+    let rule = default_builder(scenario)
+        .diagonal(HelmholtzDiagonal::Auto)
+        .diagonal_costs(Some(FREE_DIAGONAL));
+    let (fmm, base) = run(&rule, inputs, kind, comm);
+    let op = fmm.operator();
+    let nlevels = fmm.nlevels();
+    let m2l: Vec<HelmholtzM2l> = (0..nlevels).map(|l| op.m2l_on(l)).collect();
+    let classes: Vec<Option<Vec<usize>>> = (0..nlevels).map(|l| op.diagonal_classes(l)).collect();
+    let degrees = fmm.degrees().to_vec();
+    let translations: Vec<usize> = (0..nlevels).map(|l| op.translation_degree(l)).collect();
+    drop(fmm);
+    let plain = errors(scenario, inputs, &base, 0, comm);
+    let form = (2..nlevels)
+        .find(|&l| classes[l].as_ref().is_some_and(|c| c.len() > 1))
+        .unwrap_or_else(|| panic!("{}: no level of the form: {classes:?}", scenario.name));
+    let waves = (2..nlevels)
+        .find(|&l| m2l[l] == HelmholtzM2l::PlaneWave)
+        .unwrap_or_else(|| panic!("{}: no level with waves: {m2l:?}", scenario.name));
+    let mut checked = 0;
+    // Each override's run: the other levels' M2L, classes and degrees the setting's.
+    let others_same = |what: &str, fmm: &HelmholtzFmm<'_, f64>, level: usize| {
+        let op = fmm.operator();
+        for l in (2..nlevels).filter(|&l| l != level) {
+            assert_eq!(op.m2l_on(l), m2l[l], "{what}: level {l}'s M2L");
+            assert_eq!(
+                op.diagonal_classes(l),
+                classes[l],
+                "{what}: level {l}'s classes"
+            );
+            assert_eq!(fmm.degrees()[l], degrees[l], "{what}: level {l}'s degree");
+        }
+    };
+    let overridden = |o: M2lOverride| rule.clone().m2l_overrides(vec![o]);
+
+    // No override: the setting's bits.
+    let (_, none) = run(&rule.clone().m2l_overrides(Vec::new()), inputs, kind, comm);
+    assert_same("no override", &none, &base, comm);
+
+    // RCR on the form's level: the time rule's own RCR there (free RCR costs, which put RCR on
+    // the levels the form takes, at the same degree), bit for bit; all its classes off the same.
+    let what = format!("{}: RCR on level {form} (the form's)", scenario.name);
+    let rcr = overridden(M2lOverride {
+        level: form,
+        degree: None,
+        m2l: OverrideM2l::Rcr,
+    });
+    let (fmm, got) = run(&rcr, inputs, kind, comm);
+    assert_eq!(
+        fmm.operator().m2l_on(form),
+        HelmholtzM2l::Rotation,
+        "{what}"
+    );
+    assert_eq!(fmm.operator().diagonal_classes(form), None, "{what}");
+    assert_eq!(
+        fmm.degrees()[form],
+        degrees[form],
+        "{what}: the degree as run"
+    );
+    assert_eq!(
+        fmm.operator().translation_degree(form),
+        translations[form],
+        "{what}: the translations' degree"
+    );
+    others_same(&what, &fmm, form);
+    drop(fmm);
+    let free_rcr = default_builder(scenario)
+        .diagonal(HelmholtzDiagonal::Auto)
+        .diagonal_costs(Some(FREE_RCR));
+    let (fmm, want) = run(&free_rcr, inputs, kind, comm);
+    let only_form = (2..nlevels).all(|l| {
+        let op = fmm.operator();
+        l == form || (op.m2l_on(l) == m2l[l] && op.diagonal_classes(l) == classes[l])
+    });
+    drop(fmm);
+    assert!(only_form, "{what}: free RCR costs changed another level");
+    assert_same(&format!("{what}: the time rule's RCR"), &got, &want, comm);
+    let all = overridden(M2lOverride {
+        level: form,
+        degree: None,
+        m2l: OverrideM2l::RcrClasses((0..34).collect()),
+    });
+    let (_, every) = run(&all, inputs, kind, comm);
+    assert_same(&format!("{what}: every class off"), &every, &got, comm);
+    check_one_rank(&what, &rcr, inputs, kind, &got, comm);
+    let (_, threaded) = run(&rcr.clone().threads(2), inputs, kind, comm);
+    assert_same(&format!("{what}, 2 threads"), &threaded, &got, comm);
+    checked += 2;
+
+    // Some classes off the form's level: the rest on the form.
+    let level_classes = classes[form].clone().expect("the form's classes");
+    let off: Vec<usize> = level_classes.iter().step_by(2).copied().collect();
+    let what = format!("{}: classes {off:?} off level {form}", scenario.name);
+    let some = overridden(M2lOverride {
+        level: form,
+        degree: None,
+        m2l: OverrideM2l::RcrClasses(off.clone()),
+    });
+    let (fmm, got) = run(&some, inputs, kind, comm);
+    let rest: Vec<usize> = level_classes
+        .iter()
+        .copied()
+        .filter(|c| !off.contains(c))
+        .collect();
+    assert_eq!(fmm.operator().diagonal_classes(form), Some(rest), "{what}");
+    others_same(&what, &fmm, form);
+    drop(fmm);
+    let e = errors(scenario, inputs, &got, 0, comm);
+    assert!(
+        e.0 <= DIAGONAL_RATIO * plain.0 && e.1 <= DIAGONAL_RATIO * plain.1,
+        "{what}: errors {e:?} against the setting's {plain:?}"
+    );
+    if !debug {
+        check_one_rank(&what, &some, inputs, kind, &got, comm);
+    }
+    checked += 1;
+
+    // RCR on a level with waves: no waves, the degree as run.
+    let what = format!("{}: RCR on level {waves} (waves)", scenario.name);
+    let rcr = overridden(M2lOverride {
+        level: waves,
+        degree: None,
+        m2l: OverrideM2l::Rcr,
+    });
+    let (fmm, got) = run(&rcr, inputs, kind, comm);
+    assert_eq!(
+        fmm.operator().m2l_on(waves),
+        HelmholtzM2l::Rotation,
+        "{what}"
+    );
+    assert_eq!(
+        fmm.degrees()[waves],
+        degrees[waves],
+        "{what}: the degree as run"
+    );
+    others_same(&what, &fmm, waves);
+    drop(fmm);
+    let e = errors(scenario, inputs, &got, 0, comm);
+    if comm.rank() == 0 {
+        println!(
+            "{what}: φ {:.3e} against {:.3e} ({:.3}×), ∇φ {:.3e} against {:.3e}",
+            e.0,
+            plain.0,
+            e.0 / plain.0,
+            e.1,
+            plain.1
+        );
+    }
+    assert!(
+        e.0 <= PLANE_WAVE_RATIO * plain.0 && e.1 <= PLANE_WAVE_RATIO * plain.1,
+        "{what}: errors {e:?} against the setting's {plain:?}"
+    );
+    check_one_rank(&what, &rcr, inputs, kind, &got, comm);
+    checked += 1;
+
+    // A degree under the setting's M2L on the waves' level, through the builder (the remedy
+    // runs' path): the level at that degree (above p_w, so the waves' raise keeps it), every
+    // other level the setting's, 2 threads and the one-rank FMM bit for bit.
+    let raised = degrees[waves] + 1;
+    let what = format!(
+        "{}: level {waves} at degree {raised}, the setting",
+        scenario.name
+    );
+    let setting = overridden(M2lOverride {
+        level: waves,
+        degree: Some(raised),
+        m2l: OverrideM2l::Setting,
+    });
+    let (fmm, got) = run(&setting, inputs, kind, comm);
+    assert_eq!(fmm.degrees()[waves], raised, "{what}");
+    others_same(&what, &fmm, waves);
+    drop(fmm);
+    let e = errors(scenario, inputs, &got, 0, comm);
+    assert!(
+        e.0 <= scenario.bound && e.1 <= scenario.bound,
+        "{what}: errors {e:?}"
+    );
+    let (_, threaded) = run(&setting.clone().threads(2), inputs, kind, comm);
+    assert_same(&format!("{what}, 2 threads"), &threaded, &got, comm);
+    check_one_rank(&what, &setting, inputs, kind, &got, comm);
+    checked += 1;
+
+    // Under Rotation with the form off, a level's degree named: the named degrees' FMM.
+    let rotation = builder(scenario);
+    let (fmm, _) = run(&rotation, inputs, kind, comm);
+    let given = fmm.degrees().to_vec();
+    drop(fmm);
+    let level = nlevels - 1;
+    let raised = given[level] + 2;
+    let mut named = given.clone();
+    named[level] = raised;
+    let named_scenario = Scenario {
+        degrees: Degrees::PerLevel(named),
+        ..scenario.clone()
+    };
+    let (_, want) = run(&builder(&named_scenario), inputs, kind, comm);
+    for m2l in [OverrideM2l::Rcr, OverrideM2l::Setting] {
+        let what = format!(
+            "{}: level {level} at degree {raised}, {m2l:?}",
+            scenario.name
+        );
+        let raise = rotation.clone().m2l_overrides(vec![M2lOverride {
+            level,
+            degree: Some(raised),
+            m2l,
+        }]);
+        let (fmm, got) = run(&raise, inputs, kind, comm);
+        assert_eq!(fmm.degrees()[level], raised, "{what}");
+        assert_eq!(fmm.operator().translation_degree(level), raised, "{what}");
+        drop(fmm);
+        assert_same(&format!("{what}: the named degrees"), &got, &want, comm);
+        if !debug {
+            check_one_rank(&what, &raise, inputs, kind, &got, comm);
+        }
+        checked += 1;
+    }
+
+    // Refused on every rank, before any collective.
+    let refused = rule
+        .clone()
+        .m2l_overrides(vec![M2lOverride {
+            level: 1,
+            degree: None,
+            m2l: OverrideM2l::Rcr,
+        }])
+        .build::<f64, _>(&inputs.sources, &inputs.targets, comm);
+    assert!(
+        matches!(
+            refused,
+            Err(HelmholtzFmmError::M2lOverride(OverrideError::Level(1)))
+        ),
+        "level 1 refused"
+    );
+    checked
 }
 
 /// Costs under which the form takes every level with waves where a class passes (the waves and
@@ -4548,6 +4801,8 @@ fn helmholtz_fmm() {
     // The time rule at matched accuracy (CH4.3b2a): the form on a raised level.
     let classes = check_time_rule_raised(&time_rule_scenario(), &comm);
     assert!(classes > 0, "no raised level took the form");
+    // The M2L overrides (CH4.4b), a measurement setting, on the same scenario.
+    check_m2l_override(&time_rule_scenario(), &comm);
     // Leaves on the form's levels under the default c_leaf (CH4.3e): occupied, and touched by
     // M2P and by P2L (level 3 on the M6: 84 leaves, 7,660 point interactions each way).
     let [occupied, m2p, p2l] = check_form_leaves(&form_leaves_scenario(), &comm);

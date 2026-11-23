@@ -125,10 +125,11 @@ use thiserror::Error;
 use super::{
     ChargeKind, Charges, DEFAULT_DENSE_BUDGET, DEFAULT_DIAGONAL_BUILD, DIAGONAL_COST_CONSTANTS,
     DegreeError, DegreeRule, Degrees, Densities, DensityError, DiagonalCosts, DiagonalShape,
-    HelmholtzDiagonal, HelmholtzM2l, HelmholtzOperator, LevelShape, OperatorError, Output,
-    PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit, TableTimings, TransferBuild,
-    Wavenumber, WavenumberKind, auto_batched_max_degree, auto_batched_min_columns,
-    auto_plane_wave_min_degree, diagonal_costs, min_leaf_level, offset_class,
+    HelmholtzDiagonal, HelmholtzM2l, HelmholtzOperator, LevelShape, M2lOverride, OperatorError,
+    Output, OverrideError, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit,
+    TableTimings, TransferBuild, Wavenumber, WavenumberKind, auto_batched_max_degree,
+    auto_batched_min_columns, auto_plane_wave_min_degree, diagonal_costs, min_leaf_level,
+    offset_class,
 };
 use crate::fmm::{FmmError, PointSet, SettingsError};
 use crate::geometry::{Domain, radius};
@@ -232,6 +233,9 @@ pub enum HelmholtzFmmError {
     /// A named W or X crossover ([`WxNear::Crossovers`]) is negative or not a number.
     #[error("the W and X crossovers must be at least 0, got {0} and {1}")]
     WxCrossover(f64, f64),
+    /// An M2L override is refused ([`HelmholtzFmmBuilder::m2l_overrides`]).
+    #[error("the M2L overrides: {0}")]
+    M2lOverride(#[from] OverrideError),
     /// The input is invalid on another rank.
     #[error("the input is invalid on another rank")]
     OtherRank,
@@ -459,6 +463,7 @@ pub struct HelmholtzFmmBuilder {
     near_wx: WxNear,
     v_after_plan: VAfterPlan,
     v_raised_price: VRaisedPrice,
+    m2l_overrides: Vec<M2lOverride>,
     pair_calls: bool,
 }
 
@@ -521,6 +526,7 @@ impl HelmholtzFmmBuilder {
             near_wx: WxNear::CostModel,
             v_after_plan: VAfterPlan::Off,
             v_raised_price: VRaisedPrice::PerBox,
+            m2l_overrides: Vec::new(),
             pair_calls: false,
         }
     }
@@ -948,6 +954,19 @@ impl HelmholtzFmmBuilder {
         self
     }
 
+    /// Runs the levels the overrides name at their degree or M2L in place of the setting's
+    /// (Helmholtz CH4.4b; [`M2lOverride`]; default none), a measurement setting: the box
+    /// errors split by level (a level raised and run by RCR, the others as the setting gives
+    /// them) and by the diagonal form's classes (a level's classes, or some, run by RCR).
+    /// An override's degree replaces the rule's before the plan, so the near rules and the
+    /// waves' levels read it as they read the rule's; its M2L acts in the operator alone, so
+    /// the plan is the setting's at that degree. A level beyond the tree is ignored. The output
+    /// stays deterministic and on P ranks the one-rank FMM's of the same overrides bit for bit.
+    pub fn m2l_overrides(mut self, overrides: Vec<M2lOverride>) -> Self {
+        self.m2l_overrides = overrides;
+        self
+    }
+
     /// For tests: run the operator pair by pair (`tetraleaf_plan::operator::PerPair`) in place
     /// of its level calls. The output is the same bit for bit.
     #[doc(hidden)]
@@ -992,6 +1011,7 @@ impl HelmholtzFmmBuilder {
         {
             return Err(HelmholtzFmmError::WxCrossover(w, x));
         }
+        M2lOverride::check(&self.m2l_overrides)?;
         if let Degrees::Tolerance(_) = self.degrees {
             // The tolerance's own check; the levels come with the plan.
             self.degrees.resolve(&self.k, &unit_domain(), 0)?;
@@ -1137,12 +1157,19 @@ impl HelmholtzFmmBuilder {
             .unwrap_or(0);
         let mut max_leaf_points = 0usize;
         comm.all_reduce_into(&local, &mut max_leaf_points, SystemOperation::max());
-        let degrees = agree(
+        let mut degrees = agree(
             comm,
             self.degrees
                 .resolve_with(&self.degree_rule, &self.k, &domain, index.nlevels())
                 .map_err(HelmholtzFmmError::from),
         )?;
+        // An override's degree in place of the rule's (Helmholtz CH4.4b), before every rule
+        // that reads the degrees.
+        for o in &self.m2l_overrides {
+            if let (Some(p), Some(slot)) = (o.degree, degrees.get_mut(o.level)) {
+                *slot = p;
+            }
+        }
         // Auto's crossover, agreed over the ranks (constraints 2 and 9): the smallest of
         // every rank's, which differ only where the ranks' ISAs do.
         let local = self
@@ -1519,7 +1546,8 @@ impl HelmholtzFmmBuilder {
         .with_diagonal_shapes(Some(diagonal_shapes))
         .with_diagonal_chunk(self.diagonal_chunk)
         .with_diagonal_build(self.diagonal_build)
-        .with_diagonal(self.diagonal);
+        .with_diagonal(self.diagonal)
+        .with_m2l_overrides(self.m2l_overrides.clone());
         if let Some(mul_add) = self.m2l_mul_add {
             operator = operator.with_m2l_mul_add(mul_add);
         }

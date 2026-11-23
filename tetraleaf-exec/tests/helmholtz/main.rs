@@ -4,7 +4,7 @@
 //! densities (§3.15, "Storage" and "Inputs and outputs"), the degree rule (spike S7),
 //! the operator's bodies pair by pair, its P2P on every ISA (CH3.4c), its Dense M2L
 //! against Rotation (CH3.2a), its diagonal M2L's rule and pair body (CH4.2b1) and the α counts of its exponential M2L at the largest V
-//! offsets (CH6.2g), and the V rule's cost model (CH4.0d2).
+//! offsets (CH6.2g), the V rule's cost model (CH4.0d2), and the M2L overrides (CH4.4b).
 //!
 //! None of these tests initialises MPI. The trees of the reference workloads under the
 //! rule are tested in `tetraleaf-validate` (`tests/helmholtz_leaves.rs`).
@@ -16,6 +16,7 @@ mod dense;
 mod densities;
 mod diagonal;
 mod leaf_rule;
+mod m2l_override;
 mod operator;
 mod p2p;
 mod plane_wave;
