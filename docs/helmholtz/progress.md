@@ -4558,3 +4558,49 @@ request, using this template:
   `M2lOverride` kept public.
 - Laplace: not touched (the Helmholtz operator and builder, the harness, scripts, docs).
 - Follow-ups: none (question 2's recalibration alternative not taken).
+
+## 2026-11-23: CH4.5 Host performance against FMM3D at matched accuracy
+- Done:
+  - `tools/fmm3d/driver.f90` (`helmholtz` mode): FMM3D's setup (`hndiv`, `pts_tree_mem`,
+    `pts_tree_build`, `pts_tree_sort` as `hfmm3d` calls them) timed once per eps apart from the
+    calls (`tree_s=` at the end of the line); the OpenMP binding printed. Outputs unchanged bit for
+    bit against the driver before.
+  - `tetraleaf-validate`: `helmholtz_fmm3d::tree_seconds`; the example's `compare --evaluations n`
+    and `--c-leaf c`, our times to the millisecond (the Build table to 0.1 ms, the first evaluation
+    beside the last), `errors`' "tree s" and "memory GB" columns.
+  - `tools/helmholtz/ch4-5-runs.sh` (stages grid, ours, cleaf, time, bind) and `ch4-5-tables.py`
+    (the matches by the closest and one-sided rules, the eps lists, the report's tables, a selftest
+    on CH4.0e's rows); `tools/fmm3d/README.md`. Report
+    `tetraleaf-validate/results/helmholtz-ch4-5.md`; record `docs/helmholtz/tasks/CH4.5.md`.
+- Tests: `tree_seconds` and `seconds` on lines with and without `tree_s=` (unit tests); smoke runs of
+  `compare` on the M6 (W1 at kD = 30, 1 and 2 ranks: the checksum the same with one and two
+  evaluations, `--c-leaf` changing the tree); the driver's outputs `cmp`-identical before and after
+  (both variants, 10⁻³ and 10⁻⁶); the tables' selftest (CH4.0e's three hand-checked one-sided eps)
+  on both archives.
+- Measurements (Kathleen `singlenode`, jobs 663813, 663814, 663816, 664298, 664306, excluding
+  node-c11b-004 and node-c11b-013; 663952 and 663953 cancelled, a stale script; locust detached):
+  CH4.4a's 26 cases at 10⁻³, 10⁻⁶, 10⁻⁸:
+  - ours under the defaults at four splits, launches a and b, two evaluations (624 launches per
+    machine, every checksum the same over splits and launches); FMM3D over 14 eps (the grid) and
+    timed at the matches; binding on five large cases; c_leaf 2 and 4 on W3 at N = 10⁶, kD = 500;
+  - our best split over FMM3D's call at the closest eps (its faster variant), geometric means:
+    Kathleen 0.41, 0.31, 0.34 (N ≥ 10⁶: 0.13, 0.14, 0.18), locust 0.25, 0.26, 0.26 (0.13, 0.14,
+    0.16); 1 × N 0.39–0.52 and 0.32–0.43; the one-sided match the same picture;
+  - FMM3D faster on ten Kathleen rows of N ≤ 1.2·10⁴ (1.1–4.4×, calls of 5–104 ms): our build
+    (Batched's matrices at p = 11, 73 of 81 ms on W1 at kD = 30), not the evaluation (0.15–0.74×);
+  - at 1 × N the shared steps 32–91 % of the build, 24–83 % at the best split (CH4.0k's evidence);
+  - FMM3D's peak 2.2–2.5× our FMM's growth (N ≥ 10⁵, geometric means); `default` at kD = 1000
+    442–447 GB at 3·10⁻³ and 10⁻³ (locust), killed on Kathleen on W2 at kD = 500 at 10⁻³;
+  - binding FMM3D 0.99–1.14× its unbound time; c_leaf 4 0.24–0.89× c_leaf 2 but at 72 × 1
+    (0.80–1.11×, where the 114 MiB scratch per rank sends W3's levels 2–3 to RCR);
+  - FMM3D's errors on locust within 1.064× Kathleen's grid (508 values);
+  - raw outputs in `~/projects/fmm-archive/{kathleen,locust}/runs/ch4-5/`.
+- Checks: fmt; Clippy default, examples, workspace all-targets; rustdoc `-D warnings`; the default
+  (1,392) and workspace (1,436) tests at opt-level 1; `bash -n` and `py_compile` on the scripts. Not
+  run: the MPI list (no MPI crate's code beyond the example), `cargo deny` (no manifest change),
+  Laplace's benchmarks (no Laplace path).
+- Decisions: CH4.0k kept off the list at the start (the user, 2026-11-23: "Keep off; CH4.5 shows it
+  (Recommended)"). The report's questions 1–4 pending.
+- Laplace: not touched (the example, the validation crate's parser, the FMM3D driver, scripts, docs).
+- Follow-ups: CH4.7 (the form choice prices the tables' build for small trees), proposed in
+  question 4, its roadmap line added off the list.
