@@ -117,6 +117,10 @@ How it is read (to be confirmed in the PR, question 1):
     under the setting's M2L, for the remedy), and tables: the levels' M2L as run (k a, p, M2L,
     classes, the threshold decades), the M2L's parts (share of Σ|e|², worst box and ℓ2 over the
     default's), the worst boxes' parts by level and by M2L.
+  - As built also `--refine-faces` (W1's tangent points: a sample of two per box missed CH4.4a's
+    worst box at kD = 500), `--refine-cells` and `--all-levels` (W3: CH4.4a's own worst boxes, and
+    the deepest level without V pairs; the self-review), `--raise-levels v` and `--raise-together`
+    (every level raised at once: the error at the worst box spreads over levels 2–5).
   - The crate's CLAUDE.md entry.
 - `tools/helmholtz/ch4-4b-runs.sh` (the jobs' stages) and `ch4-4b-tables.py` (the report's tables
   from the outputs); report `tetraleaf-validate/results/helmholtz-ch4-4b.md`.

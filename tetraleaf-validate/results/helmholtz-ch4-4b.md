@@ -6,27 +6,28 @@ boundary", which CH4.4a left), §9.1 (the box measure and its 100 ε bound, amen
 (the rule per (level, class)). Machine: Kathleen, one node per job (2 × 20 Cascade Lake cores, Xeon
 Gold 6248), `singlenode`, one rank × 40 threads (the box study runs on one rank), release, BLAS
 threads 1, node-c11b-004 and node-c11b-013 excluded. Jobs 663781 (`low`), 663782 (`mid`), 663783
-(`w3`), 663784 (`w1-1000`), 663788 (`pw1000`, `remedy`); 663774 and 663780 the builds and checks.
+(`w3`), 663784 (`w1-1000`), 663788 (`pw1000`, `remedy`), 663789 (`w3-cells`); 663774 and 663780
+the builds and checks.
 Raw outputs: `~/projects/fmm-archive/kathleen/runs/ch4-4b/` (one Markdown file per case and ε, its
-log beside it; `superseded/`, the first runs without `--refine-faces`, §1).
+log beside it); the first runs without `--refine-faces` in `~/projects/fmm-archive/kathleen/runs/ch4-4b-superseded/` (§1).
 
 ## Summary
 
 - **The mapping** (W1 to kD = 1000, W2 to 500, W3 resolved to 100 and at N = 10⁶ for kD = 200 and
   500, with the plane wave's trace and the constant density; 10⁻³, 10⁻⁶, 10⁻⁸; 47 launches on
   Kathleen under the library's defaults): the box errors are the levels' truncation (the levels'
-  parts add up to within 0.4 % of Σ|e|² at 10⁻⁶ and 10⁻⁸, 4 % at 10⁻³; one exception explained, §3),
+  parts add up to within 0.4 % of Σ|e|² at 10⁻⁶ and 10⁻⁸, 4 % at 10⁻³),
   the finer levels' at 10⁻³ and the coarsest's at 10⁻⁸, spread over three to six levels at the worst
   boxes, which on W1 and W2 are the six tangent points' (CH4.0b's placement).
 - **No error concentrated at a class boundary.** The diagonal form on RCR changes no worst box and
-  no ℓ2 error (154 runs, 1.000; at most 0.08 % of Σ|e|²); the classes beside the bound's threshold
+  no ℓ2 error (154 runs, 1.000, ℓ2 of φ within 1.001; at most 0.08 % of Σ|e|²); the classes beside the bound's threshold
   and the next decade on RCR the same (55 runs); Batched on RCR the same (11). Where the waves run,
   RCR at the same degree errs up to 1.19× more (30 runs; the default at most 1.023× RCR in the worst
   box, 1.034× in ℓ2), which is the waves' accuracy, not an error they add.
 - **CH4.4a's 114.7 ε box** (W1, kD = 1000, the plane wave's trace, 10⁻⁸; 114.80 ε here, the same
   box) is the truncation of levels 2–5 at a tangent point (0.14–0.29 of its error each); its
   classes and the form add nothing. One level raised by two degrees leaves 89.4 ε; every level by
-  one 48.4 ε (about +4 % evaluation), by two 21.7 ε. Per pair the rule's degrees are 3.3–5.5 ε on
+  one 48.4 ε (about 2–4 % more evaluation), by two 21.7 ε. Per pair the rule's degrees are 3.3–5.5 ε on
   every level, no outlier. Within D1's range (kD ≤ 500) every worst box is at most 68.2 ε.
   Recommended (question 2): §9.1's 100 ε bound for D1's range, beyond it reported; the
   recalibration is the measured alternative.
@@ -42,7 +43,8 @@ log beside it; `superseded/`, the first runs without `--refine-faces`, §1).
   10⁻⁸), 100, 250, 500, 1000; the plane wave's trace at kD = 500 and 1000; the constant density on W1
   and W2 at kD = 30 (10⁻⁶) and 100; W2 at kD = 30 (10⁻⁶), 100, 250, 500; W3 resolved at kD = 30
   (10⁻⁶) and 100; W3 at N = 10⁶ for kD = 200 and 500. ε = 10⁻³, 10⁻⁶, 10⁻⁸; one complex charge
-  vector, gradients on; 47 launches (one case and ε each) and 4 remedy launches, every one exit 0.
+  vector, gradients on; 47 launches (one case and ε each; W3's 9 again with CH4.4a's worst boxes,
+  below) and 4 remedy launches, every one exit 0.
 - **The FMM.** The library's defaults (`Case::defaults`, CH4.4a's: the waves under Auto, the
   diagonal form's time rule, the refit degrees, c_leaf 4, the V, W and X rules). Every case's tree
   and each level's degree and M2L are CH4.4a's (its logs), at one rank × 40 threads against its
@@ -53,7 +55,7 @@ log beside it; `superseded/`, the first runs without `--refine-faces`, §1).
   and of the boxes at the centres of the domain's faces, W1's six tangent points (`--refine 8
   --refine-faces`; up to 1.54·10⁵ targets at kD = 1000). The first runs had `--refine` alone: two
   targets per box missed CH4.4a's worst box at kD = 500 (29.1 against 40.4 ε), so every stage ran
-  again with the faces (`superseded/`). The box measure (§9.1, CH3.6's): per box of the deepest
+  again with the faces (the first runs kept in `ch4-4b-superseded/`). The box measure (§9.1, CH3.6's): per box of the deepest
   level the largest error at one of its reference targets over the reference's RMS.
 - **The levels** (CH4.0b's parts, under the defaults). Each level with V pairs raised to the rule's
   degree at ε/1000 (at least one above its degree as run) and run by RCR, every other level as the
@@ -112,7 +114,9 @@ direct sum in place of FMM3D at 10⁻¹² at every point. The worst box over ε,
 | W1, planewave, kD = 500 | 1e-3 | 27.92 / 39.87 | 27.72 / 39.61 |
 | W1, planewave, kD = 500 | 1e-6 | 26.02 / 42.19 | 26.14 / 42.42 |
 | W1, planewave, kD = 500 | 1e-8 | 35.43 / 67.77 | 35.63 / 68.21 |
-| W1, planewave, kD = 1000 | 1e-3 | 35.59 / 43.35 | (running) |
+| W1, planewave, kD = 1000 | 1e-3 | 35.59 / 43.35 | 35.56 / 43.34 |
+| W1, planewave, kD = 1000 | 1e-6 | 46.68 / 73.86 | 46.66 / 73.88 |
+| W1, planewave, kD = 1000 | 1e-8 | 69.49 / 114.74 | 69.49 / 114.80 |
 | W2, kD = 30 | 1e-6 | 2.34 / 7.99 | 2.34 / 7.99 |
 | W2, kD = 100 | 1e-3 | 3.18 / 2.47 | 3.18 / 2.47 |
 | W2, kD = 100 | 1e-6 | 10.59 / 11.31 | 10.59 / 11.31 |
@@ -128,27 +132,34 @@ direct sum in place of FMM3D at 10⁻¹² at every point. The worst box over ε,
 | W2, constant, kD = 100 | 1e-6 | 3.18 / 34.68 | 3.18 / 34.68 |
 | W2, constant, kD = 100 | 1e-8 | 6.56 / 37.55 | 6.56 / 37.55 |
 | W3 (N = 108849), kD = 30 | 1e-6 | 4.10 / 3.88 | 4.10 / 3.88 |
-| W3 (N = 4031442), kD = 100 | 1e-3 | 11.05 / 6.34 | 7.54 / 2.57 |
-| W3 (N = 4031442), kD = 100 | 1e-6 | 13.54 / 9.64 | 7.73 / 3.84 |
-| W3 (N = 4031442), kD = 100 | 1e-8 | 9.72 / 7.97 | 5.78 / 2.96 |
-| W3 (N = 1000000), kD = 200 | 1e-3 | 10.82 / 7.07 | 7.62 / 8.29 |
-| W3 (N = 1000000), kD = 200 | 1e-6 | 10.21 / 10.58 | 7.05 / 9.61 |
-| W3 (N = 1000000), kD = 200 | 1e-8 | 9.42 / 7.67 | 8.18 / 11.63 |
-| W3 (N = 1000000), kD = 500 | 1e-3 | 16.43 / 15.86 | 14.28 / 14.77 |
-| W3 (N = 1000000), kD = 500 | 1e-6 | 15.40 / 15.41 | 7.72 / 11.48 |
-| W3 (N = 1000000), kD = 500 | 1e-8 | 24.59 / 24.76 | 9.82 / 18.42 |
+| W3 (N = 4031442), kD = 100 | 1e-3 | 11.05 / 6.34 | 11.02 / 3.85 |
+| W3 (N = 4031442), kD = 100 | 1e-6 | 13.54 / 9.64 | 13.55 / 5.83 |
+| W3 (N = 4031442), kD = 100 | 1e-8 | 9.72 / 7.97 | 9.72 / 4.83 |
+| W3 (N = 1000000), kD = 200 | 1e-3 | 10.82 / 7.07 | 10.84 / 12.01 |
+| W3 (N = 1000000), kD = 200 | 1e-6 | 10.21 / 10.58 | 10.23 / 17.97 |
+| W3 (N = 1000000), kD = 200 | 1e-8 | 9.42 / 7.67 | 9.44 / 13.03 |
+| W3 (N = 1000000), kD = 500 | 1e-3 | 16.43 / 15.86 | 16.45 / 19.03 |
+| W3 (N = 1000000), kD = 500 | 1e-6 | 15.40 / 15.41 | 15.41 / 18.50 |
+| W3 (N = 1000000), kD = 500 | 1e-8 | 24.59 / 24.76 | 24.61 / 29.71 |
 
 - **W1** (and the constant density, the plane wave's trace): CH4.4a's figures to within 1 % (at
-  most 0.8 % apart at kD ≥ 250, the same digits at kD ≤ 100); the worst boxes are the tangent points' (§1), which the
-  reference holds whole.
-- **W2**: the same worst boxes and the same errors at the samples, but larger figures at kD = 250
+  most 0.8 % apart at kD ≥ 250, the same digits at kD ≤ 100; the 114.7 ε box 114.80 here against
+  114.74, the same box, (127, 63, 64)); the worst boxes are the tangent points' (§1), which the
+  reference holds whole. The differences are the reference's normaliser and FMM3D's own error at
+  10⁻¹² against the direct sum here, and one rank against four (the same tree, degrees and M2L).
+- **W2**: the same errors at the samples, and the worst ∇φ box CH4.4a's worst on 13 of 14
+  launches (its second on the other, kD = 250 at 10⁻⁶; CH4.4a's logs' five worst), but larger figures at kD = 250
   and 500 (1.6–2.0×): the box measure divides by the reference's RMS over its own targets, and two
   targets per box weigh the sparse sphere more than the dense cap, whose |φ| and |∇φ| are larger. At
   kD ≤ 100 the reference holds every point and the figures are CH4.4a's.
-- **W3**: lower at kD = 100 (no tangent points: the refinement takes the sample's 8 worst boxes,
-  which need not be the worst), and higher in ∇φ at N = 10⁶, kD = 200 (11.6 against 7.7 ε): the
-  under-resolved cube has close pairs of points whose |∇φ| dominates the RMS over every point
-  (CH4.4a's all-target ∇φ error 1.42·10⁻⁹ against 2.55·10⁻⁹ over this reference's targets).
+- **W3**: without tangent points the sample's 8 worst boxes need not be the worst (the stage `w3`
+  found lower figures at kD = 100: 7.5 against 11.1 ε in φ), so W3 ran again with CH4.4a's own five
+  worst boxes of φ and of ∇φ per case and ε in the reference (`--refine-cells`, the stage
+  `w3-cells`, job 663789; the rows above): φ's worst box is CH4.4a's to 0.3 % on every W3 case. ∇φ's
+  differs by a factor fixed per case, the same at every ε (0.61 at kD = 100; 1.70 and 1.20 at
+  N = 10⁶ for kD = 200 and 500): the normaliser, the reference's RMS of |∇φ| over the sample against
+  over every point, which the cube's close pairs of points make heavy-tailed (N = 10⁶, kD = 200,
+  10⁻⁸: CH4.4a's all-target ∇φ error 1.42·10⁻⁹ against 2.84·10⁻⁹ over this reference's targets).
 
 So the gate's figures stay CH4.4a's (§9.1's box measure against every point); this task's measure
 maps the error, and its shares and ratios (a run's error over the default's) do not depend on the
@@ -160,22 +171,28 @@ Each level's share of Σ|e|² over the reference's targets is in §7 ("Levels"),
 level with the largest share of ∇φ's per launch in §7 ("Summary").
 
 - **The parts add up.** The rest (what the levels' parts leave of the error) is at most 0.004 of
-  Σ|e|² at 10⁻⁶ and 10⁻⁸ and at most 0.04 at 10⁻³, on every launch but one: W3 at N = 10⁶,
-  kD = 500, 10⁻⁸, 0.11 (φ) and 0.19 (∇φ). There the deepest level (p = 32, the waves' resolving
-  degree) has no V pairs, so the study does not raise it, and with every other level raised the
-  worst box keeps 2.79 / 8.68 of its 9.82 / 18.42 ε: that level's translations and leaf operators.
-  So the error is the levels' truncation, as CH4.0b found on all-Rotation trees, now under the
-  defaults with the form, the waves and Batched on the levels.
+  Σ|e|² at 10⁻⁶ and 10⁻⁸ and at most 0.04 at 10⁻³ on every launch. On W3 the study raises the
+  levels without V pairs too (`--all-levels`): at N = 10⁶, kD = 500, 10⁻⁸ the deepest level (p = 32,
+  no V pairs: its translations and leaf operators) carries 0.06 (φ) and 0.12 (∇φ) of Σ|e|², which
+  the first run's study, raising the levels with V pairs alone, left as a rest of 0.11 and 0.19.
+  At 10⁻³ the rest (up to 0.04) is not explained by measurement; a likely part: a raised level's
+  degree changes the plan's near pairs (the V, W and X crossovers read the degree, and the raised
+  run's degree is the rule's at 10⁻⁶), so a raised run also converts pairs of other levels, which
+  the decomposition does not separate. So the error is the levels' truncation, as CH4.0b found on
+  all-Rotation trees, now under the defaults with the form, the waves and Batched on the levels.
 - **Which levels.** At 10⁻³ the finer levels carry the most (W1: level 3 at kD = 100 and 250,
   level 6 at 500 and 1000, 19–63 % of ∇φ's Σ|e|²); at 10⁻⁸ the coarsest (W1: level 2 at
-  kD = 100–1000, 30–55 %; level 3 with the plane wave's trace at kD = 500; the constant density's
+  kD = 100–1000, 30–55 %; level 3 with the plane wave's trace at kD = 500 and 1000; the constant density's
   level 2 at kD = 100, 68 %). At large kD it spreads: W1 at kD = 1000, 10⁻⁸, levels 2–6 carry 0.30,
   0.26, 0.11, 0.12 and 0.07 of ∇φ's. On W3 a middle level leads, the form's or the waves' (39–78 %),
   on W2 at 10⁻³ Batched's finest (levels 5–7, 24–38 %).
 - **At the worst boxes.** Every worst box of W1 and W2 is one of the six tangent points' (CH4.0b's
   placement): its worst target lies near a corner of its box on every level at once (|v|/r 1.6–1.73
   on levels 2 to the deepest), so three to six levels' parts are each 0.11–0.69 of the error at the
-  worst ∇φ target of W1 at kD ≥ 250 (§7, "Worst boxes"), never one level's alone.
+  worst ∇φ target of W1 at kD ≥ 250 (§7, "Worst boxes"), never one level's alone. W3's worst
+  boxes (CH4.4a's) lie inside the cube, and some are one level's (level 4 at N = 10⁶: 0.93–1.01 of
+  the error at kD = 200, 10⁻³ and 10⁻⁸, and kD = 500, 10⁻⁶), the waves' or the form's, with the M2L's
+  part there at most 0.023: that level's truncation, not its M2L.
 
 ## 4. The M2L and the classes
 
@@ -251,11 +268,13 @@ compared; the build changes too, by the tables of the new degrees):
 (The level raised alone is the one with the largest part at the worst ∇φ box, level 3; its two
 "defaults" rows come from different launches: 26.87 and 26.32 s, 6.93 and 6.73 s.) One level raised
 takes off at most a third; every level with V pairs raised by one degree takes the worst box to
-48.4 ε at kD = 1000 (2.4× less) for about 4 % more evaluation, by two to 21.7 ε for 8.5 %.
+48.4 ε at kD = 1000 (2.4× less) for about 2–4 % more evaluation, by two to 21.7 ε for about 8 %
+(one evaluation each, in one launch; the defaults' evaluation varies by 2 % between launches, 26.32
+and 26.87 s; the build 14.2–14.8 s alike).
 
 **The pair evidence** (spike S7's worst pair over the 316 offsets and three placements at the
-levels' k a and degrees, at 10⁻⁸; levels 2–6 at kD = 1000, levels 3–6 at kD = 500 take the same
-(x, p) one level down):
+levels' k a and degrees, at 10⁻⁸; levels 2–6 at kD = 1000; levels 2–5 at kD = 500 are the rows
+of levels 3–6 at kD = 1000, the same (x, p)):
 
 | x | p | worst pair ÷ ε at p | worst pair ÷ ε at p + 1 | worst pair ÷ ε at p + 2 | worst pair ÷ ε at p + 4 |
 | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -276,10 +295,12 @@ measured:
   most 68.2 ε, W1 with the plane wave's trace at 10⁻⁸), and the 114.8 ε lies at kD = 1000, beyond
   it. Stating the bound for D1's range, and kD = 1000 as reported against it, needs no code;
 - every level with V pairs one degree up at 10⁻⁸ (a change of the degree rule's high-frequency
-  branch at 10⁻⁸, x ≥ 13.5; the other ε not measured): 48.4 ε at kD = 1000 for about 4 % more evaluation,
-  pair evidence 1.3–2.7 ε. It would be a recalibration (CH4.3c's scans and verification over D1, the
-  constant density's included), and it buys a pointwise margin that §9.1 does not ask for (ε is the
-  ℓ2 tolerance; CH4.0b: a pointwise criterion costs 1.1–5.2× the evaluation).
+  branch at 10⁻⁸, x ≥ 13.5; the other ε not measured): 48.4 ε at kD = 1000 for about 2–4 % more
+  evaluation, pair evidence 1.3–2.7 ε. It would be a recalibration (CH4.3c's scans and verification
+  over D1, the constant density's included) for a gate bound, not for the tolerance: ε is §9.1's ℓ2
+  tolerance, met with a margin here (0.09 ε at the samples), and the 100 ε bound is a check on the
+  pointwise errors (CH4.0b, where a pointwise criterion cost 1.1–5.2× the evaluation). Scoping the
+  bound to D1 leaves the one case beyond D1 above it, reported; that is question 2's choice.
 
 Recommended: the first (question 2).
 
@@ -290,15 +311,18 @@ Recommended: the first (question 2).
    the M2L's parts by each non-RCR level on RCR, and the form's classes by decade below the bound's
    threshold; "no error concentrated at a class boundary" read one-sided, the default's worst box
    and ℓ2 at most 1.1× those of RCR on the level (amended in the plan from "either way" after the
-   stage `low`: RCR errs up to 1.19× the waves', which is no error the waves add); the sampled and
-   refined reference, whose box figures equal CH4.4a's on W1 and differ on W2 and W3 by the
-   normaliser (§2), CH4.4a's figures staying the gate's. Recommended: as read.
+   stage `low`: RCR errs up to 1.19× the waves', which is no error the waves add); the worst
+   boxes' classes named by their effect, the classes' runs' part at each worst target (below 0.01
+   everywhere), not by listing a box's V offsets' classes (they span nearly all 34); the sampled
+   and refined reference, whose box figures equal CH4.4a's on W1 and differ on W2 and W3 by the
+   normaliser (§2), CH4.4a's figures staying the gate's, with W3's worst boxes CH4.4a's own cells
+   (`--refine-cells`, the stage `w3-cells`). Recommended: as read.
 2. **The 114.7 ε box** (§5): its cause is the tangent-point placement on levels 2–5 at once (no
    level, class or M2L alone; the form, its classes and the waves add nothing). Recommended: §9.1's
    100 ε bound stated for D1's range (kD ≤ 500, where every worst box is at most 68.2 ε), and beyond
    it the worst box reported, not gated (proposal §9.1 amended; CH4.4 then closes with this
    finding). Alternatives: (b) a recalibration task, every level of the high-frequency branch one
-   degree up where the box exceeds the bound (measured at 10⁻⁸: 114.8 → 48.4 ε at kD = 1000, about +4 % evaluation; pair evidence
+   degree up where the box exceeds the bound (measured at 10⁻⁸: 114.8 → 48.4 ε at kD = 1000, about 2–4 % more evaluation; pair evidence
    1.3–2.7 ε), on CH4.3c's scans; (c) §9.1's bound raised (to 150 ε, say) for every kD.
 3. **`M2lOverride` in `tetraleaf-exec`'s public API** as a measurement setting (documented, empty by
    default, no rule sets one), as `diagonal_costs` and `v_costs` are. Recommended: keep it public.
@@ -311,7 +335,7 @@ Recommended: the first (question 2).
 The worst box over ε (the refined reference), ℓ2 over the reference's targets, the level with the
 largest share of ∇φ's Σ|e|² (its M2L), the rest of the levels' parts, the largest change of the worst
 box and of ℓ2 (∇φ) over the M2L runs (RCR's over the default's) with its run, and the form's classes
-beside the threshold by level.
+beside the threshold by level. W3 beyond kD = 30 from the stage `w3-cells` (`-cells`).
 
 | launch | worst box ÷ ε φ, ∇φ | ℓ2 φ, ∇φ | level (share of Σ|Δ∇φ|²) | rest φ, ∇φ | largest M2L change: worst box ∇φ (run) | ℓ2 ∇φ (run) | classes in (0.1, 1] |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -352,16 +376,16 @@ beside the threshold by level.
 | w2-kd500-random-1e-3 | 21.78, 22.13 | 3.89e-4, 4.27e-4 | 7 (Batched, 0.24) | 0.032, 0.034 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
 | w2-kd500-random-1e-6 | 18.76, 32.34 | 2.37e-7, 4.31e-7 | 6 (diagonal 34/34, 0.33) | 0.003, 0.001 | 1.034 (level 8 RCR (was waves)) | 1.017 (level 8 RCR (was waves)) | 7: [13, 14, 15, 16, 17] |
 | w2-kd500-random-1e-8 | 22.39, 28.27 | 2.47e-9, 2.83e-9 | 4 (diagonal 32/34, 0.32) | 0.001, 0.001 | 0.978 (level 7 RCR (was waves)) | 0.999 (level 6 RCR (was waves)) | 5: [7, 8] |
-| w3-kd100-random-1e-3 | 7.54, 2.57 | 3.41e-4, 1.39e-4 | 3 (diagonal 34/34, 0.64) | 0.009, 0.014 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
-| w3-kd100-random-1e-6 | 7.73, 3.84 | 1.99e-7, 1.20e-7 | 4 (waves, 0.39) | 0.001, 0.001 | 0.998 (level 4 RCR (was waves)) | 1.006 (level 5 RCR (was waves)) | – |
-| w3-kd100-random-1e-8 | 5.78, 2.96 | 1.23e-9, 6.61e-10 | 3 (waves, 0.57) | 0.000, 0.001 | 1.010 (level 3 RCR (was waves)) | 1.000 (level 2 RCR (was diagonal 32/34)) | – |
+| w3-kd100-random-1e-3-cells | 11.02, 3.85 | 3.68e-4, 1.51e-4 | 3 (diagonal 34/34, 0.64) | 0.009, 0.014 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
+| w3-kd100-random-1e-6-cells | 13.55, 5.83 | 2.29e-7, 1.35e-7 | 4 (waves, 0.32) | 0.001, 0.001 | 1.003 (level 4 RCR (was waves)) | 1.005 (level 5 RCR (was waves)) | – |
+| w3-kd100-random-1e-8-cells | 9.72, 4.83 | 1.49e-9, 8.14e-10 | 3 (waves, 0.48) | 0.000, 0.001 | 1.021 (level 3 RCR (was waves)) | 1.001 (level 3 RCR (was waves)) | – |
 | w3-kd30-random-1e-6 | 4.10, 3.88 | 1.28e-7, 1.16e-7 | 2 (diagonal 34/34, 0.59) | 0.000, 0.000 | 1.028 (level 3 RCR (was waves)) | 1.015 (level 3 RCR (was waves)) | – |
-| w3:1000000-kd200-random-1e-3 | 7.62, 8.29 | 3.32e-4, 4.29e-4 | 4 (waves, 0.78) | 0.009, 0.010 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
-| w3:1000000-kd200-random-1e-6 | 7.05, 9.61 | 1.77e-7, 2.70e-7 | 4 (waves, 0.58) | 0.001, 0.001 | 0.999 (level 4 RCR (was waves)) | 1.000 (level 2 RCR (was diagonal 34/34)) | 5: [0, 1] |
-| w3:1000000-kd200-random-1e-8 | 8.18, 11.63 | 1.50e-9, 2.55e-9 | 4 (waves, 0.59) | 0.000, 0.000 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | 2: [0, 1] |
-| w3:1000000-kd500-random-1e-3 | 14.28, 14.77 | 3.75e-4, 5.06e-4 | 5 (diagonal 34/34, 0.53) | 0.015, 0.016 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
-| w3:1000000-kd500-random-1e-6 | 7.72, 11.48 | 1.60e-7, 2.43e-7 | 4 (diagonal 34/34, 0.60) | 0.001, 0.002 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
-| w3:1000000-kd500-random-1e-8 | 9.82, 18.42 | 1.98e-9, 3.29e-9 | 4 (waves, 0.56) | 0.109, 0.192 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
+| w3:1000000-kd200-random-1e-3-cells | 10.84, 12.01 | 3.47e-4, 4.47e-4 | 4 (waves, 0.76) | 0.009, 0.011 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
+| w3:1000000-kd200-random-1e-6-cells | 10.23, 17.97 | 1.95e-7, 3.00e-7 | 4 (waves, 0.49) | 0.001, 0.002 | 0.998 (level 4 RCR (was waves)) | 1.000 (level 2 RCR (was diagonal 34/34)) | 5: [0, 1] |
+| w3:1000000-kd200-random-1e-8-cells | 9.44, 13.03 | 1.69e-9, 2.84e-9 | 4 (waves, 0.60) | 0.000, 0.000 | 0.999 (level 4 RCR (was waves)) | 1.000 (level 2 RCR (was diagonal 34/34)) | 2: [0, 1] |
+| w3:1000000-kd500-random-1e-3-cells | 16.45, 19.03 | 3.96e-4, 5.38e-4 | 5 (diagonal 34/34, 0.49) | 0.017, 0.018 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
+| w3:1000000-kd500-random-1e-6-cells | 15.41, 18.50 | 1.96e-7, 2.95e-7 | 4 (diagonal 34/34, 0.56) | 0.002, 0.003 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
+| w3:1000000-kd500-random-1e-8-cells | 24.61, 29.71 | 2.70e-9, 4.24e-9 | 4 (waves, 0.47) | 0.001, 0.001 | 1.000 (level 2 RCR (was diagonal 34/34)) | 1.000 (level 2 RCR (was diagonal 34/34)) | – |
 
 ### Levels
 
@@ -544,45 +568,45 @@ and those that fail the bound.
 | w2-kd500-random-1e-8 | 6 | 6.77 | 32 | waves | 0.000 | 0.000 |  |  |  |
 | w2-kd500-random-1e-8 | 7 | 3.38 | 32 | waves | 0.000 | 0.000 |  |  |  |
 | w2-kd500-random-1e-8 | 8 | 1.69 | 32 | – | – | – |  |  |  |
-| w3-kd100-random-1e-3 | 2 | 21.65 | 27 | diagonal 34/34 | 0.127 | 0.084 | [] | 0 | 0 |
-| w3-kd100-random-1e-3 | 3 | 10.83 | 15 | diagonal 34/34 | 0.692 | 0.640 | [] | 0 | 0 |
-| w3-kd100-random-1e-3 | 4 | 5.41 | 10 | Batched | 0.043 | 0.072 |  |  |  |
-| w3-kd100-random-1e-3 | 5 | 2.71 | 7 | Batched | 0.017 | 0.071 |  |  |  |
-| w3-kd100-random-1e-6 | 2 | 21.65 | 34 | diagonal 34/34 | 0.312 | 0.169 | [] | 0 | 0 |
-| w3-kd100-random-1e-6 | 3 | 10.83 | 21 | diagonal 34/34 | 0.404 | 0.304 | [] | 0 | 0 |
-| w3-kd100-random-1e-6 | 4 | 5.41 | 15 | waves | 0.233 | 0.394 |  |  |  |
-| w3-kd100-random-1e-6 | 5 | 2.71 | 15 | waves | 0.016 | 0.104 |  |  |  |
-| w3-kd100-random-1e-8 | 2 | 21.65 | 38 | diagonal 32/34 | 0.483 | 0.406 | [] | 3 | 2 |
-| w3-kd100-random-1e-8 | 3 | 10.83 | 32 | waves | 0.489 | 0.575 |  |  |  |
-| w3-kd100-random-1e-8 | 4 | 5.41 | 32 | waves | 0.000 | 0.000 |  |  |  |
-| w3-kd100-random-1e-8 | 5 | 2.71 | 32 | waves | 0.000 | 0.000 |  |  |  |
+| w3-kd100-random-1e-3-cells | 2 | 21.65 | 27 | diagonal 34/34 | 0.119 | 0.081 | [] | 0 | 0 |
+| w3-kd100-random-1e-3-cells | 3 | 10.83 | 15 | diagonal 34/34 | 0.694 | 0.641 | [] | 0 | 0 |
+| w3-kd100-random-1e-3-cells | 4 | 5.41 | 10 | Batched | 0.037 | 0.062 |  |  |  |
+| w3-kd100-random-1e-3-cells | 5 | 2.71 | 7 | Batched | 0.014 | 0.061 |  |  |  |
+| w3-kd100-random-1e-6-cells | 2 | 21.65 | 34 | diagonal 34/34 | 0.349 | 0.207 | [] | 0 | 0 |
+| w3-kd100-random-1e-6-cells | 3 | 10.83 | 21 | diagonal 34/34 | 0.357 | 0.307 | [] | 0 | 0 |
+| w3-kd100-random-1e-6-cells | 4 | 5.41 | 15 | waves | 0.178 | 0.323 |  |  |  |
+| w3-kd100-random-1e-6-cells | 5 | 2.71 | 15 | waves | 0.012 | 0.084 |  |  |  |
+| w3-kd100-random-1e-8-cells | 2 | 21.65 | 38 | diagonal 32/34 | 0.473 | 0.401 | [] | 3 | 2 |
+| w3-kd100-random-1e-8-cells | 3 | 10.83 | 32 | waves | 0.412 | 0.483 |  |  |  |
+| w3-kd100-random-1e-8-cells | 4 | 5.41 | 32 | waves | 0.000 | 0.000 |  |  |  |
+| w3-kd100-random-1e-8-cells | 5 | 2.71 | 32 | waves | 0.000 | 0.000 |  |  |  |
 | w3-kd30-random-1e-6 | 2 | 6.50 | 16 | diagonal 34/34 | 0.849 | 0.589 | [] | 2 | 0 |
 | w3-kd30-random-1e-6 | 3 | 3.25 | 15 | waves | 0.150 | 0.410 |  |  |  |
 | w3-kd30-random-1e-6 | 4 | 1.62 | 15 | – | – | – |  |  |  |
-| w3:1000000-kd200-random-1e-3 | 2 | 43.30 | 49 | diagonal 34/34 | 0.086 | 0.051 | [] | 0 | 0 |
-| w3:1000000-kd200-random-1e-3 | 3 | 21.65 | 27 | diagonal 34/34 | 0.115 | 0.083 | [] | 0 | 0 |
-| w3:1000000-kd200-random-1e-3 | 4 | 10.83 | 15 | waves | 0.722 | 0.779 |  |  |  |
-| w3:1000000-kd200-random-1e-3 | 5 | 5.41 | 10 | Batched | 0.010 | 0.022 |  |  |  |
-| w3:1000000-kd200-random-1e-6 | 2 | 43.30 | 58 | diagonal 34/34 | 0.243 | 0.142 | [] | 0 | 0 |
-| w3:1000000-kd200-random-1e-6 | 3 | 21.65 | 34 | diagonal 34/34 | 0.275 | 0.206 | [] | 0 | 0 |
-| w3:1000000-kd200-random-1e-6 | 4 | 10.83 | 21 | waves | 0.451 | 0.585 |  |  |  |
-| w3:1000000-kd200-random-1e-6 | 5 | 5.41 | 15 | diagonal 34/34 | 0.006 | 0.024 | [0, 1] | 3 | 0 |
-| w3:1000000-kd200-random-1e-8 | 2 | 43.30 | 63 | diagonal 34/34 | 0.219 | 0.125 | [0, 1] | 0 | 0 |
-| w3:1000000-kd200-random-1e-8 | 3 | 21.65 | 38 | diagonal 32/34 | 0.284 | 0.229 | [] | 3 | 2 |
-| w3:1000000-kd200-random-1e-8 | 4 | 10.83 | 32 | waves | 0.459 | 0.593 |  |  |  |
-| w3:1000000-kd200-random-1e-8 | 5 | 5.41 | 32 | – | – | – |  |  |  |
-| w3:1000000-kd500-random-1e-3 | 2 | 108.25 | 115 | diagonal 34/34 | 0.029 | 0.016 | [] | 0 | 0 |
-| w3:1000000-kd500-random-1e-3 | 3 | 54.13 | 60 | diagonal 34/34 | 0.096 | 0.063 | [] | 0 | 0 |
-| w3:1000000-kd500-random-1e-3 | 4 | 27.06 | 32 | diagonal 34/34 | 0.325 | 0.271 | [] | 0 | 0 |
-| w3:1000000-kd500-random-1e-3 | 5 | 13.53 | 18 | diagonal 34/34 | 0.423 | 0.531 | [] | 0 | 0 |
-| w3:1000000-kd500-random-1e-6 | 2 | 108.25 | 128 | diagonal 34/34 | 0.042 | 0.024 | [] | 0 | 0 |
-| w3:1000000-kd500-random-1e-6 | 3 | 54.13 | 70 | diagonal 34/34 | 0.255 | 0.176 | [] | 0 | 0 |
-| w3:1000000-kd500-random-1e-6 | 4 | 27.06 | 40 | diagonal 34/34 | 0.560 | 0.598 | [] | 0 | 0 |
-| w3:1000000-kd500-random-1e-6 | 5 | 13.53 | 25 | RCR | 0.091 | 0.157 |  |  |  |
-| w3:1000000-kd500-random-1e-8 | 2 | 108.25 | 134 | diagonal 34/34 | 0.057 | 0.035 | [] | 0 | 0 |
-| w3:1000000-kd500-random-1e-8 | 3 | 54.13 | 75 | diagonal 34/34 | 0.256 | 0.174 | [] | 2 | 0 |
-| w3:1000000-kd500-random-1e-8 | 4 | 27.06 | 44 | waves | 0.558 | 0.564 |  |  |  |
-| w3:1000000-kd500-random-1e-8 | 5 | 13.53 | 32 | – | – | – |  |  |  |
+| w3:1000000-kd200-random-1e-3-cells | 2 | 43.30 | 49 | diagonal 34/34 | 0.089 | 0.056 | [] | 0 | 0 |
+| w3:1000000-kd200-random-1e-3-cells | 3 | 21.65 | 27 | diagonal 34/34 | 0.110 | 0.080 | [] | 0 | 0 |
+| w3:1000000-kd200-random-1e-3-cells | 4 | 10.83 | 15 | waves | 0.691 | 0.759 |  |  |  |
+| w3:1000000-kd200-random-1e-3-cells | 5 | 5.41 | 10 | Batched | 0.009 | 0.020 |  |  |  |
+| w3:1000000-kd200-random-1e-6-cells | 2 | 43.30 | 58 | diagonal 34/34 | 0.277 | 0.187 | [] | 0 | 0 |
+| w3:1000000-kd200-random-1e-6-cells | 3 | 21.65 | 34 | diagonal 34/34 | 0.263 | 0.208 | [] | 0 | 0 |
+| w3:1000000-kd200-random-1e-6-cells | 4 | 10.83 | 21 | waves | 0.376 | 0.493 |  |  |  |
+| w3:1000000-kd200-random-1e-6-cells | 5 | 5.41 | 15 | diagonal 34/34 | 0.005 | 0.019 | [0, 1] | 3 | 0 |
+| w3:1000000-kd200-random-1e-8-cells | 2 | 43.30 | 63 | diagonal 34/34 | 0.257 | 0.129 | [0, 1] | 0 | 0 |
+| w3:1000000-kd200-random-1e-8-cells | 3 | 21.65 | 38 | diagonal 32/34 | 0.246 | 0.210 | [] | 3 | 2 |
+| w3:1000000-kd200-random-1e-8-cells | 4 | 10.83 | 32 | waves | 0.453 | 0.599 |  |  |  |
+| w3:1000000-kd200-random-1e-8-cells | 5 | 5.41 | 32 | – | 0.000 | 0.000 |  |  |  |
+| w3:1000000-kd500-random-1e-3-cells | 2 | 108.25 | 115 | diagonal 34/34 | 0.026 | 0.014 | [] | 0 | 0 |
+| w3:1000000-kd500-random-1e-3-cells | 3 | 54.13 | 60 | diagonal 34/34 | 0.091 | 0.057 | [] | 0 | 0 |
+| w3:1000000-kd500-random-1e-3-cells | 4 | 27.06 | 32 | diagonal 34/34 | 0.341 | 0.283 | [] | 0 | 0 |
+| w3:1000000-kd500-random-1e-3-cells | 5 | 13.53 | 18 | diagonal 34/34 | 0.388 | 0.491 | [] | 0 | 0 |
+| w3:1000000-kd500-random-1e-6-cells | 2 | 108.25 | 128 | diagonal 34/34 | 0.052 | 0.025 | [] | 0 | 0 |
+| w3:1000000-kd500-random-1e-6-cells | 3 | 54.13 | 70 | diagonal 34/34 | 0.250 | 0.186 | [] | 0 | 0 |
+| w3:1000000-kd500-random-1e-6-cells | 4 | 27.06 | 40 | diagonal 34/34 | 0.487 | 0.559 | [] | 0 | 0 |
+| w3:1000000-kd500-random-1e-6-cells | 5 | 13.53 | 25 | RCR | 0.062 | 0.118 |  |  |  |
+| w3:1000000-kd500-random-1e-8-cells | 2 | 108.25 | 134 | diagonal 34/34 | 0.063 | 0.035 | [] | 0 | 0 |
+| w3:1000000-kd500-random-1e-8-cells | 3 | 54.13 | 75 | diagonal 34/34 | 0.334 | 0.262 | [] | 2 | 0 |
+| w3:1000000-kd500-random-1e-8-cells | 4 | 27.06 | 44 | waves | 0.374 | 0.475 |  |  |  |
+| w3:1000000-kd500-random-1e-8-cells | 5 | 13.53 | 32 | – | 0.059 | 0.120 |  |  |  |
 
 ### Worst boxes
 

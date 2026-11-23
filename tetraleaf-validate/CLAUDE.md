@@ -739,8 +739,11 @@ passing classes `diagonal_rule_classes`'), and to the `helmholtz_boxes` example 
 other level the defaults'; CH4.0b's named degrees under `rotation` and `default`), `--study m2l`
 (each level whose M2L is not RCR on RCR at its degree as run, the form's classes by decade of
 E/(θ ε) on RCR, `--class-runs` each class of the first decade), `--refine n` (every point of the
-n worst boxes in the reference), `--raise-by d,…` and `--raise-levels` (a level's degree raised
-under the defaults' M2L), `--reference-cache dir` (the sampled reference shared by a case's ε),
+n worst boxes in the reference), `--refine-faces` (every point of the boxes at the centres of the
+domain's faces, W1's tangent points), `--refine-cells i,j,k;…` (of named boxes), `--all-levels`
+(the level study raises the levels without V pairs too), `--raise-by d,…`, `--raise-levels l,…|v`
+and `--raise-together` (levels' degrees raised under the defaults' M2L, one at a time or at once),
+`--reference-cache dir` (the sampled reference shared by a case's ε),
 and the tables "Levels as run", "The M2L's parts" and an M2L-parts column of the worst boxes.
 `tools/helmholtz/ch4-4b-runs.sh` runs the task's stages, `ch4-4b-tables.py` makes the report's
 tables. Its report is `results/helmholtz-ch4-4b.md`.
