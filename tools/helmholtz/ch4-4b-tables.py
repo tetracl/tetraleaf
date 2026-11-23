@@ -14,6 +14,13 @@ defaults). Tables (Markdown on stdout):
   m2l      per launch and M2L run: the share, the worst box and ℓ2 ÷ first, the part at the worst
            ∇φ target
   worst    per launch: the worst ∇φ boxes with the levels' and the M2L runs' parts
+
+    tools/helmholtz/ch4-4b-tables.py pairs <ε> <x>:<p> … [--raise d,…]
+
+  pairs    the remedy's pair evidence: per level (x = Re(k) a_l, its degree p as run) the worst
+           pair's error over ε at p and at p + d for each d (default 1, 2, 4), from spike S7's
+           curves as CH4.3c2's pair evidence reads them (tools/helmholtz/ch4-3c2-pairs.py's
+           `pair_error`: the excess interpolated between the grid's k a)
 Python 3 standard library only.
 """
 
@@ -148,7 +155,38 @@ def worst(out, pattern):
         print()
 
 
+def pairs(args):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "ch4_3c2_pairs", Path(__file__).with_name("ch4-3c2-pairs.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    raises = [1, 2, 4]
+    if "--raise" in args:
+        i = args.index("--raise")
+        raises = [int(v) for v in args[i + 1].split(",")]
+        args = args[:i] + args[i + 2 :]
+    eps = float(args[0])
+    curves = module.load_curves()
+    heads = ["p"] + [f"p + {d}" for d in raises]
+    print("| x | p | " + " | ".join(f"worst pair ÷ ε at {h}" for h in heads) + " |")
+    print("| ---: | ---: |" + " ---: |" * len(heads))
+    for item in args[1:]:
+        x, p = item.split(":")
+        x, p = float(x), int(p)
+        cells = []
+        for d in [0] + raises:
+            err = module.pair_error(curves, x, p + d)
+            cells.append("–" if err is None else f"{err / eps:.3g}")
+        print(f"| {x:.2f} | {p} | " + " | ".join(cells) + " |")
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "pairs":
+        pairs(sys.argv[2:])
+        return
     if len(sys.argv) < 3:
         print(__doc__, file=sys.stderr)
         sys.exit(2)
