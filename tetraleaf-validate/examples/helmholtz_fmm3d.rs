@@ -58,7 +58,9 @@
 //! `tools/fmm3d/run.sh` writes; the driver's own input and output arrays included); a table
 //! "Build" after the main one, a row per ε: our build, its parts (`BUILD_PARTS`, the slowest
 //! rank's each) and the evaluation; and in the log, per ε, each level's k a, degree, V pairs
-//! and the M2L that ran.
+//! and the M2L that ran. An FMM3D run at ε without its output file (the driver failed, for
+//! example killed for memory) prints a row "failed (no output)" with its peak memory where
+//! the log has it; the reference's output is still required.
 //!
 //! Run in release mode, on any number of ranks for `compare` (each rank passes a
 //! contiguous block of the points, rank 0 prints), with one BLAS thread. One charge
@@ -330,6 +332,23 @@ fn read_run(prefix: &Path, token: &str, problem: &Problem) -> Fmm3dRun {
     }
 }
 
+/// [`read_run`] for a run that may have failed (Helmholtz CH4.4a: FMM3D's `default` build
+/// ran out of a Kathleen node's memory at kD = 1000): `Err` with the launch's peak resident
+/// bytes from the log, if any, when `PREFIX-<token>.out` does not exist.
+fn read_run_or_failed(
+    prefix: &Path,
+    token: &str,
+    problem: &Problem,
+) -> Result<Fmm3dRun, Option<u64>> {
+    if Path::new(&format!("{}-{token}.out", prefix.display())).exists() {
+        Ok(read_run(prefix, token, problem))
+    } else {
+        Err(std::fs::read_to_string(format!("{}.log", prefix.display()))
+            .ok()
+            .and_then(|log| maxrss(&log, token)))
+    }
+}
+
 /// A crosscheck's cells: the ℓ2 errors over all targets, the worst box (φ, ∇φ) over ε,
 /// and over the ℓ2 errors with the number of boxes; dashes without one.
 fn crosscheck_cells(check: Option<&Crosscheck>, eps: f64) -> String {
@@ -562,14 +581,14 @@ fn main() {
         }
         (token.clone(), run)
     });
-    let fmm3d: Vec<Vec<Fmm3dRun>> = arguments
+    let fmm3d: Vec<Vec<Result<Fmm3dRun, Option<u64>>>> = arguments
         .fmm3d
         .iter()
         .map(|(_, prefix)| {
             arguments
                 .eps
                 .iter()
-                .map(|e| read_run(prefix, e, &problem))
+                .map(|e| read_run_or_failed(prefix, e, &problem))
                 .collect()
         })
         .collect();
@@ -704,7 +723,20 @@ fn main() {
             row.evaluate
         ));
         for ((label, _), runs) in arguments.fmm3d.iter().zip(&fmm3d) {
-            let run = &runs[j];
+            let run = match &runs[j] {
+                Ok(run) => run,
+                Err(memory) => {
+                    println!(
+                        "| {} | {} | {kd} | {token} | FMM3D {label} | – | eps = {token} | – | failed \
+                         (no output) | – | – | {} | – | {} |",
+                        workload.name(),
+                        problem.len(),
+                        crosscheck_cells(None, eps),
+                        memory.map_or("–".into(), gigabytes),
+                    );
+                    continue;
+                }
+            };
             let e = sample_errors(&run.sampled, &oracle, 0);
             let check = match (&reference, &run.full) {
                 (Some((_, r)), Some(full)) => Some(crosscheck_values(

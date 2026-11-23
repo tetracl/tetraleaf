@@ -11,14 +11,15 @@
 #
 # Each stage is one call of `tools/fmm3d/run.sh helmholtz` (README.md there) on its cases, with
 # our side under the library's defaults (`H_SETTINGS=defaults`) at ε = 10⁻³, 10⁻⁶, 10⁻⁸, FMM3D at
-# the same eps (the variants of VARIANTS, by default `default fastker`; `default` alone on the
-# density cases) and `default` at 10⁻¹² for the full-target crosscheck, no one-thread cases, and
+# the same eps (the variants of VARIANTS, by default `default fastker`; one alone on the density
+# cases) and the first variant at 10⁻¹² for the full-target crosscheck (`fastker` at
+# kD = 1000, where `default` runs out of memory), no one-thread cases, and
 # FMM3D's peak memory per eps (tools/fmm3d/maxrss.py). `tools/helmholtz/ch4-4a-tables.py` makes the
 # report's tables from <out-dir>'s helmholtz-<case>.md. Stages:
 #   smoke    W1 at kD = 10, and W2 at kD = 10 with the constant density (a check of the script)
 #   low      W1 and W2 at kD = 10, 30, 100, 250; W3 resolved at kD = 10, 30
 #   const    the constant density: W1 and W2 at kD = 10, 30, 100; W3 resolved at kD = 10, 30
-#   mid      W1 and W2 at kD = 500
+#   mid      W1 and W2 at kD = 500 (w1-500 and w2-500 alone)
 #   pw500    W1 at kD = 500 with the plane wave's trace
 #   w1-1000  W1 at kD = 1000
 #   pw1000   W1 at kD = 1000 with the plane wave's trace
@@ -48,12 +49,16 @@ for stage in "$@"; do
             w2@30/constant w2@100/constant w3@10/constant w3@30/constant
         ;;
     mid) cases "$both" w1@500 w2@500 ;;
+    w1-500) cases "$both" w1@500 ;;
+    w2-500) cases "$both" w2@500 ;;
     pw500) cases default w1@500/planewave ;;
-    w1-1000) cases "$both" w1@1000 ;;
-    pw1000) cases default w1@1000/planewave ;;
+    # FMM3D's default build needs more than a node's 180 GB here at 10⁻³, 10⁻⁶ and 10⁻¹² (jobs
+    # 663708 and 663709): fastker first, the reference; default still runs, for its memory.
+    w1-1000) cases "fastker default" w1@1000 ;;
+    pw1000) cases fastker w1@1000/planewave ;;
     w3) cases "$both" w3@100 w3:1000000@200 w3:1000000@500 ;;
     *)
-        echo "ch4-4a-runs.sh: unknown stage $stage (smoke, low, const, mid, pw500, w1-1000, pw1000, w3)" >&2
+        echo "ch4-4a-runs.sh: unknown stage $stage (smoke, low, const, mid, w1-500, w2-500, pw500, w1-1000, pw1000, w3)" >&2
         exit 2
         ;;
     esac
