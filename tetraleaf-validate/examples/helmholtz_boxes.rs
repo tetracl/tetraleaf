@@ -1143,7 +1143,7 @@ fn main() {
         "| level | k a | p | V pairs | M2L | classes (0.1, 1] | (0.01, 0.1] | below | failing | largest E/(θ ε) |"
     );
     println!("| ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: |");
-    for l in 2..p_run.len() {
+    for (l, p) in p_run.iter().enumerate().skip(2) {
         let (decades, failing, largest) = class_decades(&row, k, eps, l).map_or(
             (String::new(), String::new(), String::new()),
             |(d, f, w)| {
@@ -1157,7 +1157,7 @@ fn main() {
         println!(
             "| {l} | {:.2} | {} | {} | {} | {} | {failing} | {largest} |",
             k.re * row.circumradii[l],
-            p_run[l],
+            p,
             row.v_pairs[l],
             level_m2l(&row, l),
             if decades.is_empty() {
