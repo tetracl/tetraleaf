@@ -164,6 +164,24 @@ runs of the tools only, small, not timed).
 - The matched rule moves in FMM3D's steps (its iprec and order tables): several eps give the same
   error, the match as close as the grid allows (C6.8, CH4.0e).
 
+## As run
+- Every stage ran (report §11, the jobs and nodes). The `time` stage's first Kathleen jobs (663952,
+  663953) ran a copy of `ch4-5-runs.sh` synced before the stage was trimmed (both bindings, REPEAT 2
+  everywhere): cancelled after 2 h; the eight finished cases kept (their unbound runs are the trimmed
+  stage's), the rest rerun as 664298 and 664306.
+- locust's timed list from locust's errors of ours (as planned); Kathleen's, from both machines',
+  adds two eps (W2 at kD = 100, W1 at kD = 30 with the constant density), run on locust afterwards.
+- `ch4-5-tables.py` changed with the data in: setup apart left out where FMM3D's tree is not below
+  its call (one case, a call of milliseconds); the closest match's variant the faster only among
+  those within a decade of the closer match (`fastker` sums the smallest trees directly at every
+  eps, 10¹⁰ off ours). The selftest on CH4.0e's rows passes after both.
+- FMM3D `default` failed (exit 137, the node's memory) on W2 at kD = 500 at 3·10⁻³ and 10⁻³ on
+  Kathleen; a row, not a stop.
+
 ## Pending runs
+None.
 
 ## Open questions
+The report's §12, for sign-off: 1. the acceptance as read; 2. CH4.2d kept off the list; 3. CH4.3f
+kept off the list; 4. CH4.7 (the form choice prices the tables' build for small trees) added off the
+list.
