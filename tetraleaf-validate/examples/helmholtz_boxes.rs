@@ -20,7 +20,10 @@
 //! run and one of these runs' parts (their share of the error, their worst box and ℓ2 over the
 //! first run's, their part at the worst ∇φ target). `--refine n` adds every point of the n worst
 //! boxes of φ and of ∇φ (by the sampled reference) to the reference, so their maxima are
-//! exact; `--refine-faces` adds every point of the deepest level's boxes at the centres of the
+//! exact; `--refine-cells i,j,k;…` adds every point of the named boxes of the deepest level
+//! (another run's worst boxes, CH4.4a's on W3); `--all-levels` makes `--study levels` raise
+//! the levels without V pairs too (the deepest level's translations and leaf operators);
+//! `--refine-faces` adds every point of the deepest level's boxes at the centres of the
 //! domain's faces (W1's six tangent points with the points' bounding cube, where CH4.4a found
 //! the worst boxes; a sample of two per box missed them). `--raise-by d,…` runs the level of `--raise-levels` (default: the level with the
 //! largest part at the worst ∇φ box, from `--study levels`) at its degree as run plus d under
@@ -106,6 +109,10 @@ struct Arguments {
     /// `--refine-faces`: every point of the deepest level's boxes at the centres of the
     /// domain's faces (W1's tangent points) in the reference.
     refine_faces: bool,
+    /// `--refine-cells i,j,k;…`: every point of these boxes of the deepest level in the reference.
+    refine_cells: Vec<[u64; 3]>,
+    /// `--all-levels`: `--study levels` raises the levels without V pairs too.
+    all_levels: bool,
     /// `--raise-by d,…`: the runs with a level's degree raised by d under the setting's M2L.
     raise_by: Vec<usize>,
     /// `--raise-levels l,…|v`: their levels (`v`, here an empty list: every level with V
@@ -177,7 +184,8 @@ fn arguments() -> Arguments {
             "usage: helmholtz_boxes [--workload w] [--kd x] [--kim y] \
              [--density random|planewave|constant] [--charges real|complex] [--eps e] \
              [--m2l rotation|default|defaults] [--study single|levels|m2l|levels,m2l] \
-             [--class-runs] [--refine n] [--refine-faces] [--raise-by d,…] \
+             [--class-runs] [--refine n] [--refine-faces] [--refine-cells i,j,k;…] \
+             [--all-levels] [--raise-by d,…] \
              [--raise-levels l,…|v] [--raise-together] \
              [--reference-cache dir] [--margin m] \
              [--offset x,y,z] [--leaf-size n|uniform] [--raise-factor f] [--worst n] \
@@ -199,6 +207,8 @@ fn arguments() -> Arguments {
         class_runs: false,
         refine: 0,
         refine_faces: false,
+        refine_cells: Vec::new(),
+        all_levels: false,
         raise_by: Vec::new(),
         raise_levels: None,
         raise_together: false,
@@ -216,11 +226,15 @@ fn arguments() -> Arguments {
     let mut rest = &args[..];
     loop {
         if let [flag, tail @ ..] = rest
-            && (flag == "--class-runs" || flag == "--refine-faces" || flag == "--raise-together")
+            && matches!(
+                flag.as_str(),
+                "--class-runs" | "--refine-faces" | "--raise-together" | "--all-levels"
+            )
         {
             match flag.as_str() {
                 "--class-runs" => parsed.class_runs = true,
                 "--refine-faces" => parsed.refine_faces = true,
+                "--all-levels" => parsed.all_levels = true,
                 _ => parsed.raise_together = true,
             }
             rest = tail;
@@ -278,6 +292,16 @@ fn arguments() -> Arguments {
                 })
                 .is_some(),
             "--refine" => value.parse().map(|v| parsed.refine = v).is_ok(),
+            "--refine-cells" => value
+                .split(';')
+                .map(|c| {
+                    let v: Option<Vec<u64>> = c.split(',').map(|x| x.parse().ok()).collect();
+                    v.filter(|v| v.len() == 3 && v.iter().all(|&x| x < 1 << 21))
+                        .map(|v| [v[0], v[1], v[2]])
+                })
+                .collect::<Option<Vec<[u64; 3]>>>()
+                .map(|cells| parsed.refine_cells = cells)
+                .is_some(),
             "--reference-cache" => {
                 parsed.reference_cache = Some(value.clone());
                 true
@@ -914,12 +938,26 @@ fn main() {
     // Every point of the worst boxes of the sampled measure (Helmholtz CH4.4b), so that their
     // maxima are exact.
     let mut refined = 0;
-    if (args.refine > 0 || args.refine_faces) && sampled < n {
+    if (args.refine > 0 || args.refine_faces || !args.refine_cells.is_empty()) && sampled < n {
         let mut keys: std::collections::HashSet<u64> = [0, 1]
             .iter()
             .flat_map(|&f| worst_boxes(&boxes, f, args.refine))
             .map(|b| b.key)
             .collect();
+        // The named boxes (`Grid::box_of`'s keys: i | j << 21 | k << 42).
+        let named: std::collections::HashSet<u64> = args
+            .refine_cells
+            .iter()
+            .map(|c| c[0] | (c[1] << 21) | (c[2] << 42))
+            .collect();
+        if !named.is_empty() {
+            for &x in &problem.points {
+                let key = grid.box_of(x);
+                if named.contains(&key) {
+                    keys.insert(key);
+                }
+            }
+        }
         if args.refine_faces {
             // The boxes whose closure holds the centre of a face of the domain: the outermost
             // layer along the face's normal, the two middle cells along the other axes.
@@ -960,10 +998,13 @@ fn main() {
             format!(
                 ", and every point of the {refined} worst boxes of φ and ∇φ by that sample{}, {} \
                  targets more",
-                if args.refine_faces {
-                    " and of the boxes at the centres of the domain's faces"
-                } else {
-                    ""
+                match (args.refine_faces, args.refine_cells.is_empty()) {
+                    (true, true) => " and of the boxes at the centres of the domain's faces",
+                    (true, false) => {
+                        " and of the boxes at the centres of the domain's faces and those named"
+                    }
+                    (false, false) => " and of the boxes named",
+                    (false, true) => "",
                 },
                 reference.targets.len() - sampled
             )
@@ -1062,7 +1103,9 @@ fn main() {
             }
         };
         let mut parts = vec![None; p_run.len()];
-        let levels: Vec<usize> = (2..p_run.len()).filter(|&l| row.v_pairs[l] > 0).collect();
+        let levels: Vec<usize> = (2..p_run.len())
+            .filter(|&l| args.all_levels || row.v_pairs[l] > 0)
+            .collect();
         for &l in &levels {
             raised_to[l] = to(l);
             let m = measure_case(format!("level {l} at {}", to(l)), &raise_case(&[l]));

@@ -116,7 +116,8 @@
 //! waves; deeper levels with waves): no override the setting's bits; RCR on the form's level the
 //! output of the time rule's RCR there (free RCR costs) bit for bit, and all its classes off the
 //! same; some classes off: the rest on the form, the errors within `DIAGONAL_RATIO`; RCR on a
-//! level with waves: no waves, the degree as run, the errors within `PLANE_WAVE_RATIO`; under
+//! level with waves: no waves, the degree as run, the errors within `PLANE_WAVE_RATIO`; a degree
+//! above it under the setting's M2L there: that degree, the other levels the setting's; under
 //! Rotation with the form off, a level's degree named (RCR or the setting) the named degrees'
 //! FMM (`Degrees::PerLevel`) bit for bit; 2 threads and the one-rank FMM bit for bit; a level
 //! below 2 refused on every rank.
@@ -2041,6 +2042,33 @@ fn check_m2l_override(scenario: &Scenario, comm: &SimpleCommunicator) -> usize {
         "{what}: errors {e:?} against the setting's {plain:?}"
     );
     check_one_rank(&what, &rcr, inputs, kind, &got, comm);
+    checked += 1;
+
+    // A degree under the setting's M2L on the waves' level, through the builder (the remedy
+    // runs' path): the level at that degree (above p_w, so the waves' raise keeps it), every
+    // other level the setting's, 2 threads and the one-rank FMM bit for bit.
+    let raised = degrees[waves] + 1;
+    let what = format!(
+        "{}: level {waves} at degree {raised}, the setting",
+        scenario.name
+    );
+    let setting = overridden(M2lOverride {
+        level: waves,
+        degree: Some(raised),
+        m2l: OverrideM2l::Setting,
+    });
+    let (fmm, got) = run(&setting, inputs, kind, comm);
+    assert_eq!(fmm.degrees()[waves], raised, "{what}");
+    others_same(&what, &fmm, waves);
+    drop(fmm);
+    let e = errors(scenario, inputs, &got, 0, comm);
+    assert!(
+        e.0 <= scenario.bound && e.1 <= scenario.bound,
+        "{what}: errors {e:?}"
+    );
+    let (_, threaded) = run(&setting.clone().threads(2), inputs, kind, comm);
+    assert_same(&format!("{what}, 2 threads"), &threaded, &got, comm);
+    check_one_rank(&what, &setting, inputs, kind, &got, comm);
     checked += 1;
 
     // Under Rotation with the form off, a level's degree named: the named degrees' FMM.

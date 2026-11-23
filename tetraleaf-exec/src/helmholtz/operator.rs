@@ -1777,13 +1777,15 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
                     let sparse = kernel.shapes.as_ref().is_some_and(|shapes| {
                         shapes[l].batched_columns() < kernel.auto_min_columns(p)
                     });
-                    if waves || sparse || p > max_degree || forced_rcr[l] {
+                    if waves || sparse || p > max_degree {
                         continue;
                     }
                     let bytes = BatchedM2l::<T>::level_bytes(p);
                     if bytes <= left {
                         left -= bytes;
-                        chosen[l] = true;
+                        // An override's RCR (Helmholtz CH4.4b) keeps the budget spent, so that
+                        // every other level's choice stays the setting's.
+                        chosen[l] = !forced_rcr[l];
                     }
                 }
                 chosen

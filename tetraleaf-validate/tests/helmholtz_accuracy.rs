@@ -27,9 +27,10 @@ use mpi::topology::SimpleCommunicator;
 use mpi::traits::Communicator;
 use tetraleaf_exec::helmholtz::{
     ChargeKind, Charges, DEFAULT_C_LEAF, DEFAULT_DIAGONAL_BUILD, Degrees, Densities,
-    HelmholtzDiagonal, HelmholtzFmmBuilder, HelmholtzM2l, LevelShape, Output, PlaneWavePrecision,
-    PlaneWaveRaise, PlaneWaveSplit, RcrSplit, TransferBuild, V_COSTS_NEON, VAfterPlan, VNear,
-    VRaisedPrice, Wavenumber, WavenumberKind, WxNear, auto_m2l_mul_add, s7_degree,
+    HelmholtzDiagonal, HelmholtzFmmBuilder, HelmholtzM2l, LevelShape, M2lOverride, Output,
+    OverrideM2l, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit, TransferBuild,
+    V_COSTS_NEON, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WavenumberKind, WxNear,
+    auto_m2l_mul_add, s7_degree,
 };
 use tetraleaf_exec::operator::Isa;
 use tetraleaf_tables::helmholtz::plane_wave::merge::{plane_wave_degree, precision_for_tolerance};
@@ -700,7 +701,8 @@ fn helmholtz_accuracy_harness() {
 /// of an FMM built by `HelmholtzFmmBuilder::new` with nothing set but the charges, the
 /// gradients and the threads (the trusted path for "the defaults"), within ε; the settings
 /// as built are the library's; `Row::memory` is read on Linux (the growth within the peak)
-/// and absent on macOS, which has no peak to reset.
+/// and absent on macOS, which has no peak to reset. Helmholtz CH4.4b: `Case::m2l_overrides`
+/// reaches the builder (level 2 on RCR, the other levels' M2L unchanged, within ε).
 fn check_defaults(world: &SimpleCommunicator) {
     let (k, epsilon, threads) = ((30.0, 0.0), 1e-7, 2);
     let defaults = Case::defaults(Workload::W1, k, Degrees::Tolerance(epsilon));
@@ -752,6 +754,35 @@ fn check_defaults(world: &SimpleCommunicator) {
     } else if cfg!(target_os = "macos") {
         assert_eq!(row.memory, None);
     }
+
+    // Helmholtz CH4.4b: `Case::m2l_overrides` reaches the builder: level 2 on RCR at its degree
+    // as run, every other level the defaults'.
+    let level = 2;
+    assert!(row.v_pairs[level] > 0, "level 2 has V pairs");
+    let rcr = Case {
+        m2l_overrides: vec![M2lOverride {
+            level,
+            degree: None,
+            m2l: OverrideM2l::Rcr,
+        }],
+        ..defaults.clone()
+    };
+    let overridden = run_output(&rcr, &problem, &oracle, threads, world).expect("the FMM runs");
+    let other = &overridden.row;
+    assert_eq!(other.degrees, row.degrees, "the degrees as run");
+    assert_eq!(other.diagonal_classes[level], 0, "no form on level 2");
+    assert!(other.plane_wave[level].is_none(), "no waves on level 2");
+    assert!(!other.dense_levels[level], "no tables on level 2");
+    for l in (0..row.levels).filter(|&l| l != level) {
+        assert_eq!(
+            other.diagonal_classes[l], row.diagonal_classes[l],
+            "level {l}"
+        );
+        assert_eq!(other.plane_wave[l], row.plane_wave[l], "level {l}");
+        assert_eq!(other.dense_levels[l], row.dense_levels[l], "level {l}");
+    }
+    let errors = other.errors.last().expect("over all vectors");
+    assert!(errors[0] <= epsilon && errors[1] <= epsilon, "{errors:?}");
 }
 
 /// Helmholtz CH4.0e: the M2L's rotation blocks formed per V pair (a block budget of 0)

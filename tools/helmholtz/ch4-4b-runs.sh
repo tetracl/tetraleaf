@@ -25,6 +25,8 @@
 #            (10⁻⁶) and 100; W3 resolved at kD = 30 (10⁻⁶)
 #   mid      W1 at kD = 500 (random charges and the plane wave's trace), W2 at kD = 500
 #   w3       W3 resolved at kD = 100; W3 at N = 10⁶ for kD = 200 and 500
+#   w3-cells the same with CH4.4a's worst boxes in the reference (`--refine-cells`) and every
+#            level raised in the level study (`--all-levels`)
 #   w1-1000  W1 at kD = 1000, random charges
 #   pw1000   W1 at kD = 1000, the plane wave's trace
 #   remedy   W1 with the plane wave's trace at kD = 500 and 1000, 10⁻⁸: also each class of the
@@ -133,6 +135,32 @@ for stage in "$@"; do
     w1-1000) each w1 1000 random $EPS ;;
     # shellcheck disable=SC2086
     pw1000) each w1 1000 planewave $EPS ;;
+    w3-cells)
+        # W3 again with CH4.4a's own worst boxes in the reference (its logs' five worst of φ and
+        # of ∇φ per case and ε; the sample's need not be the worst there, no tangent points) and
+        # every level raised in the level study, those without V pairs too.
+        cells() {
+            case "$1" in
+            w3-kd100-1e-3) echo "15,24,24;19,8,11;23,19,23;7,16,19;7,16,23;7,4,15;7,7,7" ;;
+            w3-kd100-1e-6) echo "0,31,31;15,24,19;16,15,8;24,16,24;24,24,24;7,8,12;7,8,23" ;;
+            w3-kd100-1e-8) echo "0,7,15;12,24,24;15,15,7;24,24,24;7,15,7" ;;
+            w3:1000000-kd200-1e-3) echo "15,14,12;16,31,23;19,11,16;19,12,3;20,27,26;23,8,16;24,24,31;9,17,18" ;;
+            w3:1000000-kd200-1e-6) echo "12,23,23;15,15,7;15,24,23;19,11,16;23,15,15;23,15,23;23,8,16" ;;
+            w3:1000000-kd200-1e-8) echo "11,19,4;14,5,30;16,8,7;2,21,23;25,8,5;31,23,11;7,16,7;8,11,8" ;;
+            w3:1000000-kd500-1e-3) echo "10,14,11;11,19,10;11,19,4;17,28,22;19,26,23;24,23,23;25,21,9;26,4,20;28,16,9;6,19,17" ;;
+            w3:1000000-kd500-1e-6) echo "11,19,4;12,11,3;15,15,7;16,27,9;18,16,12;19,24,3;3,12,16" ;;
+            w3:1000000-kd500-1e-8) echo "11,19,4;11,27,0;12,11,3;15,15,7;16,23,12;19,8,11;23,11,24;29,11,20" ;;
+            esac
+        }
+        for wk in w3:100 w3:1000000:200 w3:1000000:500; do
+            w=${wk%:*}
+            kd=${wk##*:}
+            for e in $EPS; do
+                launch "$w-kd$kd-random-$e-cells" --workload "$w" --kd "$kd" --eps "$e" \
+                    --all-levels --refine-cells "$(cells "$w-kd$kd-$e")"
+            done
+        done
+        ;;
     remedy)
         for kd in 500 1000; do
             launch "remedy-w1-kd$kd-planewave-1e-8" --workload w1 --kd "$kd" --density planewave \
@@ -145,7 +173,7 @@ for stage in "$@"; do
         done
         ;;
     *)
-        echo "ch4-4b-runs.sh: unknown stage $stage (smoke, low, mid, w3, w1-1000, pw1000, remedy)" >&2
+        echo "ch4-4b-runs.sh: unknown stage $stage (smoke, low, mid, w3, w3-cells, w1-1000, pw1000, remedy)" >&2
         exit 2
         ;;
     esac

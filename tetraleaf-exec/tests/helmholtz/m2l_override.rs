@@ -13,6 +13,7 @@ use tetraleaf_exec::helmholtz::{
     M2lOverride, OverrideError, OverrideM2l, Wavenumber, degree,
 };
 use tetraleaf_octree::PhysicalBox;
+use tetraleaf_tables::helmholtz::batched::BatchedM2l;
 
 const LEVELS: usize = 5;
 
@@ -251,6 +252,53 @@ fn the_overrides_per_level() {
         waves > 0 && form > 0 && raised > 0,
         "the cases cover waves ({waves}), the form ({form}) and raised levels ({raised})"
     );
+}
+
+/// Under Auto without waves (Batched on the levels within the crossover), RCR named on the finest
+/// Batched level keeps the dense budget spent: a coarser level the budget left on RCR stays there
+/// (every other level the setting's).
+#[test]
+fn the_batched_budget_stays_spent() {
+    let k = Wavenumber::new(40.0, 0.0).unwrap();
+    let epsilon = 1e-4;
+    let p = degrees(&k, epsilon);
+    let finest = LEVELS - 1;
+    let coarser = finest - 1;
+    assert!(p[coarser] >= p[finest], "{p:?}");
+    // Room for the finest level's tables alone, from the finest up; the coarser level would fit
+    // in what an override left.
+    let budget =
+        BatchedM2l::<f64>::level_bytes(p[coarser]).max(BatchedM2l::<f64>::level_bytes(p[finest]));
+    let densities = Densities::new(k.kind(), ChargeKind::Complex, 1);
+    let make = |overrides: Vec<M2lOverride>| {
+        HelmholtzOperator::<f64>::new(k, densities, &domain(), &p, false, 64)
+            .unwrap()
+            .with_plane_wave_tolerance(Some(epsilon))
+            .with_auto_plane_wave(false)
+            .with_m2l_max_degree(Some(usize::MAX))
+            .with_m2l(HelmholtzM2l::Auto, budget)
+            .with_m2l_overrides(overrides)
+    };
+    let base = make(Vec::new());
+    assert_eq!(
+        base.m2l_on(finest),
+        HelmholtzM2l::Batched,
+        "the finest level batched"
+    );
+    assert_eq!(
+        base.m2l_on(coarser),
+        HelmholtzM2l::Rotation,
+        "the budget is spent"
+    );
+    let rcr = make(vec![M2lOverride {
+        level: finest,
+        degree: None,
+        m2l: OverrideM2l::Rcr,
+    }]);
+    assert_eq!(rcr.m2l_on(finest), HelmholtzM2l::Rotation);
+    for l in 2..finest {
+        assert_eq!(rcr.m2l_on(l), base.m2l_on(l), "level {l}");
+    }
 }
 
 /// The refused lists.
