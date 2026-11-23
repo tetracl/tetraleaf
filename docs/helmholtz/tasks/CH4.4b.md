@@ -51,8 +51,12 @@ How it is read (to be confirmed in the PR, question 1):
 - **The M2L.** On each level whose M2L under the defaults is not RCR (the form, the waves,
   Batched), the run with that level on RCR at its degree as run (its resolving degree p_w where
   raised): the M2L's own part, its share and its effect at the worst boxes. "No error concentrated
-  where the M2L changes": that run's worst box and ℓ2 within 1.1× of the default's either way
-  (`DIAGONAL_RATIO` and `PLANE_WAVE_RATIO`, the tests' factor for an M2L against RCR).
+  where the M2L changes": the default's worst box and ℓ2 at most 1.1× that run's
+  (`DIAGONAL_RATIO` and `PLANE_WAVE_RATIO`, the tests' factor for an M2L against RCR). One-sided
+  (amended 2026-11-23 from "within 1.1× either way", after the stage `low` showed it, for
+  question 1: the waves
+  approximate the kernel, not RCR's truncation at p_w, so RCR at p_w may err more than they do,
+  1.19× on W2 at kD = 30, which is no error the waves add).
 - **The classes.** On each form level the classes by the bound's E(l, c)/(θ ε), in decades: the
   passing classes within a decade of the threshold ("beside the threshold") run RCR as one run, then
   the next decade; on the worst case (W1, kD = 1000, plane wave, 10⁻⁸) also each class of the top
@@ -170,15 +174,19 @@ D9 benchmarks.
 
 ## Pending runs
 Kathleen, `singlenode`, 1 × 40, `--exclude=node-c11b-004,node-c11b-013`, outputs in
-`/scratch/scratch/ucahtbe/fmm/logs/ch4-4b/` (from 0d6749c's tree; built and smoke-checked in job
-663774, node-c11b-031, W1 at kD = 30, 10⁻⁶: worst box 3.34 / 8.26 ε, CH4.4a's figures):
-- 663775 `tools/helmholtz/ch4-4b-runs.sh … low`
-- 663776 `… mid`
-- 663777 `… w3`
-- 663778 `… w1-1000`
-- 663779 `… pw1000 remedy` (the 114.7 ε case and its remedy runs)
+`/scratch/scratch/ucahtbe/fmm/logs/ch4-4b/` (from 51c914d's tree). Job 663774 (0d6749c) built and
+ran the smoke case (W1 at kD = 30, 10⁻⁶: 3.34 / 8.26 ε, CH4.4a's figures). The first stage jobs
+(663775 `low` completed, 663776–663779 cancelled) ran without `--refine-faces`: the sample of two
+per box missed CH4.4a's worst box at kD = 500 (29.1 against 40.4 ε); their outputs are kept in
+`superseded/`. Job 663780 rebuilt with it and reran W1 at kD = 500, 10⁻⁸: 27.59 / 40.47 ε against
+CH4.4a's 27.38 / 40.42 ε (FMM3D's reference at 4 × 10). Pending:
+- 663781 `tools/helmholtz/ch4-4b-runs.sh … low`
+- 663782 `… mid`
+- 663783 `… w3`
+- 663784 `… w1-1000`
+- 663785 `… pw1000 remedy` (the 114.7 ε case and its remedy runs)
 
-Each decides the mapping of its cases; 663779 also the cause and the remedy (question 2).
+Each decides the mapping of its cases; 663785 also the cause and the remedy (question 2).
 
 ## Open questions
 (filled when they arise)

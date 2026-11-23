@@ -29,7 +29,8 @@
 #   pw1000   W1 at kD = 1000, the plane wave's trace
 #   remedy   W1 with the plane wave's trace at kD = 500 and 1000, 10⁻⁸: also each class of the
 #            threshold's decade alone (`--class-runs`) and the level of the worst ∇φ box raised
-#            by 1 and 2 under the defaults' M2L (`--raise-by 1,2`)
+#            by 1 and 2 under the defaults' M2L (`--raise-by 1,2`); then every level with V pairs
+#            raised at once by 1, 2 and 4 (`--raise-levels v --raise-together`)
 # EPS (default "1e-3 1e-6 1e-8"), TIMEOUT per launch (default 5400 s), ONLY (a regular expression
 # on the launch names), DRY_RUN (print the launches only). Each launch writes <out-dir>/<name>.md
 # and .err and a line in <out-dir>/runs.log.
@@ -136,6 +137,11 @@ for stage in "$@"; do
         for kd in 500 1000; do
             launch "remedy-w1-kd$kd-planewave-1e-8" --workload w1 --kd "$kd" --density planewave \
                 --eps 1e-8 --class-runs --raise-by 1,2
+            # Every level with V pairs raised at once (the worst box's error spreads over the
+            # levels at a tangent point, CH4.0b), no study.
+            launch "remedy-all-w1-kd$kd-planewave-1e-8" --workload w1 --kd "$kd" \
+                --density planewave --eps 1e-8 --study single --raise-levels v --raise-together \
+                --raise-by 1,2,4
         done
         ;;
     *)

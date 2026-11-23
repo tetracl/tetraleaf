@@ -24,7 +24,8 @@
 //! domain's faces (W1's six tangent points with the points' bounding cube, where CH4.4a found
 //! the worst boxes; a sample of two per box missed them). `--raise-by d,…` runs the level of `--raise-levels` (default: the level with the
 //! largest part at the worst ∇φ box, from `--study levels`) at its degree as run plus d under
-//! the setting's M2L, a remedy's FMM evidence. `--reference-cache dir` stores the sampled
+//! the setting's M2L, a remedy's FMM evidence (`--raise-levels v`: every level with V pairs;
+//! `--raise-together`: one run per d with all of them raised at once). `--reference-cache dir` stores the sampled
 //! reference (before `--refine`) in dir and reads it back in a launch of the same case and grid
 //! (another ε), whose header must match; the refinement is then computed for that launch.
 //!
@@ -107,9 +108,12 @@ struct Arguments {
     refine_faces: bool,
     /// `--raise-by d,…`: the runs with a level's degree raised by d under the setting's M2L.
     raise_by: Vec<usize>,
-    /// `--raise-levels l,…`: their levels (default: the level with the largest part at the
-    /// worst ∇φ box, from `--study levels`).
+    /// `--raise-levels l,…|v`: their levels (`v`, here an empty list: every level with V
+    /// pairs; default: the level with the largest part at the worst ∇φ box, from `--study
+    /// levels`).
     raise_levels: Option<Vec<usize>>,
+    /// `--raise-together`: one run per d with every level of `--raise-levels` raised at once.
+    raise_together: bool,
     /// `--reference-cache dir`: the sampled reference stored there, and read back by a launch
     /// of the same case and grid (another ε).
     reference_cache: Option<String>,
@@ -173,7 +177,8 @@ fn arguments() -> Arguments {
             "usage: helmholtz_boxes [--workload w] [--kd x] [--kim y] \
              [--density random|planewave|constant] [--charges real|complex] [--eps e] \
              [--m2l rotation|default|defaults] [--study single|levels|m2l|levels,m2l] \
-             [--class-runs] [--refine n] [--refine-faces] [--raise-by d,…] [--raise-levels l,…] \
+             [--class-runs] [--refine n] [--refine-faces] [--raise-by d,…] \
+             [--raise-levels l,…|v] [--raise-together] \
              [--reference-cache dir] [--margin m] \
              [--offset x,y,z] [--leaf-size n|uniform] [--raise-factor f] [--worst n] \
              [--per-box s] [--full-max n] \
@@ -196,6 +201,7 @@ fn arguments() -> Arguments {
         refine_faces: false,
         raise_by: Vec::new(),
         raise_levels: None,
+        raise_together: false,
         reference_cache: None,
         margin: None,
         offset: [0.0; 3],
@@ -210,12 +216,12 @@ fn arguments() -> Arguments {
     let mut rest = &args[..];
     loop {
         if let [flag, tail @ ..] = rest
-            && (flag == "--class-runs" || flag == "--refine-faces")
+            && (flag == "--class-runs" || flag == "--refine-faces" || flag == "--raise-together")
         {
-            if flag == "--class-runs" {
-                parsed.class_runs = true;
-            } else {
-                parsed.refine_faces = true;
+            match flag.as_str() {
+                "--class-runs" => parsed.class_runs = true,
+                "--refine-faces" => parsed.refine_faces = true,
+                _ => parsed.raise_together = true,
             }
             rest = tail;
             continue;
@@ -282,6 +288,10 @@ fn arguments() -> Arguments {
                 .collect::<Option<Vec<usize>>>()
                 .map(|d| parsed.raise_by = d)
                 .is_some(),
+            "--raise-levels" if value == "v" => {
+                parsed.raise_levels = Some(Vec::new());
+                true
+            }
             "--raise-levels" => value
                 .split(',')
                 .map(|v| v.parse::<usize>().ok().filter(|&l| l >= 2))
@@ -1130,7 +1140,29 @@ fn main() {
                 .unwrap_or(2);
             vec![level]
         });
-        for l in levels.into_iter().filter(|&l| l < p_run.len()) {
+        let levels: Vec<usize> = if levels.is_empty() {
+            (2..p_run.len()).filter(|&l| row.v_pairs[l] > 0).collect()
+        } else {
+            levels.into_iter().filter(|&l| l < p_run.len()).collect()
+        };
+        if args.raise_together {
+            for &d in &args.raise_by {
+                runs.push(measure_case(
+                    format!("levels {levels:?} at +{d}, the setting's M2L"),
+                    &with_overrides(
+                        levels
+                            .iter()
+                            .map(|&l| M2lOverride {
+                                level: l,
+                                degree: Some(p_run[l] + d),
+                                m2l: OverrideM2l::Setting,
+                            })
+                            .collect(),
+                    ),
+                ));
+            }
+        }
+        for l in levels.into_iter().filter(|_| !args.raise_together) {
             for &d in &args.raise_by {
                 let degree = p_run[l] + d;
                 runs.push(measure_case(
