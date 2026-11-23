@@ -4497,7 +4497,9 @@ request, using this template:
   recorded 246 s at load 2–3). Not run: the MPI list (no MPI crate changed; `helmholtz_accuracy` is
   not in it), `cargo deny` (no manifest change), Laplace's benchmarks (no Laplace path), 8 ranks
   (no distributed code).
-- Decisions: the report's questions 1–4, pending.
+- Decisions: the report's questions 1–4, signed off 2026-11-23 by the user on #255: "Q1-4 as recommended": the acceptance as read;
+  the 114.7 ε box a finding for CH4.4b; CH4.5 with `fastker` alone at kD = 1000 and memory one ε
+  per launch.
 - Laplace: not touched (the harness, its example, scripts, docs).
 - Follow-ups: CH4.4b's Also (the worst box above 100 ε); CH4.5's Also (FMM3D `fastker` alone at
-  kD = 1000, memory one ε per launch, the slow nodes excluded), both for sign-off.
+  kD = 1000, memory one ε per launch, the slow nodes excluded), both signed off.

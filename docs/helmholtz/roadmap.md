@@ -12,7 +12,7 @@ Status (2026-11-23): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 202
 item 10 CH4.1–CH4.3 (CH4.3d2 closed unrun). CH4.4 was split into CH4.4a (the kD sweep beside FMM3D)
 and CH4.4b (the crosscheck mapped to levels and classes); CH4.4a is done, within ε everywhere, one
 worst box above 100 ε (W1 at kD = 1000, plane wave, 10⁻⁸: 114.7 ε) left to CH4.4b, its questions
-pending; then CH4.4b and CH4.5 close H4's tasks; the FFT track stays item 11. The project was renamed
+signed off; then CH4.4b and CH4.5 close H4's tasks; the FFT track stays item 11. The project was renamed
 tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7,
 CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
 (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
@@ -870,7 +870,9 @@ task's full line is in its record or report and its progress entry
   W2 to 500, W3 to 100 and at N = 10⁶ for kD = 200, 500, the plane wave's trace and the constant
   density (78 points, at most 0.76 ε); worst box ≤ 100 ε but W1 at kD = 1000, plane wave, 10⁻⁸
   (114.7 ε, a tangent point); 0.08–0.17× FMM3D's faster call on W1 at kD = 500–1000; FMM3D
-  `default` exceeds a node's 180 GB at kD = 1000. *Sign-off:* the report's questions 1–4, pending.
+  `default` exceeds a node's 180 GB at kD = 1000. *Sign-off:* the report's questions 1–4,
+  signed off 2026-11-23 by the user on #255: "Q1-4 as recommended": the acceptance as read (FMM3D `fastker` the reference at kD = 1000); CH4.4a closed with the
+  114.7 ε box a finding, its cause and remedy CH4.4b's; CH4.5's two Alsos below.
 - [ ] **CH4.4b The crosscheck mapped to levels and classes.** *Done when:* on CH4.4a's cases whose
   trees run the diagonal form or RCR at k a ≥ 2.8, the full-target crosscheck's box errors split by
   level (CH4.0b's level parts, one level's degree raised at a time) and, on the form's levels, by
@@ -887,7 +889,7 @@ task's full line is in its record or report and its progress entry
   stated; CH4.0k reconsidered before it, and the H4 gate states one-rank-per-node figures. Also
   (CH4.3e's report §4): c_leaf 4, measured at one rank per node only, at the best split and at
   N × 1 (W3 at N = 10⁶, kD = 500, where its gain lies). Also (CH4.4a's report §4–§6, questions 3
-  and 4, for sign-off): at kD = 1000 FMM3D `fastker` alone (`default` exceeds a Kathleen node's
+  and 4, signed off 2026-11-23): at kD = 1000 FMM3D `fastker` alone (`default` exceeds a Kathleen node's
   180 GB), its failure and peaks stated; our memory one ε per launch (a later ε's growth in one
   launch is a lower bound); timed jobs exclude node-c11b-004 and node-c11b-013 (about 3× slow).
   *Needs:* CH4.4. *Machines:* locust, Kathleen.

@@ -162,9 +162,7 @@ one-rank debug run at opt-level 0 437.8 s at load 19–24 on the M6 (the crate n
 2–3; not comparable).
 
 ## Open questions
-1. The acceptance as read, with FMM3D `fastker` the crosscheck's reference at kD = 1000 (the plan
-   named `default`, with 10⁻¹⁰ as the fallback; `default` does not fit the node there at any eps but
-   10⁻⁸). Report §8, question 1.
-2. The worst box above 100 ε (report §3, §8 question 2).
-3. FMM3D `default` at kD = 1000 for CH4.5 (§8 question 3).
-4. Our memory one ε per launch for CH4.5 (§8 question 4).
+- None. The report's §8 questions 1–4 were signed off 2026-11-23 by the user on #255: "Q1-4 as recommended": the acceptance as read, with FMM3D
+  `fastker` the crosscheck's reference at kD = 1000; CH4.4a closes with the 114.7 ε worst box
+  recorded as a finding, CH4.4b maps it and proposes the remedy; CH4.5 runs FMM3D `fastker` alone at
+  kD = 1000 and measures our memory one ε per launch (its Alsos in the roadmap).

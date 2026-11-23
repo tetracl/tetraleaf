@@ -248,6 +248,8 @@ not used by the harness, which builds each case afresh.
 
 ## 8. Questions for sign-off
 
+Signed off 2026-11-23 by the user on #255, "Q1-4 as recommended": all four as recommended below.
+
 1. **The acceptance as read** (plan, "Acceptance"): CH4.4a without the mapping to levels and
    classes (CH4.4b); our side under `Case::defaults`; one complex charge vector (CH3.6's reading of
    §9.1's eight); "W3 to 200" as resolved to kD = 100 and under-resolved at N = 10⁶ for kD = 200 and
