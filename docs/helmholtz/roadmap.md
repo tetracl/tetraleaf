@@ -885,7 +885,9 @@ task's full line is in its record or report and its progress entry
 - [ ] **CH4.5 Host performance against FMM3D at matched accuracy.** As C6.8, setup apart,
   one node, on CH4.4's sweep. Also (review 2026-11-19, A6, B6, B8): ours at 1 × N (one rank,
   N threads, as a threaded caller runs it) beside the best split; FMM3D's OpenMP binding
-  stated; CH4.0k reconsidered before it, and the H4 gate states one-rank-per-node figures. Also
+  stated; CH4.0k reconsidered before it (asked at CH4.5's start, the user, 2026-11-23: "Keep off;
+  CH4.5 shows it (Recommended)": CH4.0k stays off the list, CH4.5 reports the build by part at
+  1 × N with the shared steps named), and the H4 gate states one-rank-per-node figures. Also
   (CH4.3e's report §4): c_leaf 4, measured at one rank per node only, at the best split and at
   N × 1 (W3 at N = 10⁶, kD = 500, where its gain lies). Also (CH4.4a's report §4–§6, questions 3
   and 4, signed off 2026-11-23): at kD = 1000 FMM3D `fastker` alone (`default` exceeds a Kathleen node's
