@@ -386,6 +386,14 @@ tools/kathleen/submit.sh --qos=small --nodes=4 --time=03:30:00 --exclude=node-c1
 604193): 40 ranks per node fail in `MPI_Init` there ("assign_context … busy"), 2 per node
 start. Exclude it.
 
+`node-c11b-004` and `node-c11b-013` ran FMM3D and our FMM about 3× slower than other nodes
+on problems of 10⁶ points and more in Helmholtz CH4.4a (jobs 663707, 663708, 663710; FMM3D
+`fastker` on W1 at kD = 500, 10⁻³: 103 s there, 33 s on node-c11a-143 and in CH4.0e), with
+the same outputs and no error; small problems ran at the usual speed. Exclude both from timed
+jobs (`--exclude=node-c11b-004,node-c11b-013`), and compare a timed job's FMM3D times with
+an earlier report's before trusting them
+(`tetraleaf-validate/results/helmholtz-ch4-4a.md`).
+
 `singlenode` and `test` take two jobs per user each, so two one-node and two two-node
 sweeps run at once; Phase 5S T0 kept at most two jobs pending or running in all. The output stays in the root's `logs/`, never in a tree; the report
 quotes what it needs.

@@ -112,7 +112,7 @@ def accuracy(all_cases):
     print("| --- | --- | --- | --- | --- | --- | --- | --- |")
     largest, largest_box, misses = 0.0, 0.0, []
     for _, _, density, rows, _ in all_cases:
-        name = label(rows, density)
+        name = case_name = label(rows, density)
         by_eps = {}
         for r in rows:
             by_eps.setdefault(r["ε"], []).append(r)
@@ -130,7 +130,7 @@ def accuracy(all_cases):
             if box:
                 largest_box = max(largest_box, max(box))
             if ratio > 1.0 or (box and max(box) > 100.0):
-                misses.append(f"{name} at {e}")
+                misses.append(f"{case_name} at {e}")
             f3 = "; ".join(f"{r['code'][6:]} {r['φ']}, {r['∇φ']}" for r in theirs) or "–"
             fbox = "; ".join(
                 f"{r['code'][6:]} {r['worst box φ / ε, ∇φ / ε']}"

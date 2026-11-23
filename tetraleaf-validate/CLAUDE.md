@@ -720,12 +720,15 @@ Helmholtz CH4.4a (the kD sweep beside FMM3D; docs/helmholtz/tasks/CH4.4a.md) add
 build and evaluations, per rank the peak `VmHWM` after `reset_peak_resident` wrote `5` to
 `/proc/self/clear_refs` less `VmRSS` then, the largest rank's and the sums; `None` on macOS) and
 `helmholtz_fmm3d::maxrss` (FMM3D's peak per eps from the driver's log); to the `helmholtz_fmm3d`
-example `--settings harness|defaults`, `--density`, a last column "memory GB", a table "Build" and
-the levels in the log. `tests/helmholtz_accuracy.rs` (`check_defaults`) holds `Case::defaults` to an
+example `--settings harness|defaults`, `--density`, a last column "memory GB", a table "Build",
+the levels in the log and a failed FMM3D run (no output file) reported as a row; the
+`helmholtz_accuracy` example's last line says on Linux that the peak is reset before each build. `tests/helmholtz_accuracy.rs` (`check_defaults`) holds `Case::defaults` to an
 FMM built by `HelmholtzFmmBuilder::new` with nothing else set, bit for bit. `tools/fmm3d/run.sh
 helmholtz` takes `<workload>@<kD>/<density>`, `H_SETTINGS` and FMM3D's memory per eps (`tools/fmm3d/maxrss.py`);
 `tools/helmholtz/ch4-4a-runs.sh` runs the task's stages, `ch4-4a-tables.py` makes the report's
-tables. Its report is `results/helmholtz-ch4-4a.md`.
+tables. Its report is `results/helmholtz-ch4-4a.md`. The one-rank debug run of
+`tests/helmholtz_accuracy.rs` took 437.8 s on the M6 at load 19–24 (16 s at opt-level 1), not
+comparable with CH4.0e's 246 s at load 2–3.
 
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
