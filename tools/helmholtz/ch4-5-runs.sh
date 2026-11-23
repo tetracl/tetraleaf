@@ -25,10 +25,15 @@
 #   cleaf  W3 at N = 10⁶, kD = 500 (CH4.3e's Also) at c_leaf 2 and 4, every split of SPLITS
 #          and N × 1, a and b: cleaf<c>-w3-n1000000-kd500-<ε>-<split>-<a|b>.md.
 #   time   FMM3D at the eps of <out-dir>/time-eps.txt (written by `ch4-5-tables.py eps` from
-#          the grid; lines `<case> <variant> <eps,…>`), unbound and bound (OMP_PLACES=cores
-#          OMP_PROC_BIND=close), REPEAT 2 (the best of two calls), launch a (the variants and
-#          bindings in order) and b (reversed), one launch per eps under maxrss.py; then
-#          `errors` over them into time-<case>.md (this machine's errors at those eps).
+#          the grid and our errors; lines `<case> <variant> <eps,…>`), OpenMP at its defaults,
+#          REPEAT 2 (the best of two calls) below N = 10⁶ points and 1 from there (a call of
+#          seconds to minutes, its setup in every call), launch a (the variants in order) and b
+#          (reversed), one launch per eps under maxrss.py; then `errors` over them into
+#          time-<case>.md (this machine's errors at those eps). `default` at kD = 1000 runs
+#          off Slurm only, and only with 250 GB available (Kathleen's node has 180 GB).
+#   bind   FMM3D bound (OMP_PLACES=cores OMP_PROC_BIND=close) beside its defaults (review
+#          2026-11-19, B8), at the eps of <out-dir>/bind-eps.txt (the same format), each
+#          binding in launches a and b in opposite orders, as `time`; into bind-<case>.md.
 # SPLITS defaults to "1x40 2x20 4x10 8x5" under Slurm and "1x72 2x36 4x18 8x9" elsewhere; the
 # N × 1 split of `cleaf` is the cores'. Under Slurm an even rank count is bound per socket
 # (`ppr:<r/2>:socket:PE=<t>`), elsewhere `slot:PE=<t>`. FMM3D_ROOT as for tools/fmm3d/build.sh;
@@ -39,7 +44,7 @@
 set -u
 out=$1
 shift
-mkdir -p "$out/problems" "$out/grid" "$out/time"
+mkdir -p "$out/problems" "$out/grid" "$out/time" "$out/bind"
 target=${CARGO_TARGET_DIR:-target}/release/examples
 F=$target/helmholtz_fmm3d
 if [ -z "${FMM3D_ROOT:-}" ]; then
@@ -113,14 +118,29 @@ problem() {
     fi
 }
 
+# `repeat`: FMM3D's calls per launch for the problem file prob: 2 below 10⁶ points, else 1.
+repeat() {
+    local n
+    n=$(od -An -t d8 -j 8 -N 8 "$prob" 2> /dev/null | tr -d ' ')
+    if [ -n "$n" ] && [ "$n" -lt 1000000 ]; then echo 2; else echo 1; fi
+}
+
 # `driver <prefix> <variant> <bind> <eps> <repeat>`: one launch of FMM3D's driver at one eps on
 # every core, under maxrss.py, its log <prefix>.log; uses prob and kd.
 driver() {
-    local pre=$1 variant=$2 bind=$3 e=$4 repeat=$5 start status env
+    local pre=$1 variant=$2 bind=$3 e=$4 repeat=$5 start status env available
     local exe=$FMM3D_ROOT/$variant/bin/fmm3d_driver
     env=(OMP_NUM_THREADS="$cores")
     [ "$bind" = bound ] && env+=(OMP_PLACES=cores OMP_PROC_BIND=close)
     selected "$(basename "$pre")-$e" || return 0
+    if [ "$variant" = default ] && [ "$kd" = 1000 ] && [ -z "${DRY_RUN:-}" ]; then
+        available=0
+        [ "$slurm" = 1 ] || available=$(free -g | awk '/Mem:/ { print $7 }')
+        if [ "$available" -lt 250 ]; then
+            note "$(basename "$pre") $e: skipped, $available GB available (default at kD = 1000)"
+            return 0
+        fi
+    fi
     if [ -n "${DRY_RUN:-}" ]; then
         echo "$(basename "$pre") $e: ${env[*]} $exe helmholtz $prob $pre $kd 0 $e $repeat"
         return 0
@@ -226,35 +246,38 @@ stage_cleaf() {
     done
 }
 
-stage_time() {
-    local list=$out/time-eps.txt c v eps launch labels first runs
+# `timed <stage> <list> <bindings>`: the `time` and `bind` stages: per case of the list, each
+# (variant, binding) at its eps, launch a in the list's order and b reversed; then `errors`
+# over every run into <stage>-<case>.md.
+timed() {
+    local stage=$1 list=$2 bindings=$3 c v eps launch labels tokens runs run bind reps
     [ -f "$list" ] || { echo "ch4-5-runs.sh: $list is missing (ch4-5-tables.py eps)" >&2; return 1; }
     for c in $CASES; do
         parts "$c"
         grep -q "^$name " "$list" || continue
         problem "$c" || continue
-        labels= tokens=
+        reps=$(repeat)
+        labels= tokens= runs=
+        while read -r n v eps; do
+            [ "$n" = "$name" ] || continue
+            for bind in $bindings; do runs="$runs $v:$bind:$eps"; done
+        done < "$list"
         for launch in a b; do
-            runs=
-            while read -r n v eps; do
-                [ "$n" = "$name" ] || continue
-                for bind in free bound; do runs="$runs $v:$bind:$eps"; done
-            done < "$list"
             # shellcheck disable=SC2086
             [ "$launch" = b ] && runs=$(reversed $runs)
-            for first in $runs; do
-                IFS=: read -r v bind eps <<< "$first"
+            for run in $runs; do
+                IFS=: read -r v bind eps <<< "$run"
                 for e in ${eps//,/ }; do
-                    driver "$out/time/$name-$v-$bind-$launch" "$v" "$bind" "$e" 2
+                    driver "$out/$stage/$name-$v-$bind-$launch" "$v" "$bind" "$e" "$reps"
                 done
-                labels="$labels,$v-$bind-$launch=$out/time/$name-$v-$bind-$launch"
+                labels="$labels,$v-$bind-$launch=$out/$stage/$name-$v-$bind-$launch"
                 tokens="$tokens,$eps"
             done
         done
         # The union of the case's eps, each once; `errors` reads every run at every token,
         # so a token a run lacks is a failed row of that run.
         tokens=$(echo "${tokens#,}" | tr , '\n' | awk '!seen[$0]++' | paste -sd, -)
-        if selected "time-$name"; then errors "$out/time-$name.md" "${labels#,}" "$tokens"; fi
+        if selected "$stage-$name"; then errors "$out/$stage-$name.md" "${labels#,}" "$tokens"; fi
     done
 }
 
@@ -268,9 +291,10 @@ for stage in "$@"; do
     grid) stage_grid ;;
     ours) stage_ours ;;
     cleaf) stage_cleaf ;;
-    time) stage_time ;;
+    time) timed time "$out/time-eps.txt" free ;;
+    bind) timed bind "$out/bind-eps.txt" "free bound" ;;
     *)
-        echo "ch4-5-runs.sh: unknown stage $stage (grid, ours, cleaf, time)" >&2
+        echo "ch4-5-runs.sh: unknown stage $stage (grid, ours, cleaf, time, bind)" >&2
         exit 2
         ;;
     esac
