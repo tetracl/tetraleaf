@@ -173,24 +173,21 @@ D9 benchmarks.
 - Risk: the reference's cost at kD = 1000 (about 1.5 · 10⁵ targets × 8 · 10⁶ sources).
 
 ## Pending runs
-Kathleen, `singlenode`, 1 × 40, `--exclude=node-c11b-004,node-c11b-013`, outputs in
-`/scratch/scratch/ucahtbe/fmm/logs/ch4-4b/` (from 51c914d's tree). Job 663774 (0d6749c) built and
-ran the smoke case (W1 at kD = 30, 10⁻⁶: 3.34 / 8.26 ε, CH4.4a's figures). The first stage jobs
-(663775 `low` completed, 663776–663779 cancelled) ran without `--refine-faces`: the sample of two
-per box missed CH4.4a's worst box at kD = 500 (29.1 against 40.4 ε); their outputs are kept in
-`superseded/`. Job 663780 rebuilt with it and reran W1 at kD = 500, 10⁻⁸: 27.59 / 40.47 ε against
-CH4.4a's 27.38 / 40.42 ε (FMM3D's reference at 4 × 10). Pending:
-- 663781 `tools/helmholtz/ch4-4b-runs.sh … low`
-- 663782 `… mid`
-- 663783 `… w3`
-- 663784 `… w1-1000`
-- 663788 `… pw1000 remedy` (the 114.7 ε case and its remedy runs; from 6e8c4ce's tree, built in
-  `target/ch4-4b-remedy`). It replaces 663785, cancelled while queued to add the remedy runs with
-  every level raised at once (W1 at kD = 500 with the plane wave's trace, 10⁻⁸: the worst box's
-  error spread over levels 2–4, about 0.3 each at its worst target).
+None. Kathleen, `singlenode`, 1 × 40, `--exclude=node-c11b-004,node-c11b-013`, every launch exit 0:
+663781 (`low`), 663782 (`mid`), 663783 (`w3`), 663784 (`w1-1000`), 663788 (`pw1000 remedy`, built in
+`target/ch4-4b-remedy` from 6e8c4ce's tree); 663774 and 663780 the builds and checks; 663775
+(`low` without `--refine-faces`, superseded) and 663776–663779, 663785 (cancelled: 663776–663779 to
+add `--refine-faces` after the sample missed CH4.4a's worst box at kD = 500, 663785 while queued to
+add the remedy runs with every level raised). Outputs in
+`~/projects/fmm-archive/kathleen/runs/ch4-4b/` (the superseded ones in `ch4-4b-superseded/`).
 
-Done: 663781 (`low`), 663783 (`w3`). Each decides the mapping of its cases; 663788 also the cause
-and the remedy (question 2).
+## Results
+Report `tetraleaf-validate/results/helmholtz-ch4-4b.md`: the box errors are the levels'
+truncation, spread over three to six levels at the tangent points; the form, its classes beside the
+threshold and Batched on RCR change nothing (220 runs, 1.000), the waves are at most 1.023× RCR
+(30 runs); the 114.7 ε box (114.80 here) is levels 2–5 at a tangent point, no single level or class;
+every level +1 gives 48.4 ε (+4 % evaluation), one level +2 89.4 ε; within D1 every worst box ≤ 68.2 ε.
+Questions 1–3 for sign-off (the report's §6).
 
 ## Open questions
 (filled when they arise)

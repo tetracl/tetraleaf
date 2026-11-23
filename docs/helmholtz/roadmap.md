@@ -9,12 +9,12 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-23): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
-item 10 CH4.1–CH4.3 (CH4.3d2 closed unrun). CH4.4 was split into CH4.4a (the kD sweep beside FMM3D)
-and CH4.4b (the crosscheck mapped to levels and classes); CH4.4a is done, within ε everywhere, one
-worst box above 100 ε (W1 at kD = 1000, plane wave, 10⁻⁸: 114.7 ε) left to CH4.4b, its questions
-signed off; then CH4.4b and CH4.5 close H4's tasks; the FFT track stays item 11. The project was renamed
-tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7,
-CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
+item 10 CH4.1–CH4.3 (CH4.3d2 closed unrun) and CH4.4a. CH4.4b (the crosscheck mapped to levels and
+classes) is done in its PR: no error concentrated at a class boundary; CH4.4a's 114.7 ε box is the
+tangent-point placement on levels 2–5 beyond D1's kD ≤ 500, its remedy waiting for the sign-off of
+the report's questions; then CH4.5 closes H4's tasks; the FFT track stays item 11. The project was
+renamed tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and
+of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
 (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
 `git show 8475009:docs/helmholtz/roadmap.md`.
 
@@ -873,16 +873,13 @@ task's full line is in its record or report and its progress entry
   `default` exceeds a node's 180 GB at kD = 1000. *Sign-off:* the report's questions 1–4,
   signed off 2026-11-23 by the user on #255: "Q1-4 as recommended": the acceptance as read (FMM3D `fastker` the reference at kD = 1000); CH4.4a closed with the
   114.7 ε box a finding, its cause and remedy CH4.4b's; CH4.5's two Alsos below.
-- [ ] **CH4.4b The crosscheck mapped to levels and classes.** *Done when:* on CH4.4a's cases whose
-  trees run the diagonal form or RCR at k a ≥ 2.8, the full-target crosscheck's box errors split by
-  level (CH4.0b's level parts, one level's degree raised at a time) and, on the form's levels, by
-  the form's classes against RCR (the level run all-RCR), with no error concentrated at a class
-  boundary: neither in the classes beside the bound's threshold (proposal §3.6's choice per (level,
-  class)) nor at the levels where the M2L changes (the regimes, the waves, the form); the worst
-  boxes' levels and classes named. Also (CH4.4a's report §3, question 2): the worst box of W1 at
-  kD = 1000 with the plane wave's trace at 10⁻⁸, 114.7 ε (∇φ) at a tangent point of the sphere and
-  its cube, above §9.1's 100 ε: its levels and classes, and a remedy (a degree on a level, or the
-  bound) on pair and FMM evidence. *Needs:* CH4.4a. *Machines:* Kathleen.
+- [x] **CH4.4b The crosscheck mapped to levels and classes.** Report:
+  `tetraleaf-validate/results/helmholtz-ch4-4b.md`; record `docs/helmholtz/tasks/CH4.4b.md`. On CH4.4a's
+  cases under the defaults the box errors are the levels' truncation, at the tangent points spread
+  over three to six levels; the form, its classes beside the bound's threshold and Batched on RCR
+  change no worst box (220 runs, 1.000), the waves at most 1.023× RCR: no error concentrated at a
+  class boundary. The 114.7 ε box is levels 2–5 at a tangent point (every level +1: 48.4 ε, +4 %
+  evaluation); within D1 every worst box ≤ 68.2 ε. *Sign-off:* the report's questions 1–3, pending.
 - [ ] **CH4.5 Host performance against FMM3D at matched accuracy.** As C6.8, setup apart,
   one node, on CH4.4's sweep. Also (review 2026-11-19, A6, B6, B8): ours at 1 × N (one rank,
   N threads, as a threaded caller runs it) beside the best split; FMM3D's OpenMP binding
