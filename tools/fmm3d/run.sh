@@ -369,12 +369,15 @@ tools/fmm3d/maxrss.py $pre.log token=\$t -- $driver helmholtz $prob $pre $kd 0 \
         header "$pre.log" "$variant" "$command"
         if [ "$H_MAXRSS" = 1 ]; then
             for t in ${tokens//,/ }; do
+                # A launch that fails must not leave an earlier run's output to be read as its own.
+                rm -f "$pre-$t.out" "$pre-$t.full.out"
                 # shellcheck disable=SC2086 # $limit is a command and its argument, or empty
                 OMP_NUM_THREADS=$fthreads $limit python3 tools/fmm3d/maxrss.py "$pre.log" "token=$t" -- \
                     "$driver" helmholtz "$prob" "$pre" "$kd" 0 "$t" 1 1 >>"$pre.log" 2>&1 ||
                     echo "FAILED: FMM3D $variant at $t" | tee -a "$pre.log"
             done
         else
+            for t in ${tokens//,/ }; do rm -f "$pre-$t.out" "$pre-$t.full.out"; done
             # shellcheck disable=SC2086 # $limit is a command and its argument, or empty
             OMP_NUM_THREADS=$fthreads $limit "$driver" helmholtz "$prob" "$pre" "$kd" 0 "$tokens" 1 1 \
                 >>"$pre.log" 2>&1 || echo "FAILED: FMM3D $variant" | tee -a "$pre.log"

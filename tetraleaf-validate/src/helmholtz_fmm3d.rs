@@ -617,6 +617,32 @@ mod tests {
         assert_eq!(seconds(log, "1e-6"), None);
     }
 
+    /// Helmholtz CH4.4a: the densities' problem files differ in the charges only.
+    #[test]
+    fn densities_change_the_charges_only() {
+        use crate::helmholtz_accuracy::Density;
+        let mut case = Case::new(Workload::W1, (30.0, 0.0), Degrees::Tolerance(1e-3));
+        let random = problem_bytes(&Problem::new(&case), 0, case.seed);
+        let n = Problem::new(&case).len();
+        let charges = 40 + 24 * n..40 + 40 * n;
+        for density in [Density::PlaneWave, Density::Constant] {
+            case.density = density;
+            let other = problem_bytes(&Problem::new(&case), 0, case.seed);
+            assert_eq!(other.len(), random.len());
+            assert_eq!(
+                other[..charges.start],
+                random[..charges.start],
+                "{density:?}"
+            );
+            assert_eq!(other[charges.end..], random[charges.end..], "{density:?}");
+            assert_ne!(
+                other[charges.clone()],
+                random[charges.clone()],
+                "{density:?}"
+            );
+        }
+    }
+
     #[test]
     fn maxrss_line() {
         let log = "helmholtz: token=1e-3 threads=6 repeat=1 seconds=  1.5E-01 out=x\n\

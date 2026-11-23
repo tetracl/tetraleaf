@@ -72,6 +72,7 @@ use std::path::{Path, PathBuf};
 
 use mpi::Threading;
 use mpi::traits::*;
+use tetraleaf_exec::geometry::{Domain, radius};
 use tetraleaf_exec::helmholtz::{ChargeKind, Degrees, HelmholtzM2l};
 use tetraleaf_exec::operator::P2pChoice;
 use tetraleaf_validate::bench::{cores, cpu_model, target};
@@ -442,13 +443,14 @@ fn level_m2l(row: &Row, l: usize) -> String {
     }
 }
 
-/// The log's lines of a run's levels: k a, degree, V pairs and the M2L that ran.
-fn levels_log(row: &Row) -> String {
+/// The log's lines of a run's levels: k a (Re k √3 r_l in the FMM's `domain`), degree, V
+/// pairs and the M2L that ran.
+fn levels_log(row: &Row, re_k: f64, domain: &Domain) -> String {
     (0..row.levels)
         .map(|l| {
             format!(
                 "{l}: k a {:.2}, p {}, {} V pairs, {}",
-                row.diagonal_model.get(l).map_or(0.0, |m| m[0]),
+                re_k * 3f64.sqrt() * radius(l, domain),
                 row.degrees.get(l).copied().unwrap_or(0),
                 row.v_pairs.get(l).copied().unwrap_or(0),
                 level_m2l(row, l)
@@ -780,7 +782,7 @@ fn main() {
         eprintln!(
             "{} kD = {kd} ε = {token}: by level, {}",
             workload.name(),
-            levels_log(row)
+            levels_log(row, arguments.kd, &ours.domain)
         );
     }
     if root {
