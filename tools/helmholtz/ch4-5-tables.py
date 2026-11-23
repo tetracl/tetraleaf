@@ -357,14 +357,15 @@ def comparison(grid_dir, dirs):
 
 
 def fastest(row, rule):
-    """The variant with the faster timed call at the rule's match, with its cell."""
-    best_ = None
-    for (v, r), c in row["fmm3d"].items():
-        if r != rule or not c["time"]:
-            continue
-        if best_ is None or c["time"]["s"] < best_[1]["time"]["s"]:
-            best_ = (v, c)
-    return best_
+    """The variant with the faster timed call at the rule's match, with its cell. Under the
+    closest rule only among the variants whose match is within a factor 10 of the closer one's:
+    `fastker` sums small trees directly at every eps, and its closest match there can be 10¹⁰ off
+    ours where `default`'s is within 2."""
+    cells = [(v, c) for (v, r), c in row["fmm3d"].items() if r == rule and c["time"]]
+    if rule == "closest" and cells:
+        d = min(c["how"] for _, c in cells)
+        cells = [(v, c) for v, c in cells if c["how"] <= d + 1]
+    return min(cells, key=lambda vc: vc[1]["time"]["s"], default=None)
 
 
 def cmd_compare(args):
