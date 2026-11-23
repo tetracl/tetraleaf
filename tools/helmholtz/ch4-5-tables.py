@@ -31,7 +31,8 @@ closest eps of 10⁻⁶, every variant). `matches`: the matches of one machine. 
 and ε ours at its best split (the smallest build plus one evaluation over the splits and launches
 a and b; the evaluation is the second of the build's two) and at 1 × N, beside FMM3D at the
 closest eps (its call the smaller of the `time` launches a and b, its tree apart) for each
-variant, and the ratios. `summary`: the geometric means of the ratios by ε, rule, split and N.
+variant, and the ratios. `summary`: the geometric means of the ratios by ε, rule, split and N; setup apart only where
+FMM3D's tree, timed once apart, is below its call.
 `build`: the build by part at 1 × N and at the best split, the shared steps (octree, routes, plan;
 CH4.0k) named. `memory`: ours (largest rank and node) against FMM3D's peak at the matches.
 `cleaf`: c_leaf 4 over 2 per split. `binding`: FMM3D bound over unbound. `checksums`: the
@@ -91,6 +92,13 @@ def ok(x):
 def gmean(xs):
     xs = [x for x in xs if ok(x) and x > 0]
     return math.exp(sum(map(math.log, xs)) / len(xs)) if xs else float("nan")
+
+
+def apart(evaluate, t):
+    """Our evaluation over FMM3D's call less its tree; None where the tree, timed once apart,
+    is not below the call (the smallest cases, a call of milliseconds)."""
+    rest = t["s"] - t["tree"]
+    return evaluate / rest if ok(rest) and rest > 0 else None
 
 
 def f(x, d=3):
@@ -379,7 +387,7 @@ def cmd_compare(args):
             cells_ += [
                 f"{v}, {m['eps']} ({10 ** m['how']:.1f}), {f(t['s'])}, {f(t['tree'])}",
                 f"{f(b['total'] / t['s'], 2)}, {f(one[1]['total'] / t['s'], 2) if one else '–'}",
-                f(b["evaluate"] / (t["s"] - t["tree"]), 2),
+                f(apart(b["evaluate"], t), 2),
             ]
         else:
             cells_ += ["–", "–", "–"]
@@ -399,7 +407,7 @@ def cmd_compare(args):
 def cmd_summary(args):
     rows = comparison(args[0], args[1:])
     groups = [("all", lambda r: True), ("N ≥ 10⁵", lambda r: r["n"] >= 100000), ("N ≥ 10⁶", lambda r: r["n"] >= 1000000)]
-    print("| rule | cases | ε | n | best split ÷ FMM3D: gmean (range) | 1 × N ÷ FMM3D: gmean (range) | evaluate ÷ (call − tree): gmean (range) | ours slower (best split) |")
+    print("| rule | cases | ε | n | best split ÷ FMM3D: gmean (range) | 1 × N ÷ FMM3D: gmean (range) | evaluate ÷ (call − tree): gmean (range) [cases, where fewer: the tree below the call] | ours slower (best split) |")
     print("| --- | --- | --- | ---: | --- | --- | --- | --- |")
     for rule in ("closest", "one-sided"):
         for label, keep in groups:
@@ -416,13 +424,16 @@ def cmd_summary(args):
                     xs.append(b["total"] / t["s"])
                     if r["one"]:
                         ys.append(r["one"][1]["total"] / t["s"])
-                    zs.append(b["evaluate"] / (t["s"] - t["tree"]))
+                    z = apart(b["evaluate"], t)
+                    if z is not None:
+                        zs.append(z)
                     if xs[-1] > 1:
                         slower.append(r["name"])
                 if not xs:
                     continue
                 rng = lambda v: f"{gmean(v):.2f} ({min(v):.2f}–{max(v):.2f})" if v else "–"
-                print(f"| {rule} | {label} | {e} | {len(xs)} | {rng(xs)} | {rng(ys)} | {rng(zs)} | {', '.join(slower) or '–'} |")
+                zn = f" [{len(zs)}]" if len(zs) != len(xs) else ""
+                print(f"| {rule} | {label} | {e} | {len(xs)} | {rng(xs)} | {rng(ys)} | {rng(zs)}{zn} | {', '.join(slower) or '–'} |")
 
 
 def cmd_build(args):
