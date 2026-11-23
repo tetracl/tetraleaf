@@ -748,6 +748,17 @@ and the tables "Levels as run", "The M2L's parts" and an M2L-parts column of the
 `tools/helmholtz/ch4-4b-runs.sh` runs the task's stages, `ch4-4b-tables.py` makes the report's
 tables. Its report is `results/helmholtz-ch4-4b.md`.
 
+Helmholtz CH4.5 (host performance against FMM3D at matched accuracy;
+docs/helmholtz/tasks/CH4.5.md) added `helmholtz_fmm3d::tree_seconds` (FMM3D's setup, timed
+apart by the driver: the `tree_s=` field of its `helmholtz:` line; unit-tested beside
+`seconds`), to the `helmholtz_fmm3d` example `compare --evaluations n` (`Case::evaluations`, the
+row the last evaluation's, the first's in the log and in a last column "first evaluation" of
+"Build") and `--c-leaf c` (`Case::c_leaf`), our times to the millisecond (0.1 ms in "Build"),
+and to `errors` a failed run as a row and the columns "tree s" and "memory GB".
+`tools/helmholtz/ch4-5-runs.sh` runs the task's stages (`grid`, `ours`, `cleaf`, `time`,
+`bind`), `ch4-5-tables.py` makes the matches (closest and one-sided), the eps lists and the
+report's tables. Its report is `results/helmholtz-ch4-5.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

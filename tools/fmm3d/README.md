@@ -12,7 +12,7 @@ nothing of it is committed (its sources, builds and outputs stay under `FMM3D_RO
 | File | Does |
 | --- | --- |
 | `build.sh` | fetches FMM3D at the pinned release (v2.1.0, the commit and the tarball's SHA-256 checked), builds it with OpenMP with the machine's compilers in two variants (four with the patched ones), and links the driver against each |
-| `driver.f90` | the FMM3D side: reads a problem file, checks FMM3D's normalisation, times FMM3D's setup and its calls, writes φ and ∇φ at the sampled targets |
+| `driver.f90` | the FMM3D side: reads a problem file, checks FMM3D's normalisation, times FMM3D's setup and its calls, writes φ and ∇φ at the sampled targets; in its `helmholtz` mode also the setup apart and the OpenMP binding (Helmholtz CH4.5) |
 | `run.sh` | the steps of a machine's comparison: `problems`, `sweep`, `match`, `time`, and `crosscheck` (the two codes' outputs against each other at every point); `helmholtz` (CH3.6, below) |
 | `helmholtz.py` | Helmholtz CH1.4: the driver's Helmholtz modes from Python (problem and output files, the two-point check and the identification of FMM3D's conventions, the error norms) and the R12 sweep; Python 3.9 standard library only |
 | `maxrss.py` | Helmholtz CH4.4a: runs a command and appends its peak resident set to a file (`maxrss: <label> kb=<n>`), for FMM3D's memory per eps; Python 3.9 standard library only |
@@ -199,6 +199,28 @@ FMM3D_ROOT=... H_CASES='w1@10 w1@30' tools/fmm3d/run.sh helmholtz
 tools/kathleen/submit.sh --time=00:20:00 -- fmm3d.sbatch driver
 tools/kathleen/submit.sh '--export=ALL,OUT=/scratch/scratch/ucahtbe/fmm/logs/ch3-6-w1,H_CASES=w1@10 w1@30 w1@100 w1@500' -- fmm3d.sbatch helmholtz
 ```
+
+## At matched accuracy (CH4.5)
+
+Helmholtz CH4.5 (docs/helmholtz/tasks/CH4.5.md; report
+`tetraleaf-validate/results/helmholtz-ch4-5.md`) added to the driver's `helmholtz` mode:
+
+- **FMM3D's setup timed apart**, as the Laplace mode times `lfmm3d`'s: once per eps token,
+  before the calls, `hndiv` of the linked build (so `fastker`'s own subdivision rule), then
+  `pts_tree_mem`, `pts_tree_build` and `pts_tree_sort`, as `hfmm3d` calls them for charges with
+  gradients; the `helmholtz:` line ends in `tree_s=<seconds>` (after `out=`, so earlier
+  readers are unaffected; `tetraleaf_validate::helmholtz_fmm3d::tree_seconds`). The calls still
+  include it: FMM3D keeps nothing between calls. The outputs are the earlier driver's, byte
+  for byte.
+- **The OpenMP binding** on a line `helmholtz: binding proc_bind=<omp_get_proc_bind>
+  OMP_PROC_BIND=… OMP_PLACES=… threads=…` after the problem line (0 is `omp_proc_bind_false`:
+  libgomp leaves the threads unbound unless the environment binds them).
+
+`helmholtz_fmm3d errors` prints both (the columns "tree s" and "memory GB") and a failed run
+as a row. `tools/helmholtz/ch4-5-runs.sh` runs CH4.5's stages (`grid`, `ours`, `cleaf`, `time`,
+`bind`) with the driver directly, one eps per launch under `maxrss.py`, and
+`tools/helmholtz/ch4-5-tables.py` makes the matches, the eps lists of the timed stages and the
+report's tables.
 
 ## Per level (CH6.2d)
 

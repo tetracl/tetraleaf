@@ -55,8 +55,9 @@ How it is read (to be confirmed in the PR):
   locust, each in two launches, the orders reversed: CH4.0e's rule) and 1 × N (one rank, every
   core), both against FMM3D on every core.
 - **FMM3D's binding** (B8): OpenMP at its defaults (no `OMP_PROC_BIND`, `OMP_PLACES`: libgomp
-  leaves the threads unbound) and bound (`OMP_PLACES=cores OMP_PROC_BIND=close`), both timed at the
-  matched eps; FMM3D's faster per case and ε is the comparison's, both reported, the binding stated.
+  leaves the threads unbound), stated in every log by the driver; bound (`OMP_PLACES=cores
+  OMP_PROC_BIND=close`) beside it on five large cases (stage `bind`), so the report says whether
+  binding would change the comparison.
 - **Memory**: ours the FMM's resident growth over its build and evaluations (`Row::memory`, the sum
   over the node's ranks and the largest rank's), one ε per launch; FMM3D's the driver's peak RSS per
   eps (`tools/fmm3d/maxrss.py`, one launch per eps, its input and output arrays included).
@@ -135,11 +136,20 @@ launch, ours `slot:PE=<t>`, FMM3D on 72 threads. Stages:
    reversed (b), two evaluations. About 2–3 h per machine.
 3. `cleaf` (Kathleen and locust): W3 at N = 10⁶, kD = 500, c_leaf 2 and 4, every split and N × 1, a
    and b.
-4. `time` (Kathleen and locust; after `grid`): FMM3D at each case's matched eps (both rules) and at
-   ε itself, each variant, unbound and bound, REPEAT 2 (FMM3D's best of two calls), launches a and b
-   in opposite orders, one eps per launch under `maxrss.py`. On locust the matched eps are
-   Kathleen's; locust's own errors at them are measured and any change of match reported (CH4.0e
-   found FMM3D's errors equal on the two machines to the digits shown).
+4. `time` (Kathleen and locust; after `grid` and both `ours`): FMM3D at each case's eps from
+   `ch4-5-tables.py eps` (both matches on either machine, and ε itself), each variant, OpenMP at
+   its defaults, REPEAT 2 below N = 10⁶ and 1 from there (calls of seconds to minutes, the setup
+   in each), launches a and b in opposite orders, one eps per launch under `maxrss.py`. On locust
+   the matches are made with locust's own errors of ours and the grid's of FMM3D; locust's
+   FMM3D errors at those eps are measured and any change of match reported (CH4.0e found
+   FMM3D's errors equal on the two machines to the digits shown). On locust also `default` at
+   kD = 1000 at `fastker`'s eps, where 250 GB are available.
+5. `bind` (Kathleen and locust; B8): FMM3D bound (`OMP_PLACES=cores OMP_PROC_BIND=close`)
+   beside unbound on W1 at kD = 250, 500, 1000, W3 at kD = 100 and at N = 10⁶, kD = 500, at the
+   closest eps of 10⁻⁶, each variant, launches a and b. Every core-count comparison in the
+   report is at FMM3D's defaults (unbound), as CH4.0e and T9 ran it; `bind` says whether binding
+   changes that. (Planned first: every timed eps under both bindings with REPEAT 2; about a day
+   of node time at kD = 1000, so trimmed to this before the stage ran.)
 Raw outputs to `~/projects/fmm-archive/{kathleen,locust}/runs/ch4-5/`. No run on the M6 (smoke
 runs of the tools only, small, not timed).
 
