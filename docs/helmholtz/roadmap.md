@@ -863,8 +863,8 @@ task's full line is in its record or report and its progress entry
   FMM3D, and a new error mapping) into CH4.4a and CH4.4b; together their *Done when* is §10's:
   the FMM against the direct sum on W1 to kD = 1000, W2 to 500 and W3 to 200, beside `hfmm3d`; the
   full-target crosscheck mapped to levels and classes, with no error concentrated at a class boundary
-  and the worst box at most 100 ε (proposal §9.1, amended at CH4.0b); time, memory and build cost per
-  k.
+  and the worst box at most 100 ε within D1, reported beyond it (proposal §9.1, amended at CH4.0b and
+  CH4.4b); time, memory and build cost per k.
 - [x] **CH4.4a The kD sweep beside FMM3D.** Report: `tetraleaf-validate/results/helmholtz-ch4-4a.md`;
   record `docs/helmholtz/tasks/CH4.4a.md`. Under the library's defaults within ε on W1 to kD = 1000,
   W2 to 500, W3 to 100 and at N = 10⁶ for kD = 200, 500, the plane wave's trace and the constant
