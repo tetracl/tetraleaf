@@ -184,9 +184,13 @@ CH4.4a's 27.38 / 40.42 ε (FMM3D's reference at 4 × 10). Pending:
 - 663782 `… mid`
 - 663783 `… w3`
 - 663784 `… w1-1000`
-- 663785 `… pw1000 remedy` (the 114.7 ε case and its remedy runs)
+- 663788 `… pw1000 remedy` (the 114.7 ε case and its remedy runs; from 6e8c4ce's tree, built in
+  `target/ch4-4b-remedy`). It replaces 663785, cancelled while queued to add the remedy runs with
+  every level raised at once (W1 at kD = 500 with the plane wave's trace, 10⁻⁸: the worst box's
+  error spread over levels 2–4, about 0.3 each at its worst target).
 
-Each decides the mapping of its cases; 663785 also the cause and the remedy (question 2).
+Done: 663781 (`low`), 663783 (`w3`). Each decides the mapping of its cases; 663788 also the cause
+and the remedy (question 2).
 
 ## Open questions
 (filled when they arise)
