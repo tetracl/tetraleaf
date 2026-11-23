@@ -61,8 +61,9 @@ How it is read (to be confirmed in the PR, question 1):
   the default already (exact), so the boundary's other side is RCR's truncation, which the level
   parts cover.
 - **The worst boxes.** For each case and ε the worst boxes of φ and ∇φ with their place (cell,
-  centre, the levels' |v|/r) and the levels' and the M2L's parts at their worst targets, their
-  V offsets' classes on the form's levels.
+  centre, the levels' |v|/r) and the levels' and the M2L runs' parts at their worst targets (the
+  class decades' runs give the classes; a box's V offsets span nearly every class, so they are
+  not listed).
 - **The 114.7 ε box.** The level (and class) that carries it; the remedy proposed from (a) the FMM
   with that level's degree raised by 1 and 2 under the defaults' M2L (the form at the new degree, the
   new setting), its worst box and ℓ2, (b) the per-pair evidence (spike S7's curves,
@@ -90,16 +91,22 @@ How it is read (to be confirmed in the PR, question 1):
     degree as `PlaneWaveRaise` gives them; the plan is not changed (the builder's V and W/X rules
     read the setting before the override, so the base run and the override's run share the plan).
   - `HelmholtzOperator::with_m2l_overrides`, `HelmholtzFmmBuilder::m2l_overrides`, reported by
-    `HelmholtzFmm::m2l_overrides`; a level below 2 or a class ≥ 34 is
-    `HelmholtzFmmError::M2lOverride` (before any collective, the same on every rank); a level beyond
-    the tree is ignored (documented). Every public item documented; the crate's CLAUDE.md.
+    `HelmholtzOperator::m2l_overrides` (through `HelmholtzFmm::operator`); a level below 2, a
+    level named twice or a class ≥ 34 is `HelmholtzFmmError::M2lOverride` (before any collective,
+    the same on every rank); a level beyond the tree is ignored (documented). Every public item
+    documented; the crate's CLAUDE.md.
+  - As built, the override's degree is applied by the builder to the resolved degrees (so the
+    plan, the near rules and the waves' levels read it, and a degree under `Setting` cannot add
+    waves on a level the plan did not group for them); its M2L acts in the operator alone.
 - `tetraleaf-validate`:
   - `helmholtz_accuracy::Case::m2l_overrides` (empty in `Case::new` and `Case::defaults`), passed to
     the builder.
   - `helmholtz_boxes`: `Reference::extend` (more targets, the values at the old targets kept, bit
     for bit what `Reference::at` gives at the union); per-level class bounds for a run
     (`class_ratios`: E(l, c)/(θ ε) of each class at the level's degree, k̂ and the build's constants).
-  - The `helmholtz_boxes` example: `--m2l defaults` (`Case::defaults`), `--refine n`, `--study
+  - The `helmholtz_boxes` example: `--m2l defaults` (`Case::defaults`), `--refine n`,
+    `--reference-cache dir` (the sampled reference shared by a case's ε: about 12 min a launch
+    at kD = 1000), `--study
     levels` under the defaults by overrides (under `rotation` CH4.0b's named degrees, so its runs
     repeat), `--study m2l` (each non-RCR level on RCR, the class decades on the form's levels,
     `--class-runs` for each class of the top decade), `--raise-by 1,2` (the degree-raised runs

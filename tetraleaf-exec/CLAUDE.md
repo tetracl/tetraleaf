@@ -888,6 +888,23 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   test's first version, at c_leaf 2; not comparable with CH4.3b2c's 700.5 s at load 2–4, not
   measured quiet); at opt-level 1 36.6 s at c_leaf 2 and 76.8 s at the final 4, the second at load
   24–28 (CH4.3b2c 39.5 s quiet); CI's MPI list 103.8 and 118.8 s at 2 and 4 ranks on the M6.
+  Since Helmholtz CH4.4b (docs/helmholtz/tasks/CH4.4b.md; tetraleaf-validate/results/helmholtz-ch4-4b.md)
+  `M2lOverride { level, degree, m2l: OverrideM2l::{Setting, Rcr, RcrClasses} }`
+  (`HelmholtzOperator::{with_m2l_overrides, m2l_overrides}`, `HelmholtzFmmBuilder::m2l_overrides`;
+  refused by `M2lOverride::check`, `OverrideError`, `HelmholtzFmmError::M2lOverride`) is a
+  measurement setting, never a rule: a level's degree replaces the rule's before every rule reads
+  it (the builder applies it to the resolved degrees, so the plan, the near rules and `wave_levels`
+  see it; `select_tables` to its base degrees), `Rcr` takes the waves, the form and Batched, Dense
+  or Classes tables off the level at its degree as run (p_w kept unless a degree is named),
+  `RcrClasses` takes classes off the form after the bound and the time rule chose them. Empty by
+  default: no other output changes. `tests/helmholtz/m2l_override.rs` checks the levels per
+  override against the setting (a named degree under `Setting` the operator given that degree)
+  and the refusals; `check_m2l_override` in `tests/helmholtz_fmm.rs` (the cube at kD = 40 + 2i,
+  10⁻⁷, free form costs) RCR on the form's level bit for bit the time rule's RCR at free RCR
+  costs, every class off the same, some classes off within `DIAGONAL_RATIO`, RCR on a wave level
+  within `PLANE_WAVE_RATIO`, a named degree under Rotation bit for bit `Degrees::PerLevel`, 2
+  threads and the one-rank FMM, a level below 2 refused. Its cost: `helmholtz_fmm` at one rank,
+  opt-level 1, 44.1 s on the M6.
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
   count. No `unsafe`, no atomics, no global pool; per-thread scratch created at
