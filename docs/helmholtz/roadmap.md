@@ -7,14 +7,14 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/tasks/<ID>.md`; each milestone's gate report is
 `docs/helmholtz/gates/<milestone>.md`.
 
-Status (2026-11-22): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
+Status (2026-11-23): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
-item 10 CH4.1, CH4.2, CH4.2c, CH4.3a–CH4.3e (CH4.3d2 closed unrun) and CH4.3c1–c2. CH4.3c3 (the
-constant density scanned: CH4.3c2's +2 one short at x = 216 (10⁻³, 10⁻⁷) and 13.5 (10⁻⁸), up to 2
-too many at x ≤ 54; the degree rule refitted on the worst density under a cap of 0.82, the
-default) is signed off; then CH4.4 and CH4.5, which close H4's tasks; the FFT track stays item 11. The project was renamed tetraleaf on
-2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c. The
-history of this line until H6.G is in `progress.md` and in this file's history
+item 10 CH4.1–CH4.3 (CH4.3d2 closed unrun). CH4.4 was split into CH4.4a (the kD sweep beside FMM3D)
+and CH4.4b (the crosscheck mapped to levels and classes); CH4.4a is done, within ε everywhere, one
+worst box above 100 ε (W1 at kD = 1000, plane wave, 10⁻⁸: 114.7 ε) left to CH4.4b, its questions
+signed off; then CH4.4b and CH4.5 close H4's tasks; the FFT track stays item 11. The project was renamed
+tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7,
+CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
 (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
 `git show 8475009:docs/helmholtz/roadmap.md`.
 
@@ -88,7 +88,7 @@ the measured product leaves an FFT about 1–2 % of the run, so items 10 and 11 
    CH4.2's trusted path; split on 2026-11-19)
 9. CHA.11 The Helmholtz wave levels in one place (added on 2026-11-19 at the H1 gate, the
    user on #230: "CHA.11 + measure first (Recommended)"; review 2026-11-19, L1)
-10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3; CH4.3d as CH4.3d1 and CH4.3d2, split on 2026-11-22), CH4.4, CH4.5 (CH4.1a first
+10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3; CH4.3d as CH4.3d1 and CH4.3d2, split on 2026-11-22), CH4.4 (CH4.4a, CH4.4b; split on 2026-11-22), CH4.5 (CH4.1a first
     measures the product conversions against RCR and stops to ask before CH4.2 whether item 11
     moves ahead: review 2026-11-19, A5)
 11. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
@@ -859,21 +859,39 @@ task's full line is in its record or report and its progress entry
   ranks per node (or read from the rank's share), the dense-level misses at one rank per node (3.5 %
   and 2.2 % of the levels' time, its §5) refitted or closed, verified as CH4.3b2a on Kathleen and
   locust at 1 × N and N × 1. *Needs:* CH4.3b2c. *Machines:* Kathleen, locust.
-- [ ] **CH4.4 kD sweep, with the FMM3D gate.** *Done when:* the FMM against the direct sum on
-  W1 to kD = 1000, W2 to 500 and W3 to 200, beside `hfmm3d`; the full-target crosscheck mapped
-  to levels and classes, with no error concentrated at a class boundary and the worst box at
-  most 100 ε (proposal §9.1, amended at CH4.0b); time, memory and build cost per k. Also
-  (CH4.0b's sign-off 2): the plane wave's trace at kD = 500 and 1000 beside §9.1's charges. Also
-  (CH4.3c3's report §4): the constant density on the sweep's low-frequency trees, whose plateau
-  levels (x < 6.8) no constant-density scan covers and where the refit is 1–2 degrees below
-  CH4.3c2's at x ≈ 4–7 and 10⁻³.
-  *Needs:* CH4.3a–CH4.3e, CH1.4. *Machines:* Kathleen.
+- CH4.4 kD sweep, with the FMM3D gate. Split on 2026-11-22 (the size rule: a sweep on Kathleen beside
+  FMM3D, and a new error mapping) into CH4.4a and CH4.4b; together their *Done when* is §10's:
+  the FMM against the direct sum on W1 to kD = 1000, W2 to 500 and W3 to 200, beside `hfmm3d`; the
+  full-target crosscheck mapped to levels and classes, with no error concentrated at a class boundary
+  and the worst box at most 100 ε (proposal §9.1, amended at CH4.0b); time, memory and build cost per
+  k.
+- [x] **CH4.4a The kD sweep beside FMM3D.** Report: `tetraleaf-validate/results/helmholtz-ch4-4a.md`;
+  record `docs/helmholtz/tasks/CH4.4a.md`. Under the library's defaults within ε on W1 to kD = 1000,
+  W2 to 500, W3 to 100 and at N = 10⁶ for kD = 200, 500, the plane wave's trace and the constant
+  density (78 points, at most 0.76 ε); worst box ≤ 100 ε but W1 at kD = 1000, plane wave, 10⁻⁸
+  (114.7 ε, a tangent point); 0.08–0.17× FMM3D's faster call on W1 at kD = 500–1000; FMM3D
+  `default` exceeds a node's 180 GB at kD = 1000. *Sign-off:* the report's questions 1–4,
+  signed off 2026-11-23 by the user on #255: "Q1-4 as recommended": the acceptance as read (FMM3D `fastker` the reference at kD = 1000); CH4.4a closed with the
+  114.7 ε box a finding, its cause and remedy CH4.4b's; CH4.5's two Alsos below.
+- [ ] **CH4.4b The crosscheck mapped to levels and classes.** *Done when:* on CH4.4a's cases whose
+  trees run the diagonal form or RCR at k a ≥ 2.8, the full-target crosscheck's box errors split by
+  level (CH4.0b's level parts, one level's degree raised at a time) and, on the form's levels, by
+  the form's classes against RCR (the level run all-RCR), with no error concentrated at a class
+  boundary: neither in the classes beside the bound's threshold (proposal §3.6's choice per (level,
+  class)) nor at the levels where the M2L changes (the regimes, the waves, the form); the worst
+  boxes' levels and classes named. Also (CH4.4a's report §3, question 2): the worst box of W1 at
+  kD = 1000 with the plane wave's trace at 10⁻⁸, 114.7 ε (∇φ) at a tangent point of the sphere and
+  its cube, above §9.1's 100 ε: its levels and classes, and a remedy (a degree on a level, or the
+  bound) on pair and FMM evidence. *Needs:* CH4.4a. *Machines:* Kathleen.
 - [ ] **CH4.5 Host performance against FMM3D at matched accuracy.** As C6.8, setup apart,
   one node, on CH4.4's sweep. Also (review 2026-11-19, A6, B6, B8): ours at 1 × N (one rank,
   N threads, as a threaded caller runs it) beside the best split; FMM3D's OpenMP binding
   stated; CH4.0k reconsidered before it, and the H4 gate states one-rank-per-node figures. Also
   (CH4.3e's report §4): c_leaf 4, measured at one rank per node only, at the best split and at
-  N × 1 (W3 at N = 10⁶, kD = 500, where its gain lies).
+  N × 1 (W3 at N = 10⁶, kD = 500, where its gain lies). Also (CH4.4a's report §4–§6, questions 3
+  and 4, signed off 2026-11-23): at kD = 1000 FMM3D `fastker` alone (`default` exceeds a Kathleen node's
+  180 GB), its failure and peaks stated; our memory one ε per launch (a later ε's growth in one
+  launch is a lower bound); timed jobs exclude node-c11b-004 and node-c11b-013 (about 3× slow).
   *Needs:* CH4.4. *Machines:* locust, Kathleen.
 - [ ] **CH4.6 The optional FFTW back end of the φ step.** *Done when:* against the product to
   round-off; per-box plans with bits the same across batch positions, sizes and threads, and

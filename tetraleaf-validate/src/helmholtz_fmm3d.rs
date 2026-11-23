@@ -254,6 +254,20 @@ pub fn seconds(log: &str, token: &str) -> Option<(f64, usize)> {
     found
 }
 
+/// From the driver's log, the peak resident size in bytes of the driver's launch at `token`
+/// (Helmholtz CH4.4a): the last line `maxrss: token=<token> kb=<n>`, which
+/// `tools/fmm3d/run.sh helmholtz` appends after a launch of the driver at that one token
+/// under `tools/fmm3d/maxrss.py` (its peak resident set in KiB); `None` without one, or
+/// if the last line of the token has no number.
+pub fn maxrss(log: &str, token: &str) -> Option<u64> {
+    let mut words = log.lines().rev().find_map(|line| {
+        let mut words = line.strip_prefix("maxrss: ")?.split_whitespace();
+        (words.next()?.strip_prefix("token=")? == token).then_some(words)
+    })?;
+    let kib: u64 = words.next()?.strip_prefix("kb=")?.parse().ok()?;
+    Some(kib * 1024)
+}
+
 /// §9.1's relative ℓ2 errors [φ, ∇φ] of `values` at the sampled targets against vector
 /// `vector` of `oracle` (the same targets, in the order of the samples).
 ///
@@ -601,6 +615,46 @@ mod tests {
         assert_eq!(seconds(log, "1e-3"), Some((0.15, 6)));
         assert_eq!(seconds(log, "1e-12"), Some((2.5, 6)));
         assert_eq!(seconds(log, "1e-6"), None);
+    }
+
+    /// Helmholtz CH4.4a: the densities' problem files differ in the charges only.
+    #[test]
+    fn densities_change_the_charges_only() {
+        use crate::helmholtz_accuracy::Density;
+        let mut case = Case::new(Workload::W1, (30.0, 0.0), Degrees::Tolerance(1e-3));
+        let random = problem_bytes(&Problem::new(&case), 0, case.seed);
+        let n = Problem::new(&case).len();
+        let charges = 40 + 24 * n..40 + 40 * n;
+        for density in [Density::PlaneWave, Density::Constant] {
+            case.density = density;
+            let other = problem_bytes(&Problem::new(&case), 0, case.seed);
+            assert_eq!(other.len(), random.len());
+            assert_eq!(
+                other[..charges.start],
+                random[..charges.start],
+                "{density:?}"
+            );
+            assert_eq!(other[charges.end..], random[charges.end..], "{density:?}");
+            assert_ne!(
+                other[charges.clone()],
+                random[charges.clone()],
+                "{density:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn maxrss_line() {
+        let log = "helmholtz: token=1e-3 threads=6 repeat=1 seconds=  1.5E-01 out=x\n\
+                   maxrss: token=1e-3 kb=2048\n\
+                   maxrss: token=1e-12 kb=7\n\
+                   maxrss: token=1e-3 kb=4096\n\
+                   maxrss: token=1e-6 kb=\n";
+        assert_eq!(maxrss(log, "1e-3"), Some(4096 * 1024));
+        assert_eq!(maxrss(log, "1e-12"), Some(7 * 1024));
+        assert_eq!(maxrss(log, "1e-6"), None);
+        assert_eq!(maxrss(log, "1e-8"), None);
+        assert_eq!(maxrss("", "1e-3"), None);
     }
 
     #[test]

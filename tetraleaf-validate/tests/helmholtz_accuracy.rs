@@ -26,10 +26,10 @@ use mpi::Threading;
 use mpi::topology::SimpleCommunicator;
 use mpi::traits::Communicator;
 use tetraleaf_exec::helmholtz::{
-    ChargeKind, Degrees, Densities, HelmholtzDiagonal, HelmholtzM2l, LevelShape, Output,
-    PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit, TransferBuild, V_COSTS_NEON,
-    VAfterPlan, VNear, VRaisedPrice, Wavenumber, WavenumberKind, WxNear, auto_m2l_mul_add,
-    s7_degree,
+    ChargeKind, Charges, DEFAULT_C_LEAF, DEFAULT_DIAGONAL_BUILD, Degrees, Densities,
+    HelmholtzDiagonal, HelmholtzFmmBuilder, HelmholtzM2l, LevelShape, Output, PlaneWavePrecision,
+    PlaneWaveRaise, PlaneWaveSplit, RcrSplit, TransferBuild, V_COSTS_NEON, VAfterPlan, VNear,
+    VRaisedPrice, Wavenumber, WavenumberKind, WxNear, auto_m2l_mul_add, s7_degree,
 };
 use tetraleaf_exec::operator::Isa;
 use tetraleaf_tables::helmholtz::plane_wave::merge::{plane_wave_degree, precision_for_tolerance};
@@ -37,7 +37,7 @@ use tetraleaf_tables::helmholtz::plane_wave::quadrature::RHO_MAX;
 use tetraleaf_validate::fmm_accuracy::Distribution;
 use tetraleaf_validate::helmholtz_accuracy::{
     BUILD_PARTS, Case, Density, FORM_COSTS, Oracle, PLANE_WAVE_DIRECTION, Problem, RCR_COSTS, Row,
-    checksum, complex_k, run, run_output, sweep_crossovers,
+    checksum, complex_k, reduce_checksum, run, run_output, sweep_crossovers,
 };
 use tetraleaf_validate::helmholtz_boxes::{Errors, Reference, box_sample};
 use tetraleaf_validate::helmholtz_calibration::Curve;
@@ -692,6 +692,66 @@ fn helmholtz_accuracy_harness() {
     check_block_budget(&world);
     check_rcr_split(&world);
     check_diagonal(&world);
+    check_defaults(&world);
+}
+
+/// Helmholtz CH4.4a: [`Case::defaults`] runs the library's defaults. On W1 at kD = 30 and
+/// 10⁻⁷ (a tree where the time rule weighs the diagonal form), the harness's checksum is that
+/// of an FMM built by `HelmholtzFmmBuilder::new` with nothing set but the charges, the
+/// gradients and the threads (the trusted path for "the defaults"), within ε; the settings
+/// as built are the library's; `Row::memory` is read on Linux (the growth within the peak)
+/// and absent on macOS, which has no peak to reset.
+fn check_defaults(world: &SimpleCommunicator) {
+    let (k, epsilon, threads) = ((30.0, 0.0), 1e-7, 2);
+    let defaults = Case::defaults(Workload::W1, k, Degrees::Tolerance(epsilon));
+    assert_eq!(defaults.charges, ChargeKind::Complex);
+    assert!(defaults.gradients);
+    let problem = Problem::new(&defaults);
+    let oracle = Oracle::sharded(complex_k(&defaults), &problem, true, threads, world);
+    let ours = run_output(&defaults, &problem, &oracle, threads, world).expect("the FMM runs");
+    let row = &ours.row;
+    let errors = row.errors.last().expect("over all vectors");
+    assert!(errors[0] <= epsilon && errors[1] <= epsilon, "{errors:?}");
+    assert_eq!(row.m2l, HelmholtzM2l::Auto);
+    assert_eq!(row.diagonal, HelmholtzDiagonal::Auto);
+    assert_eq!(row.diagonal_build_kind, DEFAULT_DIAGONAL_BUILD);
+    assert_eq!(row.near_v, VNear::CostModel);
+    assert_eq!(row.near_wx, WxNear::CostModel);
+    assert_eq!(row.c_leaf, DEFAULT_C_LEAF);
+    assert_eq!(row.v_after_plan, VAfterPlan::Off);
+    assert_eq!(row.v_raised_price, VRaisedPrice::PerBox);
+
+    let block = problem.block(world.rank() as usize, world.size() as usize);
+    let points = &problem.points[block.clone()];
+    let mut fmm = HelmholtzFmmBuilder::new(
+        Wavenumber::new(k.0, k.1).expect("a wavenumber"),
+        Degrees::Tolerance(epsilon),
+    )
+    .charges(ChargeKind::Complex)
+    .gradients(true)
+    .threads(threads)
+    .build(points, points, world)
+    .expect("the library's defaults build");
+    let output = fmm
+        .evaluate(&[Charges::Complex {
+            re: &problem.re[0][block.clone()],
+            im: &problem.im[0][block.clone()],
+        }])
+        .expect("the library's defaults evaluate");
+    assert_eq!(
+        reduce_checksum(checksum(&output, block.start), world),
+        row.checksum,
+        "Case::defaults is not the library's defaults"
+    );
+
+    if cfg!(target_os = "linux") {
+        let memory = row.memory.expect("Linux resets and reads the peak");
+        assert!(memory.growth_max > 0);
+        assert!(memory.growth_max <= memory.growth_sum);
+        assert_eq!(memory.growth_sum, memory.peak_sum - memory.before_sum);
+    } else if cfg!(target_os = "macos") {
+        assert_eq!(row.memory, None);
+    }
 }
 
 /// Helmholtz CH4.0e: the M2L's rotation blocks formed per V pair (a block budget of 0)

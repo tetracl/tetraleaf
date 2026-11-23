@@ -2103,6 +2103,16 @@ fn main() {
     }
     if root && let Some((bytes, how)) = resident_memory() {
         println!();
-        println!("Rank 0: {:.0} MB {how}.", bytes / 1e6);
+        // Since Helmholtz CH4.4a every run resets the peak before its build
+        // (`helmholtz_accuracy::reset_peak_resident`), so on Linux this is the last run's.
+        println!(
+            "Rank 0: {:.0} MB {how}{}.",
+            bytes / 1e6,
+            if cfg!(target_os = "linux") {
+                ", since the last run's build (the peak is reset before each build)"
+            } else {
+                ""
+            }
+        );
     }
 }

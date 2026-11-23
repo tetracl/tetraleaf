@@ -55,7 +55,11 @@
 #             case helmholtz-<case>.md (the table), helmholtz-<case>.log (our levels) and
 #             h/<case>-<variant>.log (the driver); the cases of H_T1_CASES again on one
 #             thread for both codes, without the crosscheck (helmholtz-<case>-t1.md); the
-#             full outputs are removed unless H_KEEP is set
+#             full outputs are removed unless H_KEEP is set. Helmholtz CH4.4a: a case may end
+#             in /<density> (random, planewave or constant: helmholtz_fmm3d's --density,
+#             in the problem file and the names); the driver runs once per eps under
+#             tools/fmm3d/maxrss.py, which appends `maxrss: token=<eps> kb=<n>` to its
+#             log, FMM3D's peak memory at that eps (H_MAXRSS=0: one launch, no memory)
 #
 # Every launch's file starts with the command, the machine (CPU, the variant's
 # build-info.txt) and, under Slurm, the job, or elsewhere the load before; macOS waits for
@@ -97,6 +101,10 @@
 #               FMM3D's eps of the crosscheck's reference (default 1e-12)
 #   H_SPLIT     ours: ranks x threads (default 4x10 under Slurm, T9's split, else 1xCORES)
 #   H_P2P       ours: the P2P kernel (default auto)
+#   H_SETTINGS  ours: harness (default, CH3.6's: M2L by Rotation, the diagonal form off) or
+#               defaults (the library's every default; Helmholtz CH4.4a)
+#   H_MAXRSS    1 (default): the driver once per eps under tools/fmm3d/maxrss.py; 0: once
+#               at every eps, no memory (CH3.6's)
 #   DRY_RUN     if set, print the commands only
 
 set -eu
@@ -140,6 +148,8 @@ H_T1_CASES=${H_T1_CASES-"w1@100"}
 H_EPS=${H_EPS:-"1e-3,1e-6,1e-8"}
 H_REFERENCE=${H_REFERENCE:-1e-12}
 H_P2P=${H_P2P:-auto}
+H_SETTINGS=${H_SETTINGS:-harness}
+H_MAXRSS=${H_MAXRSS:-1}
 TIMEOUT=${TIMEOUT:-7200}
 QUIET=${QUIET:-200}
 case "$(uname -s)" in
@@ -327,16 +337,20 @@ match() {
 # one case of the `helmholtz` step.
 helmholtz_case() {
     workload=${1%@*} kd=${1#*@} split=$2 fthreads=$3 suffix=$4 withref=$5
-    name=$(echo "$workload" | sed 's/:/-n/')-kd$kd$suffix
+    density=random dtag=
+    case "$kd" in
+    */*) density=${kd#*/} kd=${kd%/*} dtag=-$density ;;
+    esac
+    name=$(echo "$workload" | sed 's/:/-n/')-kd$kd$dtag$suffix
     ranks=${split%x*} threads=${split#*x}
-    prob=$PROBLEMS/h-$(echo "$workload" | sed 's/:/-n/')-kd$kd.bin
+    prob=$PROBLEMS/h-$(echo "$workload" | sed 's/:/-n/')-kd$kd$dtag.bin
     mkdir -p "$OUT/h"
     if [ -n "${DRY_RUN:-}" ]; then
         echo "helmholtz $name: $prob, ours $ranks x $threads, FMM3D on $fthreads threads"
         return
     fi
     if [ ! -f "$prob" ]; then
-        "$hexe" problem --workload "$workload" --kd "$kd" --out "$prob" |
+        "$hexe" problem --workload "$workload" --kd "$kd" --density "$density" --out "$prob" |
             tee -a "$OUT/problems.txt"
     fi
     labels= first=1
@@ -345,12 +359,29 @@ helmholtz_case() {
         if [ "$first" = 1 ] && [ "$withref" = 1 ]; then tokens="$H_EPS,$H_REFERENCE"; fi
         pre=$OUT/h/$name-$variant
         driver=$FMM3D_ROOT/$variant/bin/fmm3d_driver
-        command="OMP_NUM_THREADS=$fthreads $limit $driver helmholtz $prob $pre $kd 0 $tokens 1 1"
+        if [ "$H_MAXRSS" = 1 ]; then
+            command="for t in ${tokens//,/ }: OMP_NUM_THREADS=$fthreads $limit python3 \
+tools/fmm3d/maxrss.py $pre.log token=\$t -- $driver helmholtz $prob $pre $kd 0 \$t 1 1"
+        else
+            command="OMP_NUM_THREADS=$fthreads $limit $driver helmholtz $prob $pre $kd 0 $tokens 1 1"
+        fi
         echo "[$(date '+%H:%M:%S')] $name: $command"
         header "$pre.log" "$variant" "$command"
-        # shellcheck disable=SC2086 # $limit is a command and its argument, or empty
-        OMP_NUM_THREADS=$fthreads $limit "$driver" helmholtz "$prob" "$pre" "$kd" 0 "$tokens" 1 1 \
-            >>"$pre.log" 2>&1 || echo "FAILED: FMM3D $variant" | tee -a "$pre.log"
+        if [ "$H_MAXRSS" = 1 ]; then
+            for t in ${tokens//,/ }; do
+                # A launch that fails must not leave an earlier run's output to be read as its own.
+                rm -f "$pre-$t.out" "$pre-$t.full.out"
+                # shellcheck disable=SC2086 # $limit is a command and its argument, or empty
+                OMP_NUM_THREADS=$fthreads $limit python3 tools/fmm3d/maxrss.py "$pre.log" "token=$t" -- \
+                    "$driver" helmholtz "$prob" "$pre" "$kd" 0 "$t" 1 1 >>"$pre.log" 2>&1 ||
+                    echo "FAILED: FMM3D $variant at $t" | tee -a "$pre.log"
+            done
+        else
+            for t in ${tokens//,/ }; do rm -f "$pre-$t.out" "$pre-$t.full.out"; done
+            # shellcheck disable=SC2086 # $limit is a command and its argument, or empty
+            OMP_NUM_THREADS=$fthreads $limit "$driver" helmholtz "$prob" "$pre" "$kd" 0 "$tokens" 1 1 \
+                >>"$pre.log" 2>&1 || echo "FAILED: FMM3D $variant" | tee -a "$pre.log"
+        fi
         labels="$labels,$variant=$pre"
         first=0
     done
@@ -366,13 +397,14 @@ helmholtz_case() {
     if [ "$withref" = 1 ]; then ref="--reference $H_REFERENCE"; fi
     file=$OUT/helmholtz-$name.md
     command="$limit mpirun $flags -n $ranks $hexe compare --workload $workload --kd $kd \
---eps $H_EPS --fmm3d ${labels#,} $ref --problem $prob --threads $threads --p2p $H_P2P"
+--density $density --settings $H_SETTINGS --eps $H_EPS --fmm3d ${labels#,} $ref --problem $prob \
+--threads $threads --p2p $H_P2P"
     echo "[$(date '+%H:%M:%S')] $name: $command"
     header "$OUT/helmholtz-$name.log" "${VARIANTS%% *}" "$command"
     # shellcheck disable=SC2086 # the flags and $ref are words, $limit a command or empty
     $limit mpirun $flags -n "$ranks" "$hexe" compare --workload "$workload" --kd "$kd" \
-        --eps "$H_EPS" --fmm3d "${labels#,}" $ref --problem "$prob" --threads "$threads" \
-        --p2p "$H_P2P" >"$file" 2>>"$OUT/helmholtz-$name.log" ||
+        --density "$density" --settings "$H_SETTINGS" --eps "$H_EPS" --fmm3d "${labels#,}" $ref \
+        --problem "$prob" --threads "$threads" --p2p "$H_P2P" >"$file" 2>>"$OUT/helmholtz-$name.log" ||
         echo "FAILED: ours (exit $?)" | tee -a "$file"
     if [ "$os" != slurm ]; then
         echo "load after ($(date '+%Y-%m-%d %H:%M:%S')): $(uptime)" >>"$OUT/helmholtz-$name.log"

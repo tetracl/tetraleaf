@@ -4455,3 +4455,51 @@ request, using this template:
   amended (Appendix A).
 - Laplace: not touched (the Helmholtz degree rule, the harness, scripts, docs).
 - Follow-ups: CH4.4's Also (the constant density on the low-frequency trees, its line).
+
+## 2026-11-23: CH4.4a The kD sweep beside FMM3D
+- Done:
+  - CH4.4 split into CH4.4a (the sweep: errors, crosscheck, time, memory, build) and CH4.4b (the
+    crosscheck mapped to levels and classes) by the size rule.
+  - `tetraleaf-validate`: `helmholtz_accuracy::Case::defaults` (every setting the library's),
+    `Row::memory` (`Memory`, `reset_peak_resident`, `peak_resident`: the FMM's resident growth over
+    its build and evaluations, Linux), `helmholtz_fmm3d::maxrss`; the `helmholtz_fmm3d` example's
+    `--settings harness|defaults`, `--density`, a column "memory GB", a table "Build", the levels in
+    the log, and a failed FMM3D run reported as a row instead of stopping `compare`; the
+    `helmholtz_accuracy` example's peak line says the peak is reset before each build.
+  - `tools/fmm3d/run.sh helmholtz`: `<workload>@<kD>/<density>`, `H_SETTINGS`, the driver once per
+    eps under the new `tools/fmm3d/maxrss.py` (FMM3D's peak memory; Kathleen's compute nodes lack
+    GNU time), stale outputs removed before each launch; `tools/helmholtz/ch4-4a-runs.sh`,
+    `ch4-4a-tables.py`; `tools/kathleen/README.md` names two slow nodes. Report
+    `tetraleaf-validate/results/helmholtz-ch4-4a.md`; record `docs/helmholtz/tasks/CH4.4a.md`.
+- Tests: `check_defaults` (`Case::defaults` against `HelmholtzFmmBuilder::new` with nothing else
+  set, bit for bit, on W1 at kD = 30, 10⁻⁷; a wrong default fails it; the memory on Linux), at 1, 2
+  and 4 ranks; unit tests `maxrss_line`, `densities_change_the_charges_only`.
+- Measurements (Kathleen, one node per job, ours 4 × 10, FMM3D v2.1.0 on 40 threads; jobs 663706,
+  663732–663737; 26 cases × 10⁻³, 10⁻⁶, 10⁻⁸):
+  - ours within ε at the samples everywhere (at most 0.76 ε) and over all targets; worst box at most
+    100 ε but W1 at kD = 1000 with the plane wave's trace at 10⁻⁸, 114.7 ε (∇φ), at a tangent point
+    of the sphere and its cube (CH4.0b's placement); 67.8 ε at kD = 500, 43.3 ε with random charges
+    at kD = 1000;
+  - ours over FMM3D's faster variant's whole call 0.09–0.95 at N ≥ 10⁵ (geometric mean 0.21),
+    0.08–0.17 on W1 at kD = 500 and 1000 (W1 at kD = 1000: 28–40 s against `fastker`'s 287–416 s);
+    slower at 10⁻³ on six small cases, the first ε of a launch;
+  - our memory 21–29 GB at kD = 1000; FMM3D `default` 44–108 GB at kD = 500 and above the node's
+    180 GB at kD = 1000 (killed at 10⁻³, 10⁻⁶, 10⁻¹²), `fastker` 45–118 GB there, so `fastker` is
+    the reference at kD = 1000; a later ε's memory in one launch is a lower bound (job 663737: up to
+    about 30 % low);
+  - our build 2.6–2.9 s at kD = 500, 16–19 s at kD = 1000, the RCR tables 9.2–12.9 s of it;
+  - node-c11b-004 and node-c11b-013 about 3× slow for both codes on N ≥ 10⁶ (jobs 663707, 663708,
+    663710), same outputs; rerun elsewhere (663736), the slow runs kept apart;
+  - raw outputs in `~/projects/fmm-archive/kathleen/runs/ch4-4a/`.
+- Checks: see the PR (fmt; Clippy default, examples, workspace all-targets; rustdoc `-D warnings`;
+  the default and workspace tests at opt-level 1; `helmholtz_accuracy` at 2 and 4 ranks; its
+  one-rank debug run at opt-level 0 437.8 s at load 19–24 on the M6, not comparable with the
+  recorded 246 s at load 2–3). Not run: the MPI list (no MPI crate changed; `helmholtz_accuracy` is
+  not in it), `cargo deny` (no manifest change), Laplace's benchmarks (no Laplace path), 8 ranks
+  (no distributed code).
+- Decisions: the report's questions 1–4, signed off 2026-11-23 by the user on #255: "Q1-4 as recommended": the acceptance as read;
+  the 114.7 ε box a finding for CH4.4b; CH4.5 with `fastker` alone at kD = 1000 and memory one ε
+  per launch.
+- Laplace: not touched (the harness, its example, scripts, docs).
+- Follow-ups: CH4.4b's Also (the worst box above 100 ε); CH4.5's Also (FMM3D `fastker` alone at
+  kD = 1000, memory one ε per launch, the slow nodes excluded), both signed off.
