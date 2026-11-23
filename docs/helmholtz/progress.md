@@ -4524,16 +4524,20 @@ request, using this template:
   kD = 40 + 2i, 10⁻⁷: RCR on the form's level bit for bit the time rule's RCR at free RCR costs, every
   class off the same, some classes off within `DIAGONAL_RATIO`, RCR on a wave level within
   `PLANE_WAVE_RATIO`, a named degree under Rotation bit for bit `Degrees::PerLevel`, 2 threads and
-  the one-rank FMM bit for bit, a level below 2 refused); unit tests of `Reference::extend` (bit for
-  bit the union's) and `class_ratios` (the rule's classes).
-- Measurements (Kathleen, `singlenode`, 1 × 40, jobs 663781–663784, 663788; 47 launches and 4 remedy
-  launches, every one exit 0): CH4.4a's cases with a level of the form or RCR at k a ≥ 2.8, ε 10⁻³,
+  the one-rank FMM bit for bit, a degree above p_w under the setting on a wave level through the
+  builder, a level below 2 refused); `the_batched_budget_stays_spent` (an override's RCR keeps the
+  dense budget spent, fails without the fix); `check_defaults` in `tetraleaf-validate`'s
+  `tests/helmholtz_accuracy.rs` (`Case::m2l_overrides` reaches the builder); unit tests of
+  `Reference::extend` (bit for bit the union's) and `class_ratios` (the rule's classes).
+- Measurements (Kathleen, `singlenode`, 1 × 40, jobs 663781–663784, 663788, 663789; 47 launches, W3's 9
+  again with CH4.4a's worst boxes, and 4 remedy launches, every one exit 0): CH4.4a's cases with a level of the form or RCR at k a ≥ 2.8, ε 10⁻³,
   10⁻⁶, 10⁻⁸, under the defaults:
-  - the reference sampled and refined (`--refine 8 --refine-faces`); W1's worst boxes CH4.4a's to
-    0.8 %; W2's and W3's figures differ by the normaliser (the sample's RMS), CH4.4a's stay the gate's;
-  - the levels' parts add up (rest ≤ 0.004 at 10⁻⁶ and 10⁻⁸, ≤ 0.04 at 10⁻³; W3 at N = 10⁶, kD = 500,
-    10⁻⁸ 0.19: its deepest level has no V pairs); the worst boxes of W1 and W2 all at the tangent
-    points, three to six levels each 0.11–0.69 of the error there;
+  - the reference sampled and refined (`--refine 8 --refine-faces`, on W3 CH4.4a's worst boxes by
+    `--refine-cells`); W1's worst boxes CH4.4a's to 0.8 %, W3's φ to 0.3 %; W2's and W3's ∇φ figures
+    differ by the normaliser (the sample's RMS), CH4.4a's stay the gate's;
+  - the levels' parts add up (rest ≤ 0.004 at 10⁻⁶ and 10⁻⁸, ≤ 0.04 at 10⁻³; on W3 the levels without
+    V pairs raised too); the worst boxes of W1 and W2 all at the tangent points, three to six levels
+    each 0.11–0.69 of the error there; W3's some one level's (the M2L's part ≤ 0.023);
   - the form on RCR (154 runs), Batched on RCR (11) and the classes by decade below the bound's
     threshold on RCR (55): no worst box or ℓ2 changed (1.000); the waves on RCR (30): RCR ÷ default
     0.978–1.19, the default at most 1.023× RCR (1.034× in ℓ2);
@@ -4543,9 +4547,10 @@ request, using this template:
     worst box ≤ 68.2 ε;
   - raw outputs in `~/projects/fmm-archive/kathleen/runs/ch4-4b/`.
 - Checks: fmt; Clippy default, examples, workspace all-targets; rustdoc `-D warnings`; the default
-  and workspace tests at opt-level 1; the MPI list at 2 and 4 ranks (`helmholtz_fmm` 66.9 and
-  47.1 s); `helmholtz_fmm` one rank at opt-level 1 44.1 s, at opt-level 0 1,009 s at load 11–19 on the
-  M6 (CH4.3e 1,315 s at load 24–27; not comparable); CI green on #256. Not run: `cargo deny` (no
+  and workspace tests at opt-level 1; the MPI list at 2 and 4 ranks (again after the self-review's
+  tests: `helmholtz_fmm` 46.6 and 44.5 s); `helmholtz_accuracy` at 1, 2 and 4 ranks; `helmholtz_fmm`
+  one rank at opt-level 1 45.3 s (44.1 s before the self-review's check), at opt-level 0 1,009 s at
+  load 11–19 on the M6 before it (CH4.3e 1,315 s at load 24–27; not comparable); CI green on #256. Not run: `cargo deny` (no
   manifest change), Laplace's benchmarks (no Laplace path), 8 ranks (no distributed code).
 - Decisions: the report's questions 1–3 for sign-off: the acceptance as read (the M2L criterion
   one-sided); the 114.7 ε box: §9.1's bound for D1's range, beyond it reported (recommended), or a

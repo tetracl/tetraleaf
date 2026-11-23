@@ -179,7 +179,9 @@ D9 benchmarks.
 ## Pending runs
 None. Kathleen, `singlenode`, 1 × 40, `--exclude=node-c11b-004,node-c11b-013`, every launch exit 0:
 663781 (`low`), 663782 (`mid`), 663783 (`w3`), 663784 (`w1-1000`), 663788 (`pw1000 remedy`, built in
-`target/ch4-4b-remedy` from 6e8c4ce's tree); 663774 and 663780 the builds and checks; 663775
+`target/ch4-4b-remedy` from 6e8c4ce's tree), 663789 (`w3-cells`, from 86e390f's tree: W3 with
+CH4.4a's worst boxes in the reference and every level raised, after the self-review); 663774 and
+663780 the builds and checks; 663775
 (`low` without `--refine-faces`, superseded) and 663776–663779, 663785 (cancelled: 663776–663779 to
 add `--refine-faces` after the sample missed CH4.4a's worst box at kD = 500, 663785 while queued to
 add the remedy runs with every level raised). Outputs in

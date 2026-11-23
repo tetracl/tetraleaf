@@ -902,9 +902,11 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   and the refusals; `check_m2l_override` in `tests/helmholtz_fmm.rs` (the cube at kD = 40 + 2i,
   10⁻⁷, free form costs) RCR on the form's level bit for bit the time rule's RCR at free RCR
   costs, every class off the same, some classes off within `DIAGONAL_RATIO`, RCR on a wave level
-  within `PLANE_WAVE_RATIO`, a named degree under Rotation bit for bit `Degrees::PerLevel`, 2
-  threads and the one-rank FMM, a level below 2 refused. Its cost: `helmholtz_fmm` at one rank,
-  opt-level 1, 44.1 s on the M6.
+  within `PLANE_WAVE_RATIO`, a degree above p_w under the setting there, a named degree under
+  Rotation bit for bit `Degrees::PerLevel`, 2 threads and the one-rank FMM, a level below 2
+  refused; `the_batched_budget_stays_spent` that an override's RCR on a Batched level keeps Auto's
+  dense budget spent (every other level the setting's). Its cost: `helmholtz_fmm` at one rank,
+  opt-level 1, 45.3 s on the M6.
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
   count. No `unsafe`, no atomics, no global pool; per-thread scratch created at
