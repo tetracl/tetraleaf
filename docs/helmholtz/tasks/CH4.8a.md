@@ -143,7 +143,7 @@ puts W2 within ℓ2 0.48 ε and worst box 76.3 ε at all six ε of 10⁻³–10�
 10⁻⁴ and 10⁻⁷ too), W1 within 0.28 ε and 17.6 ε, the worst pair on the
 levels of k a ≥ 13.5 from 1.4–6.4 ε to 0.7–2.3 ε (on the levels that carry the ℓ2 misses 16 → 5.4 ε
 and 32 → 20 ε: only the FMM shows those closed), at 0.989–1.047× the default's build plus one evaluation (A B B A,
-geometric mean 1.017). Questions 1–3 of the report's §8 for sign-off.
+geometric mean 1.017). Questions 1–3 of the report's §8 signed off as recommended (the user on #260, 2026-11-24: "All decisions as recommended.").
 
 ## Checks run
 `/verify` on the M6: `cargo fmt --all -- --check`, `cargo clippy -- -D warnings`, `cargo clippy
@@ -155,4 +155,6 @@ script, a dry run of every stage (208 launches) locally and on Kathleen, the roa
 deny` (no manifest change), Laplace's benchmarks (no Laplace path).
 
 ## Open questions
-None beyond the report's §8.
+None. The report's §8 signed off as recommended (the user on #260, 2026-11-24: "All decisions as recommended."):
+the acceptance as read; `h1` the remedy (CH4.8b: a margin of `DegreeRule` after the cap, §3.5
+amended there); the plateau unchanged.

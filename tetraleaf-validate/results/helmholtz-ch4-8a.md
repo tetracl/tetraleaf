@@ -55,7 +55,7 @@ CH4.4b's `tools/helmholtz/ch4-4b-tables.py`.
 - **Its cost.** Build plus one evaluation 1.004–1.058× the default's at kD = 500 in single launches,
   inside the launches' own spread of about ±5 % (§7); the A B B A repeat, the medians of four
   launches each, gives 0.989–1.047× (geometric mean 1.017).
-- **For sign-off (§8):** `h1` as the rule CH4.8b makes the default and verifies; the plateau kept.
+- **Signed off (§8; the user on #260, 2026-11-24: "All decisions as recommended."):** `h1` as the rule CH4.8b makes the default and verifies; the plateau kept.
 
 ## 1. Method
 
@@ -373,6 +373,10 @@ is not measured here: the tables grow with the degree on the same levels; CH4.8b
 "time, memory and build cost per k").
 
 ## 8. Questions for sign-off
+
+Signed off as recommended (the user on #260, 2026-11-24: "All decisions as recommended."): the acceptance as read; `h1` the remedy, which CH4.8b makes
+the default as a margin of `DegreeRule` added after the cap, with proposal §3.5 amended there; the plateau
+unchanged.
 
 1. **The acceptance as read.** CH4.8 split into CH4.8a (this report: the mapping, the cause, the
    survey, the remedy chosen on FMM and pair evidence with its cost) and CH4.8b (the remedy as the

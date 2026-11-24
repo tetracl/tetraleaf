@@ -4685,7 +4685,7 @@ request, using this template:
   workspace (1,436) tests at opt-level 1; `bash -n`, ShellCheck, `py_compile`, dry runs of every
   stage locally and on Kathleen. Not run: the MPI list (no MPI crate's code), `cargo deny` (no
   manifest change), Laplace's benchmarks (no Laplace path).
-- Decisions: the report's questions 1–3 for sign-off (the acceptance as read; `h1` as the remedy;
-  the plateau unchanged).
+- Decisions: the report's questions 1–3 signed off as recommended (the user on #260, 2026-11-24: "All decisions as recommended."): the acceptance as read; `h1` as the remedy (CH4.8b
+  makes it the default and amends §3.5); the plateau unchanged.
 - Laplace: not touched (scripts and documents).
 - Follow-ups: CH4.8b (the remedy as the default, its roadmap line), then H4.G again.
