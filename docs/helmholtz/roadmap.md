@@ -98,7 +98,8 @@ H4.G as item 11, before the FFT track.
 10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3; CH4.3d as CH4.3d1 and CH4.3d2, split on 2026-11-22), CH4.4 (CH4.4a, CH4.4b; split on 2026-11-22), CH4.5 (CH4.1a first
     measures the product conversions against RCR and stops to ask before CH4.2 whether item 11
     moves ahead: review 2026-11-19, A5)
-11. CH4.8 The constant density on W2, then H4.G again (added on 2026-11-24 at the H4 gate)
+11. CH4.8 The constant density on W2 (CH4.8a, CH4.8b; split on 2026-11-24), then H4.G again
+    (added on 2026-11-24 at the H4 gate)
 12. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
 13. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
     CH2.1 and CH2.2 wait for D4, which CH2.1 prepares)
@@ -657,20 +658,28 @@ The done lines are condensed at the H4 gate (2026-11-24); in full in `git show 4
   fingerprints all-gathered; off by default, a default build linking no FFTW, cargo-deny, a CI
   job with the feature; the GPL warning in the crate documentation, the README, the builder
   option and `Cargo.toml`. *Needs:* CH4.1b, CHR.3, CH0.9, D7.
-- [ ] **CH4.8 The constant density on W2.** Added on 2026-11-24 at the H4 gate (the gate report
-  §9, Kathleen job 672173; review 2026-11-24, M15; the user: "Keep H4 open, CH4.8
-  (Recommended)"). Under the defaults W2 with the constant density misses ε inside D1: ∇φ's ℓ2 at
-  §9.1's samples 1.28 ε at kD = 500, 10⁻³ (0.98 ε at kD = 250, 10⁻³; 0.99 ε at kD = 500, 10⁻⁶), and
-  the worst box exceeds 100 ε (129.2 ε at kD = 250, 10⁻⁸; 101.0 and 143.4 ε at kD = 500, 10⁻⁶ and
-  10⁻⁸), at the sphere's tangent point on the cube's z = 0 face; W1 with it and every random-charge
-  case hold. *Done when:* the error mapped to levels and classes (`helmholtz_boxes --study
-  levels,m2l`, as CH4.4b) and its cause stated (the degree rule on the dense cap's levels, the
-  tangent-point placement, the form or Batched at p = 7); a remedy (the degree rule's high- or
-  low-frequency branch refitted on W2's constant density, or a level's degree raised by rule) with
-  its cost; under the defaults W1–W3 with the constant density at kD = 10–500 within ε in ℓ2 at
-  10⁻³–10⁻⁸ and every worst box ≤ 100 ε, the random-charge cases of CH4.4a unchanged within ε;
-  for sign-off. *Needs:* CH4.4b. *Machines:* Kathleen, locust.
-- [ ] **H4.G Gate.** `/milestone-gate H4`. *Needs:* CH4.0–CH4.5 and CH4.8 (corrected at the gate,
+- [ ] **CH4.8a The constant density on W2: the error mapped and a remedy chosen.** Added on
+  2026-11-24 at the H4 gate as CH4.8 (the gate report §9, Kathleen job 672173; review 2026-11-24,
+  M15; the user: "Keep H4 open, CH4.8 (Recommended)"), split into CH4.8a and CH4.8b at its start
+  (`docs/helmholtz/tasks/CH4.8a.md`; CH4.4b left a degree-rule remedy to a follow-up task). Under
+  the defaults W2 with the constant density misses ε inside D1: ∇φ's ℓ2 at §9.1's samples 1.28 ε at
+  kD = 500, 10⁻³ (0.98 ε at kD = 250, 10⁻³; 0.99 ε at kD = 500, 10⁻⁶), and the worst box exceeds
+  100 ε (129.2 ε at kD = 250, 10⁻⁸; 101.0 and 143.4 ε at kD = 500, 10⁻⁶ and 10⁻⁸), at the sphere's
+  tangent point on the cube's z = 0 face; W1 with it and every random-charge case hold. *Done
+  when:* the error mapped to levels and classes (`helmholtz_boxes --study levels,m2l`, as CH4.4b)
+  and its cause stated (the degree rule on the dense cap's levels, the tangent-point placement, the
+  form or Batched at p = 7); the verification set's cases not yet run under the defaults (W3 with
+  the constant density at kD = 100, 200, 500) run, so that every miss is known; a remedy (the degree
+  rule's high- or low-frequency branch refitted on W2's constant density, or a level's degree
+  raised by rule) chosen on the FMM's errors (every miss, W1's constant density) and the worst pair
+  per level (S7's curves), with its cost (build and evaluation, one setting per launch); for
+  sign-off. *Needs:* CH4.4b. *Machines:* Kathleen.
+- [ ] **CH4.8b The constant density on W2: the remedy as the default.** *Done when:* CH4.8a's
+  signed-off remedy the library's default (proposal §3.5 amended); under the defaults W1–W3 with the
+  constant density at kD = 10–500 within ε in ℓ2 at 10⁻³–10⁻⁸ and every worst box ≤ 100 ε, the
+  random-charge cases of CH4.4a unchanged within ε; its cost on Kathleen and locust; for sign-off.
+  *Needs:* CH4.8a. *Machines:* Kathleen, locust.
+- [ ] **H4.G Gate.** `/milestone-gate H4`. *Needs:* CH4.0–CH4.5 and CH4.8 (CH4.8a, CH4.8b; corrected at the gate,
   R1). Ran on 2026-11-24 (`docs/helmholtz/gates/H4.md`, #258): the condition on the random charges
   met, H4 kept open for CH4.8 (the user, 2026-11-24: "Keep H4 open, CH4.8 (Recommended)").
 
