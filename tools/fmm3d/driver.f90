@@ -56,6 +56,10 @@
 !   'NDFMMHO1', int64 s, t; complex(16) pot(s), grad(3,s) at the sampled sources (the self
 !   term dropped), pottarg(t), gradtarg(3,t) at the targets
 ! and prints one `helmholtz:` line (seconds by `omp_get_wtime`, FMM3D's setup included).
+! Since Helmholtz CH4.5 the line ends in `tree_s=`, FMM3D's setup timed once per eps token,
+! apart from the calls (`hndiv` of the linked build, `pts_tree_mem`, `pts_tree_build` and
+! `pts_tree_sort`, called as `hfmm3d` calls them), and the `helmholtz: problem` line names the
+! OpenMP binding (`omp_get_proc_bind` and the environment's OMP_PROC_BIND and OMP_PLACES).
 ! With FULL = 1 (Helmholtz CH3.6, the full-target crosscheck) every eps token also writes
 ! PREFIX-<TOKEN>.full.out:
 !   'NDFMMHF1', int64 n; complex(16) pot(n), grad(3,n) at every source (self term dropped)
@@ -378,9 +382,10 @@ contains
     complex(8), allocatable :: charges(:), hpot(:), hgrad(:,:), spot(:), sgrad(:,:)
     complex(8), allocatable :: tpot(:), tgrad(:,:)
     complex(8) :: zk
-    real(8) :: zre, zim, heps, best, ht0, ht1
+    real(8) :: zre, zim, heps, best, ht0, ht1, htree
     integer :: hstart, hcomma, hunit
     logical :: direct
+    character(len=256) :: hbind, hplaces
 
     if (command_argument_count() < 6 .or. command_argument_count() > 8) then
       print '(a)', 'usage: fmm3d_driver helmholtz PROBLEM PREFIX ZK_RE ZK_IM TOKEN[,TOKEN...] [REPEAT [FULL]]'
@@ -434,6 +439,11 @@ contains
     end do
     print '(a,i0,a,i0,a,i0,a,i0,a,2es24.16)', 'helmholtz: problem n=', hn, ' sampled=', hs, &
         ' targets=', ht, ' seed=', hheader(4), ' zk=', zk
+    call get_environment_variable('OMP_PROC_BIND', hbind)
+    call get_environment_variable('OMP_PLACES', hplaces)
+    print '(a,i0,a,a,a,a,a,i0)', 'helmholtz: binding proc_bind=', omp_get_proc_bind(), &
+        ' OMP_PROC_BIND=', trim(hbind), ' OMP_PLACES=', trim(hplaces), ' threads=', &
+        omp_get_max_threads()
 
     hstart = 1
     do while (hstart <= len_trim(hlist))
@@ -446,7 +456,11 @@ contains
         hstart = hstart + hcomma
       end if
       direct = htoken == 'direct'
-      if (.not. direct) read (htoken, *) heps
+      htree = -1
+      if (.not. direct) then
+        read (htoken, *) heps
+        htree = helmholtz_tree_seconds(heps, sources, hn, targets, ht)
+      end if
       best = huge(1d0)
       do r = 1, hrepeat
         spot = 0
@@ -486,11 +500,54 @@ contains
         write (hunit) 'NDFMMHF1', hn, hpot, hgrad
         close (hunit)
       end if
-      write (*, '(a,a,a,i0,a,i0,a,es24.16,a,a)') 'helmholtz: token=', trim(htoken), &
-          ' threads=', omp_get_max_threads(), ' repeat=', hrepeat, ' seconds=', best, &
-          ' out=', trim(hprefix)//'-'//trim(htoken)//'.out'
+      if (direct) then
+        write (*, '(a,a,a,i0,a,i0,a,es24.16,a,a)') 'helmholtz: token=', trim(htoken), &
+            ' threads=', omp_get_max_threads(), ' repeat=', hrepeat, ' seconds=', best, &
+            ' out=', trim(hprefix)//'-'//trim(htoken)//'.out'
+      else
+        write (*, '(a,a,a,i0,a,i0,a,es24.16,a,a,a,es24.16)') 'helmholtz: token=', &
+            trim(htoken), ' threads=', omp_get_max_threads(), ' repeat=', hrepeat, &
+            ' seconds=', best, ' out=', trim(hprefix)//'-'//trim(htoken)//'.out', ' tree_s=', &
+            htree
+      end if
       flush (6)
     end do
   end subroutine helmholtz_run
+
+  ! Helmholtz CH4.5: FMM3D's setup of one `hfmm3d_s_c_g` (or, with targets, `hfmm3d_st_c_g`)
+  ! call at `eps`, timed apart from the call as the Laplace mode times `lfmm3d`'s: the
+  ! subdivision rule of the linked build (`hndiv`, the `fastker` build's own), the tree and the
+  ! sort of the points into it, as `hfmm3d` calls them (charges, gradients at the sources and
+  ! at the targets if any). FMM3D keeps nothing between calls, so every call repeats this.
+  function helmholtz_tree_seconds(teps, tsrc, tn, ttarg, tnt) result(seconds)
+    real(8), intent(in) :: teps, tsrc(3,*), ttarg(3,*)
+    integer(8), intent(in) :: tn, tnt
+    real(8) :: seconds
+    integer(8) :: tndiv, tflag, tlevels, tboxes, tltree, tptr(8), tlmin, tlmax, tunif, tper
+    integer(8) :: tpghtarg
+    integer(8), allocatable :: titree(:), tisrc(:), tisrcse(:,:), titarg(:), titargse(:,:)
+    real(8), allocatable :: tcenters(:,:), tboxsize(:)
+    real(8) :: tt0
+
+    tpghtarg = 0
+    if (tnt > 0) tpghtarg = 2
+    tlmin = 0
+    tlmax = 51
+    tunif = 0
+    tper = 0
+    tt0 = omp_get_wtime()
+    call hndiv(teps, tn, tnt, 1_8, 0_8, 2_8, tpghtarg, tndiv, tflag)
+    call pts_tree_mem(tsrc, tn, ttarg, tnt, tflag, tndiv, tlmin, tlmax, tper, tunif, tlevels, &
+        tboxes, tltree)
+    allocate (titree(tltree), tboxsize(0:tlevels), tcenters(3,tboxes))
+    call pts_tree_build(tsrc, tn, ttarg, tnt, tflag, tndiv, tlmin, tlmax, tper, tunif, &
+        tlevels, tboxes, tltree, titree, tptr, tcenters, tboxsize)
+    allocate (tisrcse(2,tboxes), tisrc(tn), titargse(2,tboxes), titarg(max(tnt, 1_8)))
+    call pts_tree_sort(tn, tsrc, titree, tltree, tboxes, tlevels, tptr, tcenters, tisrc, tisrcse)
+    call pts_tree_sort(tnt, ttarg, titree, tltree, tboxes, tlevels, tptr, tcenters, titarg, &
+        titargse)
+    seconds = omp_get_wtime() - tt0
+    deallocate (titree, tboxsize, tcenters, tisrcse, tisrc, titargse, titarg)
+  end function helmholtz_tree_seconds
 
 end program fmm3d_driver

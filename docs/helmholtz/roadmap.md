@@ -7,12 +7,12 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/tasks/<ID>.md`; each milestone's gate report is
 `docs/helmholtz/gates/<milestone>.md`.
 
-Status (2026-11-23): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
+Status (2026-11-24): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). Of the H4 list, items 1–9 are merged, and of
-item 10 CH4.1–CH4.3 (CH4.3d2 closed unrun) and CH4.4a. CH4.4b (the crosscheck mapped to levels and
-classes) is done: no error concentrated at a class boundary; CH4.4a's 114.7 ε box is the
-tangent-point placement on levels 2–5 beyond D1's kD ≤ 500, where §9.1's bound now reports it
-instead of gating it (signed off on #256); CH4.5 is next and closes H4's tasks; the FFT track stays item 11. The project was
+item 10 CH4.1–CH4.4. CH4.5 (host performance against FMM3D at matched accuracy, the last of H4's
+tasks) is signed off as recommended: ours 0.13–0.18× FMM3D's call for N ≥ 10⁶ at the best split,
+FMM3D faster only on Kathleen's smallest trees (CH4.7, added off the list).
+Next: the H4 gate; the FFT track stays item 11. The project was
 renamed tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and
 of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
 (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
@@ -94,7 +94,7 @@ the measured product leaves an FFT about 1–2 % of the run, so items 10 and 11 
 11. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
 
 Off the list, in file order: CH0.8b, CH0.5 and H0.G; CH4.0f (the user, 2026-11-12, on #211);
-CH4.3f (added at CH4.3b2c, off the list until CH4.5; the user on #251, 2026-11-22: "Q1-5 as recommended"); CH4.2d (added at CH4.2b2, off the list until CH4.5; the user on #239, 2026-11-20: "All 4 questions as recommended.");
+CH4.7 (added at CH4.5, its question 4; the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."); CH4.3f (added at CH4.3b2c, off the list until CH4.5, kept off at CH4.5, its question 3, by the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."; the user on #251, 2026-11-22: "Q1-5 as recommended"); CH4.2d (added at CH4.2b2, off the list until CH4.5, kept off at CH4.5, its question 2, by the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."; the user on #239, 2026-11-20: "All 4 questions as recommended.");
 CH4.0k (added at CH4.0h; the user, 2026-11-16, on #221: off the list; kept off at CH4.0j, on
 #223); CH4.0l (added at CH4.0i;
 the user, 2026-11-16, on #222: off the list);
@@ -716,7 +716,7 @@ task's full line is in its record or report and its progress entry
   user on #241, 2026-11-20: "Both questions as recommended"): `Interpolated` the default build
   (`DEFAULT_DIAGONAL_BUILD`; proposal §5.4 amended); the acceptance as read.
 - [ ] **CH4.2d Dispatched kernels for the diagonal pair and the conversions.** (Added at
-  CH4.2b2, its question 3, signed off 2026-11-20; off the list, reconsidered at CH4.5.) *Done when:*
+  CH4.2b2, its question 3, signed off 2026-11-20; off the list, kept off at CH4.5, its question 2, signed off 2026-11-24.) *Done when:*
   the pair and the conversions' column kernel on `tetraleaf-simd`'s ISAs, bit for bit or within
   rounding of the scalar path as the crate's rules say (constraint 1); the diagonal levels'
   call timed against CH4.2b2's (pairs 50–80 %, conversions 24–49 % of its thread time).
@@ -853,7 +853,7 @@ task's full line is in its record or report and its progress entry
   4 the default. *Sign-off:* the report's questions 1–3, signed off 2026-11-22 by the user on #253: "Q1-3 as
   recommended": the acceptance as read; c_leaf 4 (D11 amended, an Also on CH4.5); proposal §3.7, §5.1, §5.7 amended.
 - [ ] **CH4.3f The time rule's costs at many ranks per node.** (Added at CH4.3b2c, its question
-  4, signed off 2026-11-22; off the list until CH4.5.) *Done when:* the waves' cost per box at one rank per
+  4, signed off 2026-11-22; off the list, kept off at CH4.5, its question 3, signed off 2026-11-24.) *Done when:* the waves' cost per box at one rank per
   core on W3's dense levels explained (Kathleen 40 × 1, W3 at kD = 500, 10⁻⁸, level 4: 20.5 s
   against 2.5 s at 1 × 40, the form 2.6 s; CH4.3b2c's report §8) and the time rule's costs fitted per
   ranks per node (or read from the rank's share), the dense-level misses at one rank per node (3.5 %
@@ -882,16 +882,20 @@ task's full line is in its record or report and its progress entry
   evaluation); within D1 every worst box ≤ 68.2 ε. *Sign-off:* the report's questions 1–3, signed off
   2026-11-23 by the user on #256: "Q1-3 as recommended": the acceptance as read (one-sided); §9.1's
   100 ε bound gated within D1 (kD ≤ 500), reported beyond (proposal §9.1 amended); `M2lOverride` public.
-- [ ] **CH4.5 Host performance against FMM3D at matched accuracy.** As C6.8, setup apart,
-  one node, on CH4.4's sweep. Also (review 2026-11-19, A6, B6, B8): ours at 1 × N (one rank,
-  N threads, as a threaded caller runs it) beside the best split; FMM3D's OpenMP binding
-  stated; CH4.0k reconsidered before it, and the H4 gate states one-rank-per-node figures. Also
-  (CH4.3e's report §4): c_leaf 4, measured at one rank per node only, at the best split and at
-  N × 1 (W3 at N = 10⁶, kD = 500, where its gain lies). Also (CH4.4a's report §4–§6, questions 3
-  and 4, signed off 2026-11-23): at kD = 1000 FMM3D `fastker` alone (`default` exceeds a Kathleen node's
-  180 GB), its failure and peaks stated; our memory one ε per launch (a later ε's growth in one
-  launch is a lower bound); timed jobs exclude node-c11b-004 and node-c11b-013 (about 3× slow).
-  *Needs:* CH4.4. *Machines:* locust, Kathleen.
+- [x] **CH4.5 Host performance against FMM3D at matched accuracy.** Report:
+  `tetraleaf-validate/results/helmholtz-ch4-5.md`; record `docs/helmholtz/tasks/CH4.5.md`. At FMM3D's closest eps,
+  its faster variant, our best split 0.13–0.18× its call for N ≥ 10⁶ (all 26: 0.31–0.41× Kathleen,
+  0.25–0.26× locust), 1 × N 0.18–0.27×; FMM3D faster only on trees of N ≤ 1.2·10⁴ on Kathleen
+  (our build, CH4.7); binding FMM3D 0.99–1.14× its unbound time; c_leaf 4 0.24–0.89× c_leaf 2 but at 72 × 1.
+  *Sign-off* (the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."): the acceptance as read; CH4.2d and CH4.3f kept off the list; CH4.7 added
+  off the list. CH4.0k kept off at its start (the user,
+  2026-11-23: "Keep off; CH4.5 shows it (Recommended)").
+- [ ] **CH4.7 The form choice prices the tables' build for small trees.** (Added at CH4.5, its
+  question 4, signed off 2026-11-24; off the list.) *Done when:* the time rule (or the leaf rule) weighs the build of
+  Batched's matrices and the diagonal tables against the evaluation where one solve is the use, so
+  that the six Kathleen rows they explain (CH4.5 §3.4: W1 and W2 at kD = 30 and W3 at kD = 10, both
+  densities, 10⁻³; Batched at p = 11, 15–101 ms of the build) are not slower than FMM3D's call,
+  verified on CH4.5's small cases on Kathleen and locust with the large cases unchanged. *Needs:* CH4.5. *Machines:* Kathleen, locust.
 - [ ] **CH4.6 The optional FFTW back end of the φ step.** *Done when:* against the product to
   round-off; per-box plans with bits the same across batch positions, sizes and threads, and
   fingerprints all-gathered; off by default, a default build linking no FFTW, cargo-deny, a CI

@@ -220,38 +220,55 @@ pub fn read_full(path: &Path) -> io::Result<Values> {
     parse_full(path, &std::fs::read(path)?)
 }
 
+/// The value of `key` (for example `seconds=`) on one `helmholtz:` line's words after
+/// `token=`; Fortran pads a number after `key=` with blanks, so the value may be the next
+/// word.
+fn line_field<'a>(words: &[&'a str], key: &str) -> Option<&'a str> {
+    let at = words.iter().position(|w| w.starts_with(key))?;
+    let value = &words[at][key.len()..];
+    if value.is_empty() {
+        words.get(at + 1).copied()
+    } else {
+        Some(value)
+    }
+}
+
+/// A Fortran real as the driver prints it (`1.5E-01`, or with `D`).
+fn fortran_real(value: &str) -> Option<f64> {
+    value.replace(['D', 'd'], "E").parse().ok()
+}
+
+/// The words after `token=` of each `helmholtz:` line of `token` in the driver's `log`.
+fn token_lines<'a>(log: &'a str, token: &'a str) -> impl Iterator<Item = Vec<&'a str>> + 'a {
+    log.lines().filter_map(move |line| {
+        let words: Vec<&str> = line
+            .strip_prefix("helmholtz: token=")?
+            .split_whitespace()
+            .collect();
+        (words.first() == Some(&token)).then_some(words)
+    })
+}
+
 /// From the driver's output `log`, the seconds and OpenMP threads of the `helmholtz:` line
 /// of `token` (the last such line), if any.
 pub fn seconds(log: &str, token: &str) -> Option<(f64, usize)> {
-    let mut found = None;
-    for line in log.lines() {
-        let Some(rest) = line.strip_prefix("helmholtz: token=") else {
-            continue;
-        };
-        let words: Vec<&str> = rest.split_whitespace().collect();
-        if words.first() != Some(&token) {
-            continue;
-        }
-        // Fortran pads a number after `key=` with blanks, so the value may be the next word.
-        let field = |key: &str| {
-            let at = words.iter().position(|w| w.starts_with(key))?;
-            let value = &words[at][key.len()..];
-            Some(
-                if value.is_empty() {
-                    *words.get(at + 1)?
-                } else {
-                    value
-                }
-                .to_owned(),
-            )
-        };
-        let seconds = field("seconds=").and_then(|v| v.replace(['D', 'd'], "E").parse().ok());
-        let threads = field("threads=").and_then(|v| v.parse().ok());
-        if let (Some(s), Some(t)) = (seconds, threads) {
-            found = Some((s, t));
-        }
-    }
-    found
+    token_lines(log, token)
+        .filter_map(|words| {
+            let seconds = line_field(&words, "seconds=").and_then(fortran_real)?;
+            let threads = line_field(&words, "threads=")?.parse().ok()?;
+            Some((seconds, threads))
+        })
+        .last()
+}
+
+/// From the driver's output `log`, FMM3D's setup in seconds at `token` (Helmholtz CH4.5): the
+/// field `tree_s=` of the last `helmholtz:` line of `token`, FMM3D's subdivision rule, tree
+/// and sort timed once apart from the calls (`tools/fmm3d/driver.f90`); `None` for a line
+/// without it (the `direct` token, and logs from before CH4.5).
+pub fn tree_seconds(log: &str, token: &str) -> Option<f64> {
+    token_lines(log, token)
+        .filter_map(|words| line_field(&words, "tree_s=").and_then(fortran_real))
+        .last()
 }
 
 /// From the driver's log, the peak resident size in bytes of the driver's launch at `token`
@@ -615,6 +632,28 @@ mod tests {
         assert_eq!(seconds(log, "1e-3"), Some((0.15, 6)));
         assert_eq!(seconds(log, "1e-12"), Some((2.5, 6)));
         assert_eq!(seconds(log, "1e-6"), None);
+        assert_eq!(
+            tree_seconds(log, "1e-3"),
+            None,
+            "a line before CH4.5 has no tree_s"
+        );
+    }
+
+    /// Helmholtz CH4.5: FMM3D's setup timed apart, the field after `out=`; Fortran's padding
+    /// puts the number in the next word.
+    #[test]
+    fn driver_line_with_tree() {
+        let log = "helmholtz: token=1e-3 threads=40 repeat=2 seconds=  2.5E+00 out=a tree_s=  \
+                   1.25E-01\n\
+                   helmholtz: token=1e-6 threads=40 repeat=2 seconds=3.0E+00 out=b tree_s=2.0E-01\n\
+                   helmholtz: token=direct threads=40 repeat=1 seconds=  9.0E+00 out=c\n";
+        assert_eq!(seconds(log, "1e-3"), Some((2.5, 40)));
+        assert_eq!(tree_seconds(log, "1e-3"), Some(0.125));
+        assert_eq!(seconds(log, "1e-6"), Some((3.0, 40)));
+        assert_eq!(tree_seconds(log, "1e-6"), Some(0.2));
+        assert_eq!(seconds(log, "direct"), Some((9.0, 40)));
+        assert_eq!(tree_seconds(log, "direct"), None);
+        assert_eq!(tree_seconds(log, "1e-8"), None);
     }
 
     /// Helmholtz CH4.4a: the densities' problem files differ in the charges only.
