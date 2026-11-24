@@ -36,7 +36,7 @@ CH4.4b's `tools/helmholtz/ch4-4b-tables.py`.
   kD = 500, 10⁻³, 20.2 → 20.9 ε).
 - **Every miss found is W2's, and there are more than the gate's.** W2 at kD = 500 also misses at
   10⁻⁴ (∇φ 1.03 ε) and 10⁻⁷ (worst box 165.9 ε), at the tolerances the gate did not run (the
-  self-review's `mid-eps` stage, §5). The cases of the verification set no record covered under the
+  self-review's `mid-eps` stage, §5; `--study single`, so these two are not mapped by level). The cases of the verification set no record covered under the
   defaults, W3 with the constant density resolved at kD = 100 and at N = 10⁶ for kD = 200 and 500,
   hold at 10⁻³, 10⁻⁶ and 10⁻⁸: ℓ2 at most 0.51 ε, worst box at most 17.3 ε (§4). W1 with it at kD = 250
   and 500 holds (the gate: ℓ2 ≤ 0.64 ε, worst box ≤ 46.5 ε); W1 and W2 at kD ≤ 100 are CH4.4a's and
