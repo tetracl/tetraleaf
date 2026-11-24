@@ -101,6 +101,7 @@ each() {
     done
 }
 
+# shellcheck disable=SC2054 # the comma is the argument's own (`levels,m2l`)
 STUDY=(--study levels,m2l --all-levels)
 # The default is 0.30,0.25,2.60,2.00,-0.55,-4.66,2,0.82 (`DegreeRule::CALIBRATED`).
 RULES=${RULES:-h1=0.30,0.25,2.60,2.00,-0.55,-4.66,3 h2=0.30,0.25,2.60,2.00,-0.55,-4.66,4 \
