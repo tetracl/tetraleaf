@@ -4600,7 +4600,8 @@ request, using this template:
   run: the MPI list (no MPI crate's code beyond the example), `cargo deny` (no manifest change),
   Laplace's benchmarks (no Laplace path).
 - Decisions: CH4.0k kept off the list at the start (the user, 2026-11-23: "Keep off; CH4.5 shows it
-  (Recommended)"). The report's questions 1–4 pending.
+  (Recommended)"). The report's questions 1–4 signed off as recommended (the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."): the
+  acceptance as read; CH4.2d and CH4.3f kept off the list; CH4.7 added off the list.
 - Laplace: not touched (the example, the validation crate's parser, the FMM3D driver, scripts, docs).
-- Follow-ups: CH4.7 (the form choice prices the tables' build for small trees), proposed in
-  question 4, its roadmap line added off the list.
+- Follow-ups: CH4.7 (the form choice prices the tables' build for small trees), question 4, its
+  roadmap line off the list. Next: the H4 gate.

@@ -963,6 +963,8 @@ locust detached under `setsid nohup`), the eps lists by `ch4-5-tables.py eps <gr
 
 ## 12. Questions for sign-off
 
+Signed off as recommended (the user on #257, 2026-11-24: "Accept all 4 decisions as recommended.").
+
 1. **The acceptance as read.** "For each of our tolerances the eps of FMM3D with the closest error":
    per case, ε and variant the eps minimising the worse of φ's and ∇φ's |log₁₀ ratio| over a grid of
    two eps per decade; FMM3D's faster variant among those whose match is within a decade of the

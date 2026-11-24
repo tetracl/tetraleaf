@@ -184,6 +184,6 @@ runs of the tools only, small, not timed).
 None.
 
 ## Open questions
-The report's §12, for sign-off: 1. the acceptance as read; 2. CH4.2d kept off the list; 3. CH4.3f
-kept off the list; 4. CH4.7 (the form choice prices the tables' build for small trees) added off the
-list.
+The report's §12: 1. the acceptance as read; 2. CH4.2d kept off the list; 3. CH4.3f kept off the
+list; 4. CH4.7 (the form choice prices the tables' build for small trees) added off the list. Signed
+off as recommended (the user on #257, 2026-11-24: "Accept all 4 decisions as recommended.").
