@@ -503,8 +503,10 @@ Why this ordering:
   library's host the evaluation under it is 1.08–1.80× faster than under the fastest exact
   M2L at f64 p = 8 and 1.35–6.38× faster at p ≥ 12 (one rank; T13), and 1.45–11.45× faster than
   under the defaults before Phase 6 at f64 p ≥ 8 on the three machines (T11); far more than tens of percent, because the exact M2Ls it replaces are the
-  library's own (Batched, Rotation), not FMM3D's tuned ones (FMM3D, itself plane-wave, stays
-  ahead at p = 12 on the Plummer sphere, `tetraleaf-validate/results/phase6-fmm3d.md`).
+  library's own (Batched, Rotation), not FMM3D's tuned ones (FMM3D, itself plane-wave, stayed
+  ahead at p = 12 on the Plummer sphere against Batched, T9,
+  `tetraleaf-validate/results/phase6-fmm3d.md`; not re-measured under PlaneWave, the default at
+  f64 p ≥ 7 since T11: review 2026-11-24, B14, and Helmholtz CH9.1).
 
 Starting points for p, calibrated in Phase 3 (C3.4, T12; the full table is in
 Section 7, Phase 3). The smallest p whose relative L2 error of φ is below the target,
