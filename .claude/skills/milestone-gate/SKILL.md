@@ -13,8 +13,13 @@ As `/next-task`: invoking this skill is the request to create the branch
 
 ## 1. Which milestone
 
-The one named, else the first whose tasks are all ticked on `main` while its gate line
-(`<milestone>.G`) is open. If a task is still open, list it and stop.
+The one named, else the first whose blocking tasks are all ticked on `main` while its gate
+line (`<milestone>.G`) is open. A task blocks the gate when it is on the priority list or is
+one of the gate's components (proposal §10: CH2.5, CH3.6, CH4.4 and CH4.5, CH5.3, CH7.6). List
+every open task of the milestone; stop if one blocks. The others, off the list by a sign-off
+or depending on the milestone rather than it (CH4.6 on H4), go into the report and a
+question on their place after the gate (the H4 gate: H4.G's *Needs* said "every task above"
+with seven tasks off the list and CH4.6 open, and the user chose to run it).
 
 ## 2. Evidence
 
@@ -40,6 +45,9 @@ The one named, else the first whose tasks are all ticked on `main` while its gat
     task's line.
 - `main`'s CI jobs over the milestone: failures, cancellations (the cause from the job's
   log) and each job's time against its `timeout-minutes`.
+- The spikes still build: `cargo check --all-targets` from `spikes/`, by hand, into
+  `target/spikes` (`spikes/README.md`). No CI job builds them since CHA.1, and they depend on
+  the product crates by path (review 2026-11-24, K8). A failure is a finding for the triage.
 
 ## 3. The two review passes
 

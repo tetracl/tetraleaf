@@ -124,8 +124,8 @@ fixtures, the one-rank run), with the tolerance or bit identity, threads and ran
 <filled when they arise>
 ```
 
-Two rules for "Tests that prove it" and "Machine runs" (from the H6 gate,
-`docs/helmholtz/gates/H6.md` §7):
+Three rules for "Tests that prove it" and "Machine runs" (the first two from the H6 gate,
+`docs/helmholtz/gates/H6.md` §7, the third from the H4 gate, `gates/H4.md` §8):
 - **A wider scope widens the verification set.** If the task lifts a bound, widens a default
   or moves a rule's range (a tolerance, a degree, a κ limit, a machine class), list the cases
   that earlier sign-offs or reports left out for the old scope ("left to Rotation", "not
@@ -139,6 +139,12 @@ Two rules for "Tests that prove it" and "Machine runs" (from the H6 gate,
   measure may recommend; the other confirms before the PR asks to adopt it. CH6.1f's pair
   chain recommended iprec 2 at 10⁻⁷ and the FMM refuted it (CH6.1g); CH6.2e's FMM held at
   reach 4.5 and the worst pair refuted it (CH6.2g).
+- **A bound is checked on the worst case the record names.** Where the task states or gates
+  a bound (an error, a worst box, a ratio), its runs include the density, workload or
+  distribution that the record calls worst, over the bound's whole range, or the report says
+  it did not run them. CH4.3c3 named the constant density the worst; CH4.4a and CH4.4b ran it
+  only to kD = 100 and stated the worst box within D1 without it; the H4 gate's run found W2
+  with it outside ε at kD = 500 (review 2026-11-24, M15).
 
 Stop and ask, with the plan, before going on if the plan:
 - changes code on Laplace's paths (constraint 1 of proposal §2: the host drivers, tables and
@@ -174,6 +180,12 @@ Otherwise go on without asking.
   threads named (on Kathleen also the nodes, binding and job id), no timing asserted in a
   test; the report at the path the plan names (`tetraleaf-validate/results/helmholtz-<id>.md`
   unless the task says otherwise).
+- On Kathleen, one setting per launch for any time a decision rests on: the same setting runs
+  1.09–1.20× slower the second time in a launch there, undiagnosed (CH4.3b2c §6; review
+  2026-11-24, B12; CH4.3f diagnoses it). Accuracy and checksums may share a launch.
+- A new report script in `tools/helmholtz/` imports the shared `tools/helmholtz/common.py`
+  for what it holds (`cells` and the like) once CHA.10 has written it, rather than defining its
+  own (review 2026-11-24, K2: 69 scripts, fourteen with their own `cells`).
 
 ## 6. Verify
 
@@ -207,7 +219,8 @@ On the branch:
   follow-up that names another task ("relevant to CH2.3") becomes an "Also" on that task's
   line, and a decision signed off with "a later task" gets that task now, named in the
   decision table (the H1 gate: CH1.3c's finding never reached CH2.3, D5's dipole task never
-  existed);
+  existed). A new task off the priority list goes into its milestone but not into the gate
+  line's *Needs*, which names the gate's components and the tasks on the list (the H4 gate);
 - append to `docs/helmholtz/progress.md`, using its template;
 - where the work shows the proposal wrong, do not edit it silently: put the correction in
   the PR as a question for sign-off;
@@ -236,5 +249,6 @@ run is pending or a sign-off or open question blocks. An existing PR is updated 
 
 A few lines: the task and its PR (ready, or draft and why); checks run and pending;
 questions waiting for the user; the open task PRs and their states; the next runnable task.
-If every task of a milestone is ticked on `main` and its gate line is open, suggest
-`/milestone-gate <milestone>`.
+If every task of a milestone that is on the priority list, and every gate component, is
+ticked on `main` and its gate line is open, suggest `/milestone-gate <milestone>`, naming the
+milestone's open tasks off the list.
