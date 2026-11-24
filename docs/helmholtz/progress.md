@@ -4652,3 +4652,36 @@ request, using this template:
     on the density its record names worst; one setting per launch for Kathleen timings; new
     report scripts import `tools/helmholtz/common.py` once it exists; a by-hand `cargo check` of
     `spikes/` at each gate.
+
+## 2026-11-24: CH4.8a The constant density on W2: the error mapped and a remedy chosen
+- Done:
+  - CH4.8 split into CH4.8a and CH4.8b (roadmap), as CH4.4b left a degree-rule remedy to a follow-up.
+  - `tools/helmholtz/ch4-8a-runs.sh` (stages `smoke`, `map`, `all`, `survey`, `remedy`, `cost`,
+    `repeat`) and `ch4-8a-tables.py` (`rules`, `cost`, `raised`, `repeat`), beside CH4.4b's tables.
+    No library or harness code. Report `tetraleaf-validate/results/helmholtz-ch4-8a.md`; record
+    `docs/helmholtz/tasks/CH4.8a.md`.
+- Tests: none new (no code). Every base run equals the H4 gate's (the same sample from its cache:
+  1.28·10⁻³, 56.63, 101.02, 143.40 ε); the levels' parts add up (rest ≤ 0.024 of Σ|e|²).
+- Measurements (Kathleen `singlenode`, 1 × 40, jobs 672424, 672432, 672477; 190 launches, every one
+  exit 0):
+  - the mapping of W2 with the constant density at kD = 250 and 500 (10⁻³, 10⁻⁶, 10⁻⁸): the M2L adds
+    nothing (49 runs, worst box 1.000, ℓ2 0.999–1.005); the degree rule's truncation at the tangent
+    point, by ε at different levels: the plateau's edge (k a = 3.38, Batched at p = 7) 0.47–0.50 of ∇φ
+    at 10⁻³, k a = 6.77 at 10⁻⁶, levels 2–4 the worst box at 10⁻⁸; one level raised moves the worst box
+    both ways, every level raised by one brings each case within both bounds;
+  - the survey: W3 with the constant density resolved at kD = 100 and at N = 10⁶ for kD = 200 and 500
+    within ε (≤ 0.51 ε) and the box bound (≤ 17.3 ε) under the defaults: W2 is the only miss;
+  - four candidate rules on W1 and W2 with the constant density at kD = 250 and 500: `h1` (the branch
+    + 1) ℓ2 ≤ 0.48 ε, worst box ≤ 49.9 ε; `h2` ≤ 0.32 ε and 33.7 ε; the plateau + 1 adds little;
+  - pair evidence (S7): `h1` takes the branch's worst pair from 1.4–6.4 ε to 0.7–2.3 ε;
+  - cost at kD = 500 (W1, W2, W3 at N = 10⁶), one setting per launch, A B B A: `h1` 0.989–1.047× the
+    default's build plus one evaluation, geometric mean 1.017;
+  - raw outputs in `~/projects/fmm-archive/kathleen/runs/ch4-8a/`.
+- Checks: fmt; Clippy default, examples, workspace all-targets; `cargo doc`; the default (1,392) and
+  workspace (1,436) tests at opt-level 1; `bash -n`, ShellCheck, `py_compile`, dry runs of every
+  stage locally and on Kathleen. Not run: the MPI list (no MPI crate's code), `cargo deny` (no
+  manifest change), Laplace's benchmarks (no Laplace path).
+- Decisions: the report's questions 1–3 for sign-off (the acceptance as read; `h1` as the remedy;
+  the plateau unchanged).
+- Laplace: not touched (scripts and documents).
+- Follow-ups: CH4.8b (the remedy as the default, its roadmap line), then H4.G again.
