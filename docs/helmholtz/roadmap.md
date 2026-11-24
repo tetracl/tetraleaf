@@ -9,14 +9,14 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-24): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). **H4's gate ran and H4 stays open**
-(`gates/H4.md`, review `docs/reviews/2026-11-24-H4.md`): CH4.0–CH4.5 are merged and §10's
-condition on the random charges is met (0.13–0.18× FMM3D's call for N ≥ 10⁶ at matched
-accuracy), but W2 with the constant density misses ε inside D1 (∇φ 1.28 ε at kD = 500, 10⁻³) and
-the worst-box bound (the gate report §9). Next: CH4.8 (item 11), then H4.G again, then the FFT
-track (item 12), H2 and H5 (items 13–14). The project was renamed tetraleaf on 2026-11-21. HR,
-H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c. The history of
-this line until H6.G is in `progress.md` and in this file's history
-(`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
+(`gates/H4.md`, review `docs/reviews/2026-11-24-H4.md`) for W2 with the constant density, which
+missed ε and the worst-box bound inside D1. CH4.8 was split: CH4.8a (done) mapped the miss to the
+degree rule on W2's deep tree and chose `h1`, the high-frequency branch one degree higher (W2
+within 0.48 ε and 76.3 ε at 10⁻³–10⁻⁸, 1.017× the time), signed off; next CH4.8b (the remedy as the default,
+verified on CH4.8's set), then H4.G again, then the FFT track (item 12), H2 and H5 (items 13–14).
+The project was renamed tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and
+CH0.6 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in
+this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in
 `git show 8475009:docs/helmholtz/roadmap.md`; until the H4 gate in
 `git show 4d28d41:docs/helmholtz/roadmap.md`.
 
@@ -98,7 +98,8 @@ H4.G as item 11, before the FFT track.
 10. CH4.1 (CH4.1a, CH4.1b; split on 2026-11-19), CH4.2 (CH4.2a, CH4.2b1, CH4.2b2; split on 2026-11-19 and 2026-11-20), CH4.2c (CH4.2c1, CH4.2c2; added at CH4.2b2, its question 2, split on 2026-11-20), CH4.3 (CH4.3a–CH4.3e, CH4.3b as CH4.3b1 and CH4.3b2a–d; split on 2026-11-20; CH4.3b2d added at CH4.3b2b, its question 3; CH4.3c as CH4.3c1 and CH4.3c2, split on 2026-11-21; CH4.3c3 added at CH4.3c2, its question 3; CH4.3d as CH4.3d1 and CH4.3d2, split on 2026-11-22), CH4.4 (CH4.4a, CH4.4b; split on 2026-11-22), CH4.5 (CH4.1a first
     measures the product conversions against RCR and stops to ask before CH4.2 whether item 11
     moves ahead: review 2026-11-19, A5)
-11. CH4.8 The constant density on W2, then H4.G again (added on 2026-11-24 at the H4 gate)
+11. CH4.8 The constant density on W2 (CH4.8a, CH4.8b; split on 2026-11-24), then H4.G again
+    (added on 2026-11-24 at the H4 gate)
 12. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
 13. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
     CH2.1 and CH2.2 wait for D4, which CH2.1 prepares)
@@ -657,20 +658,19 @@ The done lines are condensed at the H4 gate (2026-11-24); in full in `git show 4
   fingerprints all-gathered; off by default, a default build linking no FFTW, cargo-deny, a CI
   job with the feature; the GPL warning in the crate documentation, the README, the builder
   option and `Cargo.toml`. *Needs:* CH4.1b, CHR.3, CH0.9, D7.
-- [ ] **CH4.8 The constant density on W2.** Added on 2026-11-24 at the H4 gate (the gate report
-  §9, Kathleen job 672173; review 2026-11-24, M15; the user: "Keep H4 open, CH4.8
-  (Recommended)"). Under the defaults W2 with the constant density misses ε inside D1: ∇φ's ℓ2 at
-  §9.1's samples 1.28 ε at kD = 500, 10⁻³ (0.98 ε at kD = 250, 10⁻³; 0.99 ε at kD = 500, 10⁻⁶), and
-  the worst box exceeds 100 ε (129.2 ε at kD = 250, 10⁻⁸; 101.0 and 143.4 ε at kD = 500, 10⁻⁶ and
-  10⁻⁸), at the sphere's tangent point on the cube's z = 0 face; W1 with it and every random-charge
-  case hold. *Done when:* the error mapped to levels and classes (`helmholtz_boxes --study
-  levels,m2l`, as CH4.4b) and its cause stated (the degree rule on the dense cap's levels, the
-  tangent-point placement, the form or Batched at p = 7); a remedy (the degree rule's high- or
-  low-frequency branch refitted on W2's constant density, or a level's degree raised by rule) with
-  its cost; under the defaults W1–W3 with the constant density at kD = 10–500 within ε in ℓ2 at
-  10⁻³–10⁻⁸ and every worst box ≤ 100 ε, the random-charge cases of CH4.4a unchanged within ε;
-  for sign-off. *Needs:* CH4.4b. *Machines:* Kathleen, locust.
-- [ ] **H4.G Gate.** `/milestone-gate H4`. *Needs:* CH4.0–CH4.5 and CH4.8 (corrected at the gate,
+- [x] **CH4.8a The constant density on W2: the error mapped and a remedy chosen.** The degree rule's
+  truncation on W2's deep tree against the z = 0 face (the M2L adds nothing); W3 with the constant
+  density holds; W2 misses at 10⁻⁴ and 10⁻⁷ too; `h1`, the high-frequency branch one degree higher,
+  puts W2 within 0.48 ε and 76.3 ε at all six ε, at 1.017× the default's time (geometric mean). Report `tetraleaf-validate/results/helmholtz-ch4-8a.md`.
+  Added at the H4 gate (M15), split at its start into CH4.8a and CH4.8b. Signed off on #260 (2026-11-24):
+  `h1` the remedy, the plateau unchanged.
+- [ ] **CH4.8b The constant density on W2: the remedy as the default.** *Done when:* CH4.8a's
+  signed-off remedy `h1` (one degree added after the cap of the high-frequency branch, as a margin of
+  `DegreeRule`; the plateau unchanged) the library's default (proposal §3.5 amended); under the defaults W1–W3 with the
+  constant density at kD = 10–500 within ε in ℓ2 at 10⁻³–10⁻⁸ and every worst box ≤ 100 ε, the
+  random-charge cases of CH4.4a unchanged within ε; its cost (time, memory, build per k, as §10's CH4.4)
+  on Kathleen and locust; for sign-off. *Needs:* CH4.8a. *Machines:* Kathleen, locust.
+- [ ] **H4.G Gate.** `/milestone-gate H4`. *Needs:* CH4.0–CH4.5 and CH4.8 (CH4.8a, CH4.8b; corrected at the gate,
   R1). Ran on 2026-11-24 (`docs/helmholtz/gates/H4.md`, #258): the condition on the random charges
   met, H4 kept open for CH4.8 (the user, 2026-11-24: "Keep H4 open, CH4.8 (Recommended)").
 
