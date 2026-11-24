@@ -1361,6 +1361,22 @@ cases the default took 0.27–0.65× Rotation's evaluation, with a launch's peak
 19–22.5 GB at one rank (H6 gate §8). CH0.8b's census counts the waves buffer and the raised
 stores as well.
 
+**H4 measurements (amended at H4.G).** The signature scratch held to this section's model: on
+W1 at kD = 500 0.38–0.45 GB on levels 2–3 and 0.5–1.3 GB on levels 4–5 if every V pair ran the
+diagonal form, against 0.28–1.26 GiB above; at kD = 1000 1.3–1.7 GiB on levels 2–4 and at most
+5.0 GiB below, against the 5.0 GiB peak above (CH4.1b). Under the 8 GiB node budget every level
+fits at one rank per node; at one rank per core (205 MiB per rank on Kathleen, 114 MiB on locust)
+the coarse levels do not, and run RCR whole (§5.4; CH4.3b2c §7–§8). The transfer functions are
+built by interpolation (§3.6) and sit inside the measured growth, not reported apart. Under the
+defaults the FMM's resident growth on the node is 5.6–7.0 GB on W1 at kD = 500 and 21–29 GB at
+kD = 1000 (8·10⁶ points), against FMM3D `fastker`'s peak of 9.7–27 and 45–118 GB; FMM3D's
+`default` exceeds a 180 GB node at kD = 1000 (CH4.4a). The build grows with the top level's
+degree, not N: 2.6–2.9 s on W1 at kD = 500, 16–19 s at kD = 1000, where the RCR tables of level 2
+(p = 225–248) are 9.2–12.9 s and the build 40–67 % of build plus one evaluation (CH4.4a §7). The
+diagonal form cut the evaluation to 0.37× the previous defaults' on W1 at kD = 1000 and
+0.47–0.74× at kD = 500 (CH4.3b2c), within CH4.0e's bound; at matched accuracy the FMM takes
+0.13–0.18× FMM3D's call for N ≥ 10⁶ on one node (CH4.5).
+
 **Transfer functions on the high-frequency levels**, only for the classes that use the
 diagonal form (counted here for every class; a hybrid level stores fewer):
 
@@ -2027,6 +2043,10 @@ these.
   one worst box above it (W1 at kD = 1000, the plane wave's trace, 10⁻⁸: 114.7 ε, the tangent-point
   placement on levels 2–5 at once), and "no error concentrated at a class boundary" read
   one-sided (the default at most 1.1× RCR on each level).
+- **Amended at H4.G, 2026-11-24** (`docs/helmholtz/gates/H4.md` §4, correction R3; the user on
+  #258, "Accept all (Recommended)"): Section 7, the paragraph "H4 measurements": the signature
+  scratch against the model, the fallback at one rank per core, the FMM's resident growth and
+  build per k against FMM3D's, the diagonal form's gain.
 
 ## Appendix B. The stability check behind Section 3.6
 

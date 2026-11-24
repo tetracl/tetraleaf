@@ -33,6 +33,8 @@
 #            threshold's decade alone (`--class-runs`) and the level of the worst ∇φ box raised
 #            by 1 and 2 under the defaults' M2L (`--raise-by 1,2`); then every level with V pairs
 #            raised at once by 1, 2 and 4 (`--raise-levels v --raise-together`)
+#   h4-gate  (added at the H4 gate, review 2026-11-24, M15) the constant density on W1 and W2 at
+#            kD = 250 and 500, the box measure alone (`--study single`)
 # EPS (default "1e-3 1e-6 1e-8"), TIMEOUT per launch (default 5400 s), ONLY (a regular expression
 # on the launch names), DRY_RUN (print the launches only). Each launch writes <out-dir>/<name>.md
 # and .err and a line in <out-dir>/runs.log.
@@ -172,8 +174,18 @@ for stage in "$@"; do
                 --raise-by 1,2,4
         done
         ;;
+    h4-gate)
+        for w in w1 w2; do
+            for kd in 250 500; do
+                for e in $EPS; do
+                    launch "h4gate-$w-kd$kd-constant-$e" --workload "$w" --kd "$kd" \
+                        --density constant --eps "$e" --study single
+                done
+            done
+        done
+        ;;
     *)
-        echo "ch4-4b-runs.sh: unknown stage $stage (smoke, low, mid, w3, w3-cells, w1-1000, pw1000, remedy)" >&2
+        echo "ch4-4b-runs.sh: unknown stage $stage (smoke, low, mid, w3, w3-cells, w1-1000, pw1000, remedy, h4-gate)" >&2
         exit 2
         ;;
     esac
