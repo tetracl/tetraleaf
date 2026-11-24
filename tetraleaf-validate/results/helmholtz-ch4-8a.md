@@ -40,10 +40,11 @@ CH4.4b's `tools/helmholtz/ch4-4b-tables.py`.
   at kD = 250 and 500 it gives ℓ2 at most 0.48 ε (from 1.28 ε) and worst boxes at most 49.9 ε (from
   143.4 ε); on W1 with it ℓ2 at most 0.28 ε and worst boxes at most 17.6 ε (§5). Per pair it takes the
   worst pair on the high-frequency levels from 1.4–6.4 ε to 0.7–2.3 ε (§6). Raising the plateau too
-  (`h1p1`) leaves every worst box and the ℓ2 at 10⁻³ and 10⁻⁸ as they are and lowers ∇φ's ℓ2 at 10⁻⁶
+  (`h1p1`) leaves `h1`'s worst boxes and its ℓ2 at 10⁻³ and 10⁻⁸ as they are and lowers ∇φ's ℓ2 at 10⁻⁶
   by a fifth (W2: 0.37 against 0.45 ε at kD = 500); two degrees (`h2`) halve the errors again.
 - **Its cost.** Build plus one evaluation 1.004–1.058× the default's at kD = 500 in single launches,
-  inside the launches' own spread of about ±5 % (§7); the A B B A repeat gives REPEAT_SUMMARY.
+  inside the launches' own spread of about ±5 % (§7); the A B B A repeat, the medians of four
+  launches each, gives 0.989–1.047× (geometric mean 1.017).
 - **For sign-off (§8):** `h1` as the rule CH4.8b makes the default and verifies; the plateau kept.
 
 ## 1. Method
@@ -303,9 +304,22 @@ The single launches' spread is about ±5 %: `h1` and `h1p1` run the same degrees
 10⁻⁸, and differ by up to 0.097 (W3, 10⁻³: 1.058 and 0.961); `h1` alone 1.004–1.058×. The repeat, A B B A A B B A, the median of
 four launches each with its spread:
 
-REPEAT_TABLE
+| case | ε | default: median (spread) s | h1: median (spread) s | h1 ÷ default |
+| --- | --- | ---: | ---: | ---: |
+| w1-kd500-constant | 1e-3 | 5.15 (0.11, n = 4) | 5.39 (0.11, n = 4) | 1.047 |
+| w1-kd500-constant | 1e-6 | 6.50 (0.24, n = 4) | 6.69 (0.24, n = 4) | 1.030 |
+| w1-kd500-constant | 1e-8 | 10.00 (0.45, n = 4) | 10.02 (0.20, n = 4) | 1.001 |
+| w2-kd500-constant | 1e-3 | 7.36 (0.06, n = 4) | 7.55 (0.19, n = 4) | 1.027 |
+| w2-kd500-constant | 1e-6 | 9.52 (0.43, n = 4) | 9.70 (0.32, n = 4) | 1.019 |
+| w2-kd500-constant | 1e-8 | 14.58 (0.18, n = 4) | 14.43 (0.55, n = 4) | 0.989 |
+| w3:1000000-kd500-constant | 1e-3 | 6.69 (0.45, n = 4) | 6.68 (0.43, n = 4) | 0.999 |
+| w3:1000000-kd500-constant | 1e-6 | 8.18 (0.76, n = 4) | 8.20 (0.67, n = 4) | 1.003 |
+| w3:1000000-kd500-constant | 1e-8 | 9.77 (0.05, n = 4) | 10.12 (0.35, n = 4) | 1.036 |
 
-REPEAT_READING
+`h1` costs 0–5 % of build plus one evaluation at kD = 500, 1.017× in the geometric mean over the
+nine cases: the clearest W1 at 10⁻³ (1.047×, its difference 0.24 s against both sides' spread of
+0.11 s), most others within the spread of four launches (up to 0.76 s, W3 at 10⁻⁶). The cost is the
+evaluation's: `h1`'s build is within 2.6 % of the default's, either way, in every `cost` row.
 
 A model check: `h1` raises each high-frequency level by one degree, (p + 2)²/(p + 1)² of its
 coefficients, 1.5 % at p = 128 to 17 % at p = 11, and the RCR and diagonal M2L by up to the cube of
@@ -325,7 +339,8 @@ that; the high-frequency levels are 14–31 % of build plus one evaluation on W1
    `DegreeRule` (a margin added after the cap), verified there on CH4.8's whole set, with proposal
    §3.5 amended. A hand-chosen margin, as CH4.3c2's +2 was: the refit of CH4.3c3 had none, and W2's
    constant density shows the rule needs one. Alternatives: `h2` (two degrees: the errors halved
-   again, ℓ2 ≤ 0.32 ε and worst box ≤ 33.7 ε, at about twice `h1`'s cost); a refit of the branch on
+   again, ℓ2 ≤ 0.32 ε and worst box ≤ 33.7 ε; 0.988–1.096× the default in single launches, not
+   repeated); a refit of the branch on
    W2's constant density by level scans (CH4.3c3's method; the degrees would follow from scans not
    run here, hours per case at kD = 500); the rule kept and W2's constant density named outside the
    bound (not recommended: it is inside D1 on a reference workload).
