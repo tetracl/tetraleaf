@@ -6,10 +6,11 @@ tools/helmholtz/ch4-4b-tables.py (summary, levels, m2l, worst, pairs), which rea
     tools/helmholtz/ch4-8a-tables.py <out-dir> rules [<gate-dir>]
     tools/helmholtz/ch4-8a-tables.py <out-dir> cost
     tools/helmholtz/ch4-8a-tables.py <out-dir> raised
+    tools/helmholtz/ch4-8a-tables.py <out-dir> repeat
 
-  rules   per case and ε the first run of each `remedy-<rule>-…` launch (and the default's, from
-          the `map-`, `survey-` or `all-` launch of the case, else the H4 gate's `h4gate-` launch
-          in <gate-dir>): the degrees by level, §9.1's ℓ2 of φ and ∇φ over ε, the worst box of φ
+  rules   per case and ε the first run of each `remedy-<rule>-…` and `mid-<rule>-…` launch (and
+          the default's, from the `mid-default-`, `map-`, `survey-` or `all-` launch of the case,
+          else the H4 gate's `h4gate-` launch in <gate-dir>): the degrees by level, §9.1's ℓ2 of φ and ∇φ over ε, the worst box of φ
           and ∇φ over ε; a cell in bold where §9.1's ℓ2 exceeds ε or the worst box 100 ε
   cost    per case and ε the build and the evaluation of each `cost-<rule>-…` launch (one
           setting per launch), and their sum over the default's
@@ -73,6 +74,11 @@ def cells(eps, row):
 def rules(out, gate=None):
     remedy = launches(out, "remedy")
     base = {}
+    for (case, eps, rule), rows in launches(out, "mid").items():
+        if rule == "default":
+            base[(case, eps)] = rows[0]
+        else:
+            remedy[(case, eps, rule)] = rows
     for stage in ["map", "survey", "all"]:
         for (case, eps, _), rows in launches(out, stage).items():
             base.setdefault((case, eps), rows[0])

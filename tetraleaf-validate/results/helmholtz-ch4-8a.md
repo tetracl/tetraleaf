@@ -7,7 +7,8 @@ review `docs/reviews/2026-11-24-H4.md`, M15) and CH4.4b's box study under the de
 (`helmholtz-ch4-4b.md`). Machine: Kathleen, one node per job (2 × 20 Cascade Lake cores, Xeon Gold
 6248), `singlenode`, one rank × 40 threads, release, BLAS threads 1, node-c11b-004 and node-c11b-013
 excluded. Jobs 672424 (`smoke`, `map`, `all`, `survey`; node-c11a-079), 672432 (`remedy`, `cost`;
-node-c11a-021), 672477 (`repeat`). Every launch exit 0.
+node-c11a-021), 672477 (`repeat`; node-c11a-021), 672488 (`mid-eps`, added at the self-review;
+node-c11b-012). Every launch exit 0 (208).
 Raw outputs: `~/projects/fmm-archive/kathleen/runs/ch4-8a/` (one Markdown file per launch, its log
 beside it). Script `tools/helmholtz/ch4-8a-runs.sh`; tables `tools/helmholtz/ch4-8a-tables.py` and
 CH4.4b's `tools/helmholtz/ch4-4b-tables.py`.
@@ -29,19 +30,28 @@ CH4.4b's `tools/helmholtz/ch4-4b-tables.py`.
     the ℓ2 (alone raised 0.34 ε); the worst box is levels 2–3's.
   - **10⁻⁸ (worst boxes 129.2 and 143.4 ε at kD = 250 and 500):** levels 2–4 at the tangent point, 0.78
     of ∇φ's error on level 2 at kD = 500; the levels at p_w = 32 under the waves add nothing.
-  One level raised at a time moves the worst box both ways (level 3 alone at kD = 500, 10⁻³: 56.6 →
-  75.4 ε), since the levels' errors partly cancel there; every level raised together does not.
-- **Every miss is W2's.** The cases of the verification set no record covered under the defaults, W3
-  with the constant density resolved at kD = 100 and at N = 10⁶ for kD = 200 and 500, hold: ℓ2 at most
-  0.51 ε, worst box at most 17.3 ε (§4). W1 with it at kD = 250 and 500 holds (the gate: ℓ2 ≤ 0.64 ε,
-  worst box ≤ 46.5 ε); W1 and W2 at kD ≤ 100 are CH4.4a's and CH4.4b's (within ε, ≤ 37.6 ε).
+  One level raised at a time moves ∇φ's worst box both ways (level 3 alone at kD = 500, 10⁻³: 56.6 →
+  75.4 ε), since the levels' errors partly cancel there; every level raised together lowers it in
+  every case (φ's worst box rose in two, by at most 1.1 ε: W1 at kD = 500, 10⁻³, 5.5 → 6.6 ε; W2 at
+  kD = 500, 10⁻³, 20.2 → 20.9 ε).
+- **Every miss found is W2's, and there are more than the gate's.** W2 at kD = 500 also misses at
+  10⁻⁴ (∇φ 1.03 ε) and 10⁻⁷ (worst box 165.9 ε), at the tolerances the gate did not run (the
+  self-review's `mid-eps` stage, §5). The cases of the verification set no record covered under the
+  defaults, W3 with the constant density resolved at kD = 100 and at N = 10⁶ for kD = 200 and 500,
+  hold at 10⁻³, 10⁻⁶ and 10⁻⁸: ℓ2 at most 0.51 ε, worst box at most 17.3 ε (§4). W1 with it at kD = 250
+  and 500 holds (the gate: ℓ2 ≤ 0.64 ε, worst box ≤ 46.5 ε); W1 and W2 at kD ≤ 100 are CH4.4a's and
+  CH4.4b's (within ε, ≤ 37.6 ε). Not run here: W1 and W3 at 10⁻⁴, 10⁻⁵ and 10⁻⁷, and W2 between kD =
+  100 and 250; CH4.8b's verification covers them.
 - **The remedy: the high-frequency branch one degree higher (`h1`).** p = max(plateau, high(x, ε) + 1),
   every level above the plateau one degree up, the plateau unchanged. On W2 with the constant density
-  at kD = 250 and 500 it gives ℓ2 at most 0.48 ε (from 1.28 ε) and worst boxes at most 49.9 ε (from
-  143.4 ε); on W1 with it ℓ2 at most 0.28 ε and worst boxes at most 17.6 ε (§5). Per pair it takes the
-  worst pair on the high-frequency levels from 1.4–6.4 ε to 0.7–2.3 ε (§6). Raising the plateau too
+  at kD = 250 and 500, at all six ε of 10⁻³–10⁻⁸, it gives ℓ2 at most 0.48 ε (from 1.28 ε) and worst
+  boxes at most 76.3 ε (from 165.9 ε); on W1 with it ℓ2 at most 0.28 ε and worst boxes at most 17.6 ε (§5). Per pair (§6) it
+  takes the worst pair on the levels of k a ≥ 13.5 from 1.4–6.4 ε to 0.7–2.3 ε, but on the levels that
+  carry the ℓ2 misses only from 16 to 5.4 ε (k a = 3.38, 10⁻³) and from 32 to 20 ε (k a = 6.77, 10⁻⁶):
+  per pair those stay well above ε, and only the FMM shows the misses closed. Raising the plateau too
   (`h1p1`) leaves `h1`'s worst boxes and its ℓ2 at 10⁻³ and 10⁻⁸ as they are and lowers ∇φ's ℓ2 at 10⁻⁶
-  by a fifth (W2: 0.37 against 0.45 ε at kD = 500); two degrees (`h2`) halve the errors again.
+  by a fifth (W2: 0.37 against 0.45 ε at kD = 500); two degrees (`h2`) lower ∇φ's ℓ2 to 0.32–0.79× and
+  its worst box to 0.35–0.90× `h1`'s (at 10⁻³, 10⁻⁶, 10⁻⁸).
 - **Its cost.** Build plus one evaluation 1.004–1.058× the default's at kD = 500 in single launches,
   inside the launches' own spread of about ±5 % (§7); the A B B A repeat, the medians of four
   launches each, gives 0.989–1.047× (geometric mean 1.017).
@@ -52,7 +62,9 @@ CH4.4b's `tools/helmholtz/ch4-4b-tables.py`.
 - **The cases.** W2 with the constant density (q = 1 at every point) at kD = 250 (N = 797,211) and
   500 (N = 3,188,840), the gate's misses; W1 with it at kD = 250 and 500 (the remedies' second
   workload); W3 with it resolved at kD = 100 and at N = 10⁶ for kD = 200 and 500 (the survey). ε =
-  10⁻³, 10⁻⁶, 10⁻⁸; one complex charge vector, gradients on.
+  10⁻³, 10⁻⁶, 10⁻⁸, and for W2 also 10⁻⁴, 10⁻⁵, 10⁻⁷ under the default, `h1` and `h1p1` (`mid-eps`,
+  added at the self-review: the H4 gate had run three ε only); one complex charge vector, gradients
+  on.
 - **The FMM.** The library's defaults (`--m2l defaults`, `Case::defaults`: CH4.3c3's degree rule, the
   waves under Auto, the diagonal form's time rule, c_leaf 4, the V, W and X rules), and for the remedies
   the same with another `DegreeRule` (`--rule γ,α,β,C,a,b,d[,cap]`).
@@ -71,10 +83,12 @@ CH4.4b's `tools/helmholtz/ch4-4b-tables.py`.
   and branch (γ = 0.30, α = 0.25, β = 2.60, C = 2.00, a = −0.55, b = −4.66):
   - `h1`: d = 3, no cap; `h2`: d = 4, no cap (the branch one and two degrees up);
   - `h1p1`, `h2p1`: the same with β = 3.60 (the plateau one degree up).
-  `h1` is the default's capped branch + 1 at every x ≤ 400 and 10⁻⁸ ≤ ε ≤ 10⁻³ on a grid of 123,969
-  points but 12, at x = 8.8–10.7 and ε ≤ 4.6·10⁻⁸, where it is one more still (the cap binds there and
-  d = 3 without it lies above the cap + 1); no level of the runs lies there. CH4.8b implements the rule
-  as "high + 1" with the cap kept (§8, question 2).
+  `h1` is the default's capped branch + 1 at every x ≤ 400 and 10⁻⁸ ≤ ε ≤ 10⁻³ but at x = 7.1–13.5
+  and ε ≤ 2·10⁻⁷, where it is one degree more still at isolated points (635 of 8·10⁶ on a grid of 0.01
+  in x and 200 ε per five decades: the cap binds there and d = 3 without it lies above the cap + 1). At
+  every one of them the waves' resolving degree p_w (28 or 32, CH6.1g) lies above both, so on a level
+  with a quadrature, as every level there in these runs, the degrees as run are the same. CH4.8b
+  implements the rule as "high + 1" with the cap kept (§8, question 2).
 - **The cost** (`cost`, `repeat`): one launch per setting (CH4.3b2c §6), `--study single`, the run's
   build and evaluation as the example times them (one evaluation), on W2 and W1 with the constant
   density and W3 at N = 10⁶, kD = 500; `cost` each rule once in turn per case and ε, `repeat` the
@@ -114,8 +128,9 @@ parts are not orthogonal, and their sum is the error to the rest printed):
 | 7 | 6,836 | 4.28 | 5.56 | 6.74 |
 
 The cap's targets lie within 0.067 D of z = 0, so near the face of their box on the coarse levels; the
-ℓ2 at §9.1's samples (1.28 ε) exceeds the all-target figure (1.07 ε) because the samples follow the
-points, 42 % of them in the cap.
+ℓ2 at §9.1's samples (1.28 ε) exceeds the figure over the reference's 5.3·10⁵ targets (1.07 ε, two
+per box of the deepest level and the refined boxes) because the samples follow the points, 42 % of
+them in the cap.
 
 ## 3. The cause
 
@@ -147,8 +162,10 @@ Under the defaults (`--study levels,m2l --all-levels`):
 
 No miss; the M2L on RCR moves no worst box by more than 1.3 % (the waves on RCR at p_w, one-sided as
 CH4.4b reads it). With W1 at kD = 250 and 500 (the gate) and W1, W2 at kD ≤ 100 and W3 at 10, 30
-(CH4.4a, CH4.4b), every case of CH4.8's verification set with the constant density is now measured
-under the defaults; W2 at kD = 250 and 500 are its only misses.
+(CH4.4a, CH4.4b), every workload and kD of CH4.8's verification set with the constant density is now
+measured under the defaults at 10⁻³, 10⁻⁶ and 10⁻⁸, and W2 at kD = 250 and 500 at all six ε; the
+misses are W2's at kD = 250 and 500 (at 10⁻⁸; and at kD = 500 at 10⁻³, 10⁻⁴, 10⁻⁶ and 10⁻⁷). Not run:
+W1 and W3 at 10⁻⁴, 10⁻⁵, 10⁻⁷ and W2 at 100 < kD < 250, CH4.8b's.
 
 ## 5. The candidate rules on W1 and W2 with the constant density
 
@@ -192,11 +209,20 @@ the H4 gate's (W1).
 | w2-kd250-constant | 1e-3 | h1p1 | 0×2, 61, 33, 19, 12, 8×2 | 0.07, 0.39 | 8.0, 19.4 |
 | w2-kd250-constant | 1e-3 | h2 | 0×2, 62, 34, 20, 13, 9, 7 | 0.03, 0.18 | 6.6, 9.9 |
 | w2-kd250-constant | 1e-3 | h2p1 | 0×2, 62, 34, 20, 13, 9, 8 | 0.03, 0.14 | 6.6, 9.9 |
+| w2-kd250-constant | 1e-4 | default | 0×2, 64, 35, 21, 13, 9×2 | 0.10, 0.87 | 28.3, 66.8 |
+| w2-kd250-constant | 1e-4 | h1 | 0×2, 65, 36, 22, 14, 10, 9 | 0.04, 0.34 | 12.7, 32.7 |
+| w2-kd250-constant | 1e-4 | h1p1 | 0×2, 65, 36, 22, 14, 10×2 | 0.04, 0.28 | 12.7, 32.7 |
+| w2-kd250-constant | 1e-5 | default | 0×2, 67, 38, 23, 15, 12×2 | 0.08, 0.41 | 30.8, 69.2 |
+| w2-kd250-constant | 1e-5 | h1 | 0×2, 68, 39, 24, 16, 12×2 | 0.04, 0.29 | 14.2, 30.7 |
+| w2-kd250-constant | 1e-5 | h1p1 | 0×2, 68, 39, 24, 16, 13×2 | 0.04, 0.19 | 14.2, 30.7 |
 | w2-kd250-constant | 1e-6 | default | 0×2, 70, 40, 25, 16, 15×2 | 0.09, 0.53 | 38.7, 89.6 |
 | w2-kd250-constant | 1e-6 | h1 | 0×2, 71, 41, 26, 17, 15×2 | 0.04, 0.29 | 15.9, 40.7 |
 | w2-kd250-constant | 1e-6 | h1p1 | 0×2, 71, 41, 26, 17, 16×2 | 0.04, 0.23 | 15.9, 40.7 |
 | w2-kd250-constant | 1e-6 | h2 | 0×2, 72, 42, 27, 18, 15×2 | 0.02, 0.23 | 6.5, 28.6 |
 | w2-kd250-constant | 1e-6 | h2p1 | 0×2, 72, 42, 27, 18, 16×2 | 0.02, 0.14 | 6.4, 16.7 |
+| w2-kd250-constant | 1e-7 | default | 0×2, 73, 42, 28×4 | 0.07, 0.25 | 23.8, 97.4 |
+| w2-kd250-constant | 1e-7 | h1 | 0×2, 74, 43, 28×4 | 0.02, 0.08 | 13.5, 33.7 |
+| w2-kd250-constant | 1e-7 | h1p1 | 0×2, 74, 43, 28×4 | 0.02, 0.08 | 13.5, 33.6 |
 | w2-kd250-constant | 1e-8 | default | 0×2, 75, 44, 32×4 | 0.08, 0.26 | 51.2, **129.2** |
 | w2-kd250-constant | 1e-8 | h1 | 0×2, 76, 45, 32×4 | 0.03, 0.11 | 17.3, 49.9 |
 | w2-kd250-constant | 1e-8 | h1p1 | 0×2, 76, 45, 32×4 | 0.03, 0.11 | 17.3, 49.9 |
@@ -207,24 +233,37 @@ the H4 gate's (W1).
 | w2-kd500-constant | 1e-3 | h1p1 | 0×2, 116, 61, 33, 19, 12, 8×2 | 0.08, 0.47 | 20.9, 24.0 |
 | w2-kd500-constant | 1e-3 | h2 | 0×2, 117, 62, 34, 20, 13, 9, 7 | 0.04, 0.21 | 10.1, 21.7 |
 | w2-kd500-constant | 1e-3 | h2p1 | 0×2, 117, 62, 34, 20, 13, 9, 8 | 0.04, 0.18 | 10.1, 21.7 |
+| w2-kd500-constant | 1e-4 | default | 0×2, 120, 64, 35, 21, 13, 9×2 | 0.12, **1.03** | 18.1, 60.5 |
+| w2-kd500-constant | 1e-4 | h1 | 0×2, 121, 65, 36, 22, 14, 10, 9 | 0.04, 0.39 | 18.3, 30.8 |
+| w2-kd500-constant | 1e-4 | h1p1 | 0×2, 121, 65, 36, 22, 14, 10×2 | 0.04, 0.33 | 18.3, 30.8 |
+| w2-kd500-constant | 1e-5 | default | 0×2, 124, 67, 38, 23, 15, 12×2 | 0.08, 0.56 | 42.2, 94.6 |
+| w2-kd500-constant | 1e-5 | h1 | 0×2, 125, 68, 39, 24, 16, 12×2 | 0.04, 0.33 | 25.9, 50.7 |
+| w2-kd500-constant | 1e-5 | h1p1 | 0×2, 125, 68, 39, 24, 16, 13×2 | 0.04, 0.22 | 25.9, 50.7 |
 | w2-kd500-constant | 1e-6 | default | 0×2, 128, 70, 40, 25, 16, 15×2 | 0.11, 0.99 | 46.1, **101.0** |
 | w2-kd500-constant | 1e-6 | h1 | 0×2, 129, 71, 41, 26, 17, 15×2 | 0.05, 0.45 | 24.4, 47.8 |
 | w2-kd500-constant | 1e-6 | h1p1 | 0×2, 129, 71, 41, 26, 17, 16×2 | 0.04, 0.37 | 24.4, 47.8 |
 | w2-kd500-constant | 1e-6 | h2 | 0×2, 130, 72, 42, 27, 18, 15×2 | 0.03, 0.32 | 9.1, 33.7 |
 | w2-kd500-constant | 1e-6 | h2p1 | 0×2, 130, 72, 42, 27, 18, 16×2 | 0.02, 0.20 | 9.1, 27.3 |
+| w2-kd500-constant | 1e-7 | default | 0×2, 131, 73, 42, 28×4 | 0.07, 0.29 | 68.6, **165.9** |
+| w2-kd500-constant | 1e-7 | h1 | 0×2, 132, 74, 43, 28×4 | 0.03, 0.11 | 25.0, 76.3 |
+| w2-kd500-constant | 1e-7 | h1p1 | 0×2, 132, 74, 43, 28×4 | 0.03, 0.11 | 25.0, 76.5 |
 | w2-kd500-constant | 1e-8 | default | 0×2, 134, 75, 44, 32×4 | 0.08, 0.29 | 45.1, **143.4** |
 | w2-kd500-constant | 1e-8 | h1 | 0×2, 135, 76, 45, 32×4 | 0.03, 0.12 | 23.4, 45.5 |
 | w2-kd500-constant | 1e-8 | h1p1 | 0×2, 135, 76, 45, 32×4 | 0.03, 0.12 | 23.4, 45.5 |
 | w2-kd500-constant | 1e-8 | h2 | 0×2, 136, 77, 46, 32×4 | 0.02, 0.05 | 9.5, 20.4 |
 | w2-kd500-constant | 1e-8 | h2p1 | 0×2, 136, 77, 46, 32×4 | 0.02, 0.05 | 9.5, 20.4 |
 
-- `h1` brings every case inside both bounds with margin: ℓ2 at most 0.48 ε (W2 at kD = 500, 10⁻³),
-  worst box at most 49.9 ε (W2 at kD = 250, 10⁻⁸). Where `h1p1` raises the same levels as "every level
+- `h1` brings every case inside both bounds: ℓ2 at most 0.48 ε (W2 at kD = 500, 10⁻³, just inside the
+  rule's calibration target of ε/2, §3.5), worst box at most 76.3 ε (W2 at kD = 500, 10⁻⁷; at most
+  50.7 ε at the other ε). The default misses at 10⁻⁴ (∇φ 1.03 ε) and 10⁻⁷ (165.9 ε) too, which the H4
+  gate's three ε did not show. Where `h1p1` raises the same levels as "every level
   with V pairs raised by one" (§9; W2 at kD = 500, 10⁻³ and 10⁻⁶) the two give the same figures.
 - `h1p1` (the plateau too) gives `h1`'s worst boxes, and its ℓ2 at 10⁻³ and 10⁻⁸ to 0.01 ε; at 10⁻⁶
-  it lowers ∇φ's ℓ2 on W2 (0.23 and 0.37 against 0.29 and 0.45 ε at kD = 250 and 500), where the
-  plateau levels (k a = 3.38 and 1.69, p = 15) carry 0.05–0.09 of it.
-- `h2` halves the errors again (ℓ2 at most 0.32 ε, worst box at most 33.7 ε).
+  it lowers ∇φ's ℓ2 on W2 (0.23 and 0.37 against 0.29 and 0.45 ε at kD = 250 and 500): under `h1` the
+  plateau levels (k a = 3.38 and 1.69, p = 15) carry about a third of ∇φ's Σ|e|² there (1 − (0.37/0.45)²
+  = 0.32 at kD = 500, 0.37 at kD = 250), more than the 0.02–0.09 per level of the default's runs.
+- `h2` lowers ∇φ's ℓ2 to 0.32–0.79× and the worst box to 0.35–0.90× `h1`'s (ℓ2 at most 0.32 ε, worst
+  box at most 33.7 ε).
 
 ## 6. Pair evidence
 
@@ -239,14 +278,20 @@ CH4.3c2's pair evidence reads it, `tools/helmholtz/ch4-4b-tables.py pairs`) at t
 | 10⁻⁵ | 1.6 → 1.0 | 2.7 → 1.5 | 3.0 → 1.3 | 2.7 → 0.98 | 2.5 → 0.77 | 7.0 → 3.2 | 18 | 37 |
 | 10⁻⁶ | 2.5 → 1.5 | 2.3 → 1.2 | 2.6 → 1.2 | 3.7 → 1.3 | 2.6 → 0.97 | 32 → 20 | 44 | 130 |
 | 10⁻⁷ | 1.6 → 1.0 | 3.4 → 1.8 | 2.0 → 0.71 | 4.9 → 1.6 | 9.7 → 4.9 | 39 | 44 | 150 |
-| 10⁻⁸ | 3.9 → 2.3 | 4.2 → 1.7 | 3.2 → 1.3 | 5.5 → 1.8 | 31 → 17 | 71 | 90 | 270 |
+| 10⁻⁸ | 3.9 → 2.3 | 4.2 → 1.7 | 3.2 → 1.3 | 5.5 → 1.8 | 31 → 17 (as run 4.2) | 71 | 90 | 270 |
 
-(One figure where `h1` leaves the level on the plateau.) On the high-frequency levels the rule's worst
-pair falls from 1.4–6.4 ε to 0.7–2.3 ε; the plateau's pairs stay 10–270 ε, by its calibration on the
-FMM's ℓ2, not per pair (CH3.3; half of S7's p*). At 10⁻⁷ and 10⁻⁸ the levels of x ≤ 13.5 run the
-waves at p_w = 28 or 32 (CH6.1g), above both rules' degrees, so their pairs here do not run. Both
-measures agree: per pair `h1` is never worse and on every branch level better, and the FMM confirms it
-on the cases that missed (§5).
+(One figure where `h1` leaves the level on the plateau.) On the levels of x ≥ 13.5 the rule's worst
+pair falls from 1.4–6.4 ε to 0.7–2.3 ε. On the levels that carry the ℓ2 misses it falls less: 16 → 5.4
+ε (x = 3.38, 10⁻³), 32 → 20 ε (x = 6.77, 10⁻⁶), and at 10⁻⁴, 10⁻⁵ and 10⁻⁷ 19 → 7.5, 7.0 → 3.2 and 9.7 →
+4.9 ε; the plateau's pairs stay 10–270 ε, by its calibration on the FMM's ℓ2, not per pair (CH3.3;
+half of S7's p*). Below 10⁻⁶ a level of x ≤ 13.5 with a quadrature keeps the waves' resolving degree
+p_w = 28 or 32 (CH6.1g, CH4.3b2a) whatever M2L the time rule gives it, above both rules' degrees: at
+kD = 500, 10⁻⁸ level 5 (x = 13.53) runs the form at p = 32 under both rules, its worst pair 4.2 ε, and
+the levels below run the waves. The two measures do not say the same: per pair `h1` is never worse
+and is better on every level it raises, but the levels that carry W2's ℓ2 misses stay 5–20 ε per
+pair under it; only the FMM shows those misses closed (§5). That is how the plateau and the branch's
+low end were calibrated (on the FMM's ℓ2, not per pair), and why the FMM's verification over CH4.8's
+whole set is CH4.8b's acceptance.
 
 ## 7. Cost
 
@@ -322,9 +367,10 @@ nine cases: the clearest W1 at 10⁻³ (1.047×, its difference 0.24 s against b
 evaluation's: `h1`'s build is within 2.6 % of the default's, either way, in every `cost` row.
 
 A model check: `h1` raises each high-frequency level by one degree, (p + 2)²/(p + 1)² of its
-coefficients, 1.5 % at p = 128 to 17 % at p = 11, and the RCR and diagonal M2L by up to the cube of
-that; the high-frequency levels are 14–31 % of build plus one evaluation on W1 at kD = 500 inside D1
-(CH4.0e §3), so a few per cent is the expected order.
+coefficients, 1.6 % at p = 128 to 17 % at p = 11, and the RCR and diagonal M2L by up to the cube of
+that; with those levels a part of the evaluation only, a few per cent is the expected order. Memory
+is not measured here: the tables grow with the degree on the same levels; CH4.8b reports it (§10's
+"time, memory and build cost per k").
 
 ## 8. Questions for sign-off
 
@@ -344,10 +390,12 @@ that; the high-frequency levels are 14–31 % of build plus one evaluation on W1
    W2's constant density by level scans (CH4.3c3's method; the degrees would follow from scans not
    run here, hours per case at kD = 500); the rule kept and W2's constant density named outside the
    bound (not recommended: it is inside D1 on a reference workload).
-3. **The plateau.** *Recommended:* unchanged. With the branch raised the plateau levels carry under
-   0.1 of the error; `h1p1` changes no worst box and lowers only ∇φ's ℓ2 at 10⁻⁶ (W2: 0.37 against
-   0.45 ε at kD = 500), already within ε by `h1` alone, while a higher plateau costs every
-   low-frequency tree (W3, W4, kD ≤ 30). Alternative: β + 1 as well (`h1p1`).
+3. **The plateau.** *Recommended:* unchanged. `h1` alone keeps every measured case within ε and the
+   box bound (§5, at all six ε on W2); `h1p1` changes no worst box and lowers only ∇φ's ℓ2 at 10⁻⁶ (W2: 0.37
+   against 0.45 ε at kD = 500; the plateau carries about a third of ∇φ's Σ|e|² there under `h1`), while
+   a higher plateau costs every low-frequency tree (W3, W4, kD ≤ 30). Alternative: β + 1 as well
+   (`h1p1`), for more margin in ∇φ's ℓ2 at 10⁻⁴–10⁻⁶ (W2 at kD = 500: 0.33, 0.22, 0.37 against 0.39,
+   0.33, 0.45 ε).
 
 ## 9. Tables
 

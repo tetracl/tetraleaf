@@ -12,7 +12,7 @@ Status (2026-11-24): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 202
 (`gates/H4.md`, review `docs/reviews/2026-11-24-H4.md`) for W2 with the constant density, which
 missed ε and the worst-box bound inside D1. CH4.8 was split: CH4.8a (done) mapped the miss to the
 degree rule on W2's deep tree and proposes `h1`, the high-frequency branch one degree higher (W2
-within 0.48 ε and 49.9 ε, 1.017× the time), for sign-off; next CH4.8b (the remedy as the default,
+within 0.48 ε and 76.3 ε at 10⁻³–10⁻⁸, 1.017× the time), for sign-off; next CH4.8b (the remedy as the default,
 verified on CH4.8's set), then H4.G again, then the FFT track (item 12), H2 and H5 (items 13–14).
 The project was renamed tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and
 CH0.6 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in
@@ -660,14 +660,14 @@ The done lines are condensed at the H4 gate (2026-11-24); in full in `git show 4
   option and `Cargo.toml`. *Needs:* CH4.1b, CHR.3, CH0.9, D7.
 - [x] **CH4.8a The constant density on W2: the error mapped and a remedy chosen.** The degree rule's
   truncation on W2's deep tree against the z = 0 face (the M2L adds nothing); W3 with the constant
-  density holds; `h1`, the high-frequency branch one degree higher, puts W2 within 0.48 ε and 49.9 ε
-  at 1.017× the default's time (geometric mean). Report `tetraleaf-validate/results/helmholtz-ch4-8a.md`.
+  density holds; W2 misses at 10⁻⁴ and 10⁻⁷ too; `h1`, the high-frequency branch one degree higher,
+  puts W2 within 0.48 ε and 76.3 ε at all six ε, at 1.017× the default's time (geometric mean). Report `tetraleaf-validate/results/helmholtz-ch4-8a.md`.
   Added at the H4 gate (M15), split at its start into CH4.8a and CH4.8b. For sign-off (§8).
 - [ ] **CH4.8b The constant density on W2: the remedy as the default.** *Done when:* CH4.8a's
   signed-off remedy the library's default (proposal §3.5 amended); under the defaults W1–W3 with the
   constant density at kD = 10–500 within ε in ℓ2 at 10⁻³–10⁻⁸ and every worst box ≤ 100 ε, the
-  random-charge cases of CH4.4a unchanged within ε; its cost on Kathleen and locust; for sign-off.
-  *Needs:* CH4.8a. *Machines:* Kathleen, locust.
+  random-charge cases of CH4.4a unchanged within ε; its cost (time, memory, build per k, as §10's CH4.4)
+  on Kathleen and locust; for sign-off. *Needs:* CH4.8a. *Machines:* Kathleen, locust.
 - [ ] **H4.G Gate.** `/milestone-gate H4`. *Needs:* CH4.0–CH4.5 and CH4.8 (CH4.8a, CH4.8b; corrected at the gate,
   R1). Ran on 2026-11-24 (`docs/helmholtz/gates/H4.md`, #258): the condition on the random charges
   met, H4 kept open for CH4.8 (the user, 2026-11-24: "Keep H4 open, CH4.8 (Recommended)").

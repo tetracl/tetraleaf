@@ -4657,13 +4657,13 @@ request, using this template:
 - Done:
   - CH4.8 split into CH4.8a and CH4.8b (roadmap), as CH4.4b left a degree-rule remedy to a follow-up.
   - `tools/helmholtz/ch4-8a-runs.sh` (stages `smoke`, `map`, `all`, `survey`, `remedy`, `cost`,
-    `repeat`) and `ch4-8a-tables.py` (`rules`, `cost`, `raised`, `repeat`), beside CH4.4b's tables.
+    `repeat`, `mid-eps`) and `ch4-8a-tables.py` (`rules`, `cost`, `raised`, `repeat`), beside CH4.4b's tables.
     No library or harness code. Report `tetraleaf-validate/results/helmholtz-ch4-8a.md`; record
     `docs/helmholtz/tasks/CH4.8a.md`.
 - Tests: none new (no code). Every base run equals the H4 gate's (the same sample from its cache:
   1.28·10⁻³, 56.63, 101.02, 143.40 ε); the levels' parts add up (rest ≤ 0.024 of Σ|e|²).
-- Measurements (Kathleen `singlenode`, 1 × 40, jobs 672424, 672432, 672477; 190 launches, every one
-  exit 0):
+- Measurements (Kathleen `singlenode`, 1 × 40, jobs 672424, 672432, 672477, 672488; 208 launches,
+  every one exit 0):
   - the mapping of W2 with the constant density at kD = 250 and 500 (10⁻³, 10⁻⁶, 10⁻⁸): the M2L adds
     nothing (49 runs, worst box 1.000, ℓ2 0.999–1.005); the degree rule's truncation at the tangent
     point, by ε at different levels: the plateau's edge (k a = 3.38, Batched at p = 7) 0.47–0.50 of ∇φ
@@ -4673,7 +4673,11 @@ request, using this template:
     within ε (≤ 0.51 ε) and the box bound (≤ 17.3 ε) under the defaults: W2 is the only miss;
   - four candidate rules on W1 and W2 with the constant density at kD = 250 and 500: `h1` (the branch
     + 1) ℓ2 ≤ 0.48 ε, worst box ≤ 49.9 ε; `h2` ≤ 0.32 ε and 33.7 ε; the plateau + 1 adds little;
-  - pair evidence (S7): `h1` takes the branch's worst pair from 1.4–6.4 ε to 0.7–2.3 ε;
+  - W2 at 10⁻⁴, 10⁻⁵, 10⁻⁷ (added at the self-review, job 672488): the default misses at kD = 500 at
+    10⁻⁴ (∇φ 1.03 ε) and 10⁻⁷ (worst box 165.9 ε); `h1` holds (≤ 0.39 ε, ≤ 76.3 ε);
+  - pair evidence (S7): `h1` takes the worst pair on the levels of k a ≥ 13.5 from 1.4–6.4 ε to
+    0.7–2.3 ε, on the levels that carry the ℓ2 misses only 16 → 5.4 ε and 32 → 20 ε (the FMM alone shows
+    those misses closed);
   - cost at kD = 500 (W1, W2, W3 at N = 10⁶), one setting per launch, A B B A: `h1` 0.989–1.047× the
     default's build plus one evaluation, geometric mean 1.017;
   - raw outputs in `~/projects/fmm-archive/kathleen/runs/ch4-8a/`.

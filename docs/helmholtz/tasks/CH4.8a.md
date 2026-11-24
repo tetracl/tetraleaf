@@ -125,9 +125,10 @@ each), stage 4 about 2–3. Jobs of at most 6 h. Raw outputs to
   level +1 took 114.8 ε to 48.4 ε); the remedy may be a raise on every level of a deep tree.
 
 ## Pending runs
-None. Kathleen, `singlenode`, 1 × 40, `--exclude=node-c11b-004,node-c11b-013`, every one of 190
+None. Kathleen, `singlenode`, 1 × 40, `--exclude=node-c11b-004,node-c11b-013`, every one of 208
 launches exit 0: 672424 (`smoke map all survey`, node-c11a-079), 672432 (`remedy cost`,
-node-c11a-021), 672477 (`repeat`, node-c11a-021). The `remedy`, `cost` and `repeat` stages were added
+node-c11a-021), 672477 (`repeat`, node-c11a-021), 672488 (`mid-eps`, node-c11b-012; added at the
+self-review, which found W2's ε between the gate's three unrun). The `remedy`, `cost` and `repeat` stages were added
 to the script after `map` and `all` had shown the remedy's shape (commits cf85e11, f5114e1). Outputs
 in `~/projects/fmm-archive/kathleen/runs/ch4-8a/`.
 
@@ -138,8 +139,10 @@ the levels' errors; at 10⁻³ the plateau's edge (k a = 3.38, Batched at p = 7)
 at 10⁻⁶ the level at k a = 6.77, at 10⁻⁸ levels 2–4 the worst box; the M2L adds nothing (49 runs,
 1.000 in the worst box). W3 with the constant density holds under the defaults (ℓ2 ≤ 0.51 ε, worst
 box ≤ 17.3 ε). The remedy `h1` (the high-frequency branch one degree higher, the plateau unchanged)
-puts W2 within ℓ2 0.48 ε and worst box 49.9 ε, W1 within 0.28 ε and 17.6 ε, the worst pair on the
-branch from 1.4–6.4 ε to 0.7–2.3 ε, at 0.989–1.047× the default's build plus one evaluation (A B B A,
+puts W2 within ℓ2 0.48 ε and worst box 76.3 ε at all six ε of 10⁻³–10⁻⁸ (the default misses at
+10⁻⁴ and 10⁻⁷ too), W1 within 0.28 ε and 17.6 ε, the worst pair on the
+levels of k a ≥ 13.5 from 1.4–6.4 ε to 0.7–2.3 ε (on the levels that carry the ℓ2 misses 16 → 5.4 ε
+and 32 → 20 ε: only the FMM shows those closed), at 0.989–1.047× the default's build plus one evaluation (A B B A,
 geometric mean 1.017). Questions 1–3 of the report's §8 for sign-off.
 
 ## Checks run
@@ -147,7 +150,7 @@ geometric mean 1.017). Questions 1–3 of the report's §8 for sign-off.
 --examples -- -D warnings`, `cargo doc --no-deps`, `cargo clippy --workspace --all-targets -- -D
 warnings`, all clean; `cargo test` (1,392 passed) and `cargo test --workspace` (1,436 passed) at
 opt-level 1, none failed. `bash -n` and ShellCheck on the runs script, `py_compile` on the tables
-script, a dry run of every stage (190 launches) locally and on Kathleen, the roadmap through
+script, a dry run of every stage (208 launches) locally and on Kathleen, the roadmap through
 `tools/roadmap/sync_issues.py --out`. Not run: the MPI list (no MPI crate's code changed), `cargo
 deny` (no manifest change), Laplace's benchmarks (no Laplace path).
 
