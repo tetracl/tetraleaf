@@ -34,6 +34,8 @@
 #            constant density at kD = 500 and W3 at N = 10⁶, kD = 500
 #   repeat   the default (A) and h1 (B) alternated A B B A A B B A, one launch each, `--study
 #            single`, on the cases of `cost` (D9's order: the cost as a median with its spread)
+#   mid-eps  (added at the self-review) W2 with the constant density at kD = 250 and 500 at
+#            ε = 10⁻⁴, 10⁻⁵, 10⁻⁷ (MID_EPS), the default, h1 and h1p1 (`--study single`)
 # RULES: name=constants pairs (default: the four candidates below, the default's constants with
 # the high-frequency branch's d raised and its cap removed, and the plateau's β raised by 1).
 # EPS (default "1e-3 1e-6 1e-8"), TIMEOUT per launch (default 5400 s), ONLY (a regular expression
@@ -162,8 +164,21 @@ for stage in "$@"; do
             done
         done
         ;;
+    mid-eps)
+        for kd in 250 500; do
+            EPS=${MID_EPS:-1e-4 1e-5 1e-7} each mid-default w2 "$kd" --study single
+            for r in $RULES; do
+                case "${r%%=*}" in
+                h1 | h1p1)
+                    EPS=${MID_EPS:-1e-4 1e-5 1e-7} each "mid-${r%%=*}" w2 "$kd" --study single \
+                        --rule "${r#*=}"
+                    ;;
+                esac
+            done
+        done
+        ;;
     *)
-        echo "ch4-8a-runs.sh: unknown stage $stage (smoke, map, all, survey, remedy, cost, repeat)" >&2
+        echo "ch4-8a-runs.sh: unknown stage $stage (smoke, map, all, survey, remedy, cost, repeat, mid-eps)" >&2
         exit 2
         ;;
     esac
