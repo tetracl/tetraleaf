@@ -27,6 +27,13 @@
 #            pairs raised at once by 1 and 2 (`--study single --raise-levels v --raise-together`)
 #   survey   W3 with the constant density, resolved at kD = 100 and at N = 10⁶ for kD = 200 and
 #            500: `--study levels,m2l --all-levels`
+#   remedy   each candidate rule of RULES (`--rule`, `--study single`) on W2 and W1 with the
+#            constant density at kD = 250 and 500 and on CASES (default none more)
+#   cost     the default and each candidate rule, one launch each (one setting per launch:
+#            CH4.3b2c §6), interleaved per case and ε, `--study single`, on W2 and W1 with the
+#            constant density at kD = 500 and W3 at N = 10⁶, kD = 500
+# RULES: name=constants pairs (default: the four candidates below, the default's constants with
+# the high-frequency branch's d raised and its cap removed, and the plateau's β raised by 1).
 # EPS (default "1e-3 1e-6 1e-8"), TIMEOUT per launch (default 5400 s), ONLY (a regular expression
 # on the launch names), DRY_RUN (print the launches only). Each launch writes <out-dir>/<name>.md
 # and .err and a line in <out-dir>/runs.log.
@@ -93,6 +100,10 @@ each() {
 }
 
 STUDY=(--study levels,m2l --all-levels)
+# The default is 0.30,0.25,2.60,2.00,-0.55,-4.66,2,0.82 (`DegreeRule::CALIBRATED`).
+RULES=${RULES:-h1=0.30,0.25,2.60,2.00,-0.55,-4.66,3 h2=0.30,0.25,2.60,2.00,-0.55,-4.66,4 \
+h1p1=0.30,0.25,3.60,2.00,-0.55,-4.66,3 h2p1=0.30,0.25,3.60,2.00,-0.55,-4.66,4}
+CASES=${CASES:-}
 for stage in "$@"; do
     echo "=== $(date '+%Y-%m-%d %H:%M:%S') stage $stage"
     case "$stage" in
@@ -113,8 +124,26 @@ for stage in "$@"; do
         each survey w3:1000000 200 "${STUDY[@]}"
         each survey w3:1000000 500 "${STUDY[@]}"
         ;;
+    remedy)
+        for wk in w2:250 w2:500 w1:250 w1:500 $CASES; do
+            for r in $RULES; do
+                each "remedy-${r%%=*}" "${wk%:*}" "${wk##*:}" --study single --rule "${r#*=}"
+            done
+        done
+        ;;
+    cost)
+        for wk in w2:500 w1:500 w3:1000000:500; do
+            for e in $EPS; do
+                EPS=$e each cost-default "${wk%:*}" "${wk##*:}" --study single
+                for r in $RULES; do
+                    EPS=$e each "cost-${r%%=*}" "${wk%:*}" "${wk##*:}" --study single \
+                        --rule "${r#*=}"
+                done
+            done
+        done
+        ;;
     *)
-        echo "ch4-8a-runs.sh: unknown stage $stage (smoke, map, all, survey)" >&2
+        echo "ch4-8a-runs.sh: unknown stage $stage (smoke, map, all, survey, remedy, cost)" >&2
         exit 2
         ;;
     esac
