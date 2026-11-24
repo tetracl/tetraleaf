@@ -4605,3 +4605,50 @@ request, using this template:
 - Laplace: not touched (the example, the validation crate's parser, the FMM3D driver, scripts, docs).
 - Follow-ups: CH4.7 (the form choice prices the tables' build for small trees), question 4, its
   roadmap line off the list. Next: the H4 gate.
+
+## 2026-11-24: H4.G Gate (run; H4 kept open for CH4.8)
+- Done:
+  - `/milestone-gate H4` on `main` at 4d28d41 (#258). Report `docs/helmholtz/gates/H4.md`:
+    - the gate condition on the random charges met (CH4.4a, CH4.4b, CH4.5): within ε on W1 to
+      kD = 1000, W2 to 500, W3 to 200; no error at a class boundary; 0.13–0.18× FMM3D's call for
+      N ≥ 10⁶ at matched accuracy, with the one-rank-per-node figures (review 2026-11-19, A6);
+    - CH4.0–CH4.5 merged (#211–#257), each with its record and sign-offs; eight H4 tasks open by
+      earlier sign-offs (CH4.0f, CH4.0g, CH4.0k, CH4.0l, CH4.2d, CH4.3f, CH4.7, CH4.6), the gate
+      run with them open (the user: "Run the gate now (Recommended)");
+    - CI on `main` over the milestone and its job times against their limits; proposal §9's
+      items; the defaults on the cases they now cover; H4's gain, the degrees and §7's memory
+      model against the measurements; corrections R1–R6, recommendations, a retrospective.
+  - The project review at the gate, `docs/reviews/2026-11-24-H4.md`: two read-only passes on
+    Fable at medium effort over 4d28d41. Checked by the driver: M15, M17, A9, B11, B14, L1, C8,
+    P2, P9, P10, K2. New findings M15–M17, A9, A10, B11–B15, C8, C9, L9, P9–P11, K6–K8, T6, U6;
+    the status of every earlier finding.
+  - M15's run on the gate branch (Kathleen job 672173, node-c11a-120; stage `h4-gate` of
+    `tools/helmholtz/ch4-4b-runs.sh`): W1 with the constant density at kD = 250 and 500 holds
+    (ℓ2 ≤ 0.64 ε, worst box ≤ 46.5 ε); W2 with it misses ε in ℓ2 (∇φ 1.28 ε at kD = 500, 10⁻³)
+    and the 100 ε box bound (up to 143.4 ε), at the sphere's tangent point on z = 0. Raw outputs
+    in `~/projects/fmm-archive/kathleen/runs/h4-gate/`.
+  - Roadmap: H4's done lines condensed (in full at 4d28d41); CH4.8 added and H4.G's *Needs*
+    corrected to CH4.0–CH4.5 and CH4.8 (R1); the status line rewritten (R2); CH7.2's f32 phase at
+    c_leaf 4 (R4); CH4.5's line names the nine rows FMM3D ran in one variant (R5); the review's
+    Alsos on CH4.3f, CH4.7, CH7.1, CH9.1 and CHA.5, CHA.6, CHA.7, CHA.8, CHA.9, CHA.10; CHA.7a and
+    CHA.13 added; the priority list: CH4.8 and H4.G (item 11), the FFT track (12), H2 (13), H5
+    (14).
+  - Proposal (draft 0.8 kept): §7's "H4 measurements" (R3) with its Appendix A line.
+    `laplace-fmm-plan.md` §8's FMM3D sentence corrected (R6; review B14).
+- Tests: none (documents and a script stage).
+- Checks: none of cargo's (no Rust or manifest change); `bash -n` and a dry run of the script's
+  new stage, locally and on Kathleen; `tools/roadmap/sync_issues.py --out` reads the roadmap (H4's
+  issue #145 stays open, 33 of 43); CI on `main` green over the milestone (two first-attempt
+  install failures, #224 and #227, before and at #227's retry).
+- Decisions: the gate's questions 2–5 signed off by the user in the session, 2026-11-24, as
+  recommended ("Accept all (Recommended)" for the corrections and the triage; "FFT, then H2 and H5
+  (Recommended)" for the list); question 1 "Run first, then close (Recommended)", and on the
+  run's result "Keep H4 open, CH4.8 (Recommended)".
+- Laplace: not touched (documents; `laplace-fmm-plan.md`'s sentence only).
+- Follow-ups:
+  - CH4.8 (item 11), then H4.G again.
+  - The retrospective's changes to `/milestone-gate` and `/next-task`, for the user
+    (`.claude/skills/`): open tasks off the list do not stop a gate; a report's bound is verified
+    on the density its record names worst; one setting per launch for Kathleen timings; new
+    report scripts import `tools/helmholtz/common.py` once it exists; a by-hand `cargo check` of
+    `spikes/` at each gate.
