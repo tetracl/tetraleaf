@@ -14,6 +14,8 @@ tools/helmholtz/ch4-4b-tables.py (summary, levels, m2l, worst, pairs), which rea
   cost    per case and ε the build and the evaluation of each `cost-<rule>-…` launch (one
           setting per launch), and their sum over the default's
   raised  the `all-` launches' runs: every level with V pairs raised at once by 1 and 2
+  repeat  per case and ε the `repeat<i>-<rule>-…` launches (A B B A A B B A): per rule the median
+          of build + evaluate, its spread (max − min), and the ratio of the medians
 
 Each <name>.md is one `helmholtz_boxes` launch. Python 3 standard library only.
 """
@@ -115,6 +117,31 @@ def raised(out):
             print(f"| {case} | {eps} | {label} | " + " | ".join(cells(eps, row)) + " |")
 
 
+def repeat(out):
+    times = {}
+    for path in sorted(Path(out).glob("repeat*-*.md")):
+        m = CASE.match(path.stem)
+        rows = runs(path) if m else None
+        if not rows:
+            continue
+        rule = (m["rule"] or "default-").rstrip("-")
+        times.setdefault((m["case"], m["eps"]), {}).setdefault(rule, []).append(rows[0][4] + rows[0][5])
+    print("| case | ε | default: median (spread) s | h1: median (spread) s | h1 ÷ default |")
+    print("| --- | --- | ---: | ---: | ---: |")
+    for (case, eps), by_rule in sorted(times.items(), key=lambda kv: (kv[0][0], -float(kv[0][1]))):
+        cells, medians = [], []
+        for rule in ["default", "h1"]:
+            v = sorted(by_rule.get(rule, []))
+            if not v:
+                cells.append("–")
+                medians.append(float("nan"))
+                continue
+            med = (v[(len(v) - 1) // 2] + v[len(v) // 2]) / 2
+            medians.append(med)
+            cells.append(f"{med:.2f} ({v[-1] - v[0]:.2f}, n = {len(v)})")
+        print(f"| {case} | {eps} | {cells[0]} | {cells[1]} | {medians[1] / medians[0]:.3f} |")
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__, file=sys.stderr)
@@ -126,6 +153,8 @@ def main():
         cost(out)
     elif what == "raised":
         raised(out)
+    elif what == "repeat":
+        repeat(out)
     else:
         print(__doc__, file=sys.stderr)
         sys.exit(2)

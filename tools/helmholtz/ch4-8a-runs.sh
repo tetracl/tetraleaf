@@ -32,6 +32,8 @@
 #   cost     the default and each candidate rule, one launch each (one setting per launch:
 #            CH4.3b2c §6), interleaved per case and ε, `--study single`, on W2 and W1 with the
 #            constant density at kD = 500 and W3 at N = 10⁶, kD = 500
+#   repeat   the default (A) and h1 (B) alternated A B B A A B B A, one launch each, `--study
+#            single`, on the cases of `cost` (D9's order: the cost as a median with its spread)
 # RULES: name=constants pairs (default: the four candidates below, the default's constants with
 # the high-frequency branch's d raised and its cap removed, and the plateau's β raised by 1).
 # EPS (default "1e-3 1e-6 1e-8"), TIMEOUT per launch (default 5400 s), ONLY (a regular expression
@@ -142,8 +144,25 @@ for stage in "$@"; do
             done
         done
         ;;
+    repeat)
+        h1=${RULES%% *}
+        for wk in w2:500 w1:500 w3:1000000:500; do
+            for e in $EPS; do
+                i=0
+                for r in A B B A A B B A; do
+                    i=$((i + 1))
+                    if [ "$r" = A ]; then
+                        EPS=$e each "repeat$i-default" "${wk%:*}" "${wk##*:}" --study single
+                    else
+                        EPS=$e each "repeat$i-${h1%%=*}" "${wk%:*}" "${wk##*:}" --study single \
+                            --rule "${h1#*=}"
+                    fi
+                done
+            done
+        done
+        ;;
     *)
-        echo "ch4-8a-runs.sh: unknown stage $stage (smoke, map, all, survey, remedy, cost)" >&2
+        echo "ch4-8a-runs.sh: unknown stage $stage (smoke, map, all, survey, remedy, cost, repeat)" >&2
         exit 2
         ;;
     esac
