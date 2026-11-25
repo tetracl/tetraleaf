@@ -25,7 +25,7 @@
 //!   named in a line under the machine's;
 //! - `--threads t,…` (default 1), `--oracle-threads t` (default the largest of
 //!   `--threads`);
-//! - `--rule calibrated|ch3-3|ch4-3c2|s7` (default `calibrated`, Helmholtz CH3.3): with `s7`, a
+//! - `--rule calibrated|ch3-3|ch4-3c2|ch4-3c3|s7` (default `calibrated`, Helmholtz CH3.3): with `s7`, a
 //!   tolerance gives S7's closed form (`s7_degree`) per level in place of the default rule,
 //!   through one run at degree 1 for the levels' circumradii (the times before CH3.3's rule);
 //!   with `ch3-3` (Helmholtz CH4.3c2) the tolerance stays one, under CH3.3's rule
@@ -33,7 +33,8 @@
 //!   every rule that reads ε (the exponential M2L's precision and raise, the diagonal form's
 //!   classes) runs as under the default, at CH3.3's degrees (the errors and times before the
 //!   refit); `ch4-3c2` (Helmholtz CH4.3c3) the same under CH4.3c2's rule (`DegreeRule::CH4_3C2`,
-//!   the default before CH4.3c3's refit);
+//!   the default before CH4.3c3's refit); `ch4-3c3` (Helmholtz CH4.8b) under CH4.3c3's rule
+//!   (`DegreeRule::CH4_3C3`, the default before CH4.8b's margin);
 //! - `--p2p auto|reference|<isa>,…` (default `auto`): the P2P kernels (Helmholtz CH3.4c),
 //!   each case run with each in turn; an ISA this machine lacks is refused before MPI
 //!   starts.
@@ -350,7 +351,7 @@ fn arguments() -> Arguments {
             "usage: helmholtz_accuracy [--workload w1|w2|w3|w3:<n>|w4-<distribution>:<n>] \
              [--kd x,…] [--kim y] [--eps e,…|--degree p] [--charges real|complex] \
              [--density random|planewave|constant] [--vectors m] [--samples n] [--no-gradients] [--threads t,…] \
-             [--oracle-threads t] [--rule calibrated|ch3-3|ch4-3c2|s7] [--p2p auto|reference|<isa>,…] \
+             [--oracle-threads t] [--rule calibrated|ch3-3|ch4-3c2|ch4-3c3|s7] [--p2p auto|reference|<isa>,…] \
              [--m2l rotation|dense|classes|batched|batched-fused|auto|auto:<d>|auto-pw|\
              auto-pw:<d>|sweep|\
              planewave|planewave:<1|2|3>|planewave-scan|planewave-scan:<1|2|3>,…] \
@@ -706,6 +707,7 @@ fn arguments() -> Arguments {
                         "calibrated" => Some((false, None)),
                         "ch3-3" => Some((false, Some(DegreeRule::CH3_3))),
                         "ch4-3c2" => Some((false, Some(DegreeRule::CH4_3C2))),
+                        "ch4-3c3" => Some((false, Some(DegreeRule::CH4_3C3))),
                         "s7" => Some((true, None)),
                         _ => None,
                     }

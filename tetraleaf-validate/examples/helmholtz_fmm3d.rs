@@ -72,6 +72,11 @@
 //! `helmholtz_fmm3d::tree_seconds`, from the `tree_s=` field of the driver's line) and the
 //! launch's peak resident size (a column "memory GB", from the log's `maxrss:` line).
 //!
+//! Helmholtz CH4.8b added to `compare` `--rule calibrated|ch4-3c3` (default `calibrated`, the
+//! library's rule; `ch4-3c3` CH4.3c3's, `DegreeRule::CH4_3C3`, the default before CH4.8b's margin,
+//! through `Case::degree_rule`, the tolerance and every other setting unchanged), named in the
+//! header's settings.
+//!
 //! Run in release mode, on any number of ranks for `compare` (each rank passes a
 //! contiguous block of the points, rank 0 prints), with one BLAS thread. One charge
 //! vector, gradients on. Timings are wall times on this machine: ours the build and the
@@ -83,7 +88,7 @@ use std::path::{Path, PathBuf};
 use mpi::Threading;
 use mpi::traits::*;
 use tetraleaf_exec::geometry::{Domain, radius};
-use tetraleaf_exec::helmholtz::{ChargeKind, Degrees, HelmholtzM2l};
+use tetraleaf_exec::helmholtz::{ChargeKind, DegreeRule, Degrees, HelmholtzM2l};
 use tetraleaf_exec::operator::P2pChoice;
 use tetraleaf_validate::bench::{cores, cpu_model, target};
 use tetraleaf_validate::fmm_accuracy::Distribution;
@@ -116,6 +121,7 @@ struct Arguments {
     p2p: P2pChoice,
     evaluations: usize,
     c_leaf: Option<f64>,
+    degree_rule: Option<DegreeRule>,
 }
 
 /// The workload of a name at kD (W1 and W3 resolved depend on it).
@@ -146,7 +152,7 @@ fn arguments() -> Arguments {
              [--settings harness|defaults] [--samples n] [--out FILE] \
              [--eps e,…] [--fmm3d label=PREFIX,…] [--reference e] [--problem FILE] \
              [--threads t] [--oracle-threads t] [--p2p auto|reference|<isa>] \
-             [--evaluations n] [--c-leaf c]; got {args:?}"
+             [--evaluations n] [--c-leaf c] [--rule calibrated|ch4-3c3]; got {args:?}"
         );
         std::process::exit(2);
     };
@@ -172,6 +178,7 @@ fn arguments() -> Arguments {
         p2p: P2pChoice::Auto,
         evaluations: 1,
         c_leaf: None,
+        degree_rule: None,
     };
     while let [flag, value, tail @ ..] = rest {
         let ok = match flag.as_str() {
@@ -247,6 +254,13 @@ fn arguments() -> Arguments {
                 .filter(|c| c.is_finite() && *c > 0.0)
                 .map(|c| parsed.c_leaf = Some(c))
                 .is_some(),
+            "--rule" => match value.as_str() {
+                "calibrated" => Some(None),
+                "ch4-3c3" => Some(Some(DegreeRule::CH4_3C3)),
+                _ => None,
+            }
+            .map(|r| parsed.degree_rule = r)
+            .is_some(),
             _ => false,
         };
         if !ok {
@@ -602,6 +616,7 @@ fn main() {
     case.p2p = arguments.p2p;
     case.evaluations = arguments.evaluations;
     case.c_leaf = arguments.c_leaf.or(case.c_leaf);
+    case.degree_rule = arguments.degree_rule;
     let problem = Problem::new(&case);
     let bytes = problem_bytes(&problem, 0, SEED);
     if arguments.step == "problem" {
@@ -680,7 +695,7 @@ fn main() {
         println!(
             "Machine: {}, {}, {}; ours on {} ranks × {} threads; BLAS threads: \
              OPENBLAS_NUM_THREADS={}; N = {}, {} sampled targets, one {} charge vector \
-             ({}); our settings: {}",
+             ({}); our settings: {}{}",
             cpu_model(),
             cores(),
             target(),
@@ -698,6 +713,11 @@ fn main() {
                 "the library's defaults (Case::defaults)"
             } else {
                 "the harness's (Case::new: M2L by Rotation, the diagonal form off)"
+            },
+            if arguments.degree_rule.is_some() {
+                ", the degree rule CH4.3c3's (DegreeRule::CH4_3C3)"
+            } else {
+                ""
             },
         );
         if let Some((token, run)) = &reference {
