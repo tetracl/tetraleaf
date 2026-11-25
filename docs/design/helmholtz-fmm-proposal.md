@@ -363,7 +363,12 @@ the M2L adding nothing (CH4.8a, `tetraleaf-validate/results/helmholtz-ch4-8a.md`
 every level of the branch (CH4.8a's `h1`, signed off on #260) is a hand-chosen margin, as CH4.3c2's
 +2 was: CH4.3c3's refit scanned one level at a time on W1's sphere, where the levels' errors do not
 stack as on W2. CH4.8b verified it over W1–W3 with the constant density at kD = 10–500 and over
-CH4.4a's random charges, at all six ε of D1 (`tetraleaf-validate/results/helmholtz-ch4-8b.md`).
+CH4.4a's random charges, at all six ε of D1 (`tetraleaf-validate/results/helmholtz-ch4-8b.md`), and
+the H4 gate on NEON's trees and on W4 (`docs/helmholtz/gates/H4.md` §0.3). (amended at H4.G) The
+rule has no term for the number of levels: each calibration held one level to ε/2 with the others
+below, so it is verified for D1's tree depths, not beyond; W2's worst box under it grows with kD
+(29–76 ε from kD = 175 to 500). CH4.8a's `h2` (one degree more again, its errors halved, 0.99–1.10×
+the time in single launches) is the recorded fallback if kD > 500 enters the scope (H8, H9).
 
 (amended at CH4.3c3) The high-frequency branch is refitted on the worst density: CH4.3c2's level
 scans with the random charges and level scans of W1's constant density at x = 6.8–216 (kD = 250,
@@ -1387,7 +1392,9 @@ defaults the FMM's resident growth on the node is 5.6–7.0 GB on W1 at kD = 500
 kD = 1000 (8·10⁶ points), against FMM3D `fastker`'s peak of 9.7–27 and 45–118 GB; FMM3D's
 `default` exceeds a 180 GB node at kD = 1000 (CH4.4a). The build grows with the top level's
 degree, not N: 2.6–2.9 s on W1 at kD = 500, 16–19 s at kD = 1000, where the RCR tables of level 2
-(p = 225–248) are 9.2–12.9 s and the build 40–67 % of build plus one evaluation (CH4.4a §7). The
+(p = 226–249 under the default; amended at H4.G) are 9.2–12.9 s and the build 40–67 % of build plus
+one evaluation (CH4.4a §7), at 4 ranks × 10 threads; at one rank × 40 threads the build is
+12.7–14.3 s, of which the octree, the routes and the plan take about 69 % (CH4.5 §5; CH4.0k). The
 diagonal form cut the evaluation to 0.37× the previous defaults' on W1 at kD = 1000 and
 0.47–0.74× at kD = 500 (CH4.3b2c), within CH4.0e's bound; at matched accuracy the FMM takes
 0.13–0.18× FMM3D's call for N ≥ 10⁶ on one node (CH4.5).
@@ -1522,8 +1529,13 @@ beside the all-target ℓ2 error. A gate checks it against a bound: the worst bo
 100 ε (amended at CH4.0b) within D1's range, kD ≤ 500; beyond it (W1 at kD = 1000 in H4's
 sweep) the worst box is reported, not gated (amended at CH4.4b: at a tangent point of W1 every
 level's truncation peaks at once, and the tree has a level more each time kD doubles; 114.7 ε
-with the plane wave's trace at kD = 1000 and 10⁻⁸, at most 68.2 ε within D1;
-tetraleaf-validate/results/helmholtz-ch4-4b.md §5). ε stays the relative ℓ2 tolerance, on which
+with the plane wave's trace at kD = 1000 and 10⁻⁸ under CH4.3c3's rule,
+tetraleaf-validate/results/helmholtz-ch4-4b.md §5; amended at H4.G: within D1 under the default at
+most 76.3 ε, W2 with the constant density at kD = 500 and 10⁻⁷, on both machine classes' trees,
+tetraleaf-validate/results/helmholtz-ch4-8b.md §1 and docs/helmholtz/gates/H4.md §0.3; each the
+largest at the reference's targets, a sample maximum). ε is relative to ‖φ_ref‖, so a field that
+cancels at the targets (W1's constant density near kD = 2πn, where the single layer vanishes on the
+sphere) raises φ's relative error; ∇φ is the safer measure there. ε stays the relative ℓ2 tolerance, on which
 the degree rule is calibrated; pointwise the errors reach 10–60 ε near box corners, where the
 truncation is largest (tetraleaf-validate/results/helmholtz-ch4-0b.md), and a worst box above
 100 ε within D1 is a finding as an ℓ2 miss is. CH4.4's "no error concentrated at a class
@@ -2068,6 +2080,13 @@ these.
   rule's high-frequency branch with one degree of margin after its cap (`DegreeRule::margin`;
   CH4.3c3's rule kept as `DegreeRule::CH4_3C3`), the plateau unchanged, for W2's constant density;
   the example table's calibrated degrees on levels 2–6 and the top level at kD = 100 and 500.
+- **Amended at H4.G, 2026-11-25** (the gate's second run, `docs/helmholtz/gates/H4.md` §0.5,
+  corrections R7–R9; review `docs/reviews/2026-11-25-H4.md`, M20–M23 and B17; the user on #262,
+  "Accept all (Recommended)"): Section 9.1, the worst box within D1 under the default (76.3 ε, a sample
+  maximum, on both machine classes' trees) and ε relative to ‖φ_ref‖; Section 3.5, the rule verified
+  for D1's tree depths, its missing level-count term and `h2` the recorded fallback; Section 7, "H4
+  measurements", level 2's degrees under the default and the build at kD = 1000 at one rank × 40
+  threads.
 
 ## Appendix B. The stability check behind Section 3.6
 

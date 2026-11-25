@@ -29,7 +29,7 @@ import statistics
 import sys
 from pathlib import Path
 
-CONST = re.compile(r"^(?P<stage>const|before)-(?P<case>w[0-9](?:-n[0-9]+)?-kd[0-9]+)-constant-(?P<eps>1e-[0-9])$")
+CONST = re.compile(r"^(?P<stage>const|before)-(?P<case>w[0-9](?:-[a-z]+)?(?:-n[0-9]+)?-kd[0-9]+)-constant-(?P<eps>1e-[0-9])$")
 RANDOM = re.compile(r"^random-(?P<case>w[0-9](?:-n[0-9]+)?-kd[0-9]+(?:-planewave)?)$")
 COST = re.compile(r"^cost-(?P<case>w[0-9](?:-n[0-9]+)?-kd[0-9]+)-(?P<eps>1e-[0-9])-(?P<i>[0-9])-(?P<rule>default|ch4-3c3)$")
 
@@ -89,8 +89,8 @@ def ratios(values, eps, bound):
 
 
 def case_key(case):
-    m = re.match(r"w([0-9])(?:-n([0-9]+))?-kd([0-9]+)(-planewave)?", case)
-    return (int(m[1]), int(m[2] or 0), int(m[3]), m[4] or "")
+    m = re.match(r"w([0-9])(?:-([a-z]+))?(?:-n([0-9]+))?-kd([0-9]+)(-planewave)?", case)
+    return (int(m[1]), m[2] or "", int(m[3] or 0), int(m[4]), m[5] or "")
 
 
 def const(out):
@@ -224,6 +224,7 @@ def selftest():
         assert rows == {"1e-3": ("0×2, 12", 0.015, 0.010, 1.30e-5, 2.26e-5, 0.02)}, rows
         assert build == {"1e-3": (0.0153, 0.0104, 0.0110)}, build
         assert CONST.match("before-w3-n1000000-kd500-constant-1e-8")
+        assert CONST.match("const-w4-plummer-n100000-kd30-constant-1e-6")  # the H4 gate's W4 run
         assert RANDOM.match("random-w1-kd1000-planewave")
         assert COST.match("cost-w3-n1000000-kd500-1e-6-4-ch4-3c3")
     print("selftest: ok")

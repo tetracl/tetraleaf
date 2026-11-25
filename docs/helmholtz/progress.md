@@ -4731,3 +4731,48 @@ request, using this template:
   side and class mapping need a rerun under the default).
 - Laplace: not touched (Helmholtz's degree rule, the harness, scripts, documents).
 - Follow-ups: H4.G again (`/milestone-gate H4`), the priority list's item 11.
+
+## 2026-11-25: H4.G Gate (second run; H4 closed)
+- Done:
+  - `/milestone-gate H4` on `main` at 03bc2bd (#262), after CH4.8 (#260, #261). The report's new
+    §0 in `docs/helmholtz/gates/H4.md` (the first run's §1–§9 kept):
+    - the gate condition met: CH4.8b's default holds W1–W3 with the constant density at
+      kD = 10–500 within 0.67 ε and 76.3 ε at all six ε; the random charges within 0.28 ε;
+    - CH4.8b's question 3 answered: no rerun of CH4.4's FMM3D side or CH4.4b's mapping (the
+      default raises degrees by one at most; CH4.5 within the default's 1.01–1.02×; CH9.1
+      re-measures);
+    - CI on `main` green since the first run; #261's merge started no push run (GitHub's 502s),
+      its tree identical to its PR head 05ab800, whose seven jobs passed (run 45651928891);
+    - the spikes: `cargo check --all-targets` from `spikes/` at 03bc2bd, no warning;
+    - corrections R7–R11, recommendations, a retrospective.
+  - The project review, `docs/reviews/2026-11-25-H4.md`: two read-only passes on Fable at medium
+    effort over 03bc2bd. Checked by the driver: M18–M21, A11, A12, B17, C10, P12, K2, U7. New
+    findings M18–M23, A11–A13, B16–B18, C10, C11, P12, P13, K9, K10, U7; the status of every
+    earlier finding (M5, M15, K8 resolved).
+  - The gate's runs (M18, M19), CH4.8b's `const` stage with `CONST` set, accuracy only:
+    - locust under its defaults (NEON, 128 points per leaf at ε ≥ 10⁻⁷), CH4.8b's W1–W3 matrix:
+      96 launches, ℓ2 ≤ 0.68 ε, worst box ≤ 76.3 ε, no miss; 35 points on a tree one level deeper
+      than Kathleen's, at most +0.09 ε and +8.3 ε;
+    - W4's four distributions with the constant density at N = 10⁵, kD = 10, 30, 100, six ε, on
+      locust (ℓ2 ≤ 0.33 ε, worst box ≤ 7.0 ε) and Kathleen job 672715 (node-c11a-137; ≤ 0.12 ε,
+      ≤ 4.0 ε); 72 launches each, no miss.
+    - Raw outputs in `~/projects/fmm-archive/{locust,kathleen}/runs/h4-gate2/`.
+  - `tools/helmholtz/ch4-8b-tables.py` reads W4's case names (its selftest extended).
+  - Roadmap: H4.G ticked, CH4.8a–b and H4.G condensed (in full at 03bc2bd); the status line (R11);
+    CH4.5's line under CH4.3c3's rule (R10); the review's Alsos on CH2.3, CH5.2, CH9.1, CH4.7,
+    CHA.4, CHA.5 and CHA.10; CHA.10a and CHA.14 added; the priority list: CHA.10a (item 12), the
+    FFT track (13), H2 (14), H5 (15).
+  - Proposal (draft 0.8 kept): §9.1 (R7), §3.5 (R8) and §7 (R9), with their Appendix A line.
+- Tests: none (documents and a tables script).
+- Checks: none of cargo's on the product (no Rust or manifest change); `ch4-8b-tables.py
+  selftest`; `tools/roadmap/sync_issues.py --check` reads the roadmap (H4's issue #145 to close).
+- Decisions: the gate's questions 1–4 signed off by the user in the session, 2026-11-25, as
+  recommended: "Close H4 now (Recommended)"; "Accept all (Recommended)" for the corrections and the
+  triage; "CHA.10a, then FFT, H2, H5 (Recommended)" for the list.
+- Laplace: not touched (documents and a script).
+- Follow-ups:
+  - CHA.10a (item 12), then the FFT track.
+  - The retrospective's changes to `/next-task`, for the user (`.claude/skills/`): an accuracy bound
+    "under the defaults" verified on x86's and NEON's default trees; every bound's acceptance names
+    its densities, workloads (W2) and the box measure; `tools/kathleen/README.md` on submit.sh's
+    options, one argument each.
