@@ -117,7 +117,30 @@ about 1–2, `cost` about 2 per machine. Jobs of at most 6 h.
   CH4.8a measured 1.017× (geometric mean). Memory grows with (p + 1)² on the high-frequency levels.
 
 ## Pending runs
-(filled when submitted)
+None. Kathleen, `singlenode`, 1 × 40, `--exclude=node-c11b-004,node-c11b-013`, every launch exit 0:
+672698 (`smoke`, node-c11a-094), 672699 (`const before` on W1 and W2, node-c11a-094), 672700
+(`const before` on W3, node-c11b-022), 672701 (`random`, node-c11a-057), 672702 (`cost`,
+node-c11a-094); locust 1 × 72, quiet before the run, `cost` (72 launches). Outputs in
+`~/projects/fmm-archive/kathleen/runs/ch4-8b/`, `…/kathleen/runs/ch4-8b-cost/` and
+`…/locust/runs/ch4-8b-cost/`.
+
+## Results
+Report `tetraleaf-validate/results/helmholtz-ch4-8b.md`. Under the default (CH4.3c3's rule + 1
+after the cap) the constant density on W1–W3 at kD = 10–500 (W2 also at 175 and 375) holds at all six
+ε: ℓ2 ≤ 0.67 ε, worst box ≤ 76.3 ε (108 points); CH4.3c3's rule misses at 12 of them, all W2's, two
+of them new (kD = 175 at 10⁻⁴, 375 at 10⁻⁵). CH4.4a's random charges within 0.28 ε at all six ε.
+Cost, A B B A, one setting per launch: build plus evaluation 0.983–1.048× on Kathleen (geometric
+mean 1.020), 0.999–1.020× on locust (1.011); resident growth 0.88–1.12× and 1.00–1.08×.
+
+## Checks run
+On the M6: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets -- -D warnings`
+(covers the default members and the examples); `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps`;
+`cargo test --workspace` at opt-level 1 (1,439 passed, 0 failed, 110 ignored; the default members
+are a subset), `cargo test -p tetraleaf-exec` at opt-level 1 (doc tests included); the MPI list
+(`.github/scripts/run-mpi-tests.sh`) at 2 and 4 ranks at opt-level 1, every executable and example
+passed (`helmholtz_fmm` 61.5 and 49.8 s). `bash -n` and ShellCheck on the runs script and a dry run of
+every stage (306 launches); `py_compile` and `selftest` of the tables script. Not run: `cargo deny`
+(no manifest change), Laplace's benchmarks (no Laplace path), the kernels' checks (no kernel change).
 
 ## Open questions
-None yet.
+The report's §4, questions 1–3, for sign-off.
