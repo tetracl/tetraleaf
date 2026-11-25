@@ -7,17 +7,17 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/tasks/<ID>.md`; each milestone's gate report is
 `docs/helmholtz/gates/<milestone>.md`.
 
-Status (2026-11-25): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
-`gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). **H4's gate ran and H4 stays open**
-(`gates/H4.md`, review `docs/reviews/2026-11-24-H4.md`) for W2 with the constant density. CH4.8 is
-done: CH4.8a chose `h1`; CH4.8b (signed off on #261) made it the default (the
-high-frequency branch one degree after the cap, §3.5 amended), with W1–W3's constant density at kD =
-10–500 within 0.67 ε and 76.3 ε at all six ε and the random charges within 0.28 ε, at 1.01–1.02× the
-time. Next H4.G again, then the FFT track (item 12), H2 and H5 (items 13–14). The project was
-renamed tetraleaf on 2026-11-21. HR, H0 and H2 are still open; of H0, CH0.4 and CH0.6 are done, and
-of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's history
-(`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show
-8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show 4d28d41:docs/helmholtz/roadmap.md`.
+Status (2026-11-25): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
+`gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). H4 closed at its
+gate's second run (#262, review `docs/reviews/2026-11-25-H4.md`), after CH4.8 made one degree after
+the cap the default: the kD sweep and the comparison with FMM3D hold on both machine classes' trees,
+with the random charges and the constant density on W1–W4 (ℓ2 ≤ 0.68 ε, worst box ≤ 76.3 ε within
+D1). Eight H4 tasks stay open off the list. Next CHA.10a (item 12), then the FFT track (item 13), H2
+and H5 (items 14–15). The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9
+are open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c. The history of this line until H6.G
+is in `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until
+H1.G in `git show 8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show
+4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -73,7 +73,9 @@ Amended on 2026-11-24 at the H4 gate (`docs/helmholtz/gates/H4.md` §7, question
 #258: "FFT, then H2 and H5 (Recommended)"): after the FFT track the Helmholtz family on the host,
 H2 then H5; CHA.7a before H8; CH4.7, CH4.3f and CH4.0k stay off the list. Amended on the same day
 by the gate's run (`gates/H4.md` §9; the user: "Keep H4 open, CH4.8 (Recommended)"): CH4.8 and
-H4.G as item 11, before the FFT track.
+H4.G as item 11, before the FFT track. Amended on 2026-11-25 at the H4 gate's second run
+(`gates/H4.md` §0.8, question 4; the user on #262: "CHA.10a, then FFT, H2, H5 (Recommended)"):
+CHA.10a as item 12, before the FFT track.
 
 1. CH4.0 The M2L rule's sparse-level term
 2. CH4.0b The worst-box concentration
@@ -98,11 +100,12 @@ H4.G as item 11, before the FFT track.
     measures the product conversions against RCR and stops to ask before CH4.2 whether item 11
     moves ahead: review 2026-11-19, A5)
 11. CH4.8 The constant density on W2 (CH4.8a, CH4.8b; split on 2026-11-24), then H4.G again
-    (added on 2026-11-24 at the H4 gate)
-12. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
-13. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
+    (added on 2026-11-24 at the H4 gate; H4.G closed on 2026-11-25)
+12. CHA.10a The report scripts' shared module (added on 2026-11-25 at the H4 gate's second run)
+13. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
+14. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
     CH2.1 and CH2.2 wait for D4, which CH2.1 prepares)
-14. CH5.1, CH5.2, CH5.3 and H5.G Complex wavenumber (added on 2026-11-24 at the H4 gate)
+15. CH5.1, CH5.2, CH5.3 and H5.G Complex wavenumber (added on 2026-11-24 at the H4 gate)
 
 Off the list, in file order: CH0.8b, CH0.5 and H0.G; CH4.0f (the user, 2026-11-12, on #211);
 CH4.7 (added at CH4.5, its question 4; the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."); CH4.3f (added at CH4.3b2c, off the list until CH4.5, kept off at CH4.5, its question 3, by the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."; the user on #251, 2026-11-22: "Q1-5 as recommended"); CH4.2d (added at CH4.2b2, off the list until CH4.5, kept off at CH4.5, its question 2, by the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."; the user on #239, 2026-11-20: "All 4 questions as recommended.");
@@ -110,8 +113,8 @@ CH4.0k (added at CH4.0h; the user, 2026-11-16, on #221: off the list; kept off a
 #223); CH4.0l (added at CH4.0i;
 the user, 2026-11-16, on #222: off the list);
 CH4.0g (after CH4.0d1, through its *Needs*); HR.G; H7 (CH7.5d now has D8 and waits for CH7.1; CH7.5f before CH7.5e), H8, H9 (CH9.1,
-after every other milestone; CH9.0, the dipoles, added at the H1 gate); CHA.4 to CHA.10, CHA.12 and
-CHA.13 (CHA.7 before CH8.1, through its *Needs*, its first letter CHA.7a before H8 by the H4
+after every other milestone; CH9.0, the dipoles, added at the H1 gate); CHA.4 to CHA.10, CHA.12,
+CHA.13 and CHA.14 (CHA.7 before CH8.1, through its *Needs*, its first letter CHA.7a before H8 by the H4
 gate; CHA.6 recommended before CH7.5d).
 
 ## Decisions
@@ -332,7 +335,11 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   |t| = 3w), round-off relative to its input; θ_D prunes such pairs. Also (review 2026-11-19,
   M13): the two f64 limits, RCR's M2M and L2L overflowing once p log₁₀(1/s) ≳ 300 and the
   (S|R) start column near p_src + p_tgt ≈ 175 at s < 1, refused by the builder (deep trees at
-  κD = 10⁻²) and stated in §3.15's "Precision and range" at its next revision. *Needs:* CH2.1,
+  κD = 10⁻²) and stated in §3.15's "Precision and range" at its next revision. Also (the H4 gate's second run, the user on #262, 2026-11-25: "Accept all (Recommended)"; review 2026-11-25, A12 and M18): the FMM checked
+  with the constant density beside the random charges, on W2 beside W1, W3 and W4, at all six ε of D1, with the
+  box measure beside ℓ2; and the constant density on a tree with more plateau levels than W1–W4 have
+  (a cap or surface refined 100×, or 30–40 points per wavelength), where the plateau's levels may
+  stack as W2's cap stacked on the high-frequency branch (CH4.8a). *Needs:* CH2.1,
   CH0.7.
 - [ ] **CH2.5 Gate: Yukawa against FMM3D.** *Done when:* both codes against the same sampled
   direct sum over κD on W1 and W3, and the full-target crosscheck. CH1.4's R12 found FMM3D
@@ -479,7 +486,8 @@ task's full line is in its record or report and its progress entry
 
 **Gate:** CH4.4 and CH4.5, the kD sweep and host performance against FMM3D.
 
-The done lines are condensed at the H4 gate (2026-11-24); in full in `git show 4d28d41:docs/helmholtz/roadmap.md`.
+The done lines are condensed at the H4 gate (2026-11-24); in full in `git show 4d28d41:docs/helmholtz/roadmap.md`;
+CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `git show 03bc2bd:docs/helmholtz/roadmap.md`.
 
 - [x] **CH4.0 The M2L rule's sparse-level term.** `Auto` batches a level by m̂ from the global
   tree; dense budget 8 GiB per node; CH3.2d's sweeps within 1.049 of the best. Report `tetraleaf-validate/results/helmholtz-ch4-0.md`.
@@ -638,7 +646,8 @@ The done lines are condensed at the H4 gate (2026-11-24); in full in `git show 4
 - [x] **CH4.4b The crosscheck mapped to levels and classes.** No error at a class boundary; the
   100 ε bound gated within D1. Report `tetraleaf-validate/results/helmholtz-ch4-4b.md`. Signed off on #256: §9.1 amended.
 - [x] **CH4.5 Host performance against FMM3D at matched accuracy.** 0.13–0.18× FMM3D's call for
-  N ≥ 10⁶ at the best split, its faster variant (`default` alone on the plane wave at kD = 500 and
+  N ≥ 10⁶ at the best split, at matched accuracy under CH4.3c3's rule (the default 1.01–1.02× its
+  cost, CH4.8b §3; R10 of the H4 gate's second run), its faster variant (`default` alone on the plane wave at kD = 500 and
   the eight constant-density cases, CH4.4a's runs; review 2026-11-24, B11). Report `tetraleaf-validate/results/helmholtz-ch4-5.md`.
   Signed off on #257 (2026-11-24): CH4.2d, CH4.3f off the list, CH4.7 added.
 - [ ] **CH4.7 The form choice prices the tables' build for small trees.** (Added at CH4.5, its
@@ -651,26 +660,28 @@ The done lines are condensed at the H4 gate (2026-11-24); in full in `git show 4
   weighed beside c_leaf (the width cap only on boxes above a point count, the P2P phase contract
   the hard cap), since c_leaf 4's gain is the under-resolved W3's alone (CH4.3e: 0.995 and 1.000
   without it); the time rule's choices scored per level on cases outside its fit (W2; the M6
-  with the user's go-ahead). *Needs:* CH4.5. *Machines:* Kathleen, locust.
+  with the user's go-ahead). Also (the H4 gate's second run, the user on #262, 2026-11-25: "Accept all (Recommended)"; review 2026-11-25, A11): 128 against 256 points per
+  leaf on NEON after H4 (CH4.0d3 chose 128 at ε ≥ 10⁻⁷ for the evaluation alone; at 1 × 72 W1 at
+  kD = 1000 builds in 13.4–14.0 s at 128 against 7.6 s at 256, CH4.5 §5): W1 and W2 at kD = 250–1000
+  on locust at 1 × 72 and 4 × 18, the build and the evaluation apart. *Needs:* CH4.5. *Machines:* Kathleen, locust.
 - [ ] **CH4.6 The optional FFTW back end of the φ step.** *Done when:* against the product to
   round-off; per-box plans with bits the same across batch positions, sizes and threads, and
   fingerprints all-gathered; off by default, a default build linking no FFTW, cargo-deny, a CI
   job with the feature; the GPL warning in the crate documentation, the README, the builder
   option and `Cargo.toml`. *Needs:* CH4.1b, CHR.3, CH0.9, D7.
 - [x] **CH4.8a The constant density on W2: the error mapped and a remedy chosen.** The degree rule's
-  truncation on W2's deep tree against the z = 0 face (the M2L adds nothing); W3 with the constant
-  density holds; W2 misses at 10⁻⁴ and 10⁻⁷ too; `h1`, the high-frequency branch one degree higher,
-  puts W2 within 0.48 ε and 76.3 ε at all six ε, at 1.017× the default's time (geometric mean). Report `tetraleaf-validate/results/helmholtz-ch4-8a.md`.
-  Added at the H4 gate (M15), split at its start into CH4.8a and CH4.8b. Signed off on #260 (2026-11-24):
-  `h1` the remedy, the plateau unchanged.
-- [x] **CH4.8b The constant density on W2: the remedy as the default.** `DegreeRule::margin`, the
-  default CH4.3c3's rule + 1 after the cap (§3.5 amended); W1–W3's constant density at kD = 10–500
-  within 0.67 ε and 76.3 ε at all six ε (CH4.3c3's rule missed at 12 W2 points), the random charges
-  within 0.28 ε; 1.020× (Kathleen) and 1.011× (locust) the time. Report `tetraleaf-validate/results/helmholtz-ch4-8b.md`.
-  Signed off on #261 (2026-11-25, "Accept 1-3 as recommended"): the margin the default, H4.G next.
-- [ ] **H4.G Gate.** `/milestone-gate H4`. *Needs:* CH4.0–CH4.5 and CH4.8 (CH4.8a, CH4.8b; corrected at the gate,
-  R1). Ran on 2026-11-24 (`docs/helmholtz/gates/H4.md`, #258): the condition on the random charges
-  met, H4 kept open for CH4.8 (the user, 2026-11-24: "Keep H4 open, CH4.8 (Recommended)").
+  truncation on W2's deep tree against a face; `h1` (one degree after the cap) chosen. Report
+  `tetraleaf-validate/results/helmholtz-ch4-8a.md`. Added at the H4 gate (M15). Signed off on #260 (2026-11-24).
+- [x] **CH4.8b The constant density on W2: the remedy as the default.** `DegreeRule::margin` the default
+  (§3.5 amended); W1–W3's constant density within 0.67 ε and 76.3 ε at all six ε, 1.01–1.02× the time.
+  Report `tetraleaf-validate/results/helmholtz-ch4-8b.md`. Signed off on #261 (2026-11-25).
+- [x] **H4.G Gate.** `/milestone-gate H4`. Report `docs/helmholtz/gates/H4.md`, reviews
+  `docs/reviews/2026-11-24-H4.md` and `docs/reviews/2026-11-25-H4.md`. The first run (#258, 2026-11-24)
+  kept H4 open for CH4.8; the second (#262, 2026-11-25) found the condition met on both machine
+  classes' trees and on W1–W4 with the constant density (locust and Kathleen job 672715). Signed off on
+  #262 (the user, 2026-11-25: "Close H4 now (Recommended)", corrections R7–R11 and the triage "Accept
+  all (Recommended)", the list "CHA.10a, then FFT, H2, H5 (Recommended)"). Closed with CH4.0f, CH4.0g,
+  CH4.0k, CH4.0l, CH4.2d, CH4.3f, CH4.6 and CH4.7 open (the first run's R1, the user, 2026-11-24).
 
 ## H5: Complex wavenumber
 
@@ -684,7 +695,9 @@ The done lines are condensed at the H4 gate (2026-11-24); in full in `git show 4
   confirmed in the FMM on damped W1. *Needs:*
   CH2.3, CH4.3.
 - [ ] **CH5.2 Damping-dependent truncation and bound.** *Done when:* the error within target
-  for weakly damped cases. *Needs:* CH5.1, CH0.6.
+  for weakly damped cases. Also (the H4 gate's second run, the user on #262, 2026-11-25: "Accept all (Recommended)"; review 2026-11-25, A12): checked with the
+  constant density beside the random charges, on W2, at all six ε of D1, with the box measure beside
+  ℓ2. *Needs:* CH5.1, CH0.6.
 - [ ] **CH5.3 Gate: complex k against FMM3D.** *Done when:* both codes against the same
   sampled direct sum over the (Re kD, Im kD) grid, and the full-target crosscheck. The
   comparison with FMM3D is limited for Im kD ≳ 50 as in CH2.5 (CH1.4 report §5,
@@ -906,7 +919,11 @@ The done lines are condensed at the H4 gate (2026-11-24); in full in `git show 4
   closest (B13); W1 with the constant density at kD = 350 and 700, three ε, off the degree
   rule's calibration octaves (M16); Laplace at f64 p = 8 and 12 under its defaults (PlaneWave)
   beside `lfmm3d`, with a sphere's surface and a constant density beside the random charges
-  (B14, B15). *Needs:* H4.G, H5.G,
+  (B14, B15). Also (the H4 gate's second run, the user on #262, 2026-11-25: "Accept all (Recommended)"; review 2026-11-25): W2 with the constant density at kD = 750 and
+  1000 with the box measure, where the worst box's growth with kD (29–76 ε from kD = 175 to 500)
+  may pass 100 ε (M21); W1 with the constant density at kD = 100.53 and 502.65, near the single
+  layer's zeros kD = 2πn (M22); CH4.5's comparison and CH4.4b's mapping by level and class under
+  the default, which CH4.8b raised by one degree after the cap (B16; the gate's §0.4). *Needs:* H4.G, H5.G,
   H6.G, H7.G, H8.G, CH9.0. *Machines:* locust, Kathleen, the M6.
 - [ ] **H9.G Gate.** `/milestone-gate H9`. *Needs:* every task above.
 
@@ -948,7 +965,12 @@ item is removed only where the task names it.
   where that is all it needs. *Done when:* the copies of the generator (41 at the first review,
   52 files at the second, review 2026-11-19) and the copies of
   `relative_l2` (eleven), `plummer` and `cube` replaced where the draws stay the same (checked per
-  file by the tests' own fixed values); `workspace-structure.md` has the crate.
+  file by the tests' own fixed values); `workspace-structure.md` has the crate. Also (the H4 gate's second run, the user on #262, 2026-11-25: "Accept all (Recommended)"; review 2026-11-25,
+  K9, T1): the device examples' shared helpers (`time` and `warm_up`, byte-identical in three and four
+  of `m2l_kernels.rs`, `rotation_kernels.rs`, `gemm_variants.rs`, `translation_kernels.rs`; the spike
+  reference constants; `relative_l2`) in one `gpu`-gated module of tetraleaf-validate; the MPI tests'
+  `union`, `share` and `union_points` (`mpi_exec.rs`, `helmholtz_fmm.rs`, `multi_rank.rs`,
+  `device_ranks.rs`) in one place.
 - [ ] **CHA.5 The Helmholtz builder's measurement settings apart.** Review P2, P5. *Done
   when:* `HelmholtzFmmBuilder` shows the user's settings; the measurement settings
   (`plane_wave_split`, `auto_plane_wave`, `m2l_plane_wave_min_degree`, `m2l_max_degree`,
@@ -968,7 +990,10 @@ item is removed only where the task names it.
   without it, `VRaisedPrice::PerPair` removed, `TransferBuild::Direct` kept as the interpolated
   build's oracle and documented so; `VNear`'s and `WxNear`'s `#[default]` moved to `CostModel`,
   the builder's; one Helmholtz settings parser in `tetraleaf-validate/src` for
-  `helmholtz_accuracy`, `helmholtz_boxes` and `helmholtz_fmm3d`. *Sign-off:* the settings
+  `helmholtz_accuracy`, `helmholtz_boxes` and `helmholtz_fmm3d`. Also (the H4 gate's second run, the user on #262, 2026-11-25: "Accept all (Recommended)"; review 2026-11-25, P12): the
+  superseded degree rules (`DegreeRule::CH3_3`, `CH4_3C2`, `CH4_3C3`), used by no library path of
+  tetraleaf-exec, and one rule-name parse (now copied in three examples) moved to
+  `tetraleaf_validate::helmholtz_calibration`; exec keeps `CALIBRATED` and `gd`. *Sign-off:* the settings
   removed.
 - [ ] **CHA.6 One plane-wave M2L traversal.** Review L2. The slot table, the parent runs
   and the split by child of `operator_plane_wave.rs` and
@@ -1037,7 +1062,22 @@ item is removed only where the task names it.
   housekeeping (69 scripts and 12,232 lines, fourteen `*-tables.py` defining `cells`); `mpi`'s
   `complex` feature in `tetraleaf-plan/Cargo.toml` dropped if nothing needs it; the crate
   descriptions naming Helmholtz; `tetraleaf-validate/Cargo.toml`'s `[[example]]` list complete
-  (ten examples are auto-discovered).
+  (ten examples are auto-discovered). Also (the H4 gate's second run, the user on #262, 2026-11-25: "Accept all (Recommended)"; review 2026-11-25, C11, P13, U7, K7): `common.py` split off
+  as CHA.10a; in tetraleaf-octree the empty `types` module, the `battleship` feature and the
+  unreferenced `_test_sphere.vtk` removed, `tools` (a test key generator, the library's only use of
+  `rand` and `rand_chacha`) behind `cfg(test)` or a feature; `Plan`'s constructors cut to `new`,
+  `with_rules`, `with_rules_on` and `from_key_types_with_rules` (beside CHA.5's fold);
+  `run-dependency-checks.yml` given a `timeout-minutes`, `submodules: "true"` dropped from it and
+  `run-examples.yml` (no `.gitmodules`), `run-examples.yml` installing through `apt-install.sh`.
+- [ ] **CHA.10a The report scripts' shared module.** Added at the H4 gate's second run (the user on
+  #262, 2026-11-25: "CHA.10a, then FFT, H2, H5 (Recommended)"; review 2026-11-25, K2, asked for at
+  the H1 gate and the first H4 run). `tools/helmholtz/common.py`: the cell formatting (`cells`, in
+  fifteen `*-tables.py`), the parsers of the harness examples' Markdown outputs (`helmholtz_boxes`,
+  `helmholtz_accuracy`, `helmholtz_fmm3d compare`) and the geometric means, with a `selftest`; the
+  old scripts left as they are (their reports' reproduction lines stay valid). *Done when:* the
+  module exists with its selftest, one recent script (`ch4-8b-tables.py`) uses it with byte-identical
+  output, and `/next-task`'s planning says a new report script imports it. Python standard library
+  only. *Needs:* none.
 - [x] **CHA.11 The Helmholtz wave levels in one place.** Review 2026-11-19, L1. Record:
   `docs/helmholtz/tasks/CHA.11.md`. `operator::wave_levels` chooses the levels with waves for
   `select_tables` and `HelmholtzFmmBuilder::build`; the restatement, its assert and the second
@@ -1058,3 +1098,13 @@ item is removed only where the task names it.
   `helmholtz/` with one `MachineClass::of(isa)`, moved, not changed; Laplace's `CALIBRATIONS`
   (`cost.rs`) named beside it. *Done when:* every output bit for bit on both architectures (CI's
   x86_64 and arm64 jobs and the MPI list); Laplace untouched.
+- [ ] **CHA.14 The octree's neighbour map built on first use.** Added at the H4 gate's second run
+  (the user on #262, 2026-11-25: "Accept all (Recommended)"; review 2026-11-25, C10).
+  `Octree::new` and `repartition` (`tetraleaf-octree/src/octree.rs:629`, `:797`) build
+  `compute_neighbours`' `HashMap<MortonKey, Vec<MortonKey>>` (up to 26 keys per key), which no
+  product crate reads (tetraleaf-plan builds its lists from `all_keys()`). First measure its time and
+  memory at N = 10⁶ and 10⁸ (Kathleen, the octree's build by part); if it pays, build it on the first
+  `neighbour_map()` call (`OnceLock`) or behind an option the FMM leaves off. *Done when:* the
+  measurement reported; if changed, Laplace's and Helmholtz's outputs bit for bit on host and P ranks
+  (constraint 1) and the octree's examples and tests unchanged in what they check. *Needs:* none.
+  *Machines:* Kathleen.
