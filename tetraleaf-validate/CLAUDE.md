@@ -759,6 +759,16 @@ and to `errors` a failed run as a row and the columns "tree s" and "memory GB".
 `bind`), `ch4-5-tables.py` makes the matches (closest and one-sided), the eps lists and the
 report's tables. Its report is `results/helmholtz-ch4-5.md`.
 
+Helmholtz CH4.8a (the constant density on W2, mapped; docs/helmholtz/tasks/CH4.8a.md) changed no
+harness code: `tools/helmholtz/ch4-8a-runs.sh` runs `helmholtz_boxes` under the defaults and
+candidate rules (`--rule γ,…`), `ch4-8a-tables.py` makes the report's tables. Its report is
+`results/helmholtz-ch4-8a.md`. Helmholtz CH4.8b (its remedy the default;
+docs/helmholtz/tasks/CH4.8b.md) added `--rule ch4-3c3` (`DegreeRule::CH4_3C3`, the default before
+CH4.8b's margin) to `helmholtz_accuracy` and `helmholtz_boxes` (whose `--rule γ,…` takes a ninth
+constant, the margin, 0 unless named) and `--rule calibrated|ch4-3c3` to `helmholtz_fmm3d compare`
+(`Case::degree_rule`, named in the header). `tools/helmholtz/ch4-8b-runs.sh` runs the task's
+stages, `ch4-8b-tables.py` makes the report's tables. Its report is `results/helmholtz-ch4-8b.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

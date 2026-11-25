@@ -6,7 +6,7 @@
 //!     [--study single|levels|m2l|levels,m2l] [--class-runs] [--refine n] [--raise-by d,…]
 //!     [--raise-levels l,…] [--margin m] [--offset x,y,z] [--leaf-size n] [--raise-factor f]
 //!     [--worst n] [--per-box s] [--full-max n]
-//!     [--rule calibrated|ch3-3|ch4-3c2|γ,α,β,C,a,b,d[,cap]] [--threads t]
+//!     [--rule calibrated|ch3-3|ch4-3c2|ch4-3c3|γ,α,β,C,a,b,d[,cap[,margin]]] [--threads t]
 //! ```
 //!
 //! Helmholtz CH4.4b (the crosscheck mapped to levels and classes): `--m2l defaults` runs
@@ -35,8 +35,10 @@
 //! `--rule ch3-3` (Helmholtz CH4.3c2) runs CH3.3's degree rule (`DegreeRule::CH3_3`) in place
 //! of the library's default under the same tolerance, for the errors before the refit;
 //! `--rule ch4-3c2` (Helmholtz CH4.3c3) CH4.3c2's rule (`DegreeRule::CH4_3C2`), the default
-//! before CH4.3c3's refit;
-//! `--rule γ,α,β,C,a,b,d[,cap]` a `DegreeRule` of those constants (the refit's offset varied).
+//! before CH4.3c3's refit; `--rule ch4-3c3` (Helmholtz CH4.8b) CH4.3c3's rule
+//! (`DegreeRule::CH4_3C3`), the default before CH4.8b's margin;
+//! `--rule γ,α,β,C,a,b,d[,cap[,margin]]` a `DegreeRule` of those constants (the refit's offset
+//! varied; margin 0 unless named, so that CH4.8a's named rules repeat).
 //!
 //! One case on one rank, against the direct sum (`tetraleaf_validate::helmholtz_boxes`): at
 //! every point when N ≤ `--full-max` (default 200,000), else at §9.1's samples plus
@@ -190,7 +192,7 @@ fn arguments() -> Arguments {
              [--reference-cache dir] [--margin m] \
              [--offset x,y,z] [--leaf-size n|uniform] [--raise-factor f] [--worst n] \
              [--per-box s] [--full-max n] \
-             [--rule calibrated|ch3-3|ch4-3c2|γ,α,β,C,a,b,d[,cap]] [--threads t]; got {args:?}"
+             [--rule calibrated|ch3-3|ch4-3c2|ch4-3c3|γ,α,β,C,a,b,d[,cap[,margin]]] [--threads t]; got {args:?}"
         );
         std::process::exit(2);
     };
@@ -351,6 +353,7 @@ fn arguments() -> Arguments {
                 "calibrated" => Some(None),
                 "ch3-3" => Some(Some(DegreeRule::CH3_3)),
                 "ch4-3c2" => Some(Some(DegreeRule::CH4_3C2)),
+                "ch4-3c3" => Some(Some(DegreeRule::CH4_3C3)),
                 constants => match constants
                     .split(',')
                     .map(|v| v.parse::<f64>().ok())
@@ -366,6 +369,7 @@ fn arguments() -> Arguments {
                         b,
                         d,
                         cap: None,
+                        margin: 0,
                     })),
                     Some(&[gamma, alpha, beta, c, a, b, d, cap]) => Some(Some(DegreeRule {
                         gamma,
@@ -376,7 +380,23 @@ fn arguments() -> Arguments {
                         b,
                         d,
                         cap: Some(cap),
+                        margin: 0,
                     })),
+                    Some(&[gamma, alpha, beta, c, a, b, d, cap, margin])
+                        if margin >= 0.0 && margin.fract() == 0.0 =>
+                    {
+                        Some(Some(DegreeRule {
+                            gamma,
+                            alpha,
+                            beta,
+                            c,
+                            a,
+                            b,
+                            d,
+                            cap: Some(cap),
+                            margin: margin as usize,
+                        }))
+                    }
                     _ => None,
                 },
             }
