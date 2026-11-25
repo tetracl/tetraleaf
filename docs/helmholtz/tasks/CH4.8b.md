@@ -143,4 +143,6 @@ every stage (306 launches); `py_compile` and `selftest` of the tables script. No
 (no manifest change), Laplace's benchmarks (no Laplace path), the kernels' checks (no kernel change).
 
 ## Open questions
-The report's §4, questions 1–3, for sign-off.
+None. The report's §4 signed off as recommended (the user on #261, 2026-11-25: "Accept 1-3 as recommended"): the acceptance as read; the margin kept as
+the default; CH4.8 done, H4.G next (the gate decides whether CH4.4's FMM3D side and class mapping
+need a rerun under the default).

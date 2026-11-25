@@ -10,7 +10,7 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 Status (2026-11-25): **H1, H3 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H6.md`, 2026-11-12). **H4's gate ran and H4 stays open**
 (`gates/H4.md`, review `docs/reviews/2026-11-24-H4.md`) for W2 with the constant density. CH4.8 is
-done on its branch: CH4.8a chose `h1`; CH4.8b (PR for sign-off) made it the default (the
+done: CH4.8a chose `h1`; CH4.8b (signed off on #261) made it the default (the
 high-frequency branch one degree after the cap, §3.5 amended), with W1–W3's constant density at kD =
 10–500 within 0.67 ε and 76.3 ε at all six ε and the random charges within 0.28 ε, at 1.01–1.02× the
 time. Next H4.G again, then the FFT track (item 12), H2 and H5 (items 13–14). The project was
@@ -667,6 +667,7 @@ The done lines are condensed at the H4 gate (2026-11-24); in full in `git show 4
   default CH4.3c3's rule + 1 after the cap (§3.5 amended); W1–W3's constant density at kD = 10–500
   within 0.67 ε and 76.3 ε at all six ε (CH4.3c3's rule missed at 12 W2 points), the random charges
   within 0.28 ε; 1.020× (Kathleen) and 1.011× (locust) the time. Report `tetraleaf-validate/results/helmholtz-ch4-8b.md`.
+  Signed off on #261 (2026-11-25, "Accept 1-3 as recommended"): the margin the default, H4.G next.
 - [ ] **H4.G Gate.** `/milestone-gate H4`. *Needs:* CH4.0–CH4.5 and CH4.8 (CH4.8a, CH4.8b; corrected at the gate,
   R1). Ran on 2026-11-24 (`docs/helmholtz/gates/H4.md`, #258): the condition on the random charges
   met, H4 kept open for CH4.8 (the user, 2026-11-24: "Keep H4 open, CH4.8 (Recommended)").

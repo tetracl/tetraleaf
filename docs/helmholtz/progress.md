@@ -4726,7 +4726,8 @@ request, using this template:
   opt-level 1 (1,439 passed); the MPI list at 2 and 4 ranks (all passed); `bash -n`, ShellCheck and dry
   runs of the script; `py_compile` and the selftest of the tables. Not run: `cargo deny` (no manifest
   change), Laplace's benchmarks (no Laplace path).
-- Decisions: the report's questions 1–3 for sign-off (the acceptance as read; the margin kept as the
-  default; CH4.8 done, H4.G next).
+- Decisions: the report's questions 1–3 signed off as recommended (the user on #261, 2026-11-25: "Accept 1-3 as recommended"): the acceptance as
+  read; the margin kept as the default; CH4.8 done, H4.G next (the gate decides whether CH4.4's FMM3D
+  side and class mapping need a rerun under the default).
 - Laplace: not touched (Helmholtz's degree rule, the harness, scripts, documents).
 - Follow-ups: H4.G again (`/milestone-gate H4`), the priority list's item 11.

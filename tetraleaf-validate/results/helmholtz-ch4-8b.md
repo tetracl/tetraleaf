@@ -37,6 +37,7 @@ Script `tools/helmholtz/ch4-8b-runs.sh`; tables `tools/helmholtz/ch4-8b-tables.p
 - **The random charges stay within ε (§2).** CH4.4a's 18 random-charge and plane-wave cases (W1 to
   kD = 1000, W2 to 500, W3 resolved to kD = 100 and at N = 10⁶ for 200 and 500) at all six ε: §9.1's ℓ2 at most
   **0.28 ε** (W3 at kD = 30, 10⁻⁶), at or below CH4.4a's at every ε it ran (0.49 ε at most there).
+- **Signed off (§4; the user on #261, 2026-11-25: "Accept 1-3 as recommended"):** the acceptance as read, the margin the default, H4.G next.
 - **The cost (§3).** One setting per launch, A B B A, CH4.3c3's rule (A) against the default (B), W1
   at kD = 100–1000, W2 at 500, W3 at N = 10⁶ for 500, 10⁻³, 10⁻⁶, 10⁻⁸: build plus evaluation
   **0.983–1.048× on Kathleen (geometric mean 1.020)** and **0.999–1.020× on locust (1.011)**; the
@@ -373,6 +374,9 @@ spread (0.96–1.04×): the high-frequency tables (the form's transfer functions
 degree of hundreds.
 
 ## 4. Questions for sign-off
+
+Signed off as recommended (the user on #261, 2026-11-25: "Accept 1-3 as recommended"): the acceptance as read; the margin kept as the default; CH4.8
+done, H4.G next, the gate deciding whether CH4.4's FMM3D side and class mapping need a rerun.
 
 1. **The acceptance as read.** The roadmap's *Done when* of CH4.8b read as: the margin the library's
    default (done: `DegreeRule::CALIBRATED`, §3.5 amended); W1–W3 with the constant density at kD =
