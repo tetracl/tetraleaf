@@ -1,8 +1,10 @@
 //! The degree p_l of each level of a Helmholtz FMM (Helmholtz CH3.1a, calibrated in CH3.3,
-//! its high-frequency branch refitted in CH4.3c2 and on the worst density in CH4.3c3;
-//! docs/design/helmholtz-fmm-proposal.md §3.5; spike S7, `spikes/truncation/SPIKE_REPORT.md`
-//! §3 and §8, question 1, signed off on 2026-10-29; `tetraleaf-validate/results/helmholtz-ch3-3.md`,
-//! `tetraleaf-validate/results/helmholtz-ch4-3c2.md`, `tetraleaf-validate/results/helmholtz-ch4-3c3.md`).
+//! its high-frequency branch refitted in CH4.3c2 and on the worst density in CH4.3c3, one degree
+//! added to it in CH4.8b; docs/design/helmholtz-fmm-proposal.md §3.5; spike S7,
+//! `spikes/truncation/SPIKE_REPORT.md` §3 and §8, question 1, signed off on 2026-10-29;
+//! `tetraleaf-validate/results/helmholtz-ch3-3.md`,
+//! `tetraleaf-validate/results/helmholtz-ch4-3c2.md`, `tetraleaf-validate/results/helmholtz-ch4-3c3.md`,
+//! `tetraleaf-validate/results/helmholtz-ch4-8a.md`, `tetraleaf-validate/results/helmholtz-ch4-8b.md`).
 //!
 //! The degrees are a setting of the FMM, [`Degrees`]: by default a rule at a tolerance ε,
 //! or degrees named per level, which tests and the calibration use. The rule is
@@ -11,11 +13,12 @@
 //!
 //! ```text
 //! p(x, ε) = max(⌈0.30 L² + 0.25 L + 2.60⌉,
-//!               ⌈min(x + max(0, e(ε)) x^{1/3} + 2, x + 0.82 (ln 1/ε)^{2/3} x^{1/3})⌉),
+//!               ⌈min(x + max(0, e(ε)) x^{1/3} + 2, x + 0.82 (ln 1/ε)^{2/3} x^{1/3})⌉ + 1),
 //! e(ε) = 2.00 (ln 1/ε)^{2/3} − 0.55 L − 4.66,
 //! ```
 //!
-//! a low-frequency plateau and a high-frequency branch, calibrated in the full FMM
+//! a low-frequency plateau and a high-frequency branch with one degree of margin
+//! ([`DegreeRule::margin`], Helmholtz CH4.8b, below); without the margin, calibrated in the full FMM
 //! (the plateau and CH3.3's branch in Helmholtz CH3.3, the branch refitted in CH4.3c2 and
 //! CH4.3c3): every degree the smallest that keeps the relative ℓ2 errors of φ and
 //! ∇φ over 1,000 sampled targets within ε/2, on W1, W3 and W4 of proposal §9.1, one level
@@ -44,8 +47,8 @@
 //! at low frequency (34 against 15 at ε = 10⁻⁶), where the full FMM's errors lay 10³ to 10⁶
 //! below ε (CH3.1c).
 //!
-//! The high-frequency branch is CH4.3c3's refit ([`DegreeRule::CALIBRATED`]): the shape
-//! x + e(ε) x^{1/3} + d of CH3.3's, the excess e(ε) given a term linear in L and a constant
+//! The high-frequency branch is CH4.3c3's refit ([`DegreeRule::CH4_3C3`], before the
+//! margin): the shape x + e(ε) x^{1/3} + d of CH3.3's, the excess e(ε) given a term linear in L and a constant
 //! beside C (ln 1/ε)^{2/3} (CH4.3c2), fitted as the least total excess that covers every
 //! measured degree: CH3.3's level scans, CH4.3c2's at x = 27–216 (W1 at kD = 250 and 500, the
 //! cube at kD = 250, 500 and 1000, random charges) and CH4.3c3's with W1's constant density at
@@ -61,6 +64,19 @@
 //! case and the FMM's errors under it are CH4.3c3's report's. Beyond x = 216 it is an
 //! extrapolation. The excess is taken at least 0 (outside the measured range, above about
 //! ε = 2 · 10⁻³).
+//!
+//! The margin (Helmholtz CH4.8b, signed off at CH4.8a on #260, 2026-11-24): the branch above,
+//! [`DegreeRule::CH4_3C3`], the default until CH4.8b, left W2 with the constant density (a dense
+//! polar cap against a face of the root cube, its boxes' errors adding coherently over many levels)
+//! outside ε in ℓ2 at kD = 500 (∇φ 1.28 ε at 10⁻³, 1.03 ε at 10⁻⁴) and its worst box above 100 ε
+//! (101–166 ε at 10⁻⁶ to 10⁻⁸), the level scans having been made one level at a time on W1's
+//! sphere. One degree more on every level of the branch (CH4.8a's `h1`) brought W2 within 0.48 ε
+//! and 76.3 ε at all six ε at about 1.02× the time; CH4.8b verified it over W1–W3 with the
+//! constant density at kD = 10–500 and over CH4.4a's random charges. The plateau is unchanged:
+//! where the branch with its margin lies below it, the degree is the plateau's. As measured in
+//! CH4.8a `h1` was the branch with d = 3 and no cap; it differs from the margin after the cap
+//! only where the cap binds (x = 7.1–13.5 at ε ≤ 2 · 10⁻⁷), by one degree, where the levels of
+//! CH4.8a's trees ran the waves' resolving degree p_w above both.
 //!
 //! Complex k takes Re(k) a, provisionally: S7 found η = Im k / Re k = 0.1 within 10 degrees
 //! of real k, and the damping-dependent rule is CH5.2's.
@@ -82,12 +98,12 @@
 //!
 //! // kD = 100 on the unit cube: level 2 has x = 100 · √3 / 8 ≈ 21.65 and e(10⁻⁶) =
 //! // 2.00 · 13.8^{2/3} − 3.3 − 4.66 ≈ 3.56, so 21.65 + 3.56 · 21.65^{1/3} + 2 = 33.56, below
-//! // the cap 21.65 + 0.82 · 13.8^{2/3} · 21.65^{1/3} = 34.81: 34; level 3 (x ≈ 10.8)
-//! // 10.83 + 3.56 · 10.83^{1/3} + 2 = 20.7: 21.
+//! // the cap 21.65 + 0.82 · 13.8^{2/3} · 21.65^{1/3} = 34.81: 34, and the margin: 35; level 3
+//! // (x ≈ 10.8) 10.83 + 3.56 · 10.83^{1/3} + 2 = 20.7: 21 + 1 = 22.
 //! let k = Wavenumber::new(100.0, 0.0).unwrap();
 //! let domain = Domain::new(&PhysicalBox::new([0.0, 0.0, 0.0, 1.0, 1.0, 1.0])).unwrap();
 //! let degrees = Degrees::Tolerance(1e-6).resolve(&k, &domain, 4).unwrap();
-//! assert_eq!(degrees, [0, 0, 34, 21]);
+//! assert_eq!(degrees, [0, 0, 35, 22]);
 //! ```
 
 use thiserror::Error;
@@ -200,14 +216,14 @@ pub fn s7_degree(k: &Wavenumber, circumradius: f64, epsilon: f64) -> usize {
 }
 
 /// A degree rule (module documentation): a low-frequency plateau and a high-frequency branch,
-/// p(x, ε) = max(⌈γ L² + α L + β⌉, ⌈x + (C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉) at
+/// p(x, ε) = max(⌈γ L² + α L + β⌉, ⌈x + (C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉ + m) at
 /// x = Re(k) a and L = log₁₀(1/ε), the branch at most x + cap (ln 1/ε)^{2/3} x^{1/3} with a
-/// cap. S7's shape (Helmholtz CH3.1a) and CH3.3's calibration have
+/// cap before its ceiling, and m the margin after it. S7's shape (Helmholtz CH3.1a) and CH3.3's calibration have
 /// a = b = d = 0 ([`DegreeRule::gd`]); S7's closed form is γ = 0, α = 6, β = −2, C = 1 up to the
 /// ceilings, which here forgive 10⁻⁹, so that a value an integer up to rounding
 /// (α log₁₀(10⁶) with α a multiple of 0.05) stays that integer. The branch's excess over x
 /// linear in L (a, b; Helmholtz CH4.3c2, proposal §3.5) and the offset d were added by the
-/// refit of the high-frequency levels.
+/// refit of the high-frequency levels, the margin m by Helmholtz CH4.8b.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DegreeRule {
     /// γ, the plateau's quadratic coefficient in L = log₁₀(1/ε).
@@ -226,9 +242,12 @@ pub struct DegreeRule {
     /// d, a constant added to the high-frequency branch.
     pub d: f64,
     /// The cap: the high-frequency branch at most x + cap (ln 1/ε)^{2/3} x^{1/3} (before the
-    /// ceiling), CH3.3's branch with cap = 0.80 (CH4.3c2's rule), 0.82 the default's
-    /// (CH4.3c3); `None` for none.
+    /// ceiling), CH3.3's branch with cap = 0.80 (CH4.3c2's rule), 0.82 CH4.3c3's and the
+    /// default's; `None` for none.
     pub cap: Option<f64>,
+    /// Degrees added to the high-frequency branch after its cap and ceiling (Helmholtz CH4.8b):
+    /// 1 in the default, 0 in the rules before it.
+    pub margin: usize,
 }
 
 impl DegreeRule {
@@ -249,13 +268,14 @@ impl DegreeRule {
         b: -5.73,
         d: 5.0,
         cap: Some(0.80),
+        margin: 0,
     };
 
-    /// The default rule, calibrated in the full FMM (module documentation): CH3.3's plateau
-    /// and CH4.3c3's high-frequency branch, refitted on the worst density, γ = 0.30, α = 0.25,
-    /// β = 2.60, C = 2.00, a = −0.55, b = −4.66, d = 2, capped by x + 0.82 (ln 1/ε)^{2/3}
-    /// x^{1/3} (`tetraleaf-validate/results/helmholtz-ch4-3c3.md`).
-    pub const CALIBRATED: Self = Self {
+    /// CH4.3c3's rule (Helmholtz CH4.3c3, `tetraleaf-validate/results/helmholtz-ch4-3c3.md`):
+    /// CH3.3's plateau and the high-frequency branch refitted on the worst density, γ = 0.30,
+    /// α = 0.25, β = 2.60, C = 2.00, a = −0.55, b = −4.66, d = 2, capped by
+    /// x + 0.82 (ln 1/ε)^{2/3} x^{1/3}, no margin; the default until CH4.8b.
+    pub const CH4_3C3: Self = Self {
         gamma: 0.30,
         alpha: 0.25,
         beta: 2.60,
@@ -264,10 +284,20 @@ impl DegreeRule {
         b: -4.66,
         d: 2.0,
         cap: Some(0.82),
+        margin: 0,
+    };
+
+    /// The default rule, calibrated in the full FMM (module documentation): [`DegreeRule::CH4_3C3`]
+    /// with one degree added to the high-frequency branch after its cap (Helmholtz CH4.8b,
+    /// CH4.8a's `h1`, `tetraleaf-validate/results/helmholtz-ch4-8a.md` and `helmholtz-ch4-8b.md`),
+    /// the plateau unchanged.
+    pub const CALIBRATED: Self = Self {
+        margin: 1,
+        ..Self::CH4_3C3
     };
 
     /// The rule of S7's shape, max(⌈γ L² + α L + β⌉, ⌈x + C (ln 1/ε)^{2/3} x^{1/3}⌉): a = b =
-    /// d = 0.
+    /// d = 0, no cap and no margin.
     pub const fn gd(gamma: f64, alpha: f64, beta: f64, c: f64) -> Self {
         Self {
             gamma,
@@ -278,6 +308,7 @@ impl DegreeRule {
             b: 0.0,
             d: 0.0,
             cap: None,
+            margin: 0,
         }
     }
 
@@ -296,14 +327,14 @@ impl DegreeRule {
 
     /// The high-frequency branch ⌈x + max(0, C (ln 1/ε)^{2/3} + a L + b) x^{1/3} + d⌉, at least
     /// 0: the excess taken at least 0, so that no ε puts the branch below x + d; with a cap at
-    /// most ⌈x + cap (ln 1/ε)^{2/3} x^{1/3}⌉.
+    /// most ⌈x + cap (ln 1/ε)^{2/3} x^{1/3}⌉; then the margin added.
     pub fn high(&self, x: f64, epsilon: f64) -> usize {
         let branch = x + self.excess(epsilon).max(0.0) * x.cbrt() + self.d;
         let capped = match self.cap {
             Some(cap) => branch.min(x + cap * (1.0 / epsilon).ln().powf(2.0 / 3.0) * x.cbrt()),
             None => branch,
         };
-        rounded_up(capped)
+        rounded_up(capped) + self.margin
     }
 
     /// The larger of [`DegreeRule::plateau`] and [`DegreeRule::high`].
