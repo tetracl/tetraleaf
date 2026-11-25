@@ -17,14 +17,16 @@ reproduction lines stay valid.
 What it reads (one launch per file, the harness examples of tetraleaf-validate):
 - every output: `tables` (each Markdown table, under its `## ` heading) and `find_table`;
 - `helmholtz_accuracy`: `accuracy_rows` (its first table, one row per run, the ε added) and
-  `build_rows` (its "Build" table by ε);
+  `build_rows` (its "Build" table, one row per run: several runs may share an ε);
 - `helmholtz_boxes`: `boxes_runs` and `boxes_run` (the run rows: degrees, §9.1's ℓ2 errors, the
   worst box over ε, the build and the evaluation);
 - `helmholtz_fmm3d compare`: `compare_rows` (one row per ε and code, ours and FMM3D's variants)
-  and `build_rows` (its "Build" table by ε).
+  and `build_rows` (its "Build" table, one row per ε).
 
 Cells are split on every `|`: a cell that holds one (`helmholtz_boxes`' worst-box tables have
-`|v| / r` in their header) shifts the columns after it in `tables`' row dicts.
+`|v| / r` in their header) shifts the columns after it in `tables`' row dicts. A header name that
+repeats (`W` in `helmholtz_accuracy`'s "Empty boxes", `converted` in its "Leaf operators") is
+numbered from its second time: `W`, then `W (2)`.
 
 Python 3.9 standard library only.
 """
@@ -34,9 +36,6 @@ import re
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, NamedTuple, Optional
-
-# The tolerances of D1 as the harness prints them.
-EPSILONS = ("1e-3", "1e-4", "1e-5", "1e-6", "1e-7", "1e-8")
 
 _EPS = re.compile(r"ε = ([0-9.]+(?:e[+-]?[0-9]+)?)")
 
@@ -66,7 +65,9 @@ def bold(text, over):
 
 
 def gmean(values: Iterable[float]) -> float:
-    """The geometric mean of the positive finite values, NaN where there are none."""
+    """The geometric mean of the positive finite values, NaN where there are none. None, zero,
+    negative and non-finite values are left out silently (a failed run's ratio): a caller for
+    which one is an error checks for it first."""
     xs = [v for v in values if v is not None and math.isfinite(v) and v > 0]
     return math.exp(sum(map(math.log, xs)) / len(xs)) if xs else float("nan")
 
@@ -79,6 +80,14 @@ class Table(NamedTuple):
     rows: List[Dict[str, str]]  # each row by the header's cells
 
 
+def _unique(header):
+    seen, out = {}, []
+    for name in header:
+        seen[name] = seen.get(name, 0) + 1
+        out.append(name if seen[name] == 1 else f"{name} ({seen[name]})")
+    return out
+
+
 def _is_rule(row):
     text = "".join(row)
     return "-" in text and set(text) <= set("-: ")
@@ -86,7 +95,8 @@ def _is_rule(row):
 
 def tables(path) -> List[Table]:
     """Every Markdown table of an output, in order. A table is a run of lines starting with `|`;
-    its first line is the header, a rule line (`| --- | ---: |`) is skipped."""
+    its first line is the header (repeated names numbered), a rule line (`| --- | ---: |`) is
+    skipped."""
     out, heading, current = [], "", None
     for line in Path(path).read_text(encoding="utf-8").splitlines():
         if not line.startswith("|"):
@@ -96,7 +106,7 @@ def tables(path) -> List[Table]:
             continue
         row = cells(line)
         if current is None:
-            current = Table(heading, row, [])
+            current = Table(heading, _unique(row), [])
             out.append(current)
         elif not _is_rule(row):
             current.rows.append(dict(zip(current.header, row)))
@@ -124,16 +134,19 @@ def accuracy_rows(path) -> List[Dict[str, str]]:
     return rows
 
 
-def build_rows(path) -> Dict[str, Dict[str, str]]:
-    """The "Build" table by ε, the build by part in seconds: `helmholtz_fmm3d compare`'s (keyed
-    by its `ε` cell) and `helmholtz_accuracy`'s (by its `degrees` cell)."""
+def build_rows(path) -> List[Dict[str, str]]:
+    """The "Build" table's rows, the build by part in seconds, in order. `helmholtz_fmm3d
+    compare`'s has one row per ε (its `ε` cell); `helmholtz_accuracy`'s one per run, named by
+    its `Workload`, `kD`, `degrees`, `M2L` and `ranks × threads` cells, the key "ε" added from
+    `degrees` (several runs may share an ε, so key the rows by all of these, not by ε alone)."""
     t = find_table(tables(path), heading="Build")
-    out = {}
+    rows = []
     for r in t.rows if t else []:
-        eps = r["ε"] if "ε" in r else eps_token(r.get("degrees"))
-        if eps:
-            out[eps] = r
-    return out
+        if "ε" not in r:
+            r = dict(r)
+            r["ε"] = eps_token(r.get("degrees"))
+        rows.append(r)
+    return rows
 
 
 class BoxesRun(NamedTuple):
@@ -190,6 +203,7 @@ class CompareRow(NamedTuple):
     grad: Optional[float]  # and of ∇φ
     memory: Optional[float]  # GB: ours the largest node's, FMM3D's its peak
     checksum: str
+    row: Dict[str, str]  # every cell as printed (a failed FMM3D call: `run s` "failed (no output)")
 
 
 def compare_rows(path) -> List[CompareRow]:
@@ -202,7 +216,7 @@ def compare_rows(path) -> List[CompareRow]:
         memory = (r.get("memory GB") or "").split(" ")[0]
         rows.append(CompareRow(r["ε"], r["code"], r.get("threads", ""), r.get("p by level", ""),
                                number(r.get("build s")), number(r.get("run s")), number(r.get("φ")),
-                               number(r.get("∇φ")), number(memory), r.get("checksum", "")))
+                               number(r.get("∇φ")), number(memory), r.get("checksum", ""), r))
     return rows
 
 
@@ -243,16 +257,20 @@ def selftest():
             "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | --- |\n"
             "| W1 | 79578 | 100 + 10i | ε = 1e-3 | 0.09 | 0.11 | 3.18e-5 | 5.19e-5 | 6c8d3555ce5aad7b |\n"
             "| W1 | 79578 | 100 + 10i | ε = 1e-6 | 0.08 | 0.17 | 1.26e-7 | 3.09e-7 | 6b9d13e8d84a707b |\n"
-            "\n## Empty boxes\n\n| Workload | N | degrees | rule |\n| --- | ---: | --- | --- |\n"
-            "| W1 | 79578 | ε = 1e-3 | on |\n"
-            "\n## Build\n\n| Workload | degrees | build | octree |\n| --- | --- | ---: | ---: |\n"
-            "| W1 | ε = 1e-3 | 0.0880 | 0.0151 |\n| W1 | ε = 1e-6 | 0.0760 | 0.0150 |\n", encoding="utf-8")
+            "\n## Empty boxes\n\n| Workload | N | kD | degrees | M2L | ranks × threads | rule | boxes without targets | their V | X | W | L2L | V without sources | W | M2M | V pairs | remote multipoles |\n"
+            "| --- | ---: | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+            "| W1 | 79578 | 100 + 10i | ε = 1e-3 | auto ≤ 15, pw ≥ 12 | 1 × 40 | on | 712 | 52512 | 3416 | 6496 | 712 | 31144 | 1704 | 712 | 44698 | 0 |\n"
+            "\n## Build\n\n| Workload | degrees | M2L | build s | octree s |\n| --- | --- | --- | ---: | ---: |\n"
+            "| W1 | ε = 1e-3 | rotation | 0.0880 | 0.0151 |\n| W1 | ε = 1e-3 | auto | 0.0870 | 0.0149 |\n"
+            "| W1 | ε = 1e-6 | rotation | 0.0760 | 0.0150 |\n", encoding="utf-8")
         rows = accuracy_rows(accuracy)
         assert [(r["ε"], r["φ"], r["checksum"]) for r in rows] == [
             ("1e-3", "3.18e-5", "6c8d3555ce5aad7b"), ("1e-6", "1.26e-7", "6b9d13e8d84a707b")], rows
-        assert find_table(tables(accuracy), heading="Empty boxes").rows == [
-            {"Workload": "W1", "N": "79578", "degrees": "ε = 1e-3", "rule": "on"}]
-        assert {e: r["octree"] for e, r in build_rows(accuracy).items()} == {"1e-3": "0.0151", "1e-6": "0.0150"}
+        empty = find_table(tables(accuracy), heading="Empty boxes").rows
+        assert len(empty) == 1 and (empty[0]["W"], empty[0]["W (2)"], empty[0]["M2M"]) == ("6496", "1704", "712")
+        build = build_rows(accuracy)  # two runs at 1e-3: both kept
+        assert [(r["ε"], r["M2L"], r["octree s"]) for r in build] == [
+            ("1e-3", "rotation", "0.0151"), ("1e-3", "auto", "0.0149"), ("1e-6", "rotation", "0.0150")], build
         assert find_table(tables(accuracy), heading="Leaves") is None
 
         compare = Path(d) / "compare.md"
@@ -262,16 +280,18 @@ def selftest():
             "| --- | ---: | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | ---: |\n"
             "| W1 | 7162 | 30 | 1e-3 | ours (avx512) | 4 × 10 | 0×2, 11 | 0.11 | 0.01 | 5.07e-5 | 8.05e-5 | 5.27e-5 | 9.64e-5 | 0.58 / 1.60 | 10.9 / 16.6 of 56 | 4c1b1fff1a08174a | 0.87 (rank ≤ 0.22) |\n"
             "| W1 | 7162 | 30 | 1e-3 | FMM3D fastker | 40 | eps = 1e-3 | – | 0.03 | 7.48e-5 | 7.37e-5 | 7.57e-5 | 7.53e-5 | 0.35 / 0.35 | 4.6 / 4.7 of 56 | – | 0.02 |\n"
+            "| W1 | 7162 | 30 | 1e-3 | FMM3D default | 40 | eps = 1e-3 | – | failed (no output) | – | – | – | – | – | – | – | – |\n"
             "\n## Build\n\nOurs, seconds.\n\n| ε | build | settings | evaluation | first evaluation |\n"
             "| --- | ---: | ---: | ---: | ---: |\n| 1e-3 | 0.1043 | 0.0032 | 0.0953 | 0.0935 |\n", encoding="utf-8")
-        rows = compare_rows(compare)
+        rows = [r[:-1] for r in compare_rows(compare)]  # without the cells as printed
         assert rows == [
-            CompareRow("1e-3", "ours (avx512)", "4 × 10", "0×2, 11", 0.11, 0.01, 5.07e-5, 8.05e-5, 0.87,
-                       "4c1b1fff1a08174a"),
-            CompareRow("1e-3", "FMM3D fastker", "40", "eps = 1e-3", None, 0.03, 7.48e-5, 7.37e-5, 0.02, "–"),
+            ("1e-3", "ours (avx512)", "4 × 10", "0×2, 11", 0.11, 0.01, 5.07e-5, 8.05e-5, 0.87, "4c1b1fff1a08174a"),
+            ("1e-3", "FMM3D fastker", "40", "eps = 1e-3", None, 0.03, 7.48e-5, 7.37e-5, 0.02, "–"),
+            ("1e-3", "FMM3D default", "40", "eps = 1e-3", None, None, None, None, None, "–"),
         ], rows
-        assert build_rows(compare)["1e-3"]["first evaluation"] == "0.0935"
-        assert compare_rows(boxes) == [] and build_rows(boxes) == {}
+        assert compare_rows(compare)[2].row["run s"] == "failed (no output)"
+        assert [(r["ε"], r["first evaluation"]) for r in build_rows(compare)] == [("1e-3", "0.0935")]
+        assert compare_rows(boxes) == [] and build_rows(boxes) == []
 
 
 if __name__ == "__main__":

@@ -39,34 +39,42 @@ standard library only. With constraint 1 (the HA preamble): no product code chan
 
 ## Changes
 Scripts and documents only; no crate, manifest or product code.
-- `tools/helmholtz/common.py` (new): `EPSILONS`; `cells(line)`; `number(text, default=None)`;
-  `eps_token(text)` (the `1e-6` of `ε = 1e-6, …`); `tables(path)` (every Markdown table of an
-  output by its `## ` heading, the first under `""`, rows as dicts); `accuracy_rows(path)`
-  (`helmholtz_accuracy`'s main table, the ε added); `build_rows(path)` (the "Build" table by ε,
-  both harnesses); `BoxesRun` and `boxes_runs(path)` / `boxes_run(path)` (`helmholtz_boxes`' run
-  rows); `CompareRow` and `compare_rows(path, code="ours")` (`helmholtz_fmm3d compare`'s rows of
-  one code by ε, and the "Build" table's build, evaluation and first evaluation by ε);
-  `bold(text, over)`; `gmean(values)` (positive finite values; NaN for none); `selftest()` on
-  lines of each format, run as `python3 tools/helmholtz/common.py selftest`.
-- `tools/helmholtz/ch4-8b-tables.py`: imports `common` for the above in place of its
-  `table_cells`, `boxes_run`, `compare_rows`, `bold` and inline geometric means; its own
-  `ratios`, `case_key`, tables and selftest stay (the selftest also runs `common.selftest()`).
+- `tools/helmholtz/common.py` (new; as built, after the self-review): `cells(line)`;
+  `number(text, default=None)`; `eps_token(text)` (the `1e-6` of `ε = 1e-6, …`); `bold(text,
+  over)`; `gmean(values)` (positive finite values, the rest left out, NaN for none); `Table` and
+  `tables(path)` (every Markdown table of an output in order, under its `## ` heading, rows as
+  dicts, a repeated header name numbered `W (2)`); `find_table(found, heading, first)`;
+  `accuracy_rows(path)` (`helmholtz_accuracy`'s run rows, the key "ε" added); `build_rows(path)`
+  (the "Build" table's rows in order, "ε" added: one per ε in `helmholtz_fmm3d compare`, one per
+  run in `helmholtz_accuracy`, where runs share an ε); `BoxesRun`, `boxes_runs(path)` and
+  `boxes_run(path)` (`helmholtz_boxes`' run rows); `CompareRow` and `compare_rows(path)` (every
+  row of `helmholtz_fmm3d compare`'s first table, ours and FMM3D's variants, with the cells as
+  printed); `selftest()`, run as `python3 tools/helmholtz/common.py selftest`. Python 3.9
+  standard library.
+- `tools/helmholtz/ch4-8b-tables.py`: imports `common` (by its own directory, so `python3 -I`
+  works) in place of its `table_cells`, `boxes_run`, `compare_rows`, `bold` and inline geometric
+  means; a local `ours(path)` keeps our compare rows by ε; its `ratios`, `case_key`, tables, usage
+  text and selftest stay (the selftest also runs `common.selftest()`).
 - `.claude/skills/next-task/SKILL.md` step 5: the conditional "once CHA.10 has written it" goes;
   the plan template's "Changes" names the module for a report script.
 - The old scripts are left as they are.
 
 ## Tests that prove it
-- `python3 tools/helmholtz/common.py selftest`: each parser on lines of its format (taken from the
-  archived outputs, including a `–` cell, a missing table and a row whose cell holds `|`), `gmean`
-  against a hand value, `number`'s fallback.
-- Byte-identical output of `ch4-8b-tables.py` before and after, every mode over every archived
-  directory it reads: Kathleen `ch4-8b` (`const`, `random` with and without CH4.4a's directory),
-  `ch4-8b-cost` and locust's (`cost`), both machines' `h4-gate2` (`const`, W1–W3 and W4), the
-  `selftest` and the usage text: 34 outputs captured at 6bad3c2, `diff -r` empty after.
-- `common.py` on the other two formats: `accuracy_rows` and `build_rows` read every
-  `helmholtz_accuracy` output of `…/ch4-3c3/verify-matrix/` and agree with
-  `ch4-3c3-tables.py`'s `table_rows` (row count, ε and the φ, ∇φ cells), and `compare_rows`
-  with `code="fmm3d"` reads CH4.5's outputs.
+- `python3 tools/helmholtz/common.py selftest`: each parser on lines of its format taken from the
+  archived outputs (a `–` cell, a failed FMM3D call, a boxes row without errors, a missing table,
+  a header with `|v|`, a repeated header name, two accuracy runs at one ε), `gmean` against a hand
+  value and its left-out values, `number`'s fallback.
+- Byte-identical output of `ch4-8b-tables.py` before (6bad3c2) and after, every mode over every
+  archived directory it reads: Kathleen `ch4-8b` (`const`, `random` with and without CH4.4a's
+  directory), `ch4-8b-cost` on both machines (`cost`), both machines' `h4-gate2` (`const`, W1–W3
+  and W4), the `selftest` and the usage text: 34 outputs, `diff -r` empty, under Python 3.15 and
+  3.9.6.
+- `common.py` on the other two formats, against the archive (a check script outside the repo):
+  `accuracy_rows` and `build_rows` on CH4.3c3's 52 `verify-matrix` outputs agree with
+  `ch4-3c3-tables.py`'s `table_rows` (348 rows: ε, φ, ∇φ, checksum, degrees; the Build rows one per
+  run in order); on all 686 `helmholtz_accuracy` outputs of the archive one Build row per run and
+  no header name lost; `compare_rows` on CH4.4a's 26 outputs equals the raw cells (204 rows, ours
+  and both FMM3D variants, the failed calls as None).
 
 ## Checks
 `/verify` (scripts and documents: no cargo checks apply); `python3 -m py_compile` of both scripts;
