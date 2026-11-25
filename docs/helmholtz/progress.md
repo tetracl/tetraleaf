@@ -4776,3 +4776,39 @@ request, using this template:
     "under the defaults" verified on x86's and NEON's default trees; every bound's acceptance names
     its densities, workloads (W2) and the box measure; `tools/kathleen/README.md` on submit.sh's
     options, one argument each.
+
+## 2026-11-25: CHA.10a The report scripts' shared module
+- Done:
+  - `tools/helmholtz/common.py`: `cells`, `number`, `eps_token`, `bold`, `gmean`; `tables` (every
+    Markdown table of an output under its `## ` heading, a repeated header name numbered `W (2)`)
+    and `find_table`; `accuracy_rows` and `build_rows` (`helmholtz_accuracy`; the Build table one
+    row per run, since runs share an ε), `boxes_runs` and `boxes_run` (`helmholtz_boxes`),
+    `compare_rows` (`helmholtz_fmm3d compare`, ours and FMM3D's variants, with the cells as
+    printed); a `selftest`. Python 3.9 standard library; the import recipe (by the script's own
+    directory, so `python3 -I` works) in its docstring.
+  - `tools/helmholtz/ch4-8b-tables.py` imports it in place of its own parsers and geometric means.
+    The other 14 scripts with their own `cells` are left as they are (their reports' reproduction
+    lines stay valid).
+  - `.claude/skills/next-task/SKILL.md`: step 5 sends a new report script to the module, and what
+    two scripts need beyond it into it; the plan template names its imports.
+  - Record `docs/helmholtz/tasks/CHA.10a.md`.
+- Tests:
+  - `common.py selftest` and `ch4-8b-tables.py selftest`, under Python 3.15 and 3.9.6.
+  - `ch4-8b-tables.py` byte-identical before (6bad3c2) and after: 34 outputs (`const`, `random`
+    with and without CH4.4a's directory, `cost`, `selftest`, the usage text) over the archived
+    `ch4-8b`, `ch4-8b-cost` and `h4-gate2` runs of Kathleen and locust, `diff -r` empty under both
+    Pythons.
+  - Against the archive (a check outside the repo): CH4.3c3's 52 `verify-matrix` outputs, 348
+    rows, equal to `ch4-3c3-tables.py`'s reader; all 686 `helmholtz_accuracy` outputs one Build row
+    per run, no header name lost; CH4.4a's 26 compare outputs, 204 rows, equal to the raw cells.
+  - The self-review (a subagent) found the Build rows of `helmholtz_accuracy` collapsed by ε (623
+    of 686 outputs) and the repeated header names overwritten; both fixed before the PR, with
+    cases in the selftest. It also re-ran the parsers over 830 boxes, 1,564 compare and 686
+    accuracy outputs.
+- Checks: `cargo fmt --all -- --check`; `py_compile` of both scripts; both selftests;
+  `tools/roadmap/sync_issues.py --check`. Not run: Clippy, rustdoc and the tests of section 2 of
+  `/verify`, the MPI list, `cargo deny` (no Rust, manifest or product file changed).
+- Decisions: none.
+- Laplace: not touched (scripts and documents).
+- Follow-ups: the FFT track (item 13), CH0.9 first. CHA.10's housekeeping keeps the old scripts'
+  move apart from the living tools.
