@@ -340,17 +340,29 @@ Top level (level 2) against kD, at ε = 10⁻⁴ / 10⁻⁶ / 10⁻⁸:
 
 Doubling kD moves the whole table up one level.
 
-**Calibrated (H3, CH3.3; amended at H3.G; the high-frequency branch amended at CH4.3c2 and
-CH4.3c3).** The
+**Calibrated (H3, CH3.3; amended at H3.G; the high-frequency branch amended at CH4.3c2,
+CH4.3c3 and CH4.8b).** The
 full FMM's rule, `DegreeRule::CALIBRATED` of `tetraleaf_exec::helmholtz`, with L = log₁₀(1/ε)
 and x = Re(k) a:
 
 ```math
 p(x, \varepsilon) = \max\!\left(\lceil 0.30 L^2 + 0.25 L + 2.60 \rceil,\;
 \left\lceil \min\!\left(x + \max(0, e(\varepsilon))\, x^{1/3} + 2,\;
-x + 0.82 (\ln\tfrac{1}{\varepsilon})^{2/3} x^{1/3}\right) \right\rceil\right),
+x + 0.82 (\ln\tfrac{1}{\varepsilon})^{2/3} x^{1/3}\right) \right\rceil + 1\right),
 \quad e(\varepsilon) = 2.00 (\ln\tfrac{1}{\varepsilon})^{2/3} - 0.55 L - 4.66
 ```
+
+(amended at CH4.8b) The high-frequency branch carries one degree of margin after its cap and
+ceiling (`DegreeRule::margin`), the plateau unchanged; without it the rule is CH4.3c3's
+(`DegreeRule::CH4_3C3`, kept). W2 with the constant density, whose dense polar cap lies against
+a face of the root cube so that its boxes' truncation errors add coherently over many levels,
+missed ε in ℓ2 under CH4.3c3's rule (∇φ 1.28 ε at kD = 500 and 10⁻³, 1.03 ε at 10⁻⁴) and the box
+bound of Section 9.1 (101–166 ε at 10⁻⁶ to 10⁻⁸): the degree rule's truncation on W2's deep tree,
+the M2L adding nothing (CH4.8a, `tetraleaf-validate/results/helmholtz-ch4-8a.md`). One degree on
+every level of the branch (CH4.8a's `h1`, signed off on #260) is a hand-chosen margin, as CH4.3c2's
++2 was: CH4.3c3's refit scanned one level at a time on W1's sphere, where the levels' errors do not
+stack as on W2. CH4.8b verified it over W1–W3 with the constant density at kD = 10–500 and over
+CH4.4a's random charges, at all six ε of D1 (`tetraleaf-validate/results/helmholtz-ch4-8b.md`).
 
 (amended at CH4.3c3) The high-frequency branch is refitted on the worst density: CH4.3c2's level
 scans with the random charges and level scans of W1's constant density at x = 6.8–216 (kD = 250,
@@ -390,23 +402,25 @@ sampled targets within ε/2 on W1, W3 and W4, measured over 0.14 ≤ x ≤ 65 an
 10⁻⁸ ≤ ε ≤ 10⁻³ and checked in the full FMM at x = 108 (W1 at kD = 500) and at x = 216 and
 108 (W1 at kD = 1000, within ε at 10⁻⁸ to 10⁻³, at most 0.83 ε; raising either level moves the
 error by under 1 %; amended at CH4.0c). Beyond that it is
-an extrapolation, below S7's per-pair p* as x grows and ε falls; CH4.3c2 and CH4.3c3
+an extrapolation, below S7's per-pair p* as x grows and ε falls; CH4.3c2, CH4.3c3 and CH4.8b
 recalibrated the high-frequency levels (above). The low-frequency plateau is 7, 9, 12, 15, 20 and 24 at
 10⁻³ … 10⁻⁸, about half of S7's 16 … 46. On the example above (CH3.6's W1 tree at kD = 500,
-10⁻⁶, leaves on level 7; the calibrated column CH4.3c3's rule, CH4.3c2's 71 and 41 on levels 3
-and 4, CH3.3's 131 and 72 on levels 2 and 3):
+10⁻⁶, leaves on level 7; the calibrated column the rule with CH4.8b's margin, CH4.3c3's one degree
+lower on levels 2–6, CH4.3c2's 71 and 41 on levels 3 and 4, CH3.3's 131 and 72 on levels 2 and 3;
+amended at CH4.8b):
 
 | Level | Box width | p_l, formula | p_l, calibrated |
 | --- | --- | ---: | ---: |
-| 2 | 19.9 λ | 144 | 128 |
-| 3 | 9.9 λ | 82 | 70 |
-| 4 | 5.0 λ | 50 | 40 |
-| 5 | 2.5 λ | 33 | 25 |
-| 6 | 1.2 λ | 25 | 16 |
+| 2 | 19.9 λ | 144 | 129 |
+| 3 | 9.9 λ | 82 | 71 |
+| 4 | 5.0 λ | 50 | 41 |
+| 5 | 2.5 λ | 33 | 26 |
+| 6 | 1.2 λ | 25 | 17 |
 | 7 | 0.6 λ | 23 | 15 |
 
-The top level, formula and calibrated rule, at 10⁻⁶ and 10⁻⁸: 43 and 48 against 34 and
-38 at kD = 100 (CH4.3c2's rule 35 and 38); 144 and 151 against 128 and 134 at kD = 500 (CH3.3's rule 131 and 135). The
+The top level, formula and calibrated rule, at 10⁻⁶ and 10⁻⁸: 43 and 48 against 35 and
+39 at kD = 100 (CH4.3c3's rule 34 and 38, CH4.3c2's 35 and 38); 144 and 151 against 129 and 135
+at kD = 500 (CH4.3c3's rule 128 and 134, CH3.3's 131 and 135). The
 formula stays above as the uncalibrated reference. The excess p − x on the high-frequency levels
 grows about linearly in L, faster than the formula's (ln 1/ε)^{2/3}, which CH4.3c2 refitted.
 
@@ -2047,6 +2061,12 @@ these.
   #258, "Accept all (Recommended)"): Section 7, the paragraph "H4 measurements": the signature
   scratch against the model, the fallback at one rank per core, the FMM's resident growth and
   build per k against FMM3D's, the diagonal form's gain.
+- **Amended at CH4.8b, 2026-11-25** (`tetraleaf-validate/results/helmholtz-ch4-8a.md` §8,
+  questions 2 and 3, signed off by the user on #260, "All decisions as recommended.";
+  `tetraleaf-validate/results/helmholtz-ch4-8b.md`; PR of CH4.8b): Section 3.5, the calibrated
+  rule's high-frequency branch with one degree of margin after its cap (`DegreeRule::margin`;
+  CH4.3c3's rule kept as `DegreeRule::CH4_3C3`), the plateau unchanged, for W2's constant density;
+  the example table's calibrated degrees on levels 2–6 and the top level at kD = 100 and 500.
 
 ## Appendix B. The stability check behind Section 3.6
 
