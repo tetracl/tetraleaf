@@ -75,8 +75,9 @@
 //! constant density at kD = 10–500 and over CH4.4a's random charges. The plateau is unchanged:
 //! where the branch with its margin lies below it, the degree is the plateau's. As measured in
 //! CH4.8a `h1` was the branch with d = 3 and no cap; it differs from the margin after the cap
-//! only where the cap binds (x = 7.1–13.5 at ε ≤ 2 · 10⁻⁷), by one degree, where the levels of
-//! CH4.8a's trees ran the waves' resolving degree p_w above both.
+//! only at isolated points where the cap binds (within x = 7.1–13.5 and ε ≤ 2 · 10⁻⁷; on the
+//! tests' grid four points, x = 8.7–11.3), by one degree, below the waves' resolving degree p_w
+//! there; at the levels of CH4.8a's trees the two never differ.
 //!
 //! Complex k takes Re(k) a, provisionally: S7 found η = Im k / Re k = 0.1 within 10 degrees
 //! of real k, and the damping-dependent rule is CH5.2's.

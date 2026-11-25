@@ -35,12 +35,12 @@ Script `tools/helmholtz/ch4-8b-runs.sh`; tables `tools/helmholtz/ch4-8b-tables.p
   250 and 500. W1 and W2 at kD = 10 have no far field (the tree's two levels hold every pair as near:
   errors 0 under both rules); the bound is meaningful from kD = 30.
 - **The random charges stay within ε (§2).** CH4.4a's 18 random-charge and plane-wave cases (W1 to
-  kD = 1000, W2 to 500, W3 to 200 resolved and at N = 10⁶ for 500) at all six ε: §9.1's ℓ2 at most
+  kD = 1000, W2 to 500, W3 resolved to kD = 100 and at N = 10⁶ for 200 and 500) at all six ε: §9.1's ℓ2 at most
   **0.28 ε** (W3 at kD = 30, 10⁻⁶), at or below CH4.4a's at every ε it ran (0.49 ε at most there).
 - **The cost (§3).** One setting per launch, A B B A, CH4.3c3's rule (A) against the default (B), W1
   at kD = 100–1000, W2 at 500, W3 at N = 10⁶ for 500, 10⁻³, 10⁻⁶, 10⁻⁸: build plus evaluation
   **0.983–1.048× on Kathleen (geometric mean 1.020)** and **0.999–1.020× on locust (1.011)**; the
-  evaluation alone up to 1.101× (Kathleen, W1 at kD = 500, 10⁻³), the build within ±4 %; the FMM's
+  evaluation alone up to 1.101× (Kathleen, W1 at kD = 500, 10⁻³), the build 0.96–1.04×; the FMM's
   resident growth 1.00–1.08× on locust and 0.88–1.12× on Kathleen (the smallest cases' growth of
   0.1–0.2 GB the noisiest; W3 at 10⁻³ 0.88× a measurement's spread, the degrees higher). The build per
   k under the default (§2, Kathleen, 1 × 40): W1 0.009, 0.015, 0.10, 0.54, 2.5 and 12.7 s at kD = 10,
@@ -368,8 +368,8 @@ CH4.3c3's.
 The evaluation grows most at 10⁻³ (1.03–1.10×, but 0.98× for W1 at kD = 100 on Kathleen, a 0.09 s evaluation), where the margin adds the most to a level's (p + 1)²
 and the levels on the plateau's edge (k a ≈ 3.4, 6.8) leave the plateau for the branch (the default's
 degree 8 where CH4.3c3's was 7, W1 and W2); at 10⁻⁸ the levels below x ≈ 13.5 run the waves' p_w = 32
-under both rules, so only the top levels change (0.99–1.03×). The build moves within the launches'
-spread (±4 %): the high-frequency tables (the form's transfer functions, RCR's rotations) grow by one
+under both rules, so only the top levels change (0.98–1.03×). The build moves within the launches'
+spread (0.96–1.04×): the high-frequency tables (the form's transfer functions, RCR's rotations) grow by one
 degree of hundreds.
 
 ## 4. Questions for sign-off
@@ -377,7 +377,7 @@ degree of hundreds.
 1. **The acceptance as read.** The roadmap's *Done when* of CH4.8b read as: the margin the library's
    default (done: `DegreeRule::CALIBRATED`, §3.5 amended); W1–W3 with the constant density at kD =
    10–500 at all six ε of D1 within ε in ℓ2 and every worst box ≤ 100 ε (§1: 108 points, ℓ2 ≤ 0.67 ε,
-   worst box ≤ 76.3 ε; W2 also at kD = 175 and 375, between the records' points); CH4.4a's random
+   worst box ≤ 76.3 ε; W1 and W2 also at kD = 175, W2 at 375, between the records' points); CH4.4a's random
    charges within ε (§2: ≤ 0.28 ε at all six ε); the cost on Kathleen and locust (§3). *Recommended:*
    as read.
 2. **The default.** *Recommended:* keep the margin as the default (CH4.8a's question 2, now verified
@@ -385,5 +385,9 @@ degree of hundreds.
    of CH4.3c3's rule (geometric means of build plus evaluation), the resident growth within about
    8 %. Alternative: none recommended; CH4.3c3's rule misses 12 of the 108 points (all W2's).
 3. **H4.** *Recommended:* CH4.8 done; H4's gate (`/milestone-gate H4`) next, as the priority list's
-   item 11 says, its run of the constant density on W2 now covered by §1.
+   item 11 says, its run of the constant density on W2 now covered by §1. For the gate: §10 CH4.4's
+   FMM3D side and the class-boundary mapping (CH4.4a, CH4.4b) were recorded under CH4.3c3's rule and
+   not rerun under the default; this report reran our side's errors (§1, §2), not FMM3D's or the
+   crosscheck by level and class, and the gate decides whether those need a rerun (the default only
+   raises degrees, every level one at most).
 

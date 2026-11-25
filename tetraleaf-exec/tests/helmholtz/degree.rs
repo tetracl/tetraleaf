@@ -163,10 +163,13 @@ const MEASURED_CONSTANT: [(f64, [usize; 6]); 6] = [
 
 #[test]
 fn the_calibrated_rule_covers_the_measured_degrees() {
-    for (x, row) in MEASURED.into_iter().chain(MEASURED_CONSTANT) {
-        for (epsilon, p) in EPSILONS.into_iter().zip(row) {
-            let rule = DegreeRule::CALIBRATED.degree(x, epsilon);
-            assert!(rule >= p, "x = {x}, ε = {epsilon:e}: {rule} < {p}");
+    // The default, and CH4.3c3's rule without the margin (Helmholtz CH4.8b), which covered them.
+    for rule in [DegreeRule::CALIBRATED, DegreeRule::CH4_3C3] {
+        for (x, row) in MEASURED.into_iter().chain(MEASURED_CONSTANT) {
+            for (epsilon, p) in EPSILONS.into_iter().zip(row) {
+                let degree = rule.degree(x, epsilon);
+                assert!(degree >= p, "x = {x}, ε = {epsilon:e}: {degree} < {p}");
+            }
         }
     }
 }
@@ -438,9 +441,10 @@ fn the_degrees_ch4_8a_ran() {
 }
 
 /// `h1` as CH4.8a ran it (the default's constants with d = 3 and no cap, no margin) against the
-/// default (the margin after the cap): the same degree on 4 ≤ x ≤ 512 and 10⁻⁸ ≤ ε ≤ 10⁻³ but where
-/// CH4.3c3's cap binds, at x = 7.1–13.5 and ε ≤ 2 · 10⁻⁷, where `h1` is one degree more (CH4.8a's
-/// report §1); there every level of CH4.8a's trees ran p_w above both.
+/// default (the margin after the cap): the same degree on 4 ≤ x ≤ 512 and 10⁻⁸ ≤ ε ≤ 10⁻³ but at
+/// four isolated points where CH4.3c3's cap binds, within x = 7.1–13.5 and ε ≤ 2 · 10⁻⁷ (CH4.8a's
+/// report §1), where `h1` is one degree more, at most the waves' resolving degree p_w (28 for
+/// 10⁻⁷ ≤ ε < 10⁻⁶, 32 below), which a level with a quadrature runs above both.
 #[test]
 fn h1_as_run_against_the_default() {
     let h1 = DegreeRule {
@@ -463,12 +467,16 @@ fn h1_as_run_against_the_default() {
                     (7.1..=13.5).contains(&x) && epsilon <= 2e-7,
                     "x = {x}, ε = {epsilon:e}"
                 );
-                assert!(p <= 28, "x = {x}, ε = {epsilon:e}: {p} above p_w");
+                let p_w = if epsilon < 1e-7 { 32 } else { 28 };
+                assert!(
+                    ran <= p_w,
+                    "x = {x}, ε = {epsilon:e}: {ran} above p_w = {p_w}"
+                );
                 more += 1;
             }
         }
     }
-    assert!(more > 0);
+    assert_eq!(more, 4);
 }
 
 /// CH4.3c2's rule is kept as [`DegreeRule::CH4_3C2`] (Helmholtz CH4.3c3): the default before.

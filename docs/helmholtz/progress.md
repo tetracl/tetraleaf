@@ -4708,14 +4708,15 @@ request, using this template:
   0.5 ≤ x ≤ 512 and 10⁻⁸ ≤ ε ≤ 10⁻³, the plateau unchanged; CH4.8a's degrees as run (W2 at kD = 250
   and 500, all six ε, the levels the waves do not raise) for the default and for CH4.3c3's rule; `h1`
   as run (d = 3, no cap) equal to the default but where the cap binds (x = 7.1–13.5, ε ≤ 2·10⁻⁷, one
-  degree more, below p_w); CH4.3c3's rule at most its cap (the test moved to it); the existing
+  degree more, at four points of the grid, at most p_w); CH4.3c3's rule at most its cap (the test moved to it); the existing
   tests' degrees (`resolve`, CH3.3's, the high branch) with the default's and CH4.3c3's. Every FMM
   test passes under the new degrees as it stands.
 - Measurements (Kathleen `singlenode`, 1 × 40, jobs 672698–672702; locust 1 × 72):
-  - the constant density under the default on W1 and W2 at kD = 10–500 (W2 also at 175 and 375) and
+  - the constant density under the default on W1 and W2 at kD = 10–500 (W1 and W2 also at 175, W2 at 375) and
     W3 resolved and at N = 10⁶ to kD = 500, all six ε (108 points): ℓ2 ≤ 0.67 ε, worst box ≤ 76.3 ε;
-    CH4.3c3's rule on the same matrix misses at 12 W2 points (new: kD = 175 at 10⁻⁴, 1.21 ε; 375 at
-    10⁻⁵, 1.16 ε, and its worst boxes at 10⁻⁶–10⁻⁸, up to 150.4 ε); its rows equal CH4.8a's records;
+    CH4.3c3's rule on the same matrix misses at 12 W2 points, six of them new (kD = 175 at 10⁻⁴,
+    1.21 ε, and its worst box at 10⁻⁸, 108.2 ε; 375 at 10⁻⁵, 1.16 ε, and its worst boxes at
+    10⁻⁶–10⁻⁸, up to 150.4 ε); its rows equal CH4.8a's records;
   - CH4.4a's 18 random-charge and plane-wave cases at all six ε: ℓ2 ≤ 0.28 ε;
   - the cost, A B B A, one setting per launch, W1 at kD = 100–1000, W2 at 500, W3 at N = 10⁶ for 500, at
     10⁻³, 10⁻⁶, 10⁻⁸: build plus evaluation 0.983–1.048× on Kathleen (geometric mean 1.020),

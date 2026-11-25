@@ -357,7 +357,8 @@ ceiling (`DegreeRule::margin`), the plateau unchanged; without it the rule is CH
 (`DegreeRule::CH4_3C3`, kept). W2 with the constant density, whose dense polar cap lies against
 a face of the root cube so that its boxes' truncation errors add coherently over many levels,
 missed ε in ℓ2 under CH4.3c3's rule (∇φ 1.28 ε at kD = 500 and 10⁻³, 1.03 ε at 10⁻⁴) and the box
-bound of Section 9.1 (101–166 ε at 10⁻⁶ to 10⁻⁸): the degree rule's truncation on W2's deep tree,
+bound of Section 9.1 (101–166 ε at 10⁻⁶ to 10⁻⁸; and at kD = 175 and 375, 1.21 ε, 1.16 ε and up to
+150.4 ε, CH4.8b §1): the degree rule's truncation on W2's deep tree,
 the M2L adding nothing (CH4.8a, `tetraleaf-validate/results/helmholtz-ch4-8a.md`). One degree on
 every level of the branch (CH4.8a's `h1`, signed off on #260) is a hand-chosen margin, as CH4.3c2's
 +2 was: CH4.3c3's refit scanned one level at a time on W1's sphere, where the levels' errors do not

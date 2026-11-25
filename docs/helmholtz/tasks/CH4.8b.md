@@ -126,9 +126,9 @@ node-c11a-094); locust 1 × 72, quiet before the run, `cost` (72 launches). Outp
 
 ## Results
 Report `tetraleaf-validate/results/helmholtz-ch4-8b.md`. Under the default (CH4.3c3's rule + 1
-after the cap) the constant density on W1–W3 at kD = 10–500 (W2 also at 175 and 375) holds at all six
-ε: ℓ2 ≤ 0.67 ε, worst box ≤ 76.3 ε (108 points); CH4.3c3's rule misses at 12 of them, all W2's, two
-of them new (kD = 175 at 10⁻⁴, 375 at 10⁻⁵). CH4.4a's random charges within 0.28 ε at all six ε.
+after the cap) the constant density on W1–W3 at kD = 10–500 (W1 and W2 also at 175, W2 at 375) holds at all six
+ε: ℓ2 ≤ 0.67 ε, worst box ≤ 76.3 ε (108 points); CH4.3c3's rule misses at 12 of them, all W2's, six
+of them new (kD = 175 at 10⁻⁴ and 10⁻⁸; kD = 375 at 10⁻⁵–10⁻⁸). CH4.4a's random charges within 0.28 ε at all six ε.
 Cost, A B B A, one setting per launch: build plus evaluation 0.983–1.048× on Kathleen (geometric
 mean 1.020), 0.999–1.020× on locust (1.011); resident growth 0.88–1.12× and 1.00–1.08×.
 
