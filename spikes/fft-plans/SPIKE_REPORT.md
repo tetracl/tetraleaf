@@ -27,15 +27,26 @@ Spike S9 of `docs/design/helmholtz-fmm-proposal.md` (§10 CH0.9, §6.7, §12 D7,
   place of the φ step, a whole conversion would take 0.28–0.40× the product's on locust and
   0.23–0.29× on Kathleen. CH4.1a bounds the effect on a run at about 1–2 % (2 % at kD = 1000),
   since the conversions are a small part of a run.
-- **rustfft is about as fast as FFTW:** 0.88–2.16× FFTW's time on locust and 0.55–1.73× on
-  Kathleen, where it is faster at p ≤ 82. It meets D7's condition (deterministic per box, faster than
-  the product) on both machines, with no system library and no GPL.
-- **An FFT needs the smooth grid.** The product's grid, `azimuth_count` (4P − 3 rounded up to a
-  multiple of 4), is not the smooth grid that §6.7's "Grid sizes" describes: N_φ / 4 can have a large
-  prime factor (580 = 4 · 5 · 29), and FFTW on it takes up to 8.7× (rustfft up to 3.9×) its time on
-  the smooth N_φ (588). Powers of two cost 0.45–1.95×.
-- **D7, proposed per machine:** the product stays the default and the reference everywhere. One
-  optional FFT back end on its own smooth grid, rustfft rather than FFTW (question 1 of the PR).
+- **rustfft is close to FFTW, not equal to it.** It takes 0.88–2.16× FFTW's time on locust (median
+  1.53×) and 0.55–1.73× on Kathleen (median 1.10×; faster at p ≤ 82). It is deterministic per box on
+  all three machines and faster than the product on both timed ones, with no system library and no
+  GPL. Its bits across ranks were not checked, since it has no plan fingerprint (§7).
+  Neither were its times on the M6.
+- **The grid matters to an FFT.** The product's grid, `azimuth_count` (4P − 3 rounded up to a
+  multiple of 4), is not the smooth grid of §6.7's "Grid sizes": N_φ / 4 can have a large prime
+  factor (580 = 4 · 5 · 29). On it FFTW takes up to 8.7× (rustfft up to 3.9×) its time on the
+  smooth N_φ (588).
+  - Even on the product's grid, the FFTs mostly beat the product's φ step: rustfft at 0.15–0.82×
+    (locust) and 0.07–0.33× (Kathleen); FFTW at 0.17–1.04× and 0.12–0.64×.
+  - The smooth grid costs up to 5.9 % more samples (216/204), in the diagonal pairs, the signatures
+    and the transfer functions too. Since the FFT is worth 1–2 % of a run, that could cancel it.
+  - Powers of two cost 0.45–1.95× the smooth grid.
+  - Which grid an FFT level should use is question 3; it needs a level's measurement, not S9's per
+    box.
+- **D7, proposed per machine:** the product stays the default and the reference everywhere. As
+  the one optional FFT back end, rustfft rather than FFTW, on two conditions its task must meet: a
+  check across ranks (rustfft has no fingerprint) and the M6's times. FFTW's CHR.3 and CH4.6 would
+  come off the priority list but stay in the roadmap (question 1 of the PR).
 
 ## 1. Set-up
 
@@ -106,8 +117,10 @@ for the host name, and job 672796 is the record.
 
 `tests/bits.rs::accuracy_against_the_sum` covers p = 33, 82 and 261, all three grids, 2P − 1 and 2P
 rings, and FFTW interleaved, FFTW split and rustfft, against the sum. The largest relative ℓ2 error
-is 9.2·10⁻¹⁶ for synthesis and 1.6·10⁻¹⁵ for analysis, on locust and Kathleen alike, against the
-test's bound of 10⁻¹³.
+is 1.03·10⁻¹⁵ for synthesis (rustfft, p = 261, Kathleen; 1.01·10⁻¹⁵ on locust and the M6) and
+1.6·10⁻¹⁵ for analysis, against the test's bound of 10⁻¹³. The sum is in f64, so this is the
+distance between two f64 computations; the plan's double-double reference was not built, and the
+bound is 10⁻¹³, not the plan's 10⁻¹⁴.
 
 ## 3. Bits per box
 
@@ -228,27 +241,36 @@ Read per row: "FFTW smooth ÷ product φ" is the FFT against the φ step it repl
   scratch. The per-thread scratch needs two boxes (synthesis input kept zero outside the mode
   slots, and analysis output), or a re-zeroing.
 - **The batch: 2P − 1.** 2P rings ran 0.99–1.01× on both machines and changed no bits.
-- **The grid.** An FFT back end needs N_φ / 4 7-smooth, which is §6.7's own rule. The product as
-  built at CH4.1a uses `azimuth_count` (a multiple of 4 only), on which FFTW and rustfft lose up to
-  8.7× and 3.9×. A level with an FFT back end therefore takes the smooth N_φ (at most 6 % more
-  samples at these p: 140/136, 216/204, 588/580, 1080/1048), and with it its own transfer
-  functions in the table cache. §6.7's "Grid sizes" should say that the product runs on the
-  multiple of 4 (CH4.1a) and an FFT level on the smooth size (question 3).
+- **The grid (question 3).** §6.7's "Grid sizes" asks for N_φ / 4 7-smooth on the host. The
+  product as built at CH4.1a uses `azimuth_count`, a multiple of 4 only, and §6.7 should say so.
+  - On the product's grid, FFTW and rustfft take up to 8.7× and 3.9× their smooth-grid time, yet
+    still mostly beat the product's φ step (§5; the summary).
+  - The smooth N_φ costs up to 5.9 % more samples at these p (140/136, 216/204, 588/580,
+    1080/1048), and with them larger diagonal pairs, signatures and transfer functions, kept in
+    the table cache under their own key.
+  - Which grid a level with an FFT should use is left to that back end's task. It needs a level's
+    time, not S9's per box.
 - **`rlst::fftw::version()` per machine:** see §1. These are the same as CHR.4's records.
-- **D7, per machine (question 1).** The proposal's recommendation and its condition for rustfft
-  were met on both measured machines.
+- **D7, per machine (question 1).** On both timed machines rustfft meets the proposal's condition
+  of deterministic per box and faster than the product. Its bits across ranks and its time on the
+  M6 are not shown.
 
   | Machine | Product's φ step | FFTW (smooth) | rustfft (smooth) | Proposal |
   | --- | --- | --- | --- | --- |
   | locust | 1× | 0.10–0.25× | 0.14–0.32× | product default; rustfft the optional FFT |
   | Kathleen | 1× | 0.04–0.14× | 0.05–0.11× | product default; rustfft the optional FFT |
-  | M6 | not timed (the user) | scalar FFTW (CHR.4) | not timed | product default; rustfft deterministic per box here too (§3); its time to be measured when the back end is built |
+  | M6 | not timed (the user) | scalar FFTW (CHR.4), not timed | not timed | product default; rustfft deterministic per box here too (§3); its time is a condition of its task |
 
   The FFT saves about 1–2 % of a run (CH4.1a). The product therefore stays the default and the
   reference: it has no dependency, and its bits are those of every fixture and test today. For the
-  optional back end, rustfft gives nearly all of FFTW's gain, without a system library, the GPL,
-  pkg-config or the fftw-sys licence entry. FFTW's wrapper (CHR.3) and its back end (CH4.6) would
-  then leave the priority list, and HR's gate would drop its third item.
+  optional back end, rustfft gives most of FFTW's gain without a system library, the GPL, pkg-config
+  or the fftw-sys licence entry. On the conversion as modelled, rustfft gives 0.31–0.46× the
+  product's time on locust against FFTW's 0.28–0.40×.
+  - The recommendation: CH4.6 retargeted to rustfft behind an optional feature, its acceptance
+    adding (a) a check across ranks (rustfft's version, N_φ and the dispatched CPU features,
+    all-gathered at build, the product on every rank where they differ) and (b) the M6's times.
+  - FFTW's wrapper (CHR.3) and back end would come off the priority list but stay in the roadmap,
+    and HR's gate would wait for them as before.
 
   The alternatives:
   - as the proposal stands: FFTW behind `fftw` (CHR.3, CH4.6), rustfft not adopted;
@@ -266,4 +288,16 @@ Read per row: "FFTW smooth ÷ product φ" is the FFT against the φ step it repl
 - rustfft has no plan description or fingerprint. A back end on it needs its own check across ranks,
   for example rustfft's version, N_φ and the CPU features it dispatches on (`simd_features`),
   all-gathered at build as §6.7 does for FFTW (question 1, its condition).
-- The M6's times were not run (the user). Its bits (§3, §4) and fingerprints were.
+- The M6's times were not run (the user). Its bits (§3, §4) and fingerprints were. The §10 row
+  asks for its times, so that part of the acceptance is deferred to the back end's task.
+- The split against interleaved times are not a comparison of the plans alone. The split scatter
+  and gather compute each slot by an integer `%` (`Shape::scatter_split`), while the interleaved
+  path copies whole runs. This biases against split, so the ratios overstate split's cost. The
+  conclusion (interleaved) is unchanged.
+- rustfft's times include passes FFTW avoids: it zero-fills the live box before synthesis and
+  copies the box before analysis, where FFTW keeps a zeroed scratch and a preserving plan. Its
+  ratios are therefore conservative.
+- The thread test runs each batch on rayon pools of 1, 2, 4 and all threads (`par_bridge`, a
+  scratch per worker), but does not record which worker took which box.
+- The "for the record" variants (§4) are checked for synthesis only; analysis is covered by the
+  bit tests of §3 alone.

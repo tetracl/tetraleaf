@@ -104,7 +104,8 @@ Slash commands in `.claude/skills/`, for the Helmholtz work:
   no other crate-level lock files. Commit lock-file changes with
   the manifest change that causes them.
 - The target directory is shared at the root; run every command from there (the spikes
-  workspace's commands from `spikes/`, into `target/spikes`).
+  workspace's commands from `spikes/`, into `target/spikes`; S9's from `spikes/fft-plans/`, into
+  `target/spikes-fft-plans`).
 - `.gitignore` covers `target/` but not VTK output or `*.csv`; keep those out by hand.
 
 ## Build environment

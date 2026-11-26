@@ -46,7 +46,8 @@ Homebrew FFTW 3.3.11 without SIMD (`tools/m6/machine.md`).
   nor the spikes' workspace, and FFTW and rustfft enter neither `Cargo.lock` nor
   `spikes/Cargo.lock`. Its own lock file `spikes/fft-plans/Cargo.lock` is committed (the one
   crate-level lock file, the proposal's arrangement; root `CLAUDE.md`'s "Layout" gains a
-  sentence). Target directory `target/spikes` (the spikes' `.cargo/config.toml` applies).
+  sentence). Target directory `target/spikes-fft-plans` (its own `.cargo/config.toml`, so it does
+  not rebuild the spikes workspace's shared crates).
 - Dependencies of the spike only: `rlst = { version = "0.12.0", features = ["fftw_system"] }`
   (the root's requirement plus the feature), `rustfft = "6.4"` (new; MIT OR Apache-2.0),
   `mpi = "0.8.2"` (the root's) for the fingerprint check across ranks, `rayon = "1"`,
@@ -66,27 +67,32 @@ Homebrew FFTW 3.3.11 without SIMD (`tools/m6/machine.md`).
     slots μ mod N_φ (zero elsewhere) and transforms; F → R transforms backward and gathers
     the 2P − 1 slots. A naive DFT (the φ step as a product, in f64 and double-double from
     `Grid`'s azimuths) is the trusted path for the accuracy check.
-- `examples/bits.rs`: the determinism matrix; prints a table and a hash of every box's
-  output bits (for the fresh-process comparison).
+- `examples/record.rs`: the "for the record" variants (one plan over the batch, other ring
+  strides, class 16, 2P rings, split, rustfft) against the per-box plan, and FFTW's plan
+  descriptions. The fresh-process comparison is a test (`bits_in_fresh_processes`).
 - `examples/times.rs`: time per box, one thread, for each p and back end; Markdown table.
 - `examples/fingerprints.rs` (MPI): every rank plans every (p, grid, R, direction) and
   all-gathers the fingerprints; prints whether the ranks agree.
-- `SPIKE_REPORT.md` and `results/<machine>-{bits,times,fingerprints}.md`; `spikes/README.md`
-  (the spike's row and its build line, the exception to "one spikes workspace").
-- No report script (the examples print the tables); none imports `tools/helmholtz/common.py`.
+- `run.sh <machine>`: every run of one machine into `results/<machine>/` (`tests.txt`,
+  `record.md`, `times-<variant>-<grid>.md`, `fingerprints.md`, `load.txt`), one times setting per
+  launch.
+- `SPIKE_REPORT.md`; `spikes/README.md` (the spike's row and its build line, the exception to
+  "one spikes workspace").
+- `tools/helmholtz/ch0-9-tables.py`: the report's time tables from one machine's times files,
+  reading them with `common.tables` and `common.find_table`.
 - Conventions: none.
 
 ## Tests that prove it
 In `spikes/fft-plans/tests/` (run by hand, not in CI, like every spike):
-- **Accuracy** against the naive DFT in double-double, forward and backward, on random modes,
-  every back end, p ∈ {33, 82, 261}, smooth and power-of-two N_φ: relative ℓ2 error ≤ 10⁻¹⁴
-  (the product's own round-off level; CH4.1a measured ≤ 2·10⁻¹⁵ for its conversions).
+- **Accuracy** against the naive DFT (as built: in f64, bound 10⁻¹³; the double-double
+  reference and 10⁻¹⁴ planned here were not built), forward and backward, on random modes, every
+  back end, p ∈ {33, 82, 261}, the product, smooth and power-of-two N_φ.
 - **Bits per box, FFTW and rustfft** (`assert_eq!` on the `u64` bits): one box's input at
-  positions 0, 1, B − 1 of packed batches of B ∈ {1, 2, 7, 64} boxes; transformed by 1, 2, 4
+  every position of packed batches of B ∈ {1, 2, 7, 33} boxes; transformed by 1, 2, 4
   and all rayon threads (the box on different workers); R = 2P − 1 and 2P, interleaved and
   split, each against itself; every buffer's `AlignmentClass` 0.
-- **Fresh processes**: the test runs `examples/bits` twice as child processes
-  (`CARGO_BIN_EXE`-style path) and compares the printed hashes.
+- **Fresh processes**: the test runs its own binary twice as child processes (the ignored test
+  `child_hashes`) and compares the printed hashes with each other and with its own.
 - **For the record** (printed, not asserted): a plan over the whole batch (howmany = B · R)
   and over strides other than N_φ against the per-box plan: equal bits or not; 2P against
   2P − 1 rings on the live rings; split against interleaved.
@@ -135,10 +141,13 @@ the machine, CPU, `rlst::fftw::version()` and rustfft's version.
   same plan, so its bits per box should hold; across machines they differ, as FFTW's do.
 
 ## Pending runs
-<filled in step 6>
+None. Done: locust (2026-11-26, `run.sh locust`), Kathleen jobs 672793 (one node, c11b-038) and
+672796 (fingerprints across c11b-013 and c11b-031; 672794 before it could not show its nodes), the
+M6 (tests, record, fingerprints; no times, the user). Raw outputs in `spikes/fft-plans/results/`.
 
 ## Open questions
 1. The new dependencies (rustfft; rlst's `fftw_system`; mpi) in a spike with its own workspace
-   and committed lock file `spikes/fft-plans/Cargo.lock`: asked before implementing (the
-   skill's stop for a new dependency).
-2. The M6 times: asked before running (a quiet machine).
+   and committed lock file `spikes/fft-plans/Cargo.lock`: the user, 2026-11-26, "Go ahead
+   (Recommended)".
+2. The M6 times: the user, 2026-11-26, "Skip the M6". Its tests, record and fingerprints ran.
+3. For sign-off on the PR: D7, the batch and layout, the grid (`SPIKE_REPORT.md` §6).
