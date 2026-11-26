@@ -99,10 +99,13 @@ Slash commands in `.claude/skills/`, for the Helmholtz work:
   the root workspace: no check of the root builds it, and CI never does. Build a spike by
   hand from `spikes/` (`spikes/README.md`), and rebuild the ones a task reruns or cites.
 - `Cargo.lock` lives at the root and is committed, and so does `spikes/Cargo.lock`, the
-  spikes workspace's; there are no crate-level lock files. Commit lock-file changes with
+  spikes workspace's, and `spikes/fft-plans/Cargo.lock`, S9's (a workspace of its own, outside
+  the spikes', so that FFTW and rustfft enter no other lock file; Helmholtz CH0.9); there are
+  no other crate-level lock files. Commit lock-file changes with
   the manifest change that causes them.
 - The target directory is shared at the root; run every command from there (the spikes
-  workspace's commands from `spikes/`, into `target/spikes`).
+  workspace's commands from `spikes/`, into `target/spikes`; S9's from `spikes/fft-plans/`, into
+  `target/spikes-fft-plans`).
 - `.gitignore` covers `target/` but not VTK output or `*.csv`; keep those out by hand.
 
 ## Build environment

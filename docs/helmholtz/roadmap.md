@@ -7,16 +7,17 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/tasks/<ID>.md`; each milestone's gate report is
 `docs/helmholtz/gates/<milestone>.md`.
 
-Status (2026-11-25): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
-`gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). CHA.10a (item 12)
-done: `tools/helmholtz/common.py`, the module new report scripts import. Next the FFT track (item
-13: CH0.9, then CHR.3 and CH4.6, D7 between), then H2 and H5 (items 14–15). Eight H4 tasks stay open
-off the list. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are
-open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c. The history of this line until H6.G is
-in `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until
-H1.G in `git show 8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show
-4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`;
-until CHA.10a in `git show 6bad3c2:docs/helmholtz/roadmap.md`.
+Status (2026-11-26): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
+`gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). CH0.9 (S9, the FFT
+track's first task, item 13) done and D7 signed off: the product stays the default, rustfft becomes the
+one optional FFT back end (CH4.6a, next), and the FFTW route (CHR.3, CH4.6b) leaves the list; then H2
+and H5 (items 14–15). Eight H4 tasks stay open off the list. The project was
+renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are
+done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's
+history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show
+8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show 4d28d41:docs/helmholtz/roadmap.md`; until
+its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show
+6bad3c2:docs/helmholtz/roadmap.md`; until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -101,12 +102,13 @@ CHA.10a as item 12, before the FFT track.
 11. CH4.8 The constant density on W2 (CH4.8a, CH4.8b; split on 2026-11-24), then H4.G again
     (added on 2026-11-24 at the H4 gate; H4.G closed on 2026-11-25)
 12. CHA.10a The report scripts' shared module (added on 2026-11-25 at the H4 gate's second run)
-13. CH0.9 S9, CHR.3 the FFTW wrapper, CH4.6 the optional FFTW back end
+13. CH0.9 S9, CH4.6a the optional rustfft back end. D7, signed off at CH0.9 (the user on #264,
+    2026-11-26: "Q1-3 as recommended"), moved CHR.3 and CH4.6b, the FFTW route, off the list
 14. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
     CH2.1 and CH2.2 wait for D4, which CH2.1 prepares)
 15. CH5.1, CH5.2, CH5.3 and H5.G Complex wavenumber (added on 2026-11-24 at the H4 gate)
 
-Off the list, in file order: CH0.8b, CH0.5 and H0.G; CH4.0f (the user, 2026-11-12, on #211);
+Off the list, in file order: CH0.8b, CH0.5 and H0.G; CHR.3 and CH4.6b (moved off at CH0.9 by D7, the user on #264, 2026-11-26: "Q1-3 as recommended"); CH4.0f (the user, 2026-11-12, on #211);
 CH4.7 (added at CH4.5, its question 4; the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."); CH4.3f (added at CH4.3b2c, off the list until CH4.5, kept off at CH4.5, its question 3, by the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."; the user on #251, 2026-11-22: "Q1-5 as recommended"); CH4.2d (added at CH4.2b2, off the list until CH4.5, kept off at CH4.5, its question 2, by the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."; the user on #239, 2026-11-20: "All 4 questions as recommended.");
 CH4.0k (added at CH4.0h; the user, 2026-11-16, on #221: off the list; kept off at CH4.0j, on
 #223); CH4.0l (added at CH4.0i;
@@ -130,7 +132,7 @@ The proposal's Section 12, plus D0. A decision is recorded here when the user ta
 | D4 | Yukawa: its own operator type, or the wavenumber kind as a type parameter | one `HelmholtzOperator<T, K>` if CH2.1 shows no cost to the complex path | CH2.1 | CH2.2 | open |
 | D5 | Source types of the first release | real and complex charges, potentials and gradients; dipoles once C6.4 exists for Laplace (note: Laplace dipoles were merged in Phase 6 T8 and T8d, so the condition is met) | – | CH1.1 | signed off 2026-10-29: charges now, dipoles later; §3.15 fixes real and complex charges with potentials and gradients, and dipoles get a later, separate task; that task is CH9.0, added at the H1 gate (the user, 2026-11-19, on #230: "Add CH9.0 (Recommended)") |
 | D6 | Order of H4 and H6 | H6 first | H3.G | CH6.1, CH4.1 | signed off 2026-11-02 (H3 gate, question 2): "i agree with the recommendations", H6 first, as recommended; on the gate report's reason (§3.3): the calibrated degrees cut the low-frequency share of the far field at kD = 500 to about half (an estimate), and the FMM is slowest against FMM3D on low-frequency trees at tight ε, which H6 targets |
-| D7 | Host back ends of the φ step | the product as default and reference; FFTW behind the optional `fftw` feature; rustfft if S9 finds it deterministic per box and faster, decided per machine | CH0.9 | CHR.3, CH4.6 | open |
+| D7 | Host back ends of the φ step | the product as default and reference; FFTW behind the optional `fftw` feature; rustfft if S9 finds it deterministic per box and faster, decided per machine | CH0.9 | CH4.6a, CHR.3, CH4.6b | signed off 2026-11-26: "Q1-3 as recommended" (#264; `spikes/fft-plans/SPIKE_REPORT.md` §6): the product the default and reference on every machine; rustfft the one optional FFT back end (CH4.6a), with a check across ranks and the M6's times; FFTW (CHR.3, CH4.6b) off the priority list, kept in the roadmap |
 | D8 | Exponential M2L as a default on low-frequency levels | after CH6.2 | CH6.2h | CH7.5d | signed off 2026-11-08 (CH6.2h, questions 1–5; the user: "1–5 as recommended"): `Auto` takes the exponential M2L by default where p_l ≥ d_pw (Batched's crossover + 1; 12 on AVX-512 with two planes), CH6.1e's rule gives a quadrature (ε ≥ 10⁻⁶) and Im κ_l < 5π, f64 only; no boxes term (Batched's few-box levels to CH4.0); proposal §5.3 and §6.4 amended. Amended 2026-11-11 (CH6.1g, question 2; the user: "Lift for 10⁻⁸–10⁻⁷ only (Recommended)"): `Auto` also takes it at 10⁻⁸ ≤ ε < 10⁻⁷, where the rule runs iprec 3 at the raised degree max(p_l, 32), and not at 10⁻⁷ ≤ ε < 10⁻⁶ until CH6.1h; proposal §5.3 amended. Amended 2026-11-11 (CH6.1h, question 2; the user: "Lift it (Recommended)"): `Auto` also takes it at 10⁻⁷ ≤ ε < 10⁻⁶, with the raised degree on the M2L alone there (`PlaneWaveRaise::Rule`); proposal §5.3 amended. Amended 2026-11-22 (CH4.3b2c, question 3; the user on #251, 2026-11-22: "Q1-5 as recommended"): with the diagonal form's time rule the builder's default, a level of D8's rule in its range (k a ≥ 2.8) keeps the waves unless the form beats them at the level's resolving degree, then runs the cheaper of the form and RCR; proposal §5.3, §6.4 and §12 amended |
 | D9 | What "within noise" means for Laplace's benchmarks (constraint 1) | the run-to-run spread of the Laplace baseline, repeated on each machine before the change, per benchmark; plus the C3S.4 throughput gate | – | CHR.2, CH2.0 | signed off 2026-10-26: as recommended, the measured spread of the baseline per benchmark and machine, plus the C3S.4 gate. Clarified 2026-10-26 (CHR.2): one-sided, slower than `main` by more than the spread fails, faster passes when the outputs are bit for bit identical; from CH2.0 on five runs per side in the order A B B A A B B A A B, the spread max − min of `main`'s five run medians, never pooled with the branch's. Amended 2026-10-31 (CH2.0, the user: "as recommended"): a failing row may be repeated once and the repeat counts, with both results reported. Amended 2026-10-31 (the machine move, the user: "Amend: M6 replaces M3 Max"): the M6 (`tools/m6/machine.md`) replaces the M3 Max as a machine of record, its C3S.4 reference `spikes/p2p-simd/results-m6.md` |
 | D10 | cubek-fft on the device | after S5: adopt, contribute upstream first, or keep the transform as a GEMM | CH0.5 | CH7.4 | open |
@@ -168,7 +170,8 @@ the optional FFTW wrapper of the φ step behind its feature.
   round-off; a box's bits the same across batch positions, batch sizes and thread counts;
   ranks with differing fingerprints both use the product; the feature off by default; a CI
   job with the feature (`pkg-config`, the FFTW version report, cargo-deny's entry for
-  fftw-sys). *Needs:* CHR.2, CH0.9, D7.
+  fftw-sys). *Needs:* CHR.2, CH0.9, D7. Off the priority list since CH0.9 (D7;
+  the user on #264, 2026-11-26: "Q1-3 as recommended").
 - [ ] **HR.G Gate.** `/milestone-gate HR`. *Needs:* every task above.
 
 ## H0: Spikes
@@ -220,13 +223,12 @@ D7, D10, D11, D12) put to the user.
   levels; amended at H3.G, proposal §7) and S6's constants, counting the exponential M2L's
   waves buffer and the raised stores of its levels below 10⁻⁶ (amended at H6.G, proposal §7);
   its numbers replace §7's. *Needs:* CH0.8a, CH0.6, CH0.7, D1.
-- [ ] **CH0.9 S9: FFT plans, bits and host timing.** A spike crate outside the workspace on
-  RLST 0.12's `rlst::fftw`, and rustfft. *Done when:* per-box plans of 2P − 1 and 2P rings,
-  interleaved scratch against split plans; bits identical across batch positions, batch
-  sizes, threads and fresh processes; fingerprints compared across two ranks; time per box
-  for the product, FFTW and rustfft for P from 34 to 262 on smooth and power-of-two grids;
-  `rlst::fftw::version()` per machine; D7 proposed per machine. *Needs:* CHR.4.
-  *Machines:* locust, Kathleen. *Sign-off:* D7.
+- [x] **CH0.9 S9: FFT plans, bits and host timing.** Report: `spikes/fft-plans/SPIKE_REPORT.md`
+  (raw `spikes/fft-plans/results/`). Per-box FFTW and rustfft plans keep a box's bits on the M6,
+  locust and Kathleen; fingerprints agree across two Kathleen nodes (job 672796); §6.7's layout
+  confirmed, the batch 2P − 1; FFTW 0.04–0.25× and rustfft 0.05–0.32× the product's φ step on the
+  smooth grid; M6 times skipped (the user, 2026-11-26: "Skip the M6"). Signed off on #264 (the user,
+  2026-11-26: "Q1-3 as recommended"): D7 (CH4.6a rustfft, the FFTW route off the list), §6.7 amended.
 - [x] **CH0.4 S4: plane-wave quadratures per k w_l.** Report:
   `spikes/pw-quadrature/SPIKE_REPORT.md`. *Done when:* how FMM3D obtains them;
   a generator or table for this library with its accuracy over the k w_l of low-frequency
@@ -663,11 +665,22 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   leaf on NEON after H4 (CH4.0d3 chose 128 at ε ≥ 10⁻⁷ for the evaluation alone; at 1 × 72 W1 at
   kD = 1000 builds in 13.4–14.0 s at 128 against 7.6 s at 256, CH4.5 §5): W1 and W2 at kD = 250–1000
   on locust at 1 × 72 and 4 × 18, the build and the evaluation apart. *Needs:* CH4.5. *Machines:* Kathleen, locust.
-- [ ] **CH4.6 The optional FFTW back end of the φ step.** *Done when:* against the product to
-  round-off; per-box plans with bits the same across batch positions, sizes and threads, and
-  fingerprints all-gathered; off by default, a default build linking no FFTW, cargo-deny, a CI
-  job with the feature; the GPL warning in the crate documentation, the README, the builder
-  option and `Cargo.toml`. *Needs:* CH4.1b, CHR.3, CH0.9, D7.
+- [ ] **CH4.6a The optional rustfft back end of the φ step.** Added at CH0.9 (D7; the user on #264, 2026-11-26: "Q1-3 as
+  recommended"; proposal §6.7, §10). In `tetraleaf-exec` behind an optional feature, beside the product behind the internal trait.
+  *Done when:* against the product to round-off; per-box plans with bits the same across batch
+  positions, sizes and threads (S9's layout: 2P − 1 rings, interleaved class-0 buffers, a two-box
+  per-thread scratch); at build rustfft's version, N_φ and the dispatched CPU features all-gathered,
+  and with one of two ranks made to differ (a test hook) both ranks run the product; off by default,
+  one CI job with the feature; a level's grid (the product's `azimuth_count` or the smooth size,
+  under its own cache key) chosen by the level's measured time; time per level against the product
+  on locust, Kathleen and the M6 (the M6 with the user's go-ahead; S9 did not time it). *Needs:*
+  CH4.1b, CH0.9, D7. *Machines:* locust, Kathleen, the M6.
+- [ ] **CH4.6b The optional FFTW back end of the φ step.** CH4.6 until CH0.9; off the priority list
+  since then (D7). *Done when:* against the product to round-off; per-box plans with bits the same
+  across batch positions, sizes and threads, and fingerprints all-gathered; off by default, a default
+  build linking no FFTW, cargo-deny, a CI job with the feature; the GPL warning in the crate
+  documentation, the README, the builder option and `Cargo.toml`. *Needs:* CH4.1b, CHR.3, CH0.9,
+  D7, CH4.6a (the trait).
 - [x] **CH4.8a The constant density on W2: the error mapped and a remedy chosen.** The degree rule's
   truncation on W2's deep tree against a face; `h1` (one degree after the cap) chosen. Report
   `tetraleaf-validate/results/helmholtz-ch4-8a.md`. Added at the H4 gate (M15). Signed off on #260 (2026-11-24).

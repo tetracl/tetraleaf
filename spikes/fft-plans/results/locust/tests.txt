@@ -1,0 +1,114 @@
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running unittests src/lib.rs (../../target/spikes-fft-plans/release/deps/tetraleaf_spike_fft_plans-380f07b82b39fb67)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/bits.rs (../../target/spikes-fft-plans/release/deps/bits-f86d2676a3d58327)
+
+running 4 tests
+test accuracy_against_the_sum ... p 33 product N_φ 136 rings 67 fftw: synthesis 4.61e-16, analysis 5.55e-16
+p 33 product N_φ 136 rings 67 fftw-split: synthesis 4.65e-16, analysis 5.49e-16
+p 33 product N_φ 136 rings 67 rustfft: synthesis 4.58e-16, analysis 5.43e-16
+p 33 product N_φ 136 rings 68 fftw: synthesis 4.61e-16, analysis 5.55e-16
+p 33 product N_φ 136 rings 68 fftw-split: synthesis 4.65e-16, analysis 5.49e-16
+p 33 product N_φ 136 rings 68 rustfft: synthesis 4.58e-16, analysis 5.43e-16
+p 33 smooth N_φ 140 rings 67 fftw: synthesis 3.75e-16, analysis 4.72e-16
+p 33 smooth N_φ 140 rings 67 fftw-split: synthesis 3.78e-16, analysis 4.70e-16
+p 33 smooth N_φ 140 rings 67 rustfft: synthesis 3.79e-16, analysis 4.75e-16
+p 33 smooth N_φ 140 rings 68 fftw: synthesis 3.75e-16, analysis 4.72e-16
+p 33 smooth N_φ 140 rings 68 fftw-split: synthesis 3.78e-16, analysis 4.70e-16
+p 33 smooth N_φ 140 rings 68 rustfft: synthesis 3.79e-16, analysis 4.75e-16
+p 33 pow2 N_φ 256 rings 67 fftw: synthesis 4.07e-16, analysis 6.13e-16
+p 33 pow2 N_φ 256 rings 67 fftw-split: synthesis 4.06e-16, analysis 6.16e-16
+p 33 pow2 N_φ 256 rings 67 rustfft: synthesis 4.07e-16, analysis 6.60e-16
+p 33 pow2 N_φ 256 rings 68 fftw: synthesis 4.07e-16, analysis 6.13e-16
+p 33 pow2 N_φ 256 rings 68 fftw-split: synthesis 4.06e-16, analysis 6.16e-16
+p 33 pow2 N_φ 256 rings 68 rustfft: synthesis 4.07e-16, analysis 6.60e-16
+p 82 product N_φ 332 rings 165 fftw: synthesis 6.51e-16, analysis 7.95e-16
+p 82 product N_φ 332 rings 165 fftw-split: synthesis 6.52e-16, analysis 7.95e-16
+p 82 product N_φ 332 rings 165 rustfft: synthesis 8.48e-16, analysis 1.00e-15
+p 82 product N_φ 332 rings 166 fftw: synthesis 6.51e-16, analysis 7.95e-16
+p 82 product N_φ 332 rings 166 fftw-split: synthesis 6.52e-16, analysis 7.95e-16
+p 82 product N_φ 332 rings 166 rustfft: synthesis 8.48e-16, analysis 1.00e-15
+p 82 smooth N_φ 336 rings 165 fftw: synthesis 5.49e-16, analysis 7.05e-16
+p 82 smooth N_φ 336 rings 165 fftw-split: synthesis 5.48e-16, analysis 7.06e-16
+p 82 smooth N_φ 336 rings 165 rustfft: synthesis 5.62e-16, analysis 7.19e-16
+p 82 smooth N_φ 336 rings 166 fftw: synthesis 5.49e-16, analysis 7.05e-16
+p 82 smooth N_φ 336 rings 166 fftw-split: synthesis 5.48e-16, analysis 7.06e-16
+p 82 smooth N_φ 336 rings 166 rustfft: synthesis 5.62e-16, analysis 7.19e-16
+p 82 pow2 N_φ 512 rings 165 fftw: synthesis 5.30e-16, analysis 8.17e-16
+p 82 pow2 N_φ 512 rings 165 fftw-split: synthesis 5.28e-16, analysis 8.16e-16
+p 82 pow2 N_φ 512 rings 165 rustfft: synthesis 5.33e-16, analysis 8.61e-16
+p 82 pow2 N_φ 512 rings 166 fftw: synthesis 5.30e-16, analysis 8.17e-16
+p 82 pow2 N_φ 512 rings 166 fftw-split: synthesis 5.28e-16, analysis 8.16e-16
+p 82 pow2 N_φ 512 rings 166 rustfft: synthesis 5.33e-16, analysis 8.61e-16
+p 261 product N_φ 1048 rings 523 fftw: synthesis 9.16e-16, analysis 1.20e-15
+p 261 product N_φ 1048 rings 523 fftw-split: synthesis 9.18e-16, analysis 1.20e-15
+p 261 product N_φ 1048 rings 523 rustfft: synthesis 1.01e-15, analysis 1.25e-15
+p 261 product N_φ 1048 rings 524 fftw: synthesis 9.16e-16, analysis 1.20e-15
+p 261 product N_φ 1048 rings 524 fftw-split: synthesis 9.18e-16, analysis 1.20e-15
+p 261 product N_φ 1048 rings 524 rustfft: synthesis 1.01e-15, analysis 1.25e-15
+p 261 smooth N_φ 1080 rings 523 fftw: synthesis 8.45e-16, analysis 1.16e-15
+p 261 smooth N_φ 1080 rings 523 fftw-split: synthesis 8.44e-16, analysis 1.16e-15
+p 261 smooth N_φ 1080 rings 523 rustfft: synthesis 8.96e-16, analysis 1.21e-15
+p 261 smooth N_φ 1080 rings 524 fftw: synthesis 8.45e-16, analysis 1.16e-15
+p 261 smooth N_φ 1080 rings 524 fftw-split: synthesis 8.44e-16, analysis 1.16e-15
+p 261 smooth N_φ 1080 rings 524 rustfft: synthesis 8.96e-16, analysis 1.21e-15
+p 261 pow2 N_φ 2048 rings 523 fftw: synthesis 8.28e-16, analysis 1.55e-15
+p 261 pow2 N_φ 2048 rings 523 fftw-split: synthesis 8.27e-16, analysis 1.55e-15
+p 261 pow2 N_φ 2048 rings 523 rustfft: synthesis 8.40e-16, analysis 1.58e-15
+p 261 pow2 N_φ 2048 rings 524 fftw: synthesis 8.28e-16, analysis 1.55e-15
+p 261 pow2 N_φ 2048 rings 524 fftw-split: synthesis 8.27e-16, analysis 1.55e-15
+p 261 pow2 N_φ 2048 rings 524 rustfft: synthesis 8.40e-16, analysis 1.58e-15
+ok
+test bits_across_positions_batches_and_threads ... p 33 product rings 67 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 product rings 67 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 product rings 67 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 product rings 68 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 product rings 68 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 product rings 68 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 smooth rings 67 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 smooth rings 67 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 smooth rings 67 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 smooth rings 68 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 smooth rings 68 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 smooth rings 68 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 pow2 rings 67 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 pow2 rings 67 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 pow2 rings 67 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 pow2 rings 68 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 pow2 rings 68 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 33 pow2 rings 68 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 product rings 165 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 product rings 165 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 product rings 165 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 product rings 166 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 product rings 166 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 product rings 166 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 smooth rings 165 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 smooth rings 165 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 smooth rings 165 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 smooth rings 166 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 smooth rings 166 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 smooth rings 166 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 pow2 rings 165 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 pow2 rings 165 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 pow2 rings 165 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 pow2 rings 166 fftw: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 pow2 rings 166 fftw-split: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+p 82 pow2 rings 166 rustfft: same bits at 1, 2, 7, 33 boxes, serial and 1, 2, 4, 72 threads
+ok
+test bits_in_fresh_processes ... 36 hashes equal in two fresh processes and this one
+ok
+test child_hashes ... ignored, the child of bits_in_fresh_processes
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 23.00s
+
+   Doc-tests tetraleaf_spike_fft_plans
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

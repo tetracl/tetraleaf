@@ -1,0 +1,4 @@
+# S9 (spikes/fft-plans) is a workspace of its own with its own lock file; its own target
+# directory keeps it from rebuilding the spikes workspace's shared crates (Helmholtz CH0.9).
+[build]
+target-dir = "../../target/spikes-fft-plans"

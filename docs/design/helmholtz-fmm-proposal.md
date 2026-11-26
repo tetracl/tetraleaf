@@ -1123,7 +1123,7 @@ one core of locust and of Kathleen, a box's S → F and F → R cost 1.5–2.8 R
 and about one at p = 245. W1 at kD = 500's high-frequency levels run 5–16× faster than with RCR
 (modelled from measured times). An FFT, which replaces the φ step alone, then saves about 1–2 %
 of the whole run (kD = 1000: about 2 %), so the product stays the default and the FFT back end
-optional (CH4.6). One measured point, indicative
+optional (CH4.6a, CH4.6b). One measured point, indicative
 (RLST's design, Section 10.2): one forward φ transform of one box at p = 144, 289
 transforms of length 588, took about 0.59 ms on one AVX2 core with Ubuntu's FFTW 3.3.10,
 and 1.23 ms with FFTW built without SIMD. The effect on a whole run is bounded:
@@ -1135,15 +1135,21 @@ from several hundred on, and only on levels and classes that use the diagonal fo
 product is complete, the default, and the reference against which every other back end is
 tested. Spike S5 (cubek-fft) is assessed against the product in f64 and against an
 extended-precision DFT, not against FFTW. The RLST rework (Phase HR) is done, in RLST
-0.11.0 (2026-10-25) and 0.12.0 (2026-10-26); only CH4.6, the optional FFTW back end, uses
-it, through CHR.2 and CHR.3.
+0.11.0 (2026-10-25) and 0.12.0 (2026-10-26); only CH4.6b, the optional FFTW back end, uses
+it, through CHR.2 and CHR.3 (CH4.6 split at CH0.9: CH4.6a rustfft, CH4.6b FFTW).
 
 **Grid sizes.** N_φ ≥ 4P − 3 is a per-level choice, recorded in the table cache key: on
 the host a multiple of 4 whose other prime factors are at most 7 (580 → 588, 1048 → 1080;
 204 → 216 at p = 50), at most about 10 % above 4P − 3 from p ≈ 33 and 7 % from p ≈ 82; on
 a device level that uses cubek-fft, a power of two (1.25–1.95×). The transform written as a
 product works with either. The padding enters the memory of signatures and transfer
-functions (Section 7).
+functions (Section 7). The product as built at CH4.1a does not use the smooth size (amended at
+CH0.9; `spikes/fft-plans/SPIKE_REPORT.md` §5–§6): its N_φ is `azimuth_count`, 4P − 3 rounded up
+to a multiple of 4 (580 at p = 144, and 580 = 4 · 5 · 29). On that size an FFT took up to 8.7×
+(FFTW) and 3.9× (rustfft) its time on the smooth one, and still mostly beat the product's φ step;
+the smooth size costs up to 5.9 % more samples at p = 33–261. Which grid a level with an FFT
+uses, the product's or the smooth one under its own table cache key, is chosen by the FFT back
+end's task (CH4.6a) from a level's measured time.
 
 **Plans per box.** A box's φ step is one plan of 2P − 1 rings of length N_φ (FFTW's
 howmany = 2P − 1, or 2P with one zero ring if S9 finds an even batch faster), fixed per
@@ -1154,7 +1160,12 @@ including SIMD across the batch dimension, for a different howmany, stride or al
 the plan for 289). A plan over all boxes of a level, or over chunks of varying size, would
 therefore make a box's bits depend on how many boxes its rank owns and on how the batch is
 split, which breaks constraint 2. One plan per (level, N_φ), executed box by box, avoids
-that by construction.
+that by construction. S9 confirmed it (amended at CH0.9; `spikes/fft-plans/SPIKE_REPORT.md`
+§3, §4 and §6): 2P − 1 rings, since 2P ran at 0.99–1.01× the time and is not adopted; a box's
+bits the same at every batch position, batch size and thread count and in fresh processes, on
+the M6, locust and Kathleen, for FFTW and for rustfft. On those FFTW builds no plan over the
+batch, other ring stride, alignment class 16 or 2P rings changed a box's bits either (FFTW loops
+a one-ring plan over the rings); the rule stands, since another build may differ.
 
 With RLST 0.12 (`rlst::fftw`): a layout from `Layout::along_axis` over the box's
 [N_φ, 2P − 1] buffer, a c2c plan from `Planner::<f64>::new()`, whose rigor is
@@ -1166,7 +1177,10 @@ planes into interleaved scratch at 1.01–1.08× (RLST `docs/fftw/F8b-benchmarks
 N_φ = 140 to 1080), and the φ step scatters 2P − 1 modes into N_φ slots anyway. Buffers come
 from RLST's aligned allocation at `FFTW_ALIGNED` = 64 bytes. An interleaved f64 box buffer
 takes 16 N_φ (2P − 1) bytes, a multiple of 64 since N_φ is a multiple of 4, so the boxes of a
-level packed back to back in one aligned allocation all stay in class 0.
+level packed back to back in one aligned allocation all stay in class 0. The per-thread scratch
+holds two boxes, the synthesis input (zero outside the mode slots, zeroed once) and the analysis
+output, or the input is re-zeroed before each synthesis; S9 measured split plans at 0.92–1.43×
+(locust) and 0.96–2.30× (Kathleen) the time of interleaved ones (amended at CH0.9).
 
 Plans are made once per operator build, dropped with the operator and never written to the
 table cache, since FFTW plans are not portable data. tetraleaf uses no wisdom and never calls
@@ -1201,6 +1215,16 @@ thread count or the process, and measures the per-box overhead.
    and whether its plans are deterministic per box (its planner chooses by length and CPU
    features); decision D7. On the M3 Max it may beat FFTW: Homebrew's FFTW on Apple silicon
    is built without SIMD (RLST `docs/fftw/F8b-benchmarks.md`).
+
+D7, signed off at CH0.9 (amended at CH0.9; `spikes/fft-plans/SPIKE_REPORT.md` §6): the product
+stays the default and the reference on every machine, since an FFT saves about 1–2 % of a run.
+rustfft is the one optional FFT back end, behind an optional feature of `tetraleaf-exec`
+(CH4.6a): deterministic per box on the M6, locust and Kathleen, and 0.14–0.32× (locust) and
+0.05–0.11× (Kathleen) the product's φ step on the smooth grid, against FFTW's 0.10–0.25× and
+0.04–0.14×, without a system library or the GPL. rustfft has no plan fingerprint, so CH4.6a
+all-gathers its version, N_φ and the dispatched CPU features at build and runs the product on
+every rank where they differ, and measures the M6, which S9 did not time. FFTW (item 2; CHR.3,
+CH4.6b) stays in the plan, off the priority list.
 
 The back ends sit behind a small trait internal to `tetraleaf-exec`; RLST provides none (its
 DF4). RLST ≥ 0.11 has no MKL back end (its DF5), so draft 0.7's D13 is withdrawn.
@@ -1490,7 +1514,8 @@ Every fast path against a slower trusted path, as for Laplace:
    Section 3.6: S7 and S6, then CH2.3, CH3.3 and CH4.3 in the full FMM.
 6. **Determinism**: bit for bit across thread counts, overlap settings and ranks, as for
    Laplace; for every FFT back end also across a box's position in a batch and the batch
-   size (S9, CHR.3), with plan fingerprints compared across ranks (CHR.3); and across the
+   size (S9, CHR.3, CH4.6a), with plan fingerprints compared across ranks (CHR.3), or rustfft's
+   version and CPU features (CH4.6a, amended at CH0.9); and across the
    chunk size of the target accumulators (CH4.1).
 7. **Pruning**: on pruned levels the V, W and X lists are empty and the buffers zeroed; the
    same levels are pruned on every rank.
@@ -1619,7 +1644,7 @@ run beside them, but no phase waits for all of them: §3.15 and H1 need only S1�
 the truncation tables of S7 and the leaf rule of S8; H4 needs the stability rule of S6; H6
 needs S4; the device transforms need S5; the optional FFTW back end needs S9. Phase HR's
 RLST part is done (RLST 0.11.0 and 0.12.0); what remains is tetraleaf's adoption, CHR.2 to
-CHR.4, and only CH4.6 depends on it.
+CHR.4, and only CH4.6b depends on it (CH4.6 split at CH0.9).
 
 H3 builds RCR on every level, which is correct at any kD and is the first Helmholtz
 deliverable. The default order after it is H6 then H4 (decision D6), because below kD of
@@ -1652,8 +1677,10 @@ flowchart LR
   CHR2 --> CHR3["CHR.3 FFTW wrapper"]
   CHR4["CHR.4 FFTW on the machines, first"] --> S9["S9 FFT plans and bits"]
   S9 --> CHR3
-  CHR3 --> C46["CH4.6 optional FFTW back end"]
-  H4 --> C46
+  S9 --> C46a["CH4.6a optional rustfft back end"]
+  H4 --> C46a
+  CHR3 --> C46b["CH4.6b optional FFTW back end"]
+  H4 --> C46b
 ```
 
 | ID | Component | Acceptance (initial) | Depends on |
@@ -1700,7 +1727,8 @@ flowchart LR
 | CH4.3 | The per-(level, class) rule, calibrated | C_T and θ from S6 confirmed in the full FMM on W1 and W3; the time crossover per class; the fallback of a whole level to RCR when the scratch budget binds | CH4.2 |
 | CH4.4 | kD sweep, with the FMM3D gate | FMM against the direct sum (sampled targets) on W1 to kD = 1000, W2 to 500 and W3 to 200, beside `hfmm3d` against the same sum; the full-target crosscheck mapped to levels and classes, with no error concentrated at a class boundary; time, memory and build cost per k | CH4.3, CH1.4 |
 | CH4.5 | Host performance against FMM3D at matched accuracy | as C6.8: for each of our tolerances the `eps` of FMM3D with the closest error; time and memory, setup apart, one node, on the sweep of CH4.4 | CH4.4 |
-| CH4.6 | Optional FFTW back end of the φ step, behind the `fftw` feature | against the product to round-off; per-box plans with bits identical across batch positions, batch sizes and thread counts, and fingerprints all-gathered at build; the feature off by default, a default build linking no FFTW, the `cargo deny` check, one CI job with the feature; the GPL warning of Section 6.7 in the crate documentation, the README, the builder option and `Cargo.toml` | CH4.1, CHR.3, CH0.9 |
+| CH4.6a | Optional rustfft back end of the φ step, behind an optional feature of `tetraleaf-exec` (added at CH0.9, D7) | against the product to round-off; per-box plans with bits identical across batch positions, batch sizes and thread counts; at build rustfft's version, N_φ and the dispatched CPU features all-gathered, and with one of two ranks made to differ (a test hook) both ranks run the product; the feature off by default, one CI job with the feature; a level's grid (the product's or the smooth one) chosen by its measured time; the time per level against the product on the M6, locust and Kathleen | CH4.1, CH0.9 |
+| CH4.6b | Optional FFTW back end of the φ step, behind the `fftw` feature (CH4.6 until CH0.9; off the priority list, D7) | against the product to round-off; per-box plans with bits identical across batch positions, batch sizes and thread counts, and fingerprints all-gathered at build; the feature off by default, a default build linking no FFTW, the `cargo deny` check, one CI job with the feature; the GPL warning of Section 6.7 in the crate documentation, the README, the builder option and `Cargo.toml` | CH4.1, CHR.3, CH0.9 |
 | **H5** | **Complex wavenumber** | | |
 | CH5.1 | Classifier and pruning for Im k > 0 | regimes as Section 3.6, with S6's damped results; error within target over a grid of (Re k D, Im k D) on W1 | CH2.3, CH4.3 |
 | CH5.2 | Damping-dependent truncation and bound on high-frequency levels | error within target for weakly damped cases | CH5.1, CH0.6 |
@@ -1756,7 +1784,7 @@ these.
 | D4 | Yukawa: own operator type, or the wavenumber kind as a type parameter of one operator | one operator, `HelmholtzOperator<T, K>`, with K resolved at build (Section 6.3), if CH2.1 shows no cost to the complex path |
 | D5 | Source types in the first release | charges, real and complex, with potentials and gradients; dipoles when C6.4 exists for Laplace |
 | D6 | Order of H4 and H6 | H6 first by default (Sections 7 and 10); H4 first only if D1 puts most of the work at kD of several hundred or more and loose tolerances |
-| D7 | Host back ends for the φ step | the product as the default and reference; FFTW through RLST 0.12 behind the optional `fftw` feature (CH4.6), with the GPL warning; rustfft as a fast default without FFTW if S9 shows it deterministic per box and faster than the product, decided per machine (Homebrew's FFTW on the M3 Max has no SIMD); all behind a trait internal to `tetraleaf-exec`, since RLST provides none (its DF4) |
+| D7 | Host back ends for the φ step | the product as the default and reference; FFTW through RLST 0.12 behind the optional `fftw` feature (CH4.6), with the GPL warning; rustfft as a fast default without FFTW if S9 shows it deterministic per box and faster than the product, decided per machine (Homebrew's FFTW on the M3 Max has no SIMD); all behind a trait internal to `tetraleaf-exec`, since RLST provides none (its DF4). Signed off at CH0.9 (2026-11-26, amended at CH0.9; Section 6.7): the product the default and reference on every machine; rustfft the one optional FFT back end (CH4.6a), with a check across ranks and the M6's times; FFTW (CHR.3, CH4.6b) kept, off the priority list |
 | D8 | Whether the exponential M2L may become a default on low-frequency levels | after CH6.2, as Laplace's T11 decides for `PlaneWave`. Signed off at CH6.2h (2026-11-08), amended at CH6.1g and CH6.1h (2026-11-11): `Auto` takes it by the rule of Section 5.3; amended at CH4.3b2c (2026-11-22): unless the diagonal form's time rule, the default since, moves the level (Sections 5.3, 6.4) |
 | D9 | What "within noise" means in constraint 1 of Section 2 | the run-to-run spread of the Laplace baseline, repeated on each machine of record before the change, per benchmark; plus the C3S.4 throughput gate |
 | D10 | cubek-fft on the device | after S5 (CH0.5): adopt it (a new dependency, and the cubecl pin moved to the current 0.11.x, 0.11.3 on 2026-10-22, if 0.3.1 is needed), contribute twiddle tables and radix 3 and 5 upstream first, or keep the transform as a GEMM |
@@ -2087,6 +2115,13 @@ these.
   for D1's tree depths, its missing level-count term and `h2` the recorded fallback; Section 7, "H4
   measurements", level 2's degrees under the default and the build at kD = 1000 at one rank × 40
   threads.
+- **Amended at CH0.9, 2026-11-26** (`spikes/fft-plans/SPIKE_REPORT.md` §6; PR #264, its
+  questions 1–3, signed off by the user, "Q1-3 as recommended"): Section 6.7, the plans per box
+  confirmed (2P − 1 rings; the per-thread scratch of two boxes; split plans measured), the
+  product's grid as built (`azimuth_count`, not 7-smooth) with a level's FFT grid left to its back
+  end, and D7's outcome (rustfft the one optional FFT back end, FFTW off the priority list);
+  Section 9, item 6; Section 10, CH4.6 split into CH4.6a (rustfft) and CH4.6b (FFTW), the diagram
+  and the text after the phase list; Section 12, D7 signed off.
 
 ## Appendix B. The stability check behind Section 3.6
 
