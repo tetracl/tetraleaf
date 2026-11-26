@@ -27,10 +27,10 @@ use mpi::topology::SimpleCommunicator;
 use mpi::traits::Communicator;
 use tetraleaf_exec::helmholtz::{
     ChargeKind, Charges, DEFAULT_C_LEAF, DEFAULT_DIAGONAL_BUILD, Degrees, Densities,
-    HelmholtzDiagonal, HelmholtzFmmBuilder, HelmholtzM2l, LevelShape, M2lOverride, Output,
-    OverrideM2l, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit, TransferBuild,
-    V_COSTS_NEON, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WavenumberKind, WxNear,
-    auto_m2l_mul_add, s7_degree,
+    HelmholtzDiagonal, HelmholtzFmmBuilder, HelmholtzM2l, HelmholtzPhiStep, LevelShape,
+    M2lOverride, Output, OverrideM2l, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit,
+    TransferBuild, V_COSTS_NEON, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WavenumberKind,
+    WxNear, auto_m2l_mul_add, s7_degree,
 };
 use tetraleaf_exec::operator::Isa;
 use tetraleaf_tables::helmholtz::plane_wave::merge::{plane_wave_degree, precision_for_tolerance};
@@ -1245,6 +1245,55 @@ fn check_box_study(world: &SimpleCommunicator) {
 /// timed, the multiply-adds and build), the errors within 1.1× Rotation's without it, and the
 /// same checksum at 1 and 2 threads; the same with interpolated transfer functions (Helmholtz
 /// CH4.2c2), its classes at most the direct build's per level.
+/// A row's φ step as built (Helmholtz CH4.6a2): the setting `step`, and on each level `step`
+/// exactly where the level took diagonal classes (on one machine class every rank's rustfft
+/// agrees, so no level falls back to the product), none elsewhere.
+fn check_phi_steps(row: &Row, step: HelmholtzPhiStep) {
+    assert_eq!(row.phi_step, step);
+    assert_eq!(row.phi_steps.len(), row.levels);
+    for l in 0..row.levels {
+        let want = (row.diagonal_classes[l] > 0).then_some(step);
+        assert_eq!(row.phi_steps[l], want, "level {l}");
+    }
+}
+
+/// rustfft's φ step in the harness (Helmholtz CH4.6a2, feature `rustfft`): `case` (with the
+/// diagonal form) under `HelmholtzPhiStep::RustFft` against its product row `product`: every
+/// diagonal level on rustfft, the same classes and pairs (the time rule's costs are the
+/// product's), the errors within 1.01× (CH4.6a1's FMM bound), 1 and 2 threads the same checksum.
+#[cfg(feature = "rustfft")]
+fn check_rustfft(
+    case: &Case,
+    product: &Row,
+    problem: &Problem,
+    oracle: &Oracle,
+    world: &SimpleCommunicator,
+) {
+    let fft = Case {
+        phi_step: HelmholtzPhiStep::RustFft,
+        ..case.clone()
+    };
+    let row = run(&fft, problem, oracle, 1, world).expect("the FMM runs");
+    let row_two = run(&fft, problem, oracle, 2, world).expect("the FMM runs");
+    check_phi_steps(&row, HelmholtzPhiStep::RustFft);
+    assert_eq!(row.diagonal_classes, product.diagonal_classes);
+    assert_eq!(row.diagonal_pairs, product.diagonal_pairs);
+    assert_eq!(row.diagonal_conversions, product.diagonal_conversions);
+    for (got, want) in row.errors.iter().zip(&product.errors) {
+        assert!(
+            got[0] <= 1.01 * want[0] && got[1] <= 1.01 * want[1],
+            "rustfft: {got:?} against the product's {want:?}"
+        );
+    }
+    assert_eq!(row_two.checksum, row.checksum);
+    if world.rank() == 0 {
+        println!(
+            "rustfft: levels {:?}, errors {:?} against the product's {:?}",
+            row.phi_steps, row.errors, product.errors
+        );
+    }
+}
+
 fn check_diagonal(world: &SimpleCommunicator) {
     let off = case(Workload::W1, (30.0, 0.0), Degrees::Tolerance(1e-4));
     assert_eq!(off.diagonal, HelmholtzDiagonal::Off, "Case::new's");
@@ -1349,6 +1398,13 @@ fn check_diagonal(world: &SimpleCommunicator) {
             row_i.diagonal_classes, row_i.errors
         );
     }
+    // The φ step (Helmholtz CH4.6a2): the setting and each level's step as built, the product
+    // by default; with the feature `rustfft`, rustfft on every diagonal level.
+    assert_eq!(off.phi_step, HelmholtzPhiStep::Product, "Case::new's");
+    assert!(row_off.phi_steps.iter().all(Option::is_none));
+    check_phi_steps(&row_i, HelmholtzPhiStep::Product);
+    #[cfg(feature = "rustfft")]
+    check_rustfft(&interpolated, &row_i, &problem, &oracle, world);
     // The time rule (Helmholtz CH4.3b1): reported, its levels a subset of the rule's with the
     // same classes, within 1.1× Rotation's errors; the model's columns on every level: k a
     // from the level's circumradius, the bound's classes the rule's where it took a level,

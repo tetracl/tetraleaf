@@ -18,6 +18,9 @@ gpu = ["tetraleaf-exec/gpu", "dep:tetraleaf-kernels"]
 cpu = ["gpu", "tetraleaf-exec/cpu", "tetraleaf-kernels/cpu"]
 metal = ["gpu", "tetraleaf-exec/metal", "tetraleaf-kernels/metal"]
 cuda = ["gpu", "tetraleaf-exec/cuda", "tetraleaf-kernels/cuda"]
+# The diagonal form's φ step by rustfft, passed through (Helmholtz CH4.6a2: `helmholtz_accuracy`'s
+# `--phi-step rustfft`); off by default, so the default graph holds no rustfft.
+rustfft = ["tetraleaf-exec/rustfft"]
 
 [dependencies]
 tetraleaf-math = { workspace = true }

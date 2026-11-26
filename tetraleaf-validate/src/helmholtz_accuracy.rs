@@ -61,7 +61,9 @@
 //!   tables' build and [`Row::diagonal_multiply_adds`] a conversion's multiply-adds;
 //!   [`Case::diagonal_build`] (Helmholtz CH4.2c2) the transfer functions' build
 //!   (`HelmholtzFmmBuilder::diagonal_build`, direct or interpolated), [`Row::diagonal_build_kind`]
-//!   as built.
+//!   as built; [`Case::phi_step`] (Helmholtz CH4.6a2) the φ step of the form's conversions
+//!   (`HelmholtzFmmBuilder::phi_step`: the product, or rustfft with this crate's feature
+//!   `rustfft`), [`Row::phi_step`] as built and [`Row::phi_steps`] per level as run.
 //!   [`Case::empty_boxes`] (Helmholtz CH4.0d1) whether the plan leaves out the work of boxes
 //!   whose subtree holds no target or no source point (on by default, the library's);
 //!   [`Row::left_out`] what it left out and [`Row::remote_multipoles`] the multipoles the
@@ -95,10 +97,10 @@ use tetraleaf_exec::geometry::{Domain, radius};
 use tetraleaf_exec::helmholtz::{
     ChargeKind, Charges, DEFAULT_DENSE_BUDGET, DEFAULT_DIAGONAL_BUILD, DegreeRule, Degrees,
     DiagonalCosts, DiagonalCounts, DiagonalTimes, HelmholtzDiagonal, HelmholtzFmm,
-    HelmholtzFmmBuilder, HelmholtzFmmError, HelmholtzM2l, LevelShape, M2lOverride, Output,
-    PlaneWaveCounts, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, PlaneWaveTimes, RcrSplit,
-    TransferBuild, VAfterPlan, VCosts, VNear, VRaisedPrice, Wavenumber, WxNear,
-    diagonal_rule_classes,
+    HelmholtzFmmBuilder, HelmholtzFmmError, HelmholtzM2l, HelmholtzPhiStep, LevelShape,
+    M2lOverride, Output, PlaneWaveCounts, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit,
+    PlaneWaveTimes, RcrSplit, TransferBuild, VAfterPlan, VCosts, VNear, VRaisedPrice, Wavenumber,
+    WxNear, diagonal_rule_classes,
 };
 use tetraleaf_exec::operator::{M2L_BLOCK_TARGETS, MulAdd, P2pChoice};
 use tetraleaf_math::Complex;
@@ -230,6 +232,10 @@ pub struct Case {
     /// Helmholtz CH4.2c2; [`TransferBuild::Direct`] in [`Case::new`], named always, so that
     /// CH4.2b2's runs repeat; the library's default is interpolated since CH4.2c2's sign-off).
     pub diagonal_build: TransferBuild,
+    /// The φ step of the diagonal form's conversions (`HelmholtzFmmBuilder::phi_step`, Helmholtz
+    /// CH4.6a2; [`HelmholtzPhiStep::Product`] in [`Case::new`] and [`Case::defaults`], the
+    /// library's default, named always; `RustFft` with the feature `rustfft`).
+    pub phi_step: HelmholtzPhiStep,
     /// The diagonal form's time rule's costs (`HelmholtzFmmBuilder::diagonal_costs`, Helmholtz
     /// CH4.3b1; `None` in [`Case::new`], the machine class's; [`FORM_COSTS`] and [`RCR_COSTS`]
     /// force one option, Helmholtz CH4.3b2a).
@@ -312,6 +318,7 @@ impl Case {
             rcr_split: None,
             diagonal: HelmholtzDiagonal::Off,
             diagonal_build: TransferBuild::Direct,
+            phi_step: HelmholtzPhiStep::Product,
             diagonal_costs: None,
             v_after_plan: VAfterPlan::Off,
             v_costs: None,
@@ -855,6 +862,12 @@ pub struct Row {
     /// The diagonal M2L's transfer functions' build as built (Helmholtz CH4.2c2;
     /// `HelmholtzOperator::diagonal_build`).
     pub diagonal_build_kind: TransferBuild,
+    /// The φ step's setting as built (`HelmholtzOperator::phi_step`; Helmholtz CH4.6a2).
+    pub phi_step: HelmholtzPhiStep,
+    /// Per level, the φ step that ran (`HelmholtzOperator::phi_step_on`; Helmholtz CH4.6a2):
+    /// `None` without the diagonal form, the setting's, or the product where the ranks'
+    /// rustfft builds differ (the build's agreement), the same on every rank.
+    pub phi_steps: Vec<Option<HelmholtzPhiStep>>,
     /// Per level, the offset classes that took the diagonal form (0 where the level has none;
     /// `HelmholtzOperator::diagonal_classes`), the same on every rank.
     pub diagonal_classes: Vec<usize>,
@@ -1251,6 +1264,7 @@ pub fn run_output<C: CommunicatorCollectives>(
     builder = builder
         .diagonal(case.diagonal)
         .diagonal_build(case.diagonal_build)
+        .phi_step(case.phi_step)
         .diagonal_costs(case.diagonal_costs)
         .v_after_plan(case.v_after_plan)
         .v_costs(case.v_costs);
@@ -1608,6 +1622,10 @@ pub fn run_output<C: CommunicatorCollectives>(
         near_interactions,
         diagonal: fmm.operator().diagonal(),
         diagonal_build_kind: fmm.operator().diagonal_build(),
+        phi_step: fmm.operator().phi_step(),
+        phi_steps: (0..fmm.nlevels())
+            .map(|l| fmm.operator().phi_step_on(l))
+            .collect(),
         diagonal_classes: diagonal.classes,
         diagonal_pairs: diagonal.pairs,
         diagonal_conversions: diagonal.conversions,
