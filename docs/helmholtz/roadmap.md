@@ -8,16 +8,15 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/gates/<milestone>.md`.
 
 Status (2026-11-25): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
-`gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). H4 closed at its
-gate's second run (#262, review `docs/reviews/2026-11-25-H4.md`), after CH4.8 made one degree after
-the cap the default: the kD sweep and the comparison with FMM3D hold on both machine classes' trees,
-with the random charges and the constant density on W1–W4 (ℓ2 ≤ 0.68 ε, worst box ≤ 76.3 ε within
-D1). Eight H4 tasks stay open off the list. Next CHA.10a (item 12), then the FFT track (item 13), H2
-and H5 (items 14–15). The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9
-are open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c. The history of this line until H6.G
-is in `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until
+`gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). CHA.10a (item 12)
+done: `tools/helmholtz/common.py`, the module new report scripts import. Next the FFT track (item
+13: CH0.9, then CHR.3 and CH4.6, D7 between), then H2 and H5 (items 14–15). Eight H4 tasks stay open
+off the list. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are
+open; of H0, CH0.4 and CH0.6 are done, and of H7, CH7.5a–c. The history of this line until H6.G is
+in `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until
 H1.G in `git show 8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show
-4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`.
+4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`;
+until CHA.10a in `git show 6bad3c2:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -1069,15 +1068,11 @@ item is removed only where the task names it.
   `with_rules`, `with_rules_on` and `from_key_types_with_rules` (beside CHA.5's fold);
   `run-dependency-checks.yml` given a `timeout-minutes`, `submodules: "true"` dropped from it and
   `run-examples.yml` (no `.gitmodules`), `run-examples.yml` installing through `apt-install.sh`.
-- [ ] **CHA.10a The report scripts' shared module.** Added at the H4 gate's second run (the user on
-  #262, 2026-11-25: "CHA.10a, then FFT, H2, H5 (Recommended)"; review 2026-11-25, K2, asked for at
-  the H1 gate and the first H4 run). `tools/helmholtz/common.py`: the cell formatting (`cells`, in
-  fifteen `*-tables.py`), the parsers of the harness examples' Markdown outputs (`helmholtz_boxes`,
-  `helmholtz_accuracy`, `helmholtz_fmm3d compare`) and the geometric means, with a `selftest`; the
-  old scripts left as they are (their reports' reproduction lines stay valid). *Done when:* the
-  module exists with its selftest, one recent script (`ch4-8b-tables.py`) uses it with byte-identical
-  output, and `/next-task`'s planning says a new report script imports it. Python standard library
-  only. *Needs:* none.
+- [x] **CHA.10a The report scripts' shared module.** Review 2026-11-25, K2. Record:
+  `docs/helmholtz/tasks/CHA.10a.md`. `tools/helmholtz/common.py` (`cells`, `tables`, the parsers of
+  `helmholtz_accuracy`, `helmholtz_boxes` and `helmholtz_fmm3d compare`, `gmean`; a `selftest`),
+  Python 3.9 standard library; `ch4-8b-tables.py` on it, its 34 outputs byte-identical; `/next-task`
+  sends new report scripts to it. The old scripts left as they are.
 - [x] **CHA.11 The Helmholtz wave levels in one place.** Review 2026-11-19, L1. Record:
   `docs/helmholtz/tasks/CHA.11.md`. `operator::wave_levels` chooses the levels with waves for
   `select_tables` and `HelmholtzFmmBuilder::build`; the restatement, its assert and the second

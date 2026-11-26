@@ -102,7 +102,8 @@ Started <YYYY-MM-DD> on `tbetcke/h-<id>`. Roadmap: <the line>. Proposal: §10 <I
 <files, sections, code>
 
 ## Changes
-<crates and files; public API; tables; conventions (none, or a proposal for sign-off)>
+<crates and files; public API; tables; conventions (none, or a proposal for sign-off); a report
+script's imports from `tools/helmholtz/common.py`>
 
 ## Tests that prove it
 <each against its trusted path (fixtures, identities, tetraleaf-ref, the direct sum, FMM3D
@@ -184,8 +185,10 @@ Otherwise go on without asking.
   1.09–1.20× slower the second time in a launch there, undiagnosed (CH4.3b2c §6; review
   2026-11-24, B12; CH4.3f diagnoses it). Accuracy and checksums may share a launch.
 - A new report script in `tools/helmholtz/` imports the shared `tools/helmholtz/common.py`
-  for what it holds (`cells` and the like) once CHA.10 has written it, rather than defining its
-  own (review 2026-11-24, K2: 69 scripts, fourteen with their own `cells`).
+  (CHA.10a; the import recipe in its docstring) for what it holds rather than defining its own:
+  `cells`, `number`, `tables`, the parsers of `helmholtz_accuracy`, `helmholtz_boxes` and
+  `helmholtz_fmm3d compare`, `bold`, `gmean` (review 2026-11-24, K2: 69 scripts, fourteen with
+  their own `cells`). What two scripts need beyond it goes into it, with a case in its `selftest`.
 
 ## 6. Verify
 
