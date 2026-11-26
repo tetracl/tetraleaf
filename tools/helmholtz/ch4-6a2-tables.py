@@ -313,7 +313,8 @@ def model_choice(printed, bound, diag, rcr, waves):
     from them, the waves unless the form beats them, then the form against RCR; elsewhere the form
     against the level's own M2L ("other"). Whether the level has waves is read from the choice
     `printed` with the model's own diagonal level: "waves" and "rcr" only on such a level, "other"
-    only elsewhere; a lower `diag` keeps a "diagonal" choice in both cases."""
+    only elsewhere; a lower `diag` keeps a "diagonal" choice in both cases (so the caller passes a
+    `diag` at most the model's own: rustfft's measured ratio is below 1 in every case run)."""
     if printed == "diagonal":
         return "diagonal"
     waves_level = printed in ("waves", "rcr")
@@ -373,7 +374,11 @@ def cmd_rule(args):
                 if boxes is not None and first.threads:
                     conv = boxes * (unit(costs["s2f"], p) + unit(costs["f2r"], p)) * 1e-9 / \
                         first.threads
+                # The operator counts the boxes with a V row (`DiagonalShape::targets`); the F → R
+                # count equals it where all 34 classes pass and is lower where fewer do.
                 diag_r = diag - (1.0 - rho) * conv if None not in (diag, conv, rho) else None
+                if rho is not None and rho > 1.0:
+                    raise SystemExit(f"{name}: rustfft ÷ product {rho} > 1: model_choice assumes <= 1")
                 before = r["model's choice (no budget)"]
                 after = model_choice(before, bound, diag_r, rcr, waves) if diag_r is not None \
                     else before

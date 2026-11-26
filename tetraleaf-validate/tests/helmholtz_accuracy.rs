@@ -1239,12 +1239,6 @@ fn check_box_study(world: &SimpleCommunicator) {
     );
 }
 
-/// The diagonal M2L (Helmholtz CH4.2b2) on W1 at kD = 30, ε = 10⁻⁴: off in `Case::new`, no
-/// level and no columns; by the rule some level takes it, the row's columns the operator's
-/// counts and times (pairs on the level's V pairs, signatures and conversions back, the parts
-/// timed, the multiply-adds and build), the errors within 1.1× Rotation's without it, and the
-/// same checksum at 1 and 2 threads; the same with interpolated transfer functions (Helmholtz
-/// CH4.2c2), its classes at most the direct build's per level.
 /// A row's φ step as built (Helmholtz CH4.6a2): the setting `step`, and on each level `step`
 /// exactly where the level took diagonal classes (on one machine class every rank's rustfft
 /// agrees, so no level falls back to the product), none elsewhere.
@@ -1294,6 +1288,13 @@ fn check_rustfft(
     }
 }
 
+/// The diagonal M2L (Helmholtz CH4.2b2) on W1 at kD = 30, ε = 10⁻⁴: off in `Case::new`, no
+/// level and no columns; by the rule some level takes it, the row's columns the operator's
+/// counts and times (pairs on the level's V pairs, signatures and conversions back, the parts
+/// timed, the multiply-adds and build), the errors within 1.1× Rotation's without it, and the
+/// same checksum at 1 and 2 threads; the same with interpolated transfer functions (Helmholtz
+/// CH4.2c2), its classes at most the direct build's per level; the φ step as built (Helmholtz
+/// CH4.6a2), and with the feature `rustfft` that step on the interpolated case.
 fn check_diagonal(world: &SimpleCommunicator) {
     let off = case(Workload::W1, (30.0, 0.0), Degrees::Tolerance(1e-4));
     assert_eq!(off.diagonal, HelmholtzDiagonal::Off, "Case::new's");

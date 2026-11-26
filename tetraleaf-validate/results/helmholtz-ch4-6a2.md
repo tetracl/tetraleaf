@@ -9,32 +9,39 @@ CH4.6a3 (the smooth grid) is built.
 ## 0. Summary
 
 1. **The harness** (§1): `helmholtz_accuracy --phi-step product|rustfft` (`Case::phi_step`), the
-   back end in the output ("φ step: rustfft 6.4.1, x86_64 features sse4.1, avx, fma"), the step
+   back end in the output ("φ step: rustfft; rustfft 6.4.1, x86_64 features sse4.1, avx, fma"), the step
    each level ran (`Row::phi_steps`, a column "φ" of "Diagonal M2L"), and a feature `rustfft` of
    tetraleaf-validate that passes tetraleaf-exec's through.
 2. **The conversions** (§2, Kathleen, 1 × 40): rustfft's S → F takes 0.27–0.46× the product's
    thread time per conversion, its F → R 0.23–0.60×; over each case's conversions 0.30–0.39×.
 3. **The levels and the run** (§2–§3): the diagonal levels' M2L 0.63–0.93× the product's per level
    and 0.72–0.90× summed per case; the evaluation 0.89–0.95× (the product's own spread between its
-   two launches 1.000–1.068); build plus one evaluation 0.94–0.97×. The errors are 1.0000× the
+   two launches 1.000–1.068: W3's 0.936 is within its spread of 1.068, the W1 cases' gains beyond
+   theirs); build plus one evaluation 0.94–0.97×. The errors are 1.0000× the
    product's, the checksums of each setting's two launches agree, the build is unchanged. CH4.1a
    had estimated the FFT's gain at about 1–2 % of build plus one evaluation (W1, kD = 500); measured
    it is 3–6 %.
 4. **The smooth grid** (§4): priced from S9's per-box rustfft times at the levels' degrees on the
    node and the level's measured pair cost at the larger N_φ, it changes a level by 0.98–1.03× and
-   the evaluation by 1.000–1.004×. At most of these degrees the product's grid is already 7-smooth
-   (72, 108, 168, 288), and where it is not (p = 116–241) the FFT saved is less than the pairs'
-   extra samples cost. **Recommendation (question 1): keep the product's grid and close CH4.6a3
-   unrun.**
+   the evaluation by 1.000–1.004×; with S9's FFT difference scaled up to the level's own rustfft
+   conversion cost (an upper bound on the FFT's cost in the level), by 0.90–1.03× and 0.991–1.001×.
+   At 5 of the 15 degrees the product's grid is already 7-smooth (N_φ = 72, 80, 108, 168, 288), and
+   where it is not (p = 12, 32, 33, 45, 61, 76, 116, 129, 135, 241) the FFT saved is mostly less
+   than the pairs' extra samples cost; the smooth grid gains at p = 61 (0.979×, up to 0.90× at the
+   bound) and at p = 45 and 241 at the bound. Either way about 1 % of an evaluation or less, in
+   either direction, against a second set of tables per level. **Recommendation (question 1): keep
+   the product's grid and close CH4.6a3 unrun.**
 5. **The time rule** (§5): on the 6 ABBA cases every level in the rule's range already takes the
    form, so a cheaper form changes nothing. On 7 cases where CH4.3b2c found the waves kept
    (W1 at kD = 100, 200, W3 at kD = 200, 500, 10⁻⁶–10⁻⁸), the model with the form's conversions
    at rustfft's measured ratio flips one level (W3, kD = 200, 10⁻⁶, level 4: waves → form), where
-   the forced form with rustfft measures 0.97× the waves (0.366 s against 0.379 s). The other five
-   levels the waves keep stay on the waves; the form there takes 1.30–2.95× their time, but for
-   one, W3 at kD = 500, 10⁻⁸, level 4: 0.81×, and 0.87× with the product, CH4.3b2c's known miss, not
-   the φ step's. **Recommendation (question 2): no FFT variant of `DiagonalCosts`** (rustfft is
-   opt-in; the measured gain of one is about 3 % of one level on Kathleen).
+   the forced form with rustfft measures 0.98× the waves of the same launch's setting (0.366 s
+   against 0.372 s; 0.97× against the product launch's 0.379 s), within these single launches'
+   noise. The other four levels the waves keep stay on the waves; the form there takes 1.30–2.95×
+   their time, but for one, W3 at kD = 500, 10⁻⁸, level 4: 0.81×, and 0.87× with the product,
+   CH4.3b2c's known miss, not the φ step's. **Recommendation (question 2): no FFT variant of
+   `DiagonalCosts`** (rustfft is opt-in; the one level it would move gains 0.006 s, 1.6 %, within
+   noise).
 6. **locust and the M6** (§6): the M6 was skipped at the user's word before any run (2026-11-26:
    "Skip the M6"; question 3). locust's runs are pending: the node was busy with other jobs all
    afternoon, and the runs script waits for it to be quiet.
@@ -101,12 +108,13 @@ the product).
 | w3-500-1e-6 | 3 | 71 | 512, 512 | 3243.9 → 1217.6 | 0.375 | 3915.5 → 1050.6 | 0.268 | 0.6740 → 0.5933 | 0.880 |
 | w3-500-1e-6 | 4 | 41 | 4096, 4096 | 881.7 → 308.9 | 0.350 | 1112.0 → 260.5 | 0.234 | 1.5235 → 1.4053 | 0.922 |
 
-Read per row: S → F gains more than F → R on the coarse levels (56 boxes on 40 threads, p ≥ 116),
-where F → R's thread time per conversion stays 1.7–3.5× S → F's under rustfft; at the finer
-levels both are near a third of the product's. The pairs' thread time per pair (not shown) moves
-0.78–1.20× between the settings without a trend; the pair does not depend on the φ step, and the
-largest moves are on the coarse levels of 56–64 boxes on 40 threads. The level
-gains least where the conversions are a small part of it (W3's dense level 4, 0.92×).
+Read per row: S → F gains more than F → R on the coarsest levels (level 2: 56–64 boxes on 40
+threads, p ≥ 116; and W1 at kD = 1000's level 3, p = 129), where F → R's thread time per
+conversion stays 1.7–3.5× S → F's under rustfft; at the finer levels both are near a third of the
+product's. The pairs' thread time per pair (not shown) moves 0.78–1.20× between the settings
+without a trend (the largest moves on W1 at kD = 250's level 5, 1.20×, and kD = 1000's level 4,
+1.15×); the pair does not depend on the φ step. The levels gain least where the conversions are a
+small part of them (W1 at kD = 1000's level 4, 0.93×; W3's dense level 4, 0.92×).
 
 ## 3. The runs (Kathleen)
 
@@ -170,6 +178,14 @@ of the level's thread time and the pairs, the larger part, grow by N_φ's ratio 
 p = 12, 3.8 % at p = 129). The price leaves out the transfer functions' and signatures' larger
 tables (more memory, a longer build), which would weigh further against the smooth grid.
 
+**At an upper bound of the FFT's cost in the level.** S9's per-box times are of one box on one
+thread. In the level call rustfft's whole conversion (the Legendre step, the scatter and the FFT)
+takes 3.3–12× S9's FFT alone per box (largest on the coarse levels: 12× at p = 241, 9.4× at
+p = 129). Scaling S9's smooth-less-product difference by that factor, which charges the whole
+conversion to the FFT, the levels move by 0.90–1.03× (the smooth grid gaining at p = 61, 0.90×;
+45, 0.95×; 12, 0.95×; 135, 0.98×; 241, 0.99×) and the evaluations by 0.991–1.001×. The smooth grid
+then gains at most 0.9 % of one evaluation (W1 at kD = 500, 10⁻³), and loses up to 0.1 % elsewhere.
+
 ## 5. The time rule (Kathleen)
 
 The question (roadmap, from CH4.6a1): CH4.6a1 kept the product's `DiagonalCosts`, so rustfft never
@@ -192,12 +208,13 @@ thread time (0.23–0.59), against the forced form's measured M2L (`--diagonal-c
 | W3 kD 200, 10⁻⁸ | 4 | 32 | 10.83 | 0.7026, 0.7051 | 2.1504 | 2.0741 | 2.952 | 3.1994, 4.4083, 0.8873 | 3.1227 | waves |
 | W3 kD 500, 10⁻⁸ | 4 | 45 | 27.06 | 2.4680, 2.4677 | 2.1383 | 2.0062 | 0.813 | 2.2582, 11.9401, 2.0875 | 2.1186 | waves |
 
-  The one flip would gain 0.012 s (3 % of that level; the evaluation's share not measured apart).
+  The one flip would gain 0.006 s against the same setting's waves (0.3664 s against 0.3724 s,
+  1.6 % of that level; 0.012 s against the product launch's), within these single launches' noise.
   W3 at kD = 500, 10⁻⁸, level 4 is CH4.3b2c's known miss (the form beats the waves with the
   product too, 0.87×); rustfft does not change it. Every other level of these cases already ran the
-  form.
-- **So**: on Kathleen an FFT variant of `DiagonalCosts` would change one level of the 12 cases, for
-  about 3 % of that level. Recommendation: no variant now; the product's costs stay the rule's
+  form; W1 at kD = 100 and 200 at 10⁻⁷ keep no level on the waves under the current defaults.
+- **So**: on Kathleen an FFT variant of `DiagonalCosts` would change one level of the 13 cases, for
+  about 1.6 % of that level, within noise. Recommendation: no variant now; the product's costs stay the rule's
   under either step (question 2).
 
 ## 6. locust and the M6
@@ -220,9 +237,11 @@ thread time (0.23–0.59), against the forced form's measured M2L (`--diagonal-c
 - One rank per node: at many ranks per node each rank converts fewer boxes on fewer threads, and the
   ratio per conversion may differ (S9's one-core ratios on Kathleen were 0.05–0.11× for the φ step
   alone).
-- The smooth grid's price takes S9's one-thread per-box difference as the level's. The pairs' share
-  decides the sign at every degree where the product's grid is not smooth, and the price would turn
-  only if the FFT's difference in the level were several times S9's (at p = 129 the smooth grid's
-  FFT saves 510 µs per box, against 2.6 % more of the level's 4.0 thread-s).
+- The smooth grid's price takes S9's one-thread per-box difference as the level's; the level's FFT
+  runs at some multiple of S9's per box that this task did not separate from the Legendre step (§4
+  gives the price at both ends: S9's difference and the whole conversion's scale).
+- The model in §5 counts the form's conversions by the level's measured F → R count, the operator
+  by the boxes with a V row (`DiagonalShape::targets`); the two agree where all 34 classes pass, as
+  on the flipped level, and the count is lower where fewer pass.
 - The `waves` cases are single launches per setting: their small levels (10–150 ms) vary by up to
   ±10 % between settings that compute the same thing.

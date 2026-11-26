@@ -2105,7 +2105,8 @@ fn main() {
                  slowest rank's), the conversions S → F and F → R (summed), their rate per \
                  thread in GF/s (2 × multiply-adds per conversion; one rank only), and the build of the \
                  level's transfer functions and conversions (seconds), and the φ step the level \
-                 ran (Helmholtz CH4.6a2)."
+                 ran (Helmholtz CH4.6a2; under rustfft the GF/s are the product's multiply-adds \
+                 over rustfft's time, a product-equivalent rate)."
             );
             println!();
             println!(

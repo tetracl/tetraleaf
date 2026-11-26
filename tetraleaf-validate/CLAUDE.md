@@ -781,7 +781,7 @@ line "φ step:" under the machine's (rustfft's version and the CPU features it d
 last column "φ" of "Diagonal M2L". `tests/helmholtz_accuracy.rs` (`check_diagonal`) checks the
 steps as built, and with the feature rustfft on every diagonal level with the product's classes
 and pairs, errors within 1.01× and threads bit for bit. `tools/helmholtz/ch4-6a2-runs.sh` runs
-the task's stages (`smoke`, `levels`, `ffts`: spike S9's `times` at the levels' degrees),
+the task's stages (`smoke`, `levels`, `waves`, `ffts`: spike S9's `times` at the levels' degrees),
 `ch4-6a2-tables.py` makes the report's tables (`runs`, `levels`, `smooth`, `rule`). Its report is
 `results/helmholtz-ch4-6a2.md`.
 

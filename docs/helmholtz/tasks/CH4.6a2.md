@@ -119,7 +119,43 @@ interpolated --near-v cost --near-wx cost`), `--levels`.
 - Risk: memory at kD = 1000 on locust (W1, 1 × 72) — CH4.5 ran it.
 
 ## Pending runs
-(filled in step 6)
+- **locust** (1 × 72): `tools/helmholtz/ch4-6a2-runs.sh /data/ucahtbe/fmm/runs/ch4-6a2 levels
+  waves`, then `PS=12,17,19,26,32,33,41,45,61,71,76,116,129,135,241 tools/helmholtz/ch4-6a2-runs.sh
+  /data/ucahtbe/fmm/runs/ch4-6a2 ffts`, through `tools/gh200/remote.sh` on the synced tree (ccbb9b7's
+  scripts, the harness of 68827ef built with `--features rustfft`), started by a gate on the M6 that
+  waits for a quiet node (no other process of this account above 20 % of a core, a one-minute load
+  below 2; a vLLM server of another user, about 0.6 core, is not waited for). Not started by
+  2026-11-26 18:50: the account's other jobs kept the node busy from 18:10 (load up to 295). It
+  decides NEON's ratios per level and per run, the smooth grid's price and the time rule's question
+  there (the report's §6; questions 1 and 2 hold on Kathleen's evidence alone if it does not run).
+- **The M6**: not run (the user, 2026-11-26: "Skip the M6"; question 3).
+
+## Results (Kathleen; the report `tetraleaf-validate/results/helmholtz-ch4-6a2.md`)
+Jobs 673075 (`smoke`, `levels`), 673077 (`ffts`), 673078 (`waves`), node-c11b-009, 1 × 40. rustfft's
+conversions 0.23–0.60× the product's per conversion; the diagonal levels' M2L 0.63–0.93×; the
+evaluation 0.89–0.95×, build plus one evaluation 0.94–0.97×; errors 1.0000×, checksums agree per
+setting. The smooth grid: 0.98–1.03× per level, 1.000–1.004× per evaluation (0.991–1.001× at the
+FFT's upper bound). The time rule with rustfft's conversions flips one level of 13 cases, 1.6 % of
+that level, within noise.
+
+## Checks run (the M6)
+`/verify`: fmt; Clippy default, examples, `--workspace --all-targets`, and tetraleaf-validate with
+`--features rustfft`; `cargo doc` with `-D warnings`; `cargo check --workspace --all-targets`;
+`cargo deny --locked check licenses`; `cargo tree --workspace -e normal -i rustfft` (none); the
+one-rank debug run of `tests/helmholtz_accuracy.rs` at opt-level 0, 400 s at load 11 (437.8 s
+recorded at load 19–24); at opt-level 1 `cargo test` (1,402 passed) and `cargo test --workspace`
+(1,446 passed); `cargo test -p tetraleaf-validate --features rustfft` (92 passed); the harness test
+with the feature at 2 ranks by hand (passed, 17 s). Not run: the MPI list (no change to
+tetraleaf-exec, -plan or -octree), Laplace benchmarks (no Laplace path changed).
+
+## Self-review
+A subagent (the plan, §2, §10, the branch): no code defect. Fixed: the report's counts (four levels
+kept on the waves, 13 cases), the non-smooth degrees (ten of fifteen, not p ≥ 116 alone), the
+smooth-grid caveat (the level's FFT runs several times S9's per box: the price given at both ends),
+the flip's gain against the same setting's waves (1.6 %, within noise), W3's gain within its
+spread, two statements of §2, the plan's pending runs, the misplaced doc comment of
+`check_diagonal`, the GF/s of rustfft rows called product-equivalent, the stage list in
+`tetraleaf-validate/CLAUDE.md`, a guard in the tables script's choice, and the quoted output line.
 
 ## Open questions
 Asked before any run, 2026-11-26: the M6's timing launches; the user: "Skip the M6".
