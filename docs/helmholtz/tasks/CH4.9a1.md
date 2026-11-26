@@ -63,13 +63,15 @@ See the split.
 - `tetraleaf-validate/examples/helmholtz_accuracy.rs`: the table "Translations and leaf
   expansions" with `--levels` (from `Row::kind_seconds`, already collected), its module
   documentation; `tests/helmholtz_accuracy.rs` checks its source, `Row::kind_seconds`, on a small
-  case: P2M and L2P only on levels with leaves, M2M and L2L zero on levels 0–1's inputs as
-  recorded.
+  case: P2M and L2P on every level with occupied leaves, M2M and L2L on some level (as built:
+  `check_leaves` asserts the data behind the table, not the printed table; the table ran at the
+  branch head in a smoke run on the M6, W1 at kD = 30).
 - A new MPI-free example `tetraleaf-validate/examples/helmholtz_leaf.rs` (not registered; it
   times): per (p, k ρ) on one thread, a batch of points in a leaf frame, the reference P2M and L2P
   per point, then their parts timed apart by calling the same public functions the reference
-  calls (`bessel_j`, `harmonics`, `harmonics_derivatives`, the sum as a loop), each result checked
-  against the reference's first; f64 and f32. A report script `tools/helmholtz/ch4-9a1-tables.py`
+  calls (`bessel_j`, `harmonics`, `harmonics_derivatives`, the sum as a loop); P2M's parts checked
+  to reassemble the reference's multipole bit for bit first (L2P's parts are the same calls
+  `leaf::l2p` makes, not reassembled); f64 and f32. A report script `tools/helmholtz/ch4-9a1-tables.py`
   on `common.py`; a runs script `tools/helmholtz/ch4-9a1-runs.sh`.
 - `tetraleaf-validate/CLAUDE.md`: a paragraph.
 - No library code, no Laplace path, no dependency.
@@ -85,8 +87,8 @@ See the split.
 
 ## Machine runs
 Kathleen (one core, `singlenode`, slow nodes excluded) and locust (one core, gated on a quiet
-node): the example at p ∈ {8, 12, 15, 17, 19, 26, 32, 41, 45} and k ρ ∈ {0.5, 2, 5, 10, 22}, f64
-and f32; one setting per launch where a time decides. The M6 not run (the user, 2026-11-26, for
+node): the example at p ∈ {8, 12, 15, 17, 19, 26, 32, 41, 45} and k̂ ∈ {0.5, 2, 4, 8, 16} (k ρ to
+about 28), f64 and f32; one setting per launch where a time decides. The M6 not run (the user, 2026-11-26, for
 CH4.6a2's timing: "Skip the M6"; asked again for this task only if needed).
 
 ## Constraints and risks
@@ -96,15 +98,17 @@ CH4.6a2's timing: "Skip the M6"; asked again for this task only if needed).
   prints the sum of the parts against the whole.
 
 ## Pending runs
-None. Kathleen job 673085 (node-c11a-142, one core, 20:45–20:51) and locust (one core, 20:45–20:52,
+None. Kathleen job 673085 (node-c11a-142, one core, 20:44–20:51) and locust (one core, 20:45–20:52,
 started by the quiet gate) ran `smoke` and `parts`; every launch exited 0, every case's parts
 reassembled the reference bit for bit (90 per machine). Outputs in
 `~/projects/fmm-archive/{kathleen,locust}/runs/ch4-9a1/`.
 
 ## Results (the report `tetraleaf-validate/results/helmholtz-ch4-9a1.md`)
 From p = 12 on the harmonics take 44–81 % of a point's P2M (f64) and 58–84 % of L2P with gradients;
-the radial functions most of the rest; the sum 4–10 %. f32 barely faster (subnormal slowdowns on
-x86 at p = 41–45). The per-point cost on one core equals the in-FMM thread time per point.
+the radial functions most of the rest; the sum 4–10 % (medians over k̂; per case 33–81 % and
+49–84 %). f32 barely faster (a slowdown on x86 at p = 41–45, likely subnormal values, untested). The
+per-point cost on one core is within about 10 % of the in-FMM thread time for P2M; L2P is less
+close (6.0 against about 7.9 µs).
 Recommendation: CH4.9a2 as restructured safe Rust (harmonics from coefficients tabulated per degree,
 real radial recursion for real k, points batched), no `tetraleaf-simd` change.
 

@@ -731,15 +731,15 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   path's, P2M's time per level on Kathleen and locust (the M6 with the user's go-ahead); constraint
   1; Yukawa's `p2m_yukawa` an Also for H2.
 - [x] **CH4.9a1 Where a point's P2M and L2P time goes, and the per-level table.** The harmonics take
-  44–81 % of a leaf point's P2M (f64, p ≥ 12) and 58–84 % of L2P with gradients, the sum 4–10 %, on
-  Kathleen and locust; `helmholtz_accuracy --levels`' per-level kinds and the `helmholtz_leaf`
+  44–81 % of a leaf point's P2M (f64, p ≥ 12, medians over k̂) and 58–84 % of L2P with gradients,
+  the sum 4–10 %, on Kathleen and locust; `helmholtz_accuracy --levels`' per-level kinds and the `helmholtz_leaf`
   example. Report `tetraleaf-validate/results/helmholtz-ch4-9a1.md`, record
   `docs/helmholtz/tasks/CH4.9a1.md`. Questions 1–2 of the PR (CH4.9a2's design and order) for
   sign-off.
 - [ ] **CH4.9a2 P2M by the kernel chosen.** *Done when:* CH4.9a's *Done when* less the table, the
-  kernel as signed off at CH4.9a1. Also (from CH4.9a1): in f32 at p = 41–45 and small k̂ the
-  reference ran 1.37–1.40× f64's time on Kathleen (subnormal values on x86); the f32 kernel avoids
-  or reports it. *Needs:* CH4.9a1 and its sign-off. *Machines:* Kathleen, locust.
+  kernel as signed off at CH4.9a1. Also (from CH4.9a1): in f32 at p = 41–45 the reference ran
+  1.37–1.40× f64's time on Kathleen as the median over k̂, up to 1.75× at k̂ = 2–4 (likely subnormal
+  values on x86, untested); the f32 kernel avoids or reports it. *Needs:* CH4.9a1 and its sign-off. *Machines:* Kathleen, locust.
 - [ ] **CH4.9b L2P with gradients by a SIMD kernel.** *Done when:* as CH4.9a for L2P, potentials and
   gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, sharing CH4.9a's recurrences; the
   evaluation's time under the defaults before and after CH4.9a–b on CH4.6a2's cases. *Needs:*

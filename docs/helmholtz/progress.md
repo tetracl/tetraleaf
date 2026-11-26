@@ -5007,17 +5007,23 @@ request, using this template:
 - Results (Kathleen job 673085, node-c11a-142; locust; one core each; p = 8–45, k̂ = 0.5–16, f64
   and f32):
   - The harmonics take 44–81 % of a point's P2M in f64 from p = 12 on, and with their derivatives
-    58–84 % of L2P with gradients; the radial functions most of the rest; the sum 4–10 %.
-  - The harmonics routine takes a square root and divisions per term and `powi` rescalings, all of
-    (n, m) alone; the radial recursion complex divisions per step, also for real k.
-  - The per-point cost on one core equals the in-FMM thread time per point (Kathleen, p = 17:
-    2.98 µs against about 3.3 µs).
+    58–84 % of L2P with gradients (medians over k̂; per case 33–81 % and 49–84 %); the radial
+    functions most of the rest; the sum 4–10 %.
+  - The harmonics routine takes two square roots and four divisions per term (one on the
+    loop-carried chain), all of (n, m) alone; the radial recursion complex divisions per step, also
+    for real k.
+  - The per-point cost on one core is within about 10 % of the in-FMM thread time for P2M
+    (Kathleen, p = 17: 2.98 µs against about 3.3 µs); L2P is less close (6.0 against about 7.9 µs).
   - f32 is barely faster (0.93–1.08× on Kathleen, 0.77–0.90× on locust at p ≤ 32); on Kathleen
-    f32 at p = 41–45 is 1.37–1.40× f64 (subnormal values at small k̂).
+    f32 at p = 41–45 is 1.37–1.40× f64 as the median, up to 1.75× (likely subnormal values,
+    untested).
 - Tests: `check_leaves` in `tests/helmholtz_accuracy.rs` asserts P2M and L2P on every level with
   occupied leaves and M2M and L2L somewhere; the example's bit-for-bit check (180 cases).
 - Checks: `/verify` on the M6 (fmt; Clippy default, examples, workspace; docs; `cargo test` 1,402
-  and `--workspace` 1,446 passed at opt-level 1); the harness test at opt-level 1 (17.8 s). Not run:
+  and `--workspace` 1,446 passed at opt-level 1); the harness test at opt-level 1 (17.8 s); the
+  table at the branch head in a smoke run on the M6 (W1 at kD = 30, not timed). A self-review by a
+  subagent: nothing blocking; fixed: §3's per-term count, the ranges as medians, the f32 cause as a
+  hypothesis, the per-point comparison with the FMM for L2P, the plan's details. Not run:
   the MPI list (no change to exec, plan or octree), `cargo deny` (no manifest change). Nothing
   pending.
 - Decisions: the split, above. For sign-off on the PR: (1) CH4.9a2's kernel, restructured safe Rust

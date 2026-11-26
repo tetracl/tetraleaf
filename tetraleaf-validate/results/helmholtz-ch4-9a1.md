@@ -11,21 +11,20 @@ kind times into the harness.
    table "Translations and leaf expansions"); the `helmholtz_leaf` example times one point's P2M
    and L2P and their parts.
 2. **The harmonics dominate** (§2): from p = 12 on, the orthonormal harmonics take 44–81 % of a
-   point's P2M in f64 on both machines (40–79 % in f32) and, with their derivatives, 58–84 % of L2P
-   with gradients; the radial functions take most of the rest (63 % at p = 8 on locust, 9–17 % at
-   p = 32–45); the sum
+   point's P2M in f64 on both machines (medians over k̂; 33–81 % over every case; 40–79 % in f32)
+   and, with their derivatives, 58–84 % of L2P with gradients (49–84 % over every case); the radial
+   functions take most of the rest (63 % at p = 8 on locust, 9–17 % at p = 32–45); the sum
    over the (p + 1)² terms, the part a SIMD kernel over points would speed up directly, is only
    4–10 %.
-3. **Why** (§3): the harmonics routine (`tetraleaf_math::orthonormal::harmonics`) takes a square root
-   and two divisions per term (n, m) and rescales every value through `powi`; the coefficients
-   depend on (n, m) alone. It is the robust recurrence, telescoped near the poles, built for
+3. **Why** (§3): the harmonics routine (`tetraleaf_math::orthonormal::harmonics`) takes two square
+   roots and four divisions per term (n, m), one division on the recurrence's loop-carried chain; the
+   coefficients depend on (n, m) alone. It is the robust recurrence, telescoped near the poles, built for
    degrees in the hundreds; at the leaf degrees (p ≤ 45) they could be computed once per degree.
    The radial functions run complex Smith divisions per step of the Miller recursion, also for
    real k.
 4. **f32 is barely faster** (§2): 0.93–1.08× f64's P2M time on Kathleen at p ≤ 32 and 0.77–0.90× on
-   locust;
-   the cost is not arithmetic throughput. On Kathleen f32 at p = 41–45 is slower than f64 (subnormal
-   values at small k̂, §2).
+   locust; the cost is not arithmetic throughput. On Kathleen f32 at p = 41–45 is slower than f64
+   (1.37–1.40× as medians, up to 1.75×; subnormal values are the likely cause, not tested; §2).
 5. **Recommendation (question 1)**: CH4.9a2 as a restructured kernel in safe Rust, not an ISA kernel
    first: leaf harmonics (and their derivatives) from coefficients precomputed per degree, the
    radial functions in real arithmetic for real k, the points of a leaf batched so that the sum
@@ -77,27 +76,35 @@ assembly, the call).
 
 (Every degree of the grid, both precisions and every k̂: `ch4-9a1-tables.py summary` and `shares`.)
 
-- **The cost per point matches the FMM's.** Kathleen's P2M at p = 17, 2.98 µs per point on one core,
-  is the in-FMM thread time per point measured on W1 at kD = 1000's finest level (about 3.3 µs,
-  CH4.6a2's per-level table, job 673083); the leaf operators run at one core's per-point cost.
+- **The cost per point is the FMM's, roughly.** Kathleen's P2M at p = 17, 2.98 µs per point on one
+  core, is within about 10 % of the in-FMM thread time per point on W1 at kD = 1000's finest level
+  (0.65 s × 40 threads over 7.96 M points, about 3.3 µs, job 673083; wall time × threads, so
+  imbalance included). L2P with gradients is less close: about 7.9 µs in the FMM against 6.0 µs here
+  (`Densities` calls the reference once per point's slice, the example once over 256 points).
 - **k̂ matters little**: at p = 17 P2M takes 2.79–3.36 µs over k̂ = 0.5–16 on Kathleen, the radial
   share rising with k̂ (25–37 %).
 - **The parts add up**: their sum is 0.96–0.99 of the reference call on locust and 0.95–1.05 on
   Kathleen, but for Kathleen's f32 at p = 41–45 (0.89–1.52, below).
 - **f32**: on Kathleen 0.93–1.08× f64's P2M time at p ≤ 32, on locust 0.77–0.90×; L2P ∇ 0.96–1.09×
   on Kathleen, 0.82–0.86× on locust. At p = 41 and 45 on Kathleen f32's P2M takes 1.37–1.40× f64's
-  and its sum part up to 11.6 µs per point: at small k̂ the high-degree radial values fall below
-  f32's normal range, and x86 runs subnormal arithmetic slowly (locust does not show it). Relevant
-  to f32 under D3 (CH7.1), not to the f64 kernel.
+  as the median over k̂, and up to 1.70–1.75× (k̂ = 2–4, inside W1–W3's leaf range); locust does not
+  show it. Subnormal values (high-degree radial values, or harmonics near the poles) on x86 are the
+  likely cause, not tested here (no flush-to-zero run). The example's sum part is timed on one
+  point's data, which in f64 does not matter (the cost does not depend on the values) but in f32 at
+  these degrees makes its sum part (up to 11.6 µs) one point's, not the operator's. An Also on
+  CH4.9a2, which builds the f32 kernel.
 
 ## 3. Why the harmonics cost what they do
 
 `tetraleaf_math::orthonormal::harmonics` (CH1.2a, spike S1) runs, per column m, the normalised
 Legendre recurrence in its telescoped form (the differences E_n, stable near the poles at degrees
 in the hundreds), with a mantissa and binary exponent per column. Per term (n, m) it takes
-c = √((n − m)(n + m)), two divisions (m²/(n + c), m²/(n − 1 + c′)) and a third (diff/c), plus the
-normalisation √((2n + 1)/4π) per degree and, wherever the exponent is not zero, two `powi` calls in
-`scaled`. None of these depends on the point. At the leaf degrees (p ≤ 45, far from the range the
+c = √((n − m)(n + m)), two divisions (m²/(n + c), m²/(n − 1 + c′)), a third on the loop-carried
+chain (diff/c, then cur + diff/c), and the normalisation √((2n + 1)/4π) with its division, computed
+inside each term's emission (`harmonics.rs`): two square roots and four divisions per term. Where a
+column's exponent is not zero, `scaled` adds two `powi` calls per value; in f64 that happens only
+for sin θ below about 0.02 at these orders, in f32 often from m ≈ 41. None of these depends on the
+point. At the leaf degrees (p ≤ 45, far from the range the
 telescoped form was built for) the coefficients can be tabulated once per degree, leaving a few
 multiply-adds per term.
 
