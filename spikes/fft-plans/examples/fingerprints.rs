@@ -46,7 +46,9 @@ fn main() {
         let mut gathered = vec![0u8; 256 * size];
         world.all_gather_into(&bytes[..], &mut gathered[..]);
         gathered
-            .chunks_exact(256)
+            .as_chunks::<256>()
+            .0
+            .iter()
             .map(|c| String::from_utf8_lossy(c).trim_end().to_string())
             .collect::<Vec<_>>()
     };
