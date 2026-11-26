@@ -4952,7 +4952,8 @@ request, using this template:
   - `tools/helmholtz/ch4-6a2-runs.sh` (`smoke`, `levels`, `waves`, `ffts`) and
     `ch4-6a2-tables.py` on `common.py` (`runs`, `levels`, `smooth`, `rule`).
   - Report `tetraleaf-validate/results/helmholtz-ch4-6a2.md`; record `docs/helmholtz/tasks/CH4.6a2.md`.
-- Results (Kathleen, 1 × 40, jobs 673075, 673077, 673078, one φ step per launch, ABBA):
+- Results (Kathleen, 1 × 40, jobs 673075, 673077, 673078; locust, 1 × 72, 19:35–19:44 once the node
+  was quiet; one φ step per launch, ABBA; Kathleen's ranges, locust's in the report §6):
   - rustfft's S → F 0.27–0.46× and F → R 0.23–0.60× the product's thread time per conversion; the
     diagonal levels' M2L 0.63–0.93×; the evaluation 0.89–0.95× (W3's within the product's spread),
     build plus one evaluation 0.94–0.97×; errors 1.0000×, checksums agree per setting.
@@ -4962,6 +4963,10 @@ request, using this template:
   - The time rule: with the form's conversions at rustfft's ratio one level of 13 cases moves from
     the waves to the form (W3, kD = 200, 10⁻⁶, level 4), 1.6 % of that level, within noise.
   - CH4.1a estimated the FFT at 1–2 % of build plus one evaluation; measured 3–6 %.
+  - locust: the conversions 0.31–0.71×, the levels 0.60–0.95×, the evaluation 0.91–0.99×, errors
+    0.993–1.000×; the smooth grid 1.000–1.005× per evaluation (rustfft often slower on NEON's smooth
+    grid); the time rule moves two levels (one a 3 % loss, one a gain where the form beats the waves
+    with the product too).
 - Tests: `check_diagonal` (`tests/helmholtz_accuracy.rs`) checks the φ steps as built; with the
   feature, `check_rustfft`: rustfft on every diagonal level, the product's classes, pairs and
   conversions, errors within 1.01×, threads bit for bit.
@@ -4969,10 +4974,11 @@ request, using this template:
   feature; docs; `cargo check --workspace --all-targets`; `cargo deny`; no rustfft in the default
   graph; `cargo test` 1,402 and `--workspace` 1,446 passed at opt-level 1; the debug one-rank run of
   `helmholtz_accuracy` 400 s at load 11); the harness test with the feature at 1 rank (92 passed) and
-  2 ranks by hand. Not run: the MPI list (no change to exec, plan or octree). Pending: locust's
-  `levels`, `waves` and `ffts` (waiting for a quiet node). The M6 not run (the user, 2026-11-26:
-  "Skip the M6").
+  2 ranks by hand. Not run: the MPI list (no change to exec, plan or octree). The M6 not run (the
+  user, 2026-11-26: "Skip the M6"). Nothing pending.
 - Decisions: questions for sign-off on the PR: (1) keep the product's grid and close CH4.6a3 unrun;
   (2) no FFT variant of `DiagonalCosts`; (3) CH4.6a's acceptance without the M6's times.
 - Laplace: not touched (the harness, scripts, documents and one CI step).
-- Follow-ups: CH4.6a3 (closed unrun if question 1 is signed off, else built); then H2 (CH2.1).
+- Follow-ups: CH4.6a3 (closed unrun if question 1 is signed off, else built); an Also on CH4.7: the
+  levels the time rule keeps on the waves where the form is faster under either step; then H2
+  (CH2.1).

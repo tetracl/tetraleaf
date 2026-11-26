@@ -12,39 +12,40 @@ CH4.6a3 (the smooth grid) is built.
    back end in the output ("φ step: rustfft; rustfft 6.4.1, x86_64 features sse4.1, avx, fma"), the step
    each level ran (`Row::phi_steps`, a column "φ" of "Diagonal M2L"), and a feature `rustfft` of
    tetraleaf-validate that passes tetraleaf-exec's through.
-2. **The conversions** (§2, Kathleen, 1 × 40): rustfft's S → F takes 0.27–0.46× the product's
-   thread time per conversion, its F → R 0.23–0.60×; over each case's conversions 0.30–0.39×.
-3. **The levels and the run** (§2–§3): the diagonal levels' M2L 0.63–0.93× the product's per level
-   and 0.72–0.90× summed per case; the evaluation 0.89–0.95× (the product's own spread between its
-   two launches 1.000–1.068: W3's 0.936 is within its spread of 1.068, the W1 cases' gains beyond
-   theirs); build plus one evaluation 0.94–0.97×. The errors are 1.0000× the
-   product's, the checksums of each setting's two launches agree, the build is unchanged. CH4.1a
-   had estimated the FFT's gain at about 1–2 % of build plus one evaluation (W1, kD = 500); measured
-   it is 3–6 %.
-4. **The smooth grid** (§4): priced from S9's per-box rustfft times at the levels' degrees on the
-   node and the level's measured pair cost at the larger N_φ, it changes a level by 0.98–1.03× and
-   the evaluation by 1.000–1.004×; with S9's FFT difference scaled up to the level's own rustfft
-   conversion cost (an upper bound on the FFT's cost in the level), by 0.90–1.03× and 0.991–1.001×.
-   At 5 of the 15 degrees the product's grid is already 7-smooth (N_φ = 72, 80, 108, 168, 288), and
-   where it is not (p = 12, 32, 33, 45, 61, 76, 116, 129, 135, 241) the FFT saved is mostly less
-   than the pairs' extra samples cost; the smooth grid gains at p = 61 (0.979×, up to 0.90× at the
-   bound) and at p = 45 and 241 at the bound. Either way about 1 % of an evaluation or less, in
-   either direction, against a second set of tables per level. **Recommendation (question 1): keep
-   the product's grid and close CH4.6a3 unrun.**
-5. **The time rule** (§5): on the 6 ABBA cases every level in the rule's range already takes the
-   form, so a cheaper form changes nothing. On 7 cases where CH4.3b2c found the waves kept
-   (W1 at kD = 100, 200, W3 at kD = 200, 500, 10⁻⁶–10⁻⁸), the model with the form's conversions
-   at rustfft's measured ratio flips one level (W3, kD = 200, 10⁻⁶, level 4: waves → form), where
-   the forced form with rustfft measures 0.98× the waves of the same launch's setting (0.366 s
-   against 0.372 s; 0.97× against the product launch's 0.379 s), within these single launches'
-   noise. The other four levels the waves keep stay on the waves; the form there takes 1.30–2.95×
-   their time, but for one, W3 at kD = 500, 10⁻⁸, level 4: 0.81×, and 0.87× with the product,
-   CH4.3b2c's known miss, not the φ step's. **Recommendation (question 2): no FFT variant of
-   `DiagonalCosts`** (rustfft is opt-in; the one level it would move gains 0.006 s, 1.6 %, within
-   noise).
-6. **locust and the M6** (§6): the M6 was skipped at the user's word before any run (2026-11-26:
-   "Skip the M6"; question 3). locust's runs are pending: the node was busy with other jobs all
-   afternoon, and the runs script waits for it to be quiet.
+2. **The conversions** (§2, §6): rustfft's S → F takes 0.27–0.46× the product's thread time per
+   conversion on Kathleen (1 × 40) and 0.31–0.62× on locust (1 × 72), its F → R 0.23–0.60× and
+   0.33–0.71×; over each case's conversions 0.30–0.39× and 0.41–0.47×.
+3. **The levels and the run** (§2, §3, §6): the diagonal levels' M2L 0.63–0.93× (Kathleen) and
+   0.60–0.95× (locust) the product's per level, 0.72–0.90× and 0.77–0.91× summed per case; the
+   evaluation 0.89–0.95× and 0.91–0.99× (the product's own spread between its two launches
+   1.000–1.068 and 1.000–1.036: Kathleen's W3, 0.936, is within its spread of 1.068, every other
+   case's gain beyond its spread); build plus one evaluation 0.94–0.97× on Kathleen. The errors are
+   0.993–1.000× the product's, the checksums of each setting's two launches agree, the build is
+   unchanged. CH4.1a had estimated the FFT's gain at about 1–2 % of build plus one evaluation (W1,
+   kD = 500); measured on Kathleen it is 3–6 %.
+4. **The smooth grid** (§4, §6): priced from S9's per-box rustfft times at the levels' degrees on
+   the node and the level's measured pair cost at the larger N_φ, it changes a level by 0.98–1.03×
+   and the evaluation by 1.000–1.004× on Kathleen; with S9's FFT difference scaled up to the level's
+   own rustfft conversion cost (an upper bound on the FFT's cost in the level), by 0.90–1.03× and
+   0.991–1.001×. On locust 1.000–1.072× per level and 1.000–1.005× per evaluation: on NEON rustfft
+   is often slower on the smooth grid. At 5 of the 15 degrees timed the product's grid is already
+   7-smooth (N_φ = 72, 80, 108, 168, 288; also 36 and 64 at locust's p = 8 and 15), and where it is
+   not the FFT saved is mostly less than the pairs' extra samples cost; on Kathleen the smooth grid
+   gains at p = 61 (0.979×, up to 0.90× at the bound) and at p = 45 and 241 at the bound. Either way
+   about 1 % of an evaluation or less, against a second set of tables per level. **Recommendation
+   (question 1): keep the product's grid and close CH4.6a3 unrun.**
+5. **The time rule** (§5, §6): on the 6 ABBA cases every level in the rule's range that runs the
+   form keeps it. On the levels kept on the waves (7 more cases where CH4.3b2c found the waves kept,
+   W1 at kD = 100, 200, W3 at kD = 200, 500, 10⁻⁶–10⁻⁸), the model with the form's conversions at
+   rustfft's measured ratio moves one level on Kathleen (W3, kD = 200, 10⁻⁶, level 4: the forced
+   form with rustfft 0.98× the same setting's waves, within noise) and two on locust (one a 3 %
+   loss; one a 0.024 s gain where the form beats the waves with the product too). Where the form
+   beats the waves by more (Kathleen 1 level, locust 3), it does so under either step: misses of the
+   waves' model, CH4.3b2c's kind, not the φ step's (a CH4.7 *Also*). **Recommendation (question 2):
+   no FFT variant of `DiagonalCosts`** (rustfft is opt-in, and the moves it would make are within
+   noise or a mix of gain and loss).
+6. **The M6** (§7): skipped at the user's word before any run (2026-11-26: "Skip the M6"; question
+   3).
 
 ## 1. Setup
 
@@ -64,6 +65,8 @@ CH4.6a3 (the smooth grid) is built.
     launch per setting).
   - `ffts`: spike S9's `times` (`spikes/fft-plans`), one thread, `rustfft product`, `rustfft
     smooth` and `product product` at the diagonal levels' degrees p = 12–241.
+- **locust**: §6 (the same stages, 1 × 72, 2026-11-26 19:35–19:44, the harness built at 68827ef in
+  the tree synced at ccbb9b7).
 - **Kathleen**: node-c11b-009 (Xeon Gold 6248, AVX-512; rustfft dispatched on sse4.1, avx, fma),
   `singlenode`, slow nodes excluded; job 673075 (`smoke`, `levels`, 18:14–18:27), 673077 (`ffts`),
   673078 (`waves`), 2026-11-26. The node is exclusive; its load at a launch's start is the decay of
@@ -217,23 +220,98 @@ thread time (0.23–0.59), against the forced form's measured M2L (`--diagonal-c
   about 1.6 % of that level, within noise. Recommendation: no variant now; the product's costs stay the rule's
   under either step (question 2).
 
-## 6. locust and the M6
+## 6. locust (1 × 72)
 
-- **The M6**: not timed. Asked on 2026-11-26 before any run ("May I run the timing launches on the
-  M6"); the user: "Skip the M6". The roadmap's *Done when* names the M6 with the user's go-ahead,
-  and §10 CH4.6a "the time per level against the product on the M6, locust and Kathleen"; question
-  3 asks to sign off the acceptance without it, as S9 did.
-- **locust**: pending. `tools/helmholtz/ch4-6a2-runs.sh /data/ucahtbe/fmm/runs/ch4-6a2 levels
-  waves`, then `ffts` at the same degrees, through `tools/gh200/remote.sh`, gated on a quiet node
-  (no other process of this account above 20 % of a core, a one-minute load below 2). The node ran
-  other jobs from 18:10 on (load up to 295); a vLLM server of another user holds about 0.6 core
-  throughout and is not waited for. A first `levels` launch on a busy node was stopped and its
-  outputs discarded (`/data/ucahtbe/fmm/runs/ch4-6a2-discarded-not-quiet`).
+The same stages on locust (Neoverse-V2, rustfft on NEON), 2026-11-26 19:35–19:44, started by the
+gate of the plan once the node was quiet (no other process of this account above 20 % of a core, a
+one-minute load below 2; a vLLM server of another user, about 0.3–0.6 core, ran throughout). The
+load printed per launch is the decay of the launches' own 72 threads. A first `levels` launch at
+18:18, on a busy node, was stopped and its outputs set aside
+(`/data/ucahtbe/fmm/runs/ch4-6a2-discarded-not-quiet`). Raw outputs:
+`~/projects/fmm-archive/locust/runs/ch4-6a2/`. NEON's time-rule costs put more levels on the form
+than x86's (levels of p = 8 and 15 too).
 
-## 7. Caveats
+**The levels** (as §2):
 
-- One machine class measured (x86, AVX-512 node, rustfft on AVX/FMA); NEON's ratios are locust's
-  pending runs.
+| case | level | p | S → F µs P → R | ÷ | F → R µs P → R | ÷ | M2L s P → R | ÷ |
+| --- | ---: | ---: | --- | ---: | --- | ---: | --- | ---: |
+| w1-1000-1e-6 | 2 | 241 | 26055.6 → 8380.0 | 0.322 | 43230.2 → 28504.3 | 0.659 | 0.3637 → 0.2816 | 0.774 |
+| w1-1000-1e-6 | 3 | 129 | 6177.7 → 3211.7 | 0.520 | 11735.5 → 6186.3 | 0.527 | 0.3475 → 0.3130 | 0.901 |
+| w1-1000-1e-6 | 4 | 71 | 1193.6 → 613.6 | 0.514 | 1971.9 → 905.8 | 0.459 | 0.1842 → 0.1722 | 0.935 |
+| w1-1000-1e-6 | 5 | 41 | 298.5 → 141.7 | 0.475 | 480.1 → 170.7 | 0.356 | 0.1958 → 0.1790 | 0.914 |
+| w1-1000-1e-6 | 6 | 26 | 106.1 → 64.6 | 0.609 | 139.2 → 53.6 | 0.385 | 0.2840 → 0.2663 | 0.938 |
+| w1-1000-1e-6 | 7 | 17 | 43.0 → 26.8 | 0.622 | 41.6 → 19.5 | 0.469 | 0.3855 → 0.3662 | 0.950 |
+| w1-1000-1e-6 | 8 | 15 | 34.5 → 12.1 | 0.351 | 25.2 → 11.1 | 0.441 | 0.7588 → 0.6637 | 0.875 |
+| w1-250-1e-6 | 2 | 71 | 1157.3 → 397.3 | 0.343 | 1339.2 → 684.9 | 0.511 | 0.0095 → 0.0057 | 0.599 |
+| w1-250-1e-6 | 3 | 41 | 304.2 → 112.4 | 0.369 | 370.9 → 127.0 | 0.342 | 0.0097 → 0.0074 | 0.765 |
+| w1-250-1e-6 | 4 | 26 | 100.9 → 46.5 | 0.461 | 123.1 → 49.2 | 0.400 | 0.0113 → 0.0089 | 0.790 |
+| w1-250-1e-6 | 5 | 17 | 41.5 → 20.2 | 0.486 | 40.6 → 19.2 | 0.472 | 0.0180 → 0.0147 | 0.819 |
+| w1-250-1e-6 | 6 | 15 | 33.8 → 10.3 | 0.306 | 25.0 → 11.0 | 0.441 | 0.0469 → 0.0370 | 0.788 |
+| w1-500-1e-3 | 2 | 116 | 3805.7 → 1408.7 | 0.370 | 4881.7 → 2996.3 | 0.614 | 0.0450 → 0.0347 | 0.772 |
+| w1-500-1e-3 | 3 | 61 | 795.3 → 372.3 | 0.468 | 991.6 → 413.3 | 0.417 | 0.0249 → 0.0222 | 0.892 |
+| w1-500-1e-3 | 4 | 33 | 181.5 → 84.2 | 0.464 | 201.5 → 83.7 | 0.415 | 0.0206 → 0.0174 | 0.845 |
+| w1-500-1e-3 | 5 | 19 | 54.1 → 18.6 | 0.343 | 56.7 → 25.8 | 0.455 | 0.0258 → 0.0200 | 0.776 |
+| w1-500-1e-3 | 6 | 12 | 21.7 → 8.3 | 0.383 | 21.5 → 8.8 | 0.410 | 0.0353 → 0.0291 | 0.826 |
+| w1-500-1e-3 | 7 | 8 | 10.4 → 4.5 | 0.432 | 9.5 → 3.8 | 0.401 | 0.0312 → 0.0255 | 0.816 |
+| w1-500-1e-6 | 2 | 129 | 4818.0 → 1833.3 | 0.381 | 6694.8 → 4350.3 | 0.650 | 0.0660 → 0.0527 | 0.799 |
+| w1-500-1e-6 | 3 | 71 | 1218.5 → 550.2 | 0.452 | 1605.9 → 672.5 | 0.419 | 0.0446 → 0.0342 | 0.765 |
+| w1-500-1e-6 | 4 | 41 | 296.7 → 133.7 | 0.451 | 432.5 → 143.9 | 0.333 | 0.0399 → 0.0316 | 0.792 |
+| w1-500-1e-6 | 5 | 26 | 103.3 → 58.9 | 0.570 | 133.3 → 52.0 | 0.390 | 0.0662 → 0.0588 | 0.888 |
+| w1-500-1e-6 | 6 | 17 | 42.2 → 25.2 | 0.597 | 41.9 → 19.4 | 0.463 | 0.0854 → 0.0779 | 0.911 |
+| w1-500-1e-6 | 7 | 15 | 34.3 → 11.7 | 0.341 | 25.2 → 11.1 | 0.441 | 0.1883 → 0.1643 | 0.872 |
+| w1-500-1e-8 | 2 | 135 | 5698.5 → 1847.6 | 0.324 | 8156.9 → 5091.0 | 0.624 | 0.0792 → 0.0607 | 0.766 |
+| w1-500-1e-8 | 3 | 76 | 1472.0 → 668.6 | 0.454 | 1985.8 → 810.2 | 0.408 | 0.0547 → 0.0490 | 0.896 |
+| w1-500-1e-8 | 4 | 45 | 371.0 → 177.1 | 0.477 | 495.2 → 186.0 | 0.376 | 0.0569 → 0.0492 | 0.864 |
+| w3-500-1e-6 | 2 | 129 | 5021.7 → 1909.4 | 0.380 | 7842.3 → 5578.4 | 0.711 | 0.0808 → 0.0666 | 0.824 |
+| w3-500-1e-6 | 3 | 71 | 1219.0 → 561.3 | 0.460 | 2091.0 → 740.7 | 0.354 | 0.1527 → 0.1457 | 0.954 |
+
+**The runs** (as §3):
+
+| case | build s P1, R1, R2, P2 | evaluate s P1, R1, R2, P2 | evaluate R ÷ P | P spread | diagonal M2L s P, R | ÷ | errors R ÷ P (φ, ∇φ) | checksums |
+| --- | --- | --- | ---: | ---: | --- | ---: | --- | --- |
+| w1-1000-1e-6 | 14.61, 14.39, 14.44, 14.18 | 5.830, 5.530, 5.590, 5.830 | 0.954 | 1.000 | 2.520, 2.242 | 0.890 | 0.9985, 1.0000 | agree |
+| w1-250-1e-6 | 0.62, 0.61, 0.62, 0.62 | 0.290, 0.260, 0.260, 0.280 | 0.912 | 1.036 | 0.095, 0.074 | 0.773 | 1.0000, 0.9932 | agree |
+| w1-500-1e-3 | 2.79, 2.80, 2.78, 2.77 | 0.780, 0.750, 0.740, 0.780 | 0.955 | 1.000 | 0.183, 0.149 | 0.815 | 1.0000, 1.0000 | agree |
+| w1-500-1e-6 | 2.94, 2.88, 2.86, 2.88 | 1.230, 1.170, 1.160, 1.240 | 0.943 | 1.008 | 0.491, 0.419 | 0.855 | 1.0000, 1.0000 | agree |
+| w1-500-1e-8 | 1.58, 1.58, 1.59, 1.56 | 2.280, 2.260, 2.260, 2.300 | 0.987 | 1.009 | 0.191, 0.159 | 0.833 | 1.0000, 1.0000 | agree |
+| w3-500-1e-6 | 1.52, 1.51, 1.51, 1.51 | 1.980, 1.940, 1.940, 1.980 | 0.980 | 1.000 | 0.233, 0.212 | 0.909 | 1.0000, 1.0000 | agree |
+
+- rustfft's S → F 0.31–0.62× and F → R 0.33–0.71× the product's per conversion (over each case's
+  conversions 0.41–0.47×; Kathleen 0.30–0.39×); the diagonal levels 0.60–0.95×, summed per case
+  0.77–0.91×; the evaluation 0.91–0.99× (each rustfft launch faster than both product launches of
+  its case, the product's spread 1.000–1.036). The run gains less than on Kathleen: rustfft gains
+  less against NEON's product (the conversions 0.41–0.47× against 0.30–0.39×), and at 10⁻⁸ and on
+  W3 fewer of locust's levels run the form (the diagonal levels 8 % and 12 % of the evaluation,
+  against 27 % and 46 % on Kathleen).
+- The errors: 0.9932–1.0000× the product's (two cases move in the fourth digit, both down).
+- **The smooth grid**: 1.000–1.072× per level, 1.000–1.005× per evaluation. On NEON rustfft is
+  often slower on the smooth grid than on the product's (p = 241: 6,514 → 8,672 µs per box; p = 129:
+  1,688 → 1,837 µs; p = 33: 68 → 88 µs), so the smooth grid loses at every degree where it differs.
+  At p = 8 and 15 (not in the `ffts` list) the product's grid is the smooth one (N_φ = 36, 64).
+- **The time rule** (the `rule` table; the case's rustfft ÷ product ratio of the conversions
+  0.36–0.50): every level of the ABBA cases in the rule's range that runs the form keeps it. The
+  18 levels kept on the waves (13 cases): the model with rustfft's conversions moves two, W1 at kD = 100,
+  10⁻⁷, level 3 (the forced form with rustfft measures 1.03× the waves, a 3 % loss) and W1 at
+  kD = 200, 10⁻⁷, level 4 (0.54× the waves, 0.024 s gained; but the form with the product measures
+  0.61× the waves there too, a miss of the waves' model under either step). The form also beats
+  the waves, under either step, on W1 at kD = 500, 10⁻⁸, level 5 (0.82× with rustfft, 0.91× with
+  the product), W3 at kD = 200, 10⁻⁶, level 4 (0.86×, 1.02×) and 10⁻⁸, level 3 (0.66×, 0.88×),
+  which the model keeps on the waves with either costs. These misses are the waves' model on
+  locust's NEON constants, CH4.3b2c's kind ("every miss keeps the waves where the form was faster"),
+  not the φ step's; a CH4.7 *Also* (roadmap) takes them to the time rule's scoring outside its fit.
+  With the form forced on every level the rule reaches, W1 at kD = 200, 10⁻⁷ runs 0.36 s against the
+  default's 0.33 s, under either step.
+
+## 7. The M6
+
+Not timed. Asked on 2026-11-26 before any run ("May I run the timing launches on the M6"); the user:
+"Skip the M6". The roadmap's *Done when* names the M6 with the user's go-ahead, and §10 CH4.6a "the
+time per level against the product on the M6, locust and Kathleen"; question 3 asks to sign off the
+acceptance without it, as S9 did.
+
+## 8. Caveats
+
+- Two machine classes measured (x86 on Kathleen, NEON on locust); the M6 (NEON, another core) not.
 - One rank per node: at many ranks per node each rank converts fewer boxes on fewer threads, and the
   ratio per conversion may differ (S9's one-core ratios on Kathleen were 0.05–0.11× for the φ step
   alone).

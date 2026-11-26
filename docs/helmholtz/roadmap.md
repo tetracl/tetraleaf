@@ -10,7 +10,7 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 Status (2026-11-26): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). The FFT track
 (item 13): CH0.9 and CH4.6a1 done; CH4.6a2 (the time per level, product against rustfft) done in its
-PR on Kathleen, locust pending there, the M6 skipped by the user; its questions ask to keep the
+PR on Kathleen and locust, the M6 skipped by the user; its questions ask to keep the
 product's grid (CH4.6a3 closed unrun) and the product's time-rule costs. Next, after its sign-off,
 H2 and H5 (items 14–15), CH2.1 first. Eight H4 tasks stay open off the list. The project was renamed
 tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are
@@ -667,7 +667,11 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   with the user's go-ahead). Also (the H4 gate's second run, the user on #262, 2026-11-25: "Accept all (Recommended)"; review 2026-11-25, A11): 128 against 256 points per
   leaf on NEON after H4 (CH4.0d3 chose 128 at ε ≥ 10⁻⁷ for the evaluation alone; at 1 × 72 W1 at
   kD = 1000 builds in 13.4–14.0 s at 128 against 7.6 s at 256, CH4.5 §5): W1 and W2 at kD = 250–1000
-  on locust at 1 × 72 and 4 × 18, the build and the evaluation apart. *Needs:* CH4.5. *Machines:* Kathleen, locust.
+  on locust at 1 × 72 and 4 × 18, the build and the evaluation apart. Also (from CH4.6a2, its report
+  §5–§6): the levels the time rule keeps on the waves where the form runs faster under either φ
+  step, Kathleen's W3 at kD = 500, 10⁻⁸, level 4 (0.87× with the product) and locust's W1 at
+  kD = 200, 10⁻⁷, level 4 (0.61×), W1 at kD = 500, 10⁻⁸, level 5 (0.91×) and W3 at kD = 200, 10⁻⁸,
+  level 3 (0.88×), in that scoring. *Needs:* CH4.5. *Machines:* Kathleen, locust.
 - CH4.6a The optional rustfft back end of the φ step. Added at CH0.9 (D7; the user on #264,
   2026-11-26: "Q1-3 as recommended"; proposal §6.7, §10). Split on 2026-11-26 into CH4.6a1–a3,
   measuring before the second grid is built (the user: "Split a1/a2/a3 (Recommended)"); rustfft
@@ -677,16 +681,15 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   the form's own 1 u sensitivity, errors 1.0000×; fingerprints agreed over the ranks; CI
   `run-tests-rustfft`. Record `docs/helmholtz/tasks/CH4.6a1.md`. That reading of §10's
   "round-off" signed off 2026-11-26 (the user on #265: "I accept PR Question 1").
-- [x] **CH4.6a2 The time per level against the product, both grids priced.** On Kathleen (1 × 40)
-  rustfft's conversions 0.23–0.60× the product's, the diagonal levels 0.63–0.93×, the evaluation
-  0.89–0.95×, errors 1.0000×; the smooth grid 1.000–1.004× per evaluation; the time rule's costs need
-  no FFT variant (one level of 13 cases moves, within noise); the harness's `--phi-step`. Report
+- [x] **CH4.6a2 The time per level against the product, both grids priced.** rustfft's conversions
+  0.23–0.71× the product's, the diagonal levels 0.60–0.95×, the evaluation 0.89–0.95× (Kathleen,
+  1 × 40) and 0.91–0.99× (locust, 1 × 72), errors 0.993–1.000×; the smooth grid 1.000–1.005× per
+  evaluation; the time rule's costs need no FFT variant; the harness's `--phi-step`. Report
   `tetraleaf-validate/results/helmholtz-ch4-6a2.md`, record `docs/helmholtz/tasks/CH4.6a2.md`. The M6
-  skipped (the user, 2026-11-26: "Skip the M6"); locust pending in the PR. Questions 1–3 of the PR
-  (keep the product's grid and close CH4.6a3 unrun; no FFT costs; the acceptance without the M6)
-  for sign-off.
+  skipped (the user, 2026-11-26: "Skip the M6"). Questions 1–3 of the PR (keep the product's grid
+  and close CH4.6a3 unrun; no FFT costs; the acceptance without the M6) for sign-off.
 - [ ] **CH4.6a3 The smooth grid, chosen per level by its time.** CH4.6a2 recommends closing it
-  unrun (its question 1: the smooth grid priced at 1.000–1.004× of an evaluation on Kathleen). *Done when:* `Grid` at a chosen
+  unrun (its question 1: the smooth grid priced at 1.000–1.005× of an evaluation on Kathleen and locust). *Done when:* `Grid` at a chosen
   N_φ (4P − 3 up to a 7-smooth multiple of 4), the conversions and transfer functions on it under
   their own table key, round-off against the product's grid; a level's grid (the product's or the
   smooth one) chosen by a rule fitted on CH4.6a2's times per machine class (constraint 9: no time
