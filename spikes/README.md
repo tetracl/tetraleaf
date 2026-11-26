@@ -18,6 +18,12 @@ the root's (`exclude = ["spikes"]` there):
   green-kernels' `[patch]` of rlst to 0.10.2 (`docs/design/simd-p2p.md` §8.4);
 - its target directory `target/spikes` at the root (`spikes/.cargo/config.toml`).
 
+One spike is outside it: `fft-plans` (S9, Helmholtz CH0.9) has a `[workspace]` table of its
+own and is in `spikes/Cargo.toml`'s `exclude`, so that FFTW's GPL bindings and rustfft enter
+neither lock file (proposal §10). Its lock file `fft-plans/Cargo.lock` is committed and its
+target directory is `target/spikes-fft-plans` (`fft-plans/.cargo/config.toml`); build it from
+`spikes/fft-plans/`, with a system FFTW in both precisions found by pkg-config.
+
 No root check builds a spike, and CI never does; `deny.toml`'s licence check covers the root
 alone, so the spikes' licence graphs are not checked. Run every spike command from this
 directory: the commands in the reports (`cargo run -p tetraleaf-spike-<name> …`) work as written
@@ -52,3 +58,4 @@ recorded as broken in this file, never left silently broken.
 | `diagonal` | Helmholtz CH0.6, S6: the diagonal M2L's stability; rerun at CH4.0e and CH4.0i as the prototype; extended at CH4.3d1 with the scan of T's length (`src/lengths.rs`) | `truncation` | the proposal, the reports of CH4.0e, CH4.0i and CH4.3d1, `tools/helmholtz/ch4-0e-tables.py`, `tools/helmholtz/ch4-3d1-tables.py` | `cargo test -p tetraleaf-spike-diagonal --release -- --include-ignored`; examples `sweep`, `times`, `summary`, `lengths` |
 | `truncation` | Helmholtz CH0.7, S7: the truncation degree in double-double | – | `tetraleaf-exec/src/helmholtz/degree.rs` and its test, `tetraleaf-validate`'s calibration, `tetraleaf-math/src/coaxial/` | `cargo test -p tetraleaf-spike-truncation`; `--example sweep` |
 | `census` | Helmholtz CH0.8a, S8: the workload census, the leaf rule | tetraleaf-octree, tetraleaf-plan, -validate, mpi | `tetraleaf-validate`'s `helmholtz_workloads` (ported from here; **`tests/ported_workloads.rs` checks it**), `tetraleaf-exec/tests/helmholtz/leaf_rule.rs`, `tetraleaf-exec`'s rustdoc | `RUST_MIN_STACK=8388608 cargo test -p tetraleaf-spike-census`; `--example census` (MPI; on the M6 `HWLOC_COMPONENTS=-darwin`) |
+| `fft-plans` | Helmholtz CH0.9, S9: per-box FFT plans of the φ step (FFTW through RLST 0.12, rustfft) against the product: bits per box, fingerprints across ranks, time per box | rlst (`fftw_system`), rustfft, mpi, rayon, tetraleaf-math, -ref, -tables (its own workspace and lock file) | the proposal (§6.7, D7), CHR.3 and CH4.6, `tools/helmholtz/ch0-9-tables.py` | from `spikes/fft-plans/`: `cargo test --release`; `run.sh <machine>` (the examples `record`, `times`, `fingerprints` under `mpirun -n 2`) |
