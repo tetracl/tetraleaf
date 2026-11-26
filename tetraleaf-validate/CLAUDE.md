@@ -785,6 +785,18 @@ the task's stages (`smoke`, `levels`, `waves`, `ffts`: spike S9's `times` at the
 `ch4-6a2-tables.py` makes the report's tables (`runs`, `levels`, `smooth`, `rule`). Its report is
 `results/helmholtz-ch4-6a2.md`.
 
+Helmholtz CH4.9a1 (a leaf point's P2M and L2P time by part; docs/helmholtz/tasks/CH4.9a1.md)
+added to `helmholtz_accuracy --levels` a table "Translations and leaf expansions" (per level P2M,
+M2M, L2L and L2P from `Row::kind_seconds`, already collected since CH4.0d3; `check_leaves` asserts
+P2M and L2P on every level with occupied leaves and M2M and L2L somewhere), and the
+`helmholtz_leaf` example (MPI-free, not registered; it times): per degree and k̂ on one thread,
+`tetraleaf_ref::helmholtz::leaf::{p2m, l2p}` per point in the leaf frame `Densities` uses, and their
+parts apart (`bessel_j`, `harmonics`, the factor's `exp`, the sum; `bessel_j` with derivatives and
+`harmonics_derivatives` for L2P with gradients), the parts checked to reassemble the reference's
+multipole bit for bit before any timing. `tools/helmholtz/ch4-9a1-runs.sh` runs it (`smoke`,
+`parts`), `ch4-9a1-tables.py` makes the report's tables (`shares`, `summary`). Its report is
+`results/helmholtz-ch4-9a1.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

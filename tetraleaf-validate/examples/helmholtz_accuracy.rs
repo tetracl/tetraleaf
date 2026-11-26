@@ -163,6 +163,10 @@
 //!   most targets with a V row and V sources on one rank, the budget, the most MiB of a
 //!   rank's source signatures and whole scratch, the fewest targets per chunk, the most
 //!   chunks, and the ranks over the budget.
+//!   Then (Helmholtz CH4.9a1) a table "Translations and leaf expansions", a row per run and
+//!   level with work of P2M, M2M, L2L or L2P: each kind's seconds (`Row::kind_seconds`, the
+//!   slowest rank's; M2M and L2L each into the level's boxes, M2M from their children and L2L
+//!   from their parents), the level's degree, boxes, M2L and its seconds.
 //! - `--block-budget MB` (Helmholtz CH4.0e): the bytes of the M2L's stored rotation blocks
 //!   per rank (default the library's, 512 MiB); the levels that do not fit, coarsest first,
 //!   form their blocks per V pair. No bit depends on it.
@@ -1148,6 +1152,7 @@ fn main() {
     let mut diagonal_rows: Vec<String> = Vec::new();
     let mut time_rows: Vec<String> = Vec::new();
     let mut leaf_operators: Vec<String> = Vec::new();
+    let mut kind_rows: Vec<String> = Vec::new();
     // Whether `--leaf-size` and `--c-leaf` named a value (Helmholtz CH4.0d3): the column
     // "M2L" then ends with it.
     let named = (
@@ -1528,6 +1533,30 @@ fn main() {
                     }
                 }
                 lines
+            };
+            // `--levels`: the rows of the table "Translations and leaf expansions", a row per
+            // level with work of P2M, M2M, L2L or L2P (`Row::kind_seconds`, each the slowest
+            // rank's), with the level's degree, boxes, M2L and its seconds.
+            let kind_lines = |row: &Row| -> Vec<String> {
+                (0..row.levels)
+                    .filter(|&l| row.kind_seconds[l][..4].iter().any(|&t| t > 0.0))
+                    .map(|l| {
+                        let [p2m, m2m, l2l, l2p, _, _] = row.kind_seconds[l];
+                        format!(
+                            "| {} | {} | {kd_string} | {degrees_name} | {} | {} × {} | {l} | {} \
+                             | {} | {} | {p2m:.4} | {m2m:.4} | {l2l:.4} | {l2p:.4} | {:.4} |",
+                            workload.name(),
+                            problem.len(),
+                            setting_name(row),
+                            row.ranks,
+                            row.threads,
+                            row.degrees[l],
+                            row.v_targets[l],
+                            level_m2l(row, l),
+                            row.m2l_seconds[l],
+                        )
+                    })
+                    .collect()
             };
             // The row of the table "Leaves" (Helmholtz CH4.0d3).
             let re_k = complex_k(&case).re;
@@ -1929,6 +1958,7 @@ fn main() {
                                                     scratch_rows.extend(scratch_lines(&row));
                                                     diagonal_rows.extend(diagonal_lines(&row));
                                                     time_rows.extend(time_lines(&row));
+                                                    kind_rows.extend(kind_lines(&row));
                                                 }
                                                 left_out.push(left_out_line(&row));
                                                 near.extend(near_lines(&row));
@@ -2159,6 +2189,29 @@ fn main() {
             println!("{line}");
         }
         println!();
+        if !kind_rows.is_empty() {
+            println!("## Translations and leaf expansions");
+            println!();
+            println!(
+                "Per level with work of P2M, M2M, L2L or L2P: the seconds of each kind's level \
+                 calls (the slowest rank's; M2M and L2L each into the level's boxes, M2M from \
+                 their children, L2L from their parents), with the level's boxes, its M2L and \
+                 that M2L's seconds."
+            );
+            println!();
+            println!(
+                "| Workload | N | kD | degrees | M2L | ranks × threads | level | p | boxes | ran \
+                 | P2M s | M2M s | L2L s | L2P s | M2L s |"
+            );
+            println!(
+                "| --- | ---: | --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: \
+                 | ---: | ---: | ---: |"
+            );
+            for line in &kind_rows {
+                println!("{line}");
+            }
+            println!();
+        }
         println!("## Leaf operators");
         println!();
         println!(
