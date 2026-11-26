@@ -22,7 +22,8 @@ signature buffers, scratch and driver, and `signed_permutation`); Helmholtz CH4.
 (`helmholtz::diagonal::transfer`, the transfer functions per (level, class) and the pair);
 Helmholtz CH4.2b1 (`Signatures::{strides_mut, relayout, fits}` and `Conversions::s2f_strides`, for
 tetraleaf-exec's threaded level call); Helmholtz CH4.2c1 (`TransferBuild`, the interpolated build
-and the build by ring).
+and the build by ring); Helmholtz CH4.6a1
+(`Conversions::{s2f_modes, f2r_modes}`, the conversions' halves around the φ step).
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.
@@ -213,7 +214,16 @@ and the build by ring).
   `s2f`'s bits at every split), and lays one allocation out again for another degree
   (`relayout`: the padding zeroed, the samples left until written, no allocation; `fits`
   tells whether a layout fits the allocation);
-  `tests/helmholtz/diagonal_level.rs` checks both. `signed_permutation` names ref's `diagonal::Symmetry` (flips, then the
+  `tests/helmholtz/diagonal_level.rs` checks both. Since Helmholtz CH4.6a1 (the module docs,
+  "Modes") `Conversions::{s2f_modes, f2r_modes, rings}` stop S → F after the Legendre step and
+  start F → R after the φ step, for tetraleaf-exec's optional FFT: each ring's modes
+  c_{±μ} = (aᵤ ∓ i bᵤ)/2 in a run laid out as an inverse DFT's input (c_m at slot m, at
+  `ring_len` + m for m < 0, zero between), and āᵤ, b̄ᵤ from a forward DFT's X_{±μ}. The gather,
+  the Legendre steps and the scatter are the product's own code (moved into helpers; `s2f` and
+  `f2r` bit for bit, by hash at the change), and no FFT is linked here;
+  `tests/helmholtz/diagonal_modes.rs` checks the halves with the φ step as a plain DFT over the
+  grid's tables against the reference and the product within 256 u, the run layout, the padding
+  untouched, a box's bits in every batch, f32 and the refusals. `signed_permutation` names ref's `diagonal::Symmetry` (flips, then the
   x ↔ y swap) as the element of O_h acting the same on offsets (review 2026-11-19, C5).
   `tests/helmholtz/diagonal_level.rs` checks the alignment (f64 and f32, padded and not), the
   store conversions bit for bit, the level call against the sum of `tetraleaf_ref`'s

@@ -271,7 +271,14 @@
 //! its classes, [`diagonal_counts`](HelmholtzOperator::diagonal_counts) its pairs. The pair body
 //! ([`PairOperator`]) takes a diagonal offset by S → F, the pair and F → R of the pair alone,
 //! the level call to rounding. Its tables are not cached; their build time is
-//! [`TableTimings::diagonal`].
+//! [`TableTimings::diagonal`]. The φ step of its S → F and F → R is the product by default; with
+//! the feature `rustfft`, [`with_phi_step`](HelmholtzOperator::with_phi_step)'s
+//! [`HelmholtzPhiStep`] may make it rustfft's FFT per box and ring (Helmholtz CH4.6a1; proposal
+//! §6.7, D7), the product to rounding, with the same guarantees of bits;
+//! [`phi_step_on`](HelmholtzOperator::phi_step_on) reports each level's, and
+//! [`phi_fingerprints`](HelmholtzOperator::phi_fingerprints) and
+//! [`with_phi_product`](HelmholtzOperator::with_phi_product) are the builder's agreement of the
+//! ranks.
 //!
 //! The time rule (Helmholtz CH4.3b1, [`HelmholtzDiagonal::Auto`], the builder's default since
 //! CH4.3b2c) takes the bound's classes of a level only where a cost model of the level calls puts the diagonal

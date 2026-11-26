@@ -1699,4 +1699,160 @@ mod phi_tests {
             }
         }
     }
+
+    /// The FFT's distance from the product is the diagonal form's own rounding: on a pair of
+    /// boxes (P2M of 40 charges, the pair at a V offset, L2P at 40 points of the target box, all
+    /// `tetraleaf_ref`'s), rustfft's potentials lie within `SENSITIVITY_FACTOR` times the larger
+    /// distance of the product's when its signature F or its accumulator G is perturbed by 1 u
+    /// of its largest sample (random signs), from k a = 10 down to 0.3, where the form's
+    /// low-frequency conditioning turns 1 u into up to 10⁻¹ (pairs the rule never takes; the
+    /// product's distance from the direct sum is printed beside).
+    #[test]
+    fn rustfft_within_the_forms_own_rounding() {
+        use tetraleaf_ref::Frame;
+        use tetraleaf_ref::helmholtz::{Workspace, leaf};
+        use tetraleaf_tables::geometry::m2l_offsets;
+        use tetraleaf_tables::parts::Serial;
+        const SENSITIVITY_FACTOR: f64 = 8.0;
+        let zero = Complex::new(0.0, 0.0);
+        let n = 40;
+        let points = |seed: u64, centre: [f64; 3]| -> Vec<[f64; 3]> {
+            let u = values::<f64>(3 * n, seed);
+            (0..n)
+                .map(|i| {
+                    [
+                        centre[0] + u[3 * i],
+                        centre[1] + u[3 * i + 1],
+                        centre[2] + u[3 * i + 2],
+                    ]
+                })
+                .collect()
+        };
+        let sources = points(5, [0.0; 3]);
+        let q = values::<f64>(2 * n, 7);
+        let charges: Vec<Complex<f64>> = (0..n)
+            .map(|i| Complex::new(q[2 * i], q[2 * i + 1]))
+            .collect();
+        let norm = |a: &[Complex<f64>]| a.iter().map(|z| z.norm_sqr()).sum::<f64>().sqrt();
+        let distance = |a: &[Complex<f64>], b: &[Complex<f64>]| {
+            a.iter()
+                .zip(b)
+                .map(|(x, y)| (x - y).norm_sqr())
+                .sum::<f64>()
+                .sqrt()
+                / norm(b)
+        };
+        let perturb = |values_: &mut [Complex<f64>], seed: u64| {
+            let big = largest(values_.iter().map(|z| z.norm()));
+            let noise = values::<f64>(2 * values_.len(), seed);
+            for (i, z) in values_.iter_mut().enumerate() {
+                *z += Complex::new(noise[2 * i], noise[2 * i + 1]) * (f64::EPSILON * big);
+            }
+        };
+        let cases = if cfg!(debug_assertions) {
+            vec![(12usize, 2.5f64, 0.05), (9, 0.6, 0.0)]
+        } else {
+            vec![
+                (20, 10.0, 0.0),
+                (12, 2.5, 0.05),
+                (10, 1.25, 0.05),
+                (9, 0.6, 0.0),
+                (8, 0.3, 0.0),
+            ]
+        };
+        for (p, ka, eta) in cases {
+            let k = Complex::new(ka, eta * ka);
+            let level = Level::new(k, 1.0);
+            let conversions = Conversions::<f64>::new(p, level.scale());
+            let all: Vec<usize> = (0..CLASS_COUNT).collect();
+            let m2l = DiagonalM2l::<f64>::build_by(p, k, &all, TransferBuild::Direct, &Serial);
+            let fft = plans(&conversions);
+            let mut conversion = ConversionScratch::new(&conversions);
+            let mut scratch = vec![zero; fft.scratch_len()];
+            let (len, samples) = (conversions.expansion_len(), conversions.samples());
+            let stride = Signatures::<f64>::stride_for(samples);
+            let mut ws = Workspace::<f64>::new(p);
+            let mut multipole = vec![0.0; len];
+            let origin = Frame::new([0.0; 3], 1.0);
+            leaf::p2m(
+                p,
+                &level,
+                &origin,
+                &sources,
+                &charges,
+                &mut ws,
+                &mut multipole,
+            );
+            for offset in [0usize, 157, 315] {
+                let d = m2l_offsets()[offset];
+                let centre = d.map(|x| 2.0 * x as f64);
+                let targets = points(11, centre);
+                let direct: Vec<Complex<f64>> = targets
+                    .iter()
+                    .map(|x| {
+                        sources
+                            .iter()
+                            .zip(&charges)
+                            .map(|(y, q)| {
+                                let r = (0..3).map(|a| (x[a] - y[a]).powi(2)).sum::<f64>().sqrt();
+                                *q * (Complex::new(0.0, 1.0) * k * r).exp() / r
+                            })
+                            .sum()
+                    })
+                    .collect();
+                // 0 the product, 1 rustfft, 2 the product with G perturbed, 3 with F perturbed.
+                let potentials: Vec<Vec<Complex<f64>>> = (0..4)
+                    .map(|variant| {
+                        let by = (variant == 1).then_some(&*fft);
+                        let mut f = vec![zero; stride];
+                        s2f_by(
+                            &conversions,
+                            by,
+                            &multipole,
+                            &mut f,
+                            stride,
+                            &mut conversion,
+                            &mut scratch,
+                        );
+                        if variant == 3 {
+                            perturb(&mut f[..samples], 99);
+                        }
+                        let mut g = vec![zero; stride];
+                        m2l.pair(offset, &f[..samples], &mut g[..samples]);
+                        if variant == 2 {
+                            perturb(&mut g[..samples], 98);
+                        }
+                        let mut local = vec![0.0; len];
+                        f2r_by(
+                            &conversions,
+                            by,
+                            &mut g,
+                            stride,
+                            &mut local,
+                            &mut conversion,
+                            &mut scratch,
+                        );
+                        let mut phi = vec![zero; n];
+                        let frame = Frame::new(centre, 1.0);
+                        leaf::l2p(p, &level, &frame, &local, &targets, &mut ws, &mut phi, None);
+                        phi
+                    })
+                    .collect();
+                let fft_distance = distance(&potentials[1], &potentials[0]);
+                let sensitivity = distance(&potentials[2], &potentials[0])
+                    .max(distance(&potentials[3], &potentials[0]));
+                println!(
+                    "p {p}, k a {ka} (η {eta}), offset {d:?}: rustfft {fft_distance:.2e} from the \
+                     product, the product's 1 u sensitivity {sensitivity:.2e}, the product {:.2e} \
+                     from the direct sum",
+                    distance(&potentials[0], &direct)
+                );
+                assert!(
+                    fft_distance <= SENSITIVITY_FACTOR * sensitivity,
+                    "p {p}, k a {ka}, offset {d:?}: rustfft {fft_distance:.2e}, the product's \
+                     sensitivity {sensitivity:.2e}"
+                );
+            }
+        }
+    }
 }

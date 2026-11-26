@@ -24,6 +24,11 @@
 # blocked in a collective: the `timeout` (RUN_TIMEOUT seconds, default 300, then KILL
 # after 30 more) ends such a run, and the workflow bounds the step as well.
 #
+# Two variables narrow `build` for a job with a feature (Helmholtz CH4.6a1's
+# run-tests-rustfft): MPI_TESTS_ONLY names the targets to build (space-separated, by target
+# name; default all), MPI_TESTS_FEATURES is passed to every cargo call as `--features`
+# (default none).
+#
 # The environment passes through mpirun to the ranks: the workflow sets RUST_MIN_STACK,
 # the BLAS thread variables and Open MPI's oversubscription there. MPIRUN_FLAGS adds
 # flags to every mpirun, for example the macOS loopback flags of the root CLAUDE.md for a
@@ -86,22 +91,45 @@ for line in sys.stdin:
 '
 }
 
+# Whether MPI_TESTS_ONLY (if set) names the target.
+selected() {
+    local name
+    if [ -z "${MPI_TESTS_ONLY:-}" ]; then
+        return 0
+    fi
+    for name in $MPI_TESTS_ONLY; do
+        if [ "$name" = "$1" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 build() {
     local list=$1 found kind package target args path
     mkdir -p "$(dirname "$list")"
     found=$list.cargo
     : >"$found"
     while read -r kind package target; do
+        if ! selected "$target"; then
+            continue
+        fi
         if [ "$kind" = test ]; then
             args=(test --no-run -p "$package" --test "$target")
         else
             args=(build -p "$package" --example "$target")
+        fi
+        if [ -n "${MPI_TESTS_FEATURES:-}" ]; then
+            args+=(--features "$MPI_TESTS_FEATURES")
         fi
         echo "=== cargo ${args[*]}" >&2
         cargo "${args[@]}" --message-format=json </dev/null | executables >>"$found"
     done <<<"$TARGETS"
     : >"$list"
     while read -r kind package target; do
+        if ! selected "$target"; then
+            continue
+        fi
         path=$(awk -F '\t' -v k="$kind" -v t="$target" '$1 == k && $2 == t { p = $3 } END { print p }' "$found")
         if [ -z "$path" ]; then
             echo "::error::$package: no executable for $kind $target in cargo's output" >&2

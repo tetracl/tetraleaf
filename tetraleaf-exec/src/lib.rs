@@ -87,6 +87,19 @@
 //! - `device` (feature `gpu`): the device path, `DeviceOperator`, its report and its
 //!   accounting of transfers, launches and syncs (C4.1–C4.8).
 //!
+//! ## The FFT of the Helmholtz diagonal form (feature `rustfft`)
+//!
+//! | Feature | Enables |
+//! | --- | --- |
+//! | `rustfft` | `HelmholtzPhiStep::RustFft` ([`HelmholtzPhiStep`](helmholtz::HelmholtzPhiStep)): the φ step of the diagonal form's conversions by rustfft (MIT OR Apache-2.0, pure Rust), per box and ring (Helmholtz CH4.6a1) |
+//!
+//! Off by default and enabled by no crate of the workspace; the product
+//! ([`HelmholtzPhiStep::Product`](helmholtz::HelmholtzPhiStep::Product)) stays the default and
+//! the reference, and the feature changes nothing else. Its output is the product's to rounding,
+//! deterministic, and on P ranks the one-rank FMM's bit for bit: the build agrees each level's
+//! fingerprint (rustfft's version, the CPU features it dispatches on, N_φ, the precision) over the
+//! ranks and runs the product where they differ.
+//!
 //! ## Device path (feature `gpu`)
 //!
 //! | Feature | Enables |

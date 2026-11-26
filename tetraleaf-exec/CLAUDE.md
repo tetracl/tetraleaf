@@ -44,7 +44,8 @@ device's `PlaneWave` on `tetraleaf_kernels::plane_wave`, opt-in until CH7.5c: `D
 `FmmBuilder::{device_plane_wave, device_plane_wave_budget}`; docs/helmholtz/tasks/CH7.5b.md;
 CH7.5c, its measurement and adoption: `FmmBuilder::device_plane_wave_layout`,
 `DevicePlaneWaveLayout`, `DevicePlaneWave::Kernels` the default, the layout by backend and p
-and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.md).
+and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.md); Helmholtz CH4.6a1 (the diagonal form's φ step by rustfft,
+feature `rustfft`, `HelmholtzPhiStep`; docs/helmholtz/tasks/CH4.6a1.md).
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.
@@ -914,6 +915,33 @@ and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.
   refused; `the_batched_budget_stays_spent` that an override's RCR on a Batched level keeps Auto's
   dense budget spent (every other level the setting's). Its cost: `helmholtz_fmm` at one rank,
   opt-level 1, 45.3 s on the M6.
+- The diagonal form's φ step (Helmholtz CH4.6a1; docs/helmholtz/tasks/CH4.6a1.md; the private
+  `src/helmholtz/operator_phi.rs`, proposal §6.7, D7): `HelmholtzPhiStep` (`Product`, the
+  default and the reference, always built; `RustFft` with the optional feature `rustfft`, off by
+  default and enabled by no workspace crate), `HelmholtzOperator::{with_phi_step, phi_step,
+  phi_step_on, phi_fingerprints, with_phi_product}`, `HelmholtzFmmBuilder::phi_step` and the
+  doc-hidden `phi_fingerprint_salt` (the test hook). An FFT back end is a `PhiTransform` (the
+  crate-internal trait; CH4.6b's FFTW would be a second): one plan per (level, N_φ, direction) from
+  a fresh planner at the operator's build, made for f32 or f64 and handed back through `Any` (no
+  bound beyond `SimdScalar`). S → F writes `Conversions::s2f_modes` into each box's own signature
+  and transforms it in place; F → R transforms each accumulator in place (zeroed before its next
+  use) and runs `Conversions::f2r_modes` (`s2f_by`, `f2r_by` in `operator_diagonal.rs`); the
+  thread scratch holds each level's FFT scratch. A box's bits depend on its own input alone, so
+  the level call's guarantees hold under either step; the two agree to rounding (≤ 5.1 u per
+  conversion to p = 245), and in the FMM the distance is the form's own low-frequency
+  conditioning of that rounding (`rustfft_within_the_forms_own_rounding`: within 8× the product's
+  response to 1 u of F or G). `build` all-reduces each level's fingerprint (rustfft's version
+  `RUSTFFT_VERSION`, the architecture, `rustfft_cpu_features`, N_φ, the precision) as min and
+  max, and a level where they differ runs the product on every rank (`with_phi_product`: plans
+  dropped, scratch sets made again, the tables kept); only with the feature. The time rule's costs
+  are the product's. Tests: the unit tests `phi_tests` (rustfft against the product, f64 and f32,
+  p ≤ 24 and the ignored large degrees to 245 in release; a box's bits in batches of 1, 2, 7, 33
+  on pools of 1, 2, 4 threads; the fingerprint) and `operator_phi`'s (the version is the
+  workspace's pin); `check_phi_step` in `tests/helmholtz_fmm.rs` (in `check_diagonal`, Rotation:
+  every diagonal level on rustfft, the output within 0.03 of the product's error from it and its
+  errors within 1.01×, 2 threads and chunks bit for bit, the one-rank FMM, and one rank's
+  fingerprints salted: every level on the product, the product's bits; on one rank the salt
+  changes nothing). CI's `run-tests-rustfft` runs them (root `CLAUDE.md`, "Checks").
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
   count. No `unsafe`, no atomics, no global pool; per-thread scratch created at
@@ -1524,9 +1552,9 @@ CubeCL 0.11.0 since Phase 5S T1s, re-run on locust there (tetraleaf-validate/res
 
 ## Allowed dependencies
 tetraleaf-math, tetraleaf-ref, tetraleaf-tables, tetraleaf-plan, tetraleaf-simd (from Phase 3S T6),
-tetraleaf-octree, mpi, rlst, thiserror, rayon (from T10; no other crate gets it), and
-tetraleaf-kernels (from Phase 4 T5, optional, feature `gpu`), all through
-[workspace.dependencies]; dev-dependencies: proptest.
+tetraleaf-octree, mpi, rlst, thiserror, rayon (from T10; no other crate gets it),
+tetraleaf-kernels (from Phase 4 T5, optional, feature `gpu`), and rustfft (from Helmholtz
+CH4.6a1, optional, feature `rustfft`, pinned `=6.4.1`), all through [workspace.dependencies]; dev-dependencies: proptest.
 Not allowed:
 - CubeCL directly (only through tetraleaf-kernels);
 - tetraleaf-validate, not even as a dev-dependency (it depends on this crate).
