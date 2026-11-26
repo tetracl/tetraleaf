@@ -91,6 +91,11 @@ interpolated --near-v cost --near-wx cost`), `--levels`.
   10⁻⁸ (D1's edges), W3 at N = 10⁶, kD = 500 at 10⁻⁶; per case six launches in the order
   product, rustfft, rustfft, product (ABBA), then `--diagonal-costs form` with the product and
   with rustfft (every level the bound reaches on the form, for the time rule's question).
+- Stage `waves` (added after Kathleen's `levels`, where every level in the rule's range already
+  took the form, so the time rule's question had no level to decide): the cases where CH4.3b2c
+  found the waves kept against the form, W1 at kD = 100, 200 at 10⁻⁷ and 10⁻⁸, W3 at N = 10⁶,
+  kD = 200 at 10⁻⁶ and 10⁻⁸ and kD = 500 at 10⁻⁸; per case the defaults with each φ step, then
+  `--diagonal-costs form` with each.
 - Stage `ffts`: S9's `times rustfft product <ps>`, `times rustfft smooth <ps>` and `times product
   product <ps>` at the diagonal levels' degrees from `levels` (one launch each, one thread).
 - **locust** (1 × 72, `tools/gh200/remote.sh`, after `nvidia-smi` and `uptime`), and **Kathleen**

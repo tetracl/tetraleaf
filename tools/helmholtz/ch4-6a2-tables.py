@@ -29,8 +29,10 @@ per launch) and `-form-product`, `-form-rustfft` (`--diagonal-costs form`).
 - `rule`: per level with V pairs in the time rule's range (k a ≥ 2.8) of each case: what the
   default ran and its M2L seconds (the product launches), the form forced (`-form-product`,
   `-form-rustfft`), and the model's choice with the form's conversions at the measured rustfft
-  ÷ product ratio of the case's conversions (`DIAGONAL_COSTS_*`' S → F and F → R units, the
-  rest of the model as printed): whether the time rule needs an FFT variant of its costs.
+  ÷ product ratio of the case's conversions (`DIAGONAL_COSTS_*`' S → F and F → R units once per
+  box converted back, the level's F → R count as measured, from `-form-product` where the default
+  ran no form; the rest of the model as printed): whether the time rule needs an FFT variant of
+  its costs.
 
 No timing is asserted; the numbers go into tetraleaf-validate/results/helmholtz-ch4-6a2.md.
 Python 3.9 standard library only.
@@ -319,7 +321,7 @@ def model_choice(printed, bound, diag, rcr, waves):
 
 
 def cmd_rule(args):
-    header = ["machine", "case", "level", "p", "k a", "bound", "default ran", "default M2L s",
+    header = ["machine", "case", "level", "p", "k a", "bound", "default ran", "default M2L s P, R",
               "form P M2L s", "form R M2L s", "form R ÷ default", "model diag, RCR, waves s",
               "conversions' share of diag", "model diag with R", "choice P → R"]
     rows = []
@@ -337,6 +339,15 @@ def cmd_rule(args):
                 if "product" in m and "rustfft" in m:
                     num += m["rustfft"]["ts"][0] + m["rustfft"]["ts"][2]
                     den += m["product"]["ts"][0] + m["product"]["ts"][2]
+            if not den:
+                # A case without the ABBA launches (the stage `waves`): the forced form's.
+                for level in sorted(case["form-product"].diagonal) if "form-product" in case \
+                        and "form-rustfft" in case else []:
+                    a = per_conversion(case["form-product"], level)
+                    b = per_conversion(case["form-rustfft"], level)
+                    if a and b:
+                        num += b["ts"][0] + b["ts"][2]
+                        den += a["ts"][0] + a["ts"][2]
             rho = num / den if den else None
             for level, r in sorted(first.rule.items()):
                 ka = common.number(r["k a"])
@@ -346,7 +357,14 @@ def cmd_rule(args):
                 bound = int(common.number(r["bound classes"], 0))
                 diag, rcr, waves = (common.number(r[k]) for k in
                                     ("model diagonal s", "model RCR s", "model waves s"))
-                boxes = common.number(first.m2l[level]["boxes"]) if level in first.m2l else None
+                # The model's conversions per box with a V row: the level's targets converted
+                # back (F → R) as measured, from the forced form where the default ran no form.
+                boxes = None
+                for s in ("product-1", "form-product"):
+                    d = case[s].diagonal.get(level) if s in case else None
+                    if d is not None:
+                        boxes = common.number(d["F → R"])
+                        break
                 conv = None
                 if boxes is not None and first.threads:
                     conv = boxes * (unit(costs["s2f"], p) + unit(costs["f2r"], p)) * 1e-9 / \
@@ -357,13 +375,15 @@ def cmd_rule(args):
                     else before
                 default = mean([case[s].m2l_seconds(level) for s in ("product-1", "product-2")
                                 if s in case])
+                default_r = mean([case[s].m2l_seconds(level) for s in ("rustfft-1", "rustfft-2")
+                                  if s in case])
                 fp = case["form-product"].m2l_seconds(level) if "form-product" in case else None
                 fr = case["form-rustfft"].m2l_seconds(level) if "form-rustfft" in case else None
                 ran_fr = case["form-rustfft"].rule.get(level, {}).get("ran", "") \
                     if "form-rustfft" in case else ""
                 rows.append([
                     machine, name, str(level), str(p), fmt(ka, 2), str(bound), r["ran"],
-                    fmt(default, 4), fmt(fp, 4),
+                    f"{fmt(default, 4)}, {fmt(default_r, 4)}", fmt(fp, 4),
                     fmt(fr, 4) + ("" if ran_fr.startswith("diagonal") else f" ({ran_fr})"),
                     fmt(ratio(fr, default)),
                     f"{fmt(diag, 4)}, {fmt(rcr, 4)}, {fmt(waves, 4)}",

@@ -769,6 +769,22 @@ constant, the margin, 0 unless named) and `--rule calibrated|ch4-3c3` to `helmho
 (`Case::degree_rule`, named in the header). `tools/helmholtz/ch4-8b-runs.sh` runs the task's
 stages, `ch4-8b-tables.py` makes the report's tables. Its report is `results/helmholtz-ch4-8b.md`.
 
+Helmholtz CH4.6a2 (the φ step's time per level; docs/helmholtz/tasks/CH4.6a2.md) added the
+feature `rustfft` (passes tetraleaf-exec's through; off by default, so the default graph holds no
+rustfft; CI's `run-tests-rustfft` runs Clippy with it), `helmholtz_accuracy::Case::phi_step`
+(`HelmholtzFmmBuilder::phi_step`, `HelmholtzPhiStep::Product` in `Case::new` and
+`Case::defaults`, named always) and `Row::{phi_step, phi_steps}` (the setting as built; per level
+the step that ran, `HelmholtzOperator::phi_step_on`), and to the example `--phi-step
+product|rustfft,…` (each `--diagonal` run but `off` with each, inside `--diagonal-build`'s loop;
+`rustfft` refused before MPI starts without the feature; the column "M2L" ending `/rustfft`), a
+line "φ step:" under the machine's (rustfft's version and the CPU features it dispatches on) and a
+last column "φ" of "Diagonal M2L". `tests/helmholtz_accuracy.rs` (`check_diagonal`) checks the
+steps as built, and with the feature rustfft on every diagonal level with the product's classes
+and pairs, errors within 1.01× and threads bit for bit. `tools/helmholtz/ch4-6a2-runs.sh` runs
+the task's stages (`smoke`, `levels`, `ffts`: spike S9's `times` at the levels' degrees),
+`ch4-6a2-tables.py` makes the report's tables (`runs`, `levels`, `smooth`, `rule`). Its report is
+`results/helmholtz-ch4-6a2.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

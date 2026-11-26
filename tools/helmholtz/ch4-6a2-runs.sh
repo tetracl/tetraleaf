@@ -17,6 +17,10 @@
 #           kD = 500 at 10⁻⁶: per case product, rustfft, rustfft, product (ABBA), then
 #           `--diagonal-costs form` with the product and with rustfft (every level the bound
 #           reaches on the form, for the time rule's question)
+#   waves   the cases where CH4.3b2c found the waves kept against the form (W1 at kD = 100, 200
+#           at 10⁻⁷ and 10⁻⁸; W3 at N = 10⁶, kD = 200 at 10⁻⁶ and 10⁻⁸ and kD = 500 at 10⁻⁸): per
+#           case the defaults with the product and with rustfft, then `--diagonal-costs form`
+#           with each (the time rule's question on levels the waves keep)
 #   ffts    spike S9's `times` (spikes/fft-plans, its own workspace and target directory), one
 #           thread: `rustfft product`, `rustfft smooth` and `product product` at the degrees PS
 #           (comma-separated, required: the diagonal levels' degrees of `levels`)
@@ -106,6 +110,25 @@ for stage in "$@"; do
             case_runs "w1-500-$eps" --workload w1 --kd 500 --eps "$eps"
         done
         case_runs "w3-500-1e-6" --workload w3:1000000 --kd 500 --eps 1e-6
+        ;;
+    waves)
+        for c in w1:100:1e-7 w1:100:1e-8 w1:200:1e-7 w1:200:1e-8 w3:1000000:200:1e-6 \
+            w3:1000000:200:1e-8 w3:1000000:500:1e-8; do
+            eps=${c##*:}
+            rest=${c%:*}
+            kd=${rest##*:}
+            w=${rest%:*}
+            n="waves-${w%%:*}-$kd-$eps"
+            for s in "product-1 product" "rustfft-1 rustfft" "form-product product" \
+                "form-rustfft rustfft"; do
+                # shellcheck disable=SC2086
+                set -- $s
+                costs=()
+                [[ $1 == form-* ]] && costs=(--diagonal-costs form)
+                launch "$n-$1" --phi-step "$2" ${costs[@]+"${costs[@]}"} --workload "$w" --kd "$kd" \
+                    --eps "$eps"
+            done
+        done
         ;;
     ffts)
         if [ -z "${PS:-}" ]; then
