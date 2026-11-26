@@ -628,14 +628,12 @@ pub fn timing_boxes(box_len: usize) -> usize {
 /// The machine line of a results file: the architecture, the SIMD features rustfft and FFTW
 /// can use, `rlst::fftw::version()`.
 pub fn machine_line() -> String {
-    let host = std::env::var("HOSTNAME")
+    // The system's name, not `HOSTNAME`: Slurm passes the batch node's environment to the
+    // ranks on the other nodes.
+    let host = std::process::Command::new("hostname")
+        .output()
         .ok()
-        .or_else(|| {
-            std::process::Command::new("hostname")
-                .output()
-                .ok()
-                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        })
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_else(|| "unknown".into());
     format!(
         "host `{host}`, {}, features {}, FFTW `{}`, rustfft 6.4 (Cargo.lock)",
