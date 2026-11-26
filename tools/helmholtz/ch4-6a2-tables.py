@@ -17,10 +17,10 @@ per launch) and `-form-product`, `-form-rustfft` (`--diagonal-costs form`).
   diagonal levels' M2L seconds summed, rustfft's over the product's (the means of the two
   launches of each), the product's spread (the larger launch over the smaller), the errors'
   ratio (φ, ∇φ) and whether the checksums of the launches of one setting agree.
-- `levels`: per case and level with the diagonal form, the conversions per level call (S → F,
+- `levels` (the cases with the four ABBA launches): per case and level with the diagonal form, the conversions per level call (S → F,
   F → R), their thread-µs per conversion under each step and the ratio, the pairs' thread-µs per
   pair, and the level's M2L seconds and their ratio (means of two launches each).
-- `smooth`: the smooth grid priced per level (the plan's "Machine runs", item 2): rustfft's
+- `smooth` (the same cases): the smooth grid priced per level (the plan's "Machine runs", item 2): rustfft's
   thread-seconds as measured on the product's grid, with S → F and F → R changed by the
   conversions times spike S9's per-box rustfft difference (`ffts-rustfft-smooth.md` less
   `ffts-rustfft-product.md`, at the level's degree) and the pairs scaled by N_φ smooth over N_φ;
@@ -221,6 +221,8 @@ def cmd_levels(args):
     for arg in args:
         machine, found = cases(arg)
         for name, case in found.items():
+            if not all(s in case for s in SETTINGS[:4]):
+                continue  # the stage `waves`: one launch per setting
             for level in diagonal_levels(case):
                 m = level_means(case, level)
                 if "product" not in m or "rustfft" not in m:
@@ -265,6 +267,8 @@ def cmd_smooth(args):
         times = ffts(where)
         prod, smooth = times.get(("rustfft", "product"), {}), times.get(("rustfft", "smooth"), {})
         for name, case in found.items():
+            if not all(s in case for s in SETTINGS[:4]):
+                continue  # the stage `waves`: one launch per setting
             delta_case = 0.0
             for level in diagonal_levels(case):
                 m = level_means(case, level).get("rustfft")
