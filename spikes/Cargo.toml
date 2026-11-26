@@ -22,6 +22,9 @@ members = [
     "rotation-blocks",
     "truncation",
 ]
+# S9 has a workspace of its own, so that FFTW and rustfft enter no lock file here (Helmholtz
+# CH0.9; proposal §10).
+exclude = ["fft-plans"]
 
 # The root's [workspace.package].
 [workspace.package]

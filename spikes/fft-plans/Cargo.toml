@@ -1,0 +1,30 @@
+[package]
+name = "tetraleaf-spike-fft-plans"
+version = "0.0.0"
+description = "Throwaway study: per-box FFT plans of the Helmholtz FMM's φ step (FFTW through RLST 0.12, rustfft) against the product: bits per box, fingerprints across ranks, time per box (Helmholtz CH0.9, spike S9)."
+publish = false
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tetracl/tetraleaf"
+
+# A workspace of its own (proposal §10 CH0.9; the user, 2026-11-26): excluded from the spikes'
+# workspace (`spikes/Cargo.toml`) and outside the root's, so that FFTW's GPL bindings
+# (fftw-sys) and rustfft enter neither `Cargo.lock` nor `spikes/Cargo.lock`. Its own lock
+# file, `spikes/fft-plans/Cargo.lock`, is committed; its target directory is
+# `target/spikes-fft-plans` (`.cargo/config.toml` here).
+[workspace]
+
+[dependencies]
+# The root's requirement, with RLST's only FFTW back end: links the system's FFTW (GPL) in
+# both precisions through pkg-config. Spike only; the product's `fftw` feature is CHR.3's.
+rlst = { version = "0.12.0", features = ["fftw_system"] }
+# D7's pure-Rust candidate (MIT OR Apache-2.0).
+rustfft = "6.4"
+# The fingerprint check across ranks (examples/fingerprints.rs); the root's requirement.
+mpi = "0.8.2"
+rayon = "1"
+# The product's grid (N_φ) and conversions, the times' reference.
+tetraleaf-math = { path = "../../tetraleaf-math" }
+tetraleaf-ref = { path = "../../tetraleaf-ref" }
+tetraleaf-tables = { path = "../../tetraleaf-tables" }
+
