@@ -15,6 +15,8 @@ cd "$(dirname "$0")"
 machine=$1
 what=${2:-all}
 [ $# -ge 2 ] && shift 2 || shift $#
+# The mpirun options, kept before the loop below reuses the positional parameters.
+mpi_options="$*"
 out=results/$machine
 mkdir -p "$out"
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 BLIS_NUM_THREADS=1
@@ -51,7 +53,8 @@ case $what in all | local | times)
 esac
 case $what in all | fingerprints)
     note
-    mpirun -n 2 "$@" "$bin/fingerprints" >"$out/fingerprints.md"
+    # shellcheck disable=SC2086
+    mpirun -n 2 $mpi_options "$bin/fingerprints" >"$out/fingerprints.md"
     ;;
 esac
 echo "S9 runs ($what) on $machine: $out"
