@@ -675,7 +675,8 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
 - [x] **CH4.6a1 The trait and rustfft on the product's grid.** `HelmholtzPhiStep::RustFft` behind
   `tetraleaf-exec`'s feature `rustfft`: ≤ 5.1 u from the product per conversion (p ≤ 245); in the FMM
   the form's own 1 u sensitivity, errors 1.0000×; fingerprints agreed over the ranks; CI
-  `run-tests-rustfft`. Record `docs/helmholtz/tasks/CH4.6a1.md`.
+  `run-tests-rustfft`. Record `docs/helmholtz/tasks/CH4.6a1.md`. That reading of §10's
+  "round-off" signed off 2026-11-26 (the user on #265: "I accept PR Question 1").
 - [ ] **CH4.6a2 The time per level against the product, both grids priced.** *Done when:* each
   diagonal level's conversions and level call, the product against rustfft on the product's grid,
   on locust, Kathleen and the M6 (the M6 with the user's go-ahead; S9 did not time it), on W1 at

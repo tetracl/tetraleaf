@@ -170,6 +170,7 @@ For sign-off on the PR:
    (the pair test; the FMM 4.8·10⁻¹² and 1.8·10⁻⁸ from the product, ≤ 3.1·10⁻³ of its error,
    errors 1.0000×). The alternative: a bound in u on the FMM's output, which the form's
    low-frequency conditioning does not allow for the product either.
+   Signed off 2026-11-26, the user on #265: "I accept PR Question 1".
 
 ## Self-review
 A subagent (the plan, §2, §10, the branch): nothing blocking; the maths, the product's bits and the

@@ -4934,9 +4934,9 @@ request, using this template:
     does not exist, `#[non_exhaustive]`, the operator's agreement documented, the salt hook's
     zero, the licence step's match, the script's empty selection, and 4 threads in release.
   - Not run: rustfft on x86_64. Its first run is CI's `run-tests-rustfft`, on AVX or SSE4.1 code.
-- Decisions: the split and the pin, above. Question 1 of the PR asks whether "against the
-  product to round-off" is met in this reading: ≤ 5.1 u per conversion, and in the FMM within
-  the form's own sensitivity to 1 u.
+- Decisions: the split and the pin, above. Question 1 of the PR: "against the product to
+  round-off" is met in this reading, ≤ 5.1 u per conversion, and in the FMM within the form's
+  own sensitivity to 1 u. Signed off on #265 by the user, 2026-11-26: "I accept PR Question 1".
 - Laplace: not touched. No Laplace path changed: tables' `helmholtz::diagonal`, exec's Helmholtz
   operator and builder only. `mpi_exec` and `invariance` passed at 2 and 4 ranks. No benchmark
   run is needed (D9): no code Laplace runs changed.
