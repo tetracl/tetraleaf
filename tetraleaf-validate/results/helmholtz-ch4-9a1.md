@@ -125,7 +125,8 @@ and the start order can come from a closed-form estimate.
    - No `tetraleaf-simd` change (constraint 1 untouched); an ISA kernel only if the measured time
      stays far from the sum's.
    - If the harmonics fell to about the sum's cost, P2M would take roughly 0.3–0.5× today's at
-     p ≥ 17 (an estimate from §2's shares, to be measured).
+     p ≥ 17 (an estimate from §2's median shares, 0.26–0.57 over every case; the radial functions'
+     own gain not counted; to be measured).
    - Alternatives: ISA kernels in `tetraleaf-simd` now (constraint 1 and D9 apply, and the per-term
      setup the harmonics cost would remain unless rewritten too); or both at once.
 2. **The order**: the leaf harmonics routine is shared by P2M and L2P (it is 58–84 % of L2P with
