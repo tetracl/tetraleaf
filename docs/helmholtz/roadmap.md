@@ -102,7 +102,7 @@ CHA.10a as item 12, before the FFT track.
 11. CH4.8 The constant density on W2 (CH4.8a, CH4.8b; split on 2026-11-24), then H4.G again
     (added on 2026-11-24 at the H4 gate; H4.G closed on 2026-11-25)
 12. CHA.10a The report scripts' shared module (added on 2026-11-25 at the H4 gate's second run)
-13. CH0.9 S9, CH4.6a the optional rustfft back end. D7, signed off at CH0.9 (the user on #264,
+13. CH0.9 S9, CH4.6a the optional rustfft back end (CH4.6a1–a3; split on 2026-11-26). D7, signed off at CH0.9 (the user on #264,
     2026-11-26: "Q1-3 as recommended"), moved CHR.3 and CH4.6b, the FFTW route, off the list
 14. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
     CH2.1 and CH2.2 wait for D4, which CH2.1 prepares)
@@ -665,22 +665,37 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   leaf on NEON after H4 (CH4.0d3 chose 128 at ε ≥ 10⁻⁷ for the evaluation alone; at 1 × 72 W1 at
   kD = 1000 builds in 13.4–14.0 s at 128 against 7.6 s at 256, CH4.5 §5): W1 and W2 at kD = 250–1000
   on locust at 1 × 72 and 4 × 18, the build and the evaluation apart. *Needs:* CH4.5. *Machines:* Kathleen, locust.
-- [ ] **CH4.6a The optional rustfft back end of the φ step.** Added at CH0.9 (D7; the user on #264, 2026-11-26: "Q1-3 as
-  recommended"; proposal §6.7, §10). In `tetraleaf-exec` behind an optional feature, beside the product behind the internal trait.
-  *Done when:* against the product to round-off; per-box plans with bits the same across batch
-  positions, sizes and threads (S9's layout: 2P − 1 rings, interleaved class-0 buffers, a two-box
-  per-thread scratch); at build rustfft's version, N_φ and the dispatched CPU features all-gathered,
-  and with one of two ranks made to differ (a test hook) both ranks run the product; off by default,
-  one CI job with the feature; a level's grid (the product's `azimuth_count` or the smooth size,
-  under its own cache key) chosen by the level's measured time; time per level against the product
-  on locust, Kathleen and the M6 (the M6 with the user's go-ahead; S9 did not time it). *Needs:*
-  CH4.1b, CH0.9, D7. *Machines:* locust, Kathleen, the M6.
+- CH4.6a The optional rustfft back end of the φ step. Added at CH0.9 (D7; the user on #264,
+  2026-11-26: "Q1-3 as recommended"; proposal §6.7, §10). Split on 2026-11-26 into CH4.6a1–a3,
+  measuring before the second grid is built (the user: "Split a1/a2/a3 (Recommended)"); rustfft
+  pinned `=6.4.1` (the user, 2026-11-26: "Exact =6.4.1 (Recommended)").
+- [ ] **CH4.6a1 The trait and rustfft on the product's grid.** In `tetraleaf-exec` behind an
+  optional feature `rustfft`, beside the product behind the internal trait, on the product's grid
+  (`azimuth_count`). *Done when:* against the product to round-off; per-box plans with bits the
+  same across batch positions, sizes and threads (S9's layout: 2P − 1 rings, a two-box per-thread
+  scratch); at build rustfft's version, N_φ and the dispatched CPU features all-gathered, and with
+  one of two ranks made to differ (a test hook) both ranks run the product; off by default, the
+  default members' `cargo tree` without rustfft, one CI job with the feature. *Needs:* CH4.1b,
+  CH0.9, D7.
+- [ ] **CH4.6a2 The time per level against the product, both grids priced.** *Done when:* each
+  diagonal level's conversions and level call, the product against rustfft on the product's grid,
+  on locust, Kathleen and the M6 (the M6 with the user's go-ahead; S9 did not time it), on W1 at
+  kD = 250–1000 and W3 at kD = 500; the smooth grid priced from S9's per-box FFT times and the
+  level's measured pair cost at its larger N_φ; a question for sign-off: build the smooth grid
+  (CH4.6a3) or keep the product's grid and close CH4.6a3 unrun. *Needs:* CH4.6a1. *Machines:*
+  locust, Kathleen, the M6.
+- [ ] **CH4.6a3 The smooth grid, chosen per level by its time.** *Done when:* `Grid` at a chosen
+  N_φ (4P − 3 up to a 7-smooth multiple of 4), the conversions and transfer functions on it under
+  their own table key, round-off against the product's grid; a level's grid (the product's or the
+  smooth one) chosen by a rule fitted on CH4.6a2's times per machine class (constraint 9: no time
+  measured at run time); the time per level against the product on the M6, locust and Kathleen.
+  *Needs:* CH4.6a2 and its sign-off. *Machines:* locust, Kathleen, the M6.
 - [ ] **CH4.6b The optional FFTW back end of the φ step.** CH4.6 until CH0.9; off the priority list
   since then (D7). *Done when:* against the product to round-off; per-box plans with bits the same
   across batch positions, sizes and threads, and fingerprints all-gathered; off by default, a default
   build linking no FFTW, cargo-deny, a CI job with the feature; the GPL warning in the crate
   documentation, the README, the builder option and `Cargo.toml`. *Needs:* CH4.1b, CHR.3, CH0.9,
-  D7, CH4.6a (the trait).
+  D7, CH4.6a1 (the trait).
 - [x] **CH4.8a The constant density on W2: the error mapped and a remedy chosen.** The degree rule's
   truncation on W2's deep tree against a face; `h1` (one degree after the cap) chosen. Report
   `tetraleaf-validate/results/helmholtz-ch4-8a.md`. Added at the H4 gate (M15). Signed off on #260 (2026-11-24).
