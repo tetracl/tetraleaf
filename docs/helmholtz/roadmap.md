@@ -735,7 +735,7 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   to the roadmap"); off the priority list. A Laplace task: constraint 1 binds in full. Measured on
   Kathleen (job 673084, the cube at N = 10⁷, f64, the library's defaults, gradients, `scaling --kinds`
   at 1 × 40 and 40 × 1; outputs `~/projects/fmm-archive/kathleen/runs/laplace-kinds/`): P2M + L2P
-  19 % of the compute at p = 3, 34–35 % at p = 8, 39–42 % at p = 12 and 36–40 % at p = 18, 1.3–6.5×
+  19 % of the compute at p = 3, 34–35 % at p = 8, 39–42 % at p = 12 and 36–40 % at p = 18, 1.4–7.1×
   the P2P from p = 8 on, L2P 1.5–2.3× P2M; they run `tetraleaf_ref::leaf::{p2m_many, l2p_many}`
   per point (`LaplaceOperator::{p2m, l2p}`). *Done when:* P2M (charges and dipoles) and L2P (with
   gradients) kernels in `tetraleaf-simd` on the P2P's ISAs, vectorised over a leaf's points and
