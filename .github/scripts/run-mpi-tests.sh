@@ -138,6 +138,10 @@ build() {
         printf '%s\t%s\t%s\n' "$kind" "$target" "$path" >>"$list"
     done <<<"$TARGETS"
     rm -f "$found"
+    if [ ! -s "$list" ]; then
+        echo "::error::no target selected (MPI_TESTS_ONLY=${MPI_TESTS_ONLY:-})" >&2
+        exit 1
+    fi
     echo "Executables:" >&2
     cat "$list" >&2
 }

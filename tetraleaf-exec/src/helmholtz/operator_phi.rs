@@ -23,7 +23,8 @@
 //! executed box by box on the box's own samples by whichever worker holds the box: the plan never
 //! sees the batch, so a box's bits do not depend on its position, the batch size or the thread
 //! (spike S9 measured this on the M6, locust and Kathleen, `spikes/fft-plans/SPIKE_REPORT.md` §3,
-//! and `tests/helmholtz/phi.rs` checks it). rustfft's planner chooses its algorithms by the
+//! and the unit test `a_box_has_the_same_bits_in_every_batch_and_thread` in
+//! `operator_diagonal.rs` checks it). rustfft's planner chooses its algorithms by the
 //! length and the CPU features it detects (AVX with FMA, or SSE4.1, on x86_64; NEON on aarch64),
 //! so two ranks of one build on CPUs of different features may get different bits. The builder
 //! therefore agrees each level's [`fingerprint`] (rustfft's version, the architecture, the
@@ -34,8 +35,10 @@ use tetraleaf_math::Complex;
 use tetraleaf_simd::SimdScalar;
 
 /// The φ step of the diagonal form's S → F and F → R (Helmholtz CH4.6a1; proposal §6.7, D7;
-/// `HelmholtzOperator::with_phi_step`, `HelmholtzFmmBuilder::phi_step`).
+/// `HelmholtzOperator::with_phi_step`, `HelmholtzFmmBuilder::phi_step`). Non-exhaustive: a
+/// variant exists only with its feature, and features unify across a build.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum HelmholtzPhiStep {
     /// The transform written as a product (`Conversions::{s2f, f2r}`): the default and the
     /// reference, always built.
@@ -129,7 +132,7 @@ pub(super) fn fingerprint(
                 value_bytes
             );
             text.push(';');
-            fnv1a(text.as_bytes()).max(1) ^ salt
+            (fnv1a(text.as_bytes()) ^ salt).max(1)
         }
     }
 }

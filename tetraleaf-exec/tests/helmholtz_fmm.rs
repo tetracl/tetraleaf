@@ -3266,7 +3266,7 @@ fn check_diagonal(scenario: &Scenario, comm: &SimpleCommunicator) -> usize {
 /// within a few u, and the form's low-frequency conditioning amplifies that as it does the
 /// product's own rounding: the operator's unit test `rustfft_within_the_forms_own_rounding`;
 /// 4.8·10⁻¹² and 1.8·10⁻⁸ here, at most 3.1·10⁻³ of the error), and its errors within
-/// `PHI_RATIO` of the product's; 2 threads and
+/// `PHI_RATIO` of the product's; 2 threads (4 in release builds) and
 /// chunks of 3 bit for bit; on several ranks the one-rank FMM bit for bit; and the test hook: one
 /// rank's fingerprints salted, every level runs the product on every rank, the product's output
 /// bit for bit (on one rank the salt changes nothing).
@@ -3332,8 +3332,12 @@ fn check_phi_step(
             && fft_errors.1 <= PHI_RATIO * product_errors.1,
         "{what}: errors {fft_errors:?} against the product's {product_errors:?}"
     );
-    // Threads and chunks.
-    for (threads, chunk) in [(2, None), (2, Some(3)), (1, Some(1))] {
+    // Threads and chunks (4 threads in release builds).
+    let mut runs = vec![(2, None), (2, Some(3)), (1, Some(1))];
+    if !cfg!(debug_assertions) {
+        runs.push((4, None));
+    }
+    for (threads, chunk) in runs {
         let (_, again) = run(
             &fft.clone().threads(threads).diagonal_chunk(chunk),
             inputs,

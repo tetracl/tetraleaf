@@ -100,28 +100,50 @@ CH4.6a1 takes all but the last two clauses (CH4.6a2, CH4.6a3).
 - Report scripts: none in CH4.6a1.
 
 ## Tests that prove it
-- `tetraleaf-tables`: the halves composed with the product's φ step written as a plain sum equal
-  `tetraleaf_ref::helmholtz::diagonal::{s2f, f2r}` within 256 u of the largest value (as
-  `tests/helmholtz/diagonal.rs`); p ≤ 24 in debug, larger p ignored in release.
-- `tetraleaf-exec`, feature on: S → F and F → R with `RustFft` against the product within
-  256 u of the largest value, p = 6, 12, 24 (and 41, 72, 131 ignored, release), f64 and f32
-  (f32 within its own u).
-- Bits per box: a box's signature and local the same bits at every position in batches of 1, 2,
-  7, 33 boxes, and on pools of 1, 2, 4 threads (and all threads, ignored).
-- The FMM: the Helmholtz FMM with `RustFft` against the product's FMM on the accuracy tests'
-  cases with the diagonal form on (the default `Auto` on a high-frequency tree), errors against
-  the direct sum within 1.01× the product's, and bit for bit across 1 and 4 threads.
-- Ranks (MPI, in `helmholtz_fmm`, feature on): at 2 ranks with `RustFft`, the output bit for bit
-  the one-rank output; with the hook on one rank, both ranks report the product on every
-  diagonal level and the output is the product's bit for bit.
-- Feature off: the default build's outputs unchanged (the existing fixtures and bit-identity
-  tests); `cargo tree -e normal` lists no rustfft.
+- `tetraleaf-tables` (`tests/helmholtz/diagonal_modes.rs`): the halves composed with the φ step
+  written as a plain DFT over the grid's tables, against `tetraleaf_ref::helmholtz::diagonal::
+  {s2f, f2r}` and against the product, within 256 u of the largest value, p = 0–17 in debug and
+  24, 41, 72 ignored in release, at ring length N_φ, 2p + 1 and N_φ + 5 with padded strides; every
+  slot written, the gap zero, the padding untouched; a box's bits in batches of 1–9 and at the
+  compact ring length; f32; the refusals. The product's `s2f`/`f2r` bit for bit across the
+  refactor: a hash of their outputs (p = 3–41, two scales, f64 and f32) the same before and after.
+- `tetraleaf-exec` unit tests (`phi_tests` in `operator_diagonal.rs`, feature on):
+  - rustfft against the product: S → F ≤ 2.4 u and F → R ≤ 0.9 u at p ≤ 24 (f64 and f32); ignored
+    in release p = 41–245: ≤ 5.1 u and ≤ 1.0 u (bound 256 u);
+  - a box's signature and local in batches of 1, 2, 7, 33 on rayon pools of 1, 2, 4 threads, bit
+    for bit the box alone (the plan's ignored "all threads" variant was not built: S9 ran all
+    threads on the three machines);
+  - `rustfft_within_the_forms_own_rounding`: on a physical pair (P2M of 40 charges, the pair at V
+    offsets (−3,−3,−3), (0,0,−2), (3,3,3), L2P at 40 points, all `tetraleaf_ref`'s) rustfft's
+    potentials lie within 8× the larger distance of the product's when F or G is perturbed by
+    1 u (k a 2.5 and 0.6 in debug; 10, 2.5, 1.25, 0.6, 0.3 in release). Measured: the ratio at
+    most 2.2; the distances themselves from 5·10⁻¹⁶ (k a 10) to 0.73 (k a 0.3 at (0,0,−2), a pair
+    the rule never takes), the form's low-frequency conditioning;
+  - `operator_phi`'s: the fingerprint's version is the workspace's pin, the product's is 0, it
+    reads N_φ, the precision and the salt.
+- The FMM (`check_phi_step` in `tests/helmholtz_fmm.rs`, in `check_diagonal` under Rotation with
+  the form by rule, the direct build; the cube at kD = 40 + 2i with rank 0 empty and the clusters
+  at kD = 20, ε = 10⁻⁴): every diagonal level runs rustfft; the output 4.8·10⁻¹² (cube) and
+  1.8·10⁻⁸ (clusters) from the product's in relative ℓ2, bound 0.03 of the product's error
+  (measured ≤ 3.1·10⁻³ of it); the errors against the direct sum 1.0000× the product's (bound
+  1.01×); 2 threads, 2 threads with chunks of 3, chunks of 1, and 4 threads in release builds, bit
+  for bit; the one-rank FMM bit
+  for bit on 2 ranks; one rank's fingerprints salted: every level on the product, the product's
+  output bit for bit (on one rank the salt changes nothing, checked).
+- Feature off: no Rust path changes for Laplace or the default Helmholtz FMM (the product's bits,
+  above); `cargo tree --workspace -e normal -i rustfft` finds no rustfft.
+
+The first bound of the FMM check (10⁻¹³ relative, a guess) failed at 4.8·10⁻¹²; before changing
+it the cause was measured (the per-level overrides: level 3 of the cube, k a 2.5, gave it; the
+pair test above then showed the same size from 1 u of the product's own F or G), and the bound
+was set on the product's error instead.
 
 ## Checks
 `/verify` (default, strict workspace, MPI list at 2 and 4 ranks, `cargo deny`), and with the
 feature: `cargo clippy -p tetraleaf-exec --all-targets --features rustfft -- -D warnings`,
 `RUST_MIN_STACK=8388608 cargo test -p tetraleaf-exec --features rustfft`, the ignored large-p
-tests in release, `run-mpi-tests.sh` for `helmholtz_fmm` with the feature at 2 and 4 ranks.
+tests in release, `run-mpi-tests.sh` for `helmholtz_fmm` with the feature at 1 and 2 ranks
+(`MPI_TESTS_ONLY`, `MPI_TESTS_FEATURES`, the script's new variables). Results: the progress entry.
 
 ## Machine runs
 None in CH4.6a1 (correctness only; the feature's bits per box were measured on all three
@@ -136,8 +158,24 @@ machines by S9). Times are CH4.6a2's.
   oversampled, so no aliasing into them beyond the product's own).
 
 ## Pending runs
-None yet.
+None (no machine runs in CH4.6a1; the times are CH4.6a2's).
 
 ## Open questions
 Asked before implementing, answered 2026-11-26: the dependency, "Exact =6.4.1 (Recommended)";
 the split, "Split a1/a2/a3 (Recommended)".
+
+For sign-off on the PR:
+1. "Against the product to round-off" (§10) read as: each conversion within a few u of the
+   product (≤ 5.1 u to p = 245), and in the FMM within the diagonal form's own sensitivity to 1 u
+   (the pair test; the FMM 4.8·10⁻¹² and 1.8·10⁻⁸ from the product, ≤ 3.1·10⁻³ of its error,
+   errors 1.0000×). The alternative: a bound in u on the FMM's output, which the form's
+   low-frequency conditioning does not allow for the product either.
+
+## Self-review
+A subagent (the plan, §2, §10, the branch): nothing blocking; the maths, the product's bits and the
+agreement checked. Fixed: a cited test file that does not exist; `HelmholtzPhiStep`
+`#[non_exhaustive]` (a feature-gated variant); `with_phi_step` documents that the agreement is the
+builder's; the salt hook could give 0; the licence step matches cargo's "did not match" message;
+`run-mpi-tests.sh` fails on an empty selection; 4 threads in release. Left: the bounds were measured
+on the M6 (NEON) only, so CI's x86 run is the first on AVX or SSE4.1 code; `with_phi_product` counts
+a second scratch make in `table_timings.scratch` (reporting only).

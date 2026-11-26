@@ -2138,7 +2138,11 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
     /// Runs the diagonal form's φ step by `step` (Helmholtz CH4.6a1; module documentation,
     /// "M2L"; default [`HelmholtzPhiStep::Product`]): the product, or with the feature `rustfft`
     /// rustfft's FFT per box and ring on every diagonal level, the product to rounding. The
-    /// tables are chosen again.
+    /// tables are chosen again. The agreement of the ranks is `HelmholtzFmmBuilder::build`'s: an
+    /// operator run on several ranks without the builder agrees
+    /// [`phi_fingerprints`](Self::phi_fingerprints) over them itself and passes the levels that
+    /// differ to [`with_phi_product`](Self::with_phi_product), or a box may get other bits on
+    /// another rank.
     pub fn with_phi_step(mut self, step: HelmholtzPhiStep) -> Self {
         self.kernel.diagonal_settings.phi = step;
         self.select_tables();
