@@ -4812,3 +4812,52 @@ request, using this template:
 - Laplace: not touched (scripts and documents).
 - Follow-ups: the FFT track (item 13), CH0.9 first. CHA.10's housekeeping keeps the old scripts'
   move apart from the living tools.
+
+## 2026-11-26: CH0.9 S9: FFT plans, bits and host timing
+- Done:
+  - The spike `spikes/fft-plans` (`tetraleaf-spike-fft-plans`): a `[workspace]` of its own,
+    excluded from the spikes workspace. Its own committed `Cargo.lock` holds rlst 0.12 with
+    `fftw_system`, rustfft 6.4.1 and mpi, so FFTW and rustfft enter no other lock file. The
+    dependencies were signed off by the user on 2026-11-26: "Go ahead (Recommended)".
+  - The φ step on one layout: per-box FFTW plans (interleaved or split, 2P − 1 or 2P rings,
+    `Rigor::Estimate`, class 0), rustfft, and the DFT as a sum. The product (`Conversions`) is timed
+    whole.
+  - The examples `record` (what changes a box's bits), `times` (one setting per launch),
+    `fingerprints` (MPI), and `run.sh <machine>`.
+  - `tools/helmholtz/ch0-9-tables.py`, on `common.py`, builds the time tables.
+  - Report `spikes/fft-plans/SPIKE_REPORT.md`, raw outputs in `spikes/fft-plans/results/`.
+  - Root `CLAUDE.md` (the lock file, the target directory) and `spikes/README.md` updated.
+- Results:
+  - Bits per box for FFTW and rustfft: identical across batch positions, batch sizes 1–33, 1, 2, 4
+    and all threads, and fresh processes, on the M6, locust and Kathleen.
+  - For the record: on these FFTW builds no plan choice changed bits (one plan over the batch, ring
+    stride, class 16, 2P rings). Split storage and rustfft give other bits, ≤ 8·10⁻¹⁶.
+  - Fingerprints: 288 of 288 plans agree on 2 ranks, including across two Kathleen nodes.
+  - The batch stays 2P − 1: 2P rings run 0.99–1.01×.
+  - Interleaved scratch confirmed: split is up to 1.4× (locust) and 2.3× (Kathleen).
+  - The FFT's φ step costs 0.04–0.25× (FFTW) and 0.05–0.32× (rustfft) the product's, the latter
+    taken as 0.80 of the conversion.
+  - The product's grid (`azimuth_count`) is not §6.7's smooth grid; an FFT on it is up to 8.7×
+    slower than on the smooth one.
+- Tests: `spikes/fft-plans/tests/bits.rs`, run on the M6, locust and Kathleen (job 672793), all
+  passing:
+  - accuracy against the sum, ≤ 1.6·10⁻¹⁵ against a bound of 10⁻¹³;
+  - bits across positions, batches and threads, 36 cases;
+  - bits in fresh processes.
+- Checks:
+  - `/verify` on the M6, all passing: fmt; Clippy (default, examples, workspace with all
+    targets); rustdoc; `cargo test` and `cargo test --workspace` at opt-level 1 (2,834 passed, 0
+    failed); `cargo deny --locked check licenses`; `cargo check --workspace --all-targets`.
+  - `cargo tree -e normal -i fftw-sys` finds no fftw-sys, as expected.
+  - Spike: fmt and Clippy clean; `cargo check --all-targets` of the spikes workspace.
+  - Root and spikes lock files unchanged.
+  - Self-review by a subagent. It found three overstatements and one wrong number in the report
+    (the grid, D7's evidence, rustfft against FFTW, the accuracy maximum); all were fixed before
+    the PR.
+  - Nothing pending.
+- Decisions: D7 proposed for sign-off on the PR (question 1): the product the default; rustfft the
+  one optional back end, if its task adds a check across ranks and the M6's times; FFTW's CHR.3
+  and CH4.6 off the list. Questions 2 and 3 are on §6.7.
+- Laplace: not touched (a spike outside both workspaces, documents, a script).
+- Follow-ups: D7's answer decides CHR.3, CH4.6 and the priority list's item 13. The M6's times
+  (deferred by the user) go to the back end's task.
