@@ -70,6 +70,18 @@
 //! The transfer functions per offset class and the pair step the driver applies
 //! ([`DiagonalM2l`]) are the module [`transfer`]'s (Helmholtz CH4.2a).
 //!
+//! # Modes
+//!
+//! For a φ step by FFT (Helmholtz CH4.6a1; proposal §6.7), [`Conversions::s2f_modes`] stops
+//! S → F after the Legendre step and gives each ring's Fourier modes,
+//! F(φ) = Σ_{m=−p}^{p} c_m e^{imφ} with c_{±μ} = (aᵤ ∓ i bᵤ)/2 and c₀ = a₀, laid out as the
+//! input of an inverse DFT of length N_φ; [`Conversions::f2r_modes`] takes the forward DFT's
+//! X_m of each ring and forms āᵤ = Σ G cos μφ = (X_μ + X_{−μ})/2 and
+//! b̄ᵤ = Σ G sin μφ = i (X_μ − X_{−μ})/2 before F → R's transposed Legendre step. The Legendre
+//! steps, the gather and the scatter are the product's code, so the two paths differ only in
+//! the φ step, and agree to rounding. The FFT itself is the caller's (tetraleaf-exec's
+//! optional back end); nothing here depends on one.
+//!
 //! # Example
 //!
 //! ```
@@ -341,6 +353,236 @@ impl<T: RealScalar> Conversions<T> {
         self.f2r_strided(signatures, self.samples(), locals, scratch);
     }
 
+    /// The number of rings 2p + 1, each a run of N_φ samples of a signature.
+    pub fn rings(&self) -> usize {
+        2 * self.p + 1
+    }
+
+    /// S → F of a batch of boxes up to the φ step (Helmholtz CH4.6a1; module documentation,
+    /// "Modes"): for every box b and ring i, the Fourier modes c_m of the ring's signature,
+    /// F(φ) = Σ_{m = −p}^{p} c_m e^{imφ}, into the run of `ring_len` values at
+    /// `b * stride + i * ring_len`: c_m at slot m for 0 ≤ m ≤ p, at slot `ring_len` + m for
+    /// −p ≤ m < 0, zero between. With `ring_len` = N_φ ([`azimuths`](Self::azimuths)) and
+    /// `stride` ≥ [`samples`](Self::samples) a ring's run is the input of an unnormalised
+    /// inverse DFT of length N_φ (Σ_m c_m e^{+2πi mJ/N_φ}), whose output is the ring's samples:
+    /// [`s2f`](Self::s2f)'s signature, to rounding. Overwrites each box's runs, leaves the
+    /// padding between boxes untouched, allocates nothing; each box's bits depend on its own
+    /// multipole only. The Legendre step is [`s2f`](Self::s2f)'s, bit for bit.
+    ///
+    /// # Panics
+    ///
+    /// If `multipoles` is not a whole number of expansions, `ring_len` < 2p + 1, `stride` <
+    /// (2p + 1) `ring_len`, `modes` too short for the boxes (the last box needs (2p + 1)
+    /// `ring_len` values), or the scratch was made for another degree.
+    pub fn s2f_modes(
+        &self,
+        multipoles: &[T],
+        modes: &mut [Complex<T>],
+        ring_len: usize,
+        stride: usize,
+        scratch: &mut ConversionScratch<T>,
+    ) {
+        let boxes = self.check_modes(multipoles.len(), modes.len(), ring_len, stride, scratch);
+        let len = self.expansion_len();
+        let run = self.rings() * ring_len;
+        for first in (0..boxes).step_by(BLOCK_BOXES) {
+            let nb = BLOCK_BOXES.min(boxes - first);
+            self.s2f_modes_block(
+                &multipoles[first * len..(first + nb) * len],
+                &mut modes[first * stride..(first + nb - 1) * stride + run],
+                ring_len,
+                stride,
+                nb,
+                scratch,
+            );
+        }
+    }
+
+    /// F → R of a batch of boxes from the φ step's output (Helmholtz CH4.6a1; module
+    /// documentation, "Modes"): for every box b and ring i, X_m = Σ_J G(φ_J) e^{−imφ_J}, the
+    /// unnormalised forward DFT of the ring's samples, read from the run of `ring_len` values at
+    /// `b * stride + i * ring_len` (X_m at slot m for 0 ≤ m ≤ p, at slot `ring_len` + m for
+    /// −p ≤ m < 0; the other slots are not read); adds [`f2r`](Self::f2r)'s local, to rounding.
+    /// The transposed Legendre step and the scatter are [`f2r`](Self::f2r)'s, bit for bit.
+    /// Allocates nothing; each box's bits depend on its own modes and local only.
+    ///
+    /// # Panics
+    ///
+    /// As [`s2f_modes`](Self::s2f_modes), with `locals` in place of `multipoles`.
+    pub fn f2r_modes(
+        &self,
+        modes: &[Complex<T>],
+        ring_len: usize,
+        stride: usize,
+        locals: &mut [T],
+        scratch: &mut ConversionScratch<T>,
+    ) {
+        let boxes = self.check_modes(locals.len(), modes.len(), ring_len, stride, scratch);
+        let len = self.expansion_len();
+        let run = self.rings() * ring_len;
+        for first in (0..boxes).step_by(BLOCK_BOXES) {
+            let nb = BLOCK_BOXES.min(boxes - first);
+            self.f2r_modes_block(
+                &modes[first * stride..(first + nb - 1) * stride + run],
+                ring_len,
+                stride,
+                &mut locals[first * len..(first + nb) * len],
+                nb,
+                scratch,
+            );
+        }
+    }
+
+    /// The boxes of a modes call, after its checks.
+    fn check_modes(
+        &self,
+        expansions: usize,
+        modes: usize,
+        ring_len: usize,
+        stride: usize,
+        scratch: &ConversionScratch<T>,
+    ) -> usize {
+        assert_eq!(
+            scratch.p, self.p,
+            "the scratch has degree {}, the conversions {}",
+            scratch.p, self.p
+        );
+        let len = self.expansion_len();
+        assert!(
+            expansions.is_multiple_of(len),
+            "the expansions hold {expansions} values, not a multiple of 2(p + 1)² = {len}"
+        );
+        assert!(
+            ring_len > 2 * self.p,
+            "a ring's run of {ring_len} values cannot hold 2p + 1 = {} modes",
+            2 * self.p + 1
+        );
+        let run = self.rings() * ring_len;
+        assert!(
+            stride >= run,
+            "a box's stride {stride} is shorter than its {run} values"
+        );
+        let boxes = expansions / len;
+        let need = if boxes == 0 {
+            0
+        } else {
+            (boxes - 1) * stride + run
+        };
+        assert!(
+            modes >= need,
+            "{boxes} boxes need {need} values of modes, not {modes}"
+        );
+        boxes
+    }
+
+    fn s2f_modes_block(
+        &self,
+        multipoles: &[T],
+        modes: &mut [Complex<T>],
+        ring_len: usize,
+        stride: usize,
+        nb: usize,
+        scratch: &mut ConversionScratch<T>,
+    ) {
+        let p = self.p;
+        let w = 4 * nb;
+        let half = T::from_f64(0.5);
+        let zero = Complex::new(T::zero(), T::zero());
+        self.s2f_gather(multipoles, nb, &mut scratch.expansions);
+        for i0 in (0..=p).step_by(RING_BLOCK) {
+            let h = RING_BLOCK.min(p + 1 - i0);
+            let columns = 2 * h * w;
+            self.s2f_legendre(i0, h, nb, scratch);
+            let y = &scratch.y;
+            for b in 0..nb {
+                for hh in 0..h {
+                    let i = i0 + hh;
+                    for side in 0..2 {
+                        if side == 1 && i == p {
+                            continue;
+                        }
+                        let ring = if side == 0 { i } else { 2 * p - i };
+                        let slot = (2 * hh + side) * w;
+                        let out = &mut modes[b * stride + ring * ring_len..][..ring_len];
+                        out[p + 1..ring_len - p].fill(zero);
+                        for mu in 0..=p {
+                            let row = (self.residue_row(mu % 4) + mu / 4) * columns + slot;
+                            let (are, aim) = (y[row + b], y[row + nb + b]);
+                            if mu == 0 {
+                                out[0] = Complex::new(are, aim);
+                                continue;
+                            }
+                            let (bre, bim) = (y[row + 2 * nb + b], y[row + 3 * nb + b]);
+                            // c_{±μ} = (a ∓ i b)/2.
+                            out[mu] = Complex::new((are + bim) * half, (aim - bre) * half);
+                            out[ring_len - mu] =
+                                Complex::new((are - bim) * half, (aim + bre) * half);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn f2r_modes_block(
+        &self,
+        modes: &[Complex<T>],
+        ring_len: usize,
+        stride: usize,
+        locals: &mut [T],
+        nb: usize,
+        scratch: &mut ConversionScratch<T>,
+    ) {
+        let p = self.p;
+        let w = 4 * nb;
+        let half = T::from_f64(0.5);
+        let rows_total = self.expansion_row(p + 1);
+        scratch.expansions[..rows_total * w].fill(T::zero());
+        for i0 in (0..=p).step_by(RING_BLOCK) {
+            let h = RING_BLOCK.min(p + 1 - i0);
+            let columns = 2 * h * w;
+            for r in 0..4 {
+                let orders = self.orders(r);
+                if orders == 0 {
+                    continue;
+                }
+                // Row t of y: ā = Σ G cos μφ = (X_μ + X_{−μ})/2 (a planes) and
+                // b̄ = Σ G sin μφ = i (X_μ − X_{−μ})/2 (b planes), μ = r + 4t.
+                let y = &mut scratch.y;
+                y[..orders * columns].fill(T::zero());
+                for b in 0..nb {
+                    for hh in 0..h {
+                        let i = i0 + hh;
+                        for side in 0..2 {
+                            if side == 1 && i == p {
+                                continue;
+                            }
+                            let ring = if side == 0 { i } else { 2 * p - i };
+                            let slot = (2 * hh + side) * w;
+                            let x = &modes[b * stride + ring * ring_len..][..ring_len];
+                            for t in 0..orders {
+                                let mu = r + 4 * t;
+                                let row = t * columns + slot;
+                                if mu == 0 {
+                                    y[row + b] = x[0].re;
+                                    y[row + nb + b] = x[0].im;
+                                    continue;
+                                }
+                                let (plus, minus) = (x[mu], x[ring_len - mu]);
+                                y[row + b] = (plus.re + minus.re) * half;
+                                y[row + nb + b] = (plus.im + minus.im) * half;
+                                y[row + 2 * nb + b] = -((plus.im - minus.im) * half);
+                                y[row + 3 * nb + b] = (plus.re - minus.re) * half;
+                            }
+                        }
+                    }
+                }
+                self.f2r_legendre(r, i0, h, nb, scratch);
+            }
+        }
+        self.f2r_scatter(&scratch.expansions, locals, nb);
+    }
+
     /// S → F of a batch of boxes into a stride of signatures: box b's signature at
     /// `b * stride` (stride ≥ [`samples`](Self::samples)), the padding between untouched. The
     /// caller has checked the lengths.
@@ -436,93 +678,14 @@ impl<T: RealScalar> Conversions<T> {
         scratch: &mut ConversionScratch<T>,
     ) {
         let p = self.p;
-        let (len, samples, azimuths, bases) = (
-            self.expansion_len(),
-            self.samples(),
-            self.azimuths,
-            self.bases,
-        );
+        let (samples, azimuths, bases) = (self.samples(), self.azimuths, self.bases);
         let w = 4 * nb;
-        let ConversionScratch {
-            expansions,
-            e,
-            o,
-            y,
-            z,
-            ..
-        } = scratch;
-
-        // Gather: row (μ, n) of the four planes [Re +μ, Im +μ, Re −μ, Im −μ] times (−i)ⁿ.
-        let half = (p + 1) * (p + 1);
-        for mu in 0..=p {
-            let mut row = self.expansion_row(mu);
-            for parity in 0..2 {
-                for n in (mu + parity..=p).step_by(2) {
-                    let out = &mut expansions[row * w..(row + 1) * w];
-                    for b in 0..nb {
-                        let m = &multipoles[b * len..(b + 1) * len];
-                        let plus = times_minus_i_pow(m[index(n, mu)], m[half + index(n, mu)], n);
-                        let minus = if mu == 0 {
-                            (T::zero(), T::zero())
-                        } else {
-                            let at = index_negative(n, mu);
-                            times_minus_i_pow(m[at], m[half + at], n)
-                        };
-                        out[b] = plus.0;
-                        out[nb + b] = plus.1;
-                        out[2 * nb + b] = minus.0;
-                        out[3 * nb + b] = minus.1;
-                    }
-                    row += 1;
-                }
-            }
-        }
-
+        self.s2f_gather(multipoles, nb, &mut scratch.expansions);
         for i0 in (0..=p).step_by(RING_BLOCK) {
             let h = RING_BLOCK.min(p + 1 - i0);
             let columns = 2 * h * w;
-            // The Legendre step: per order, rings i and 2p − i of the block into residue r's
-            // row t of y (rows of all residues: r's rows start at Σ_{r' < r} orders).
-            for mu in 0..=p {
-                let at = self.legendre_at[mu];
-                let (even, odd) = ((p - mu) / 2 + 1, (p + 1 - mu) / 2);
-                let row = self.expansion_row(mu);
-                e[..h * w].fill(T::zero());
-                gemm_acc(
-                    h,
-                    w,
-                    even,
-                    &self.legendre[at[0] + i0 * even..],
-                    even,
-                    &expansions[row * w..],
-                    w,
-                    e,
-                    w,
-                );
-                o[..h * w].fill(T::zero());
-                if odd > 0 {
-                    gemm_acc(
-                        h,
-                        w,
-                        odd,
-                        &self.legendre[at[1] + i0 * odd..],
-                        odd,
-                        &expansions[(row + even) * w..],
-                        w,
-                        o,
-                        w,
-                    );
-                }
-                let target = self.residue_row(mu % 4) + mu / 4;
-                let out = &mut y[target * columns..(target + 1) * columns];
-                for hh in 0..h {
-                    for v in 0..w {
-                        let (ev, od) = (e[hh * w + v], o[hh * w + v]);
-                        out[2 * hh * w + v] = ev + od;
-                        out[(2 * hh + 1) * w + v] = ev - od;
-                    }
-                }
-            }
+            self.s2f_legendre(i0, h, nb, scratch);
+            let ConversionScratch { y, z, .. } = scratch;
             // The φ step per residue, then the azimuths from the base ones.
             for r in 0..4 {
                 let orders = self.orders(r);
@@ -575,6 +738,95 @@ impl<T: RealScalar> Conversions<T> {
         }
     }
 
+    /// S → F's gather of a block of `nb` boxes into `expansions`: row (μ, n) of the four
+    /// planes [Re +μ, Im +μ, Re −μ, Im −μ] times (−i)ⁿ, each plane's `nb` boxes in turn.
+    fn s2f_gather(&self, multipoles: &[T], nb: usize, expansions: &mut [T]) {
+        let p = self.p;
+        let len = self.expansion_len();
+        let w = 4 * nb;
+        let half = (p + 1) * (p + 1);
+        for mu in 0..=p {
+            let mut row = self.expansion_row(mu);
+            for parity in 0..2 {
+                for n in (mu + parity..=p).step_by(2) {
+                    let out = &mut expansions[row * w..(row + 1) * w];
+                    for b in 0..nb {
+                        let m = &multipoles[b * len..(b + 1) * len];
+                        let plus = times_minus_i_pow(m[index(n, mu)], m[half + index(n, mu)], n);
+                        let minus = if mu == 0 {
+                            (T::zero(), T::zero())
+                        } else {
+                            let at = index_negative(n, mu);
+                            times_minus_i_pow(m[at], m[half + at], n)
+                        };
+                        out[b] = plus.0;
+                        out[nb + b] = plus.1;
+                        out[2 * nb + b] = minus.0;
+                        out[3 * nb + b] = minus.1;
+                    }
+                    row += 1;
+                }
+            }
+        }
+    }
+
+    /// S → F's Legendre step of the rings i0 ≤ i < i0 + h (and their partners 2p − i) of a
+    /// gathered block of `nb` boxes: per order μ, ring slot 2·hh + side (side 0 ring i0 + hh,
+    /// side 1 its partner) of residue μ mod 4's row μ/4 of `y` holds the four planes' ring sums
+    /// (rows of all residues: residue r's start at Σ_{r' < r} orders; each slot 4·nb columns).
+    fn s2f_legendre(&self, i0: usize, h: usize, nb: usize, scratch: &mut ConversionScratch<T>) {
+        let p = self.p;
+        let w = 4 * nb;
+        let columns = 2 * h * w;
+        let ConversionScratch {
+            expansions,
+            e,
+            o,
+            y,
+            ..
+        } = scratch;
+        for mu in 0..=p {
+            let at = self.legendre_at[mu];
+            let (even, odd) = ((p - mu) / 2 + 1, (p + 1 - mu) / 2);
+            let row = self.expansion_row(mu);
+            e[..h * w].fill(T::zero());
+            gemm_acc(
+                h,
+                w,
+                even,
+                &self.legendre[at[0] + i0 * even..],
+                even,
+                &expansions[row * w..],
+                w,
+                e,
+                w,
+            );
+            o[..h * w].fill(T::zero());
+            if odd > 0 {
+                gemm_acc(
+                    h,
+                    w,
+                    odd,
+                    &self.legendre[at[1] + i0 * odd..],
+                    odd,
+                    &expansions[(row + even) * w..],
+                    w,
+                    o,
+                    w,
+                );
+            }
+            let target = self.residue_row(mu % 4) + mu / 4;
+            let out = &mut y[target * columns..(target + 1) * columns];
+            for hh in 0..h {
+                for v in 0..w {
+                    let (ev, od) = (e[hh * w + v], o[hh * w + v]);
+                    out[2 * hh * w + v] = ev + od;
+                    out[(2 * hh + 1) * w + v] = ev - od;
+                }
+            }
+        }
+    }
+
     fn f2r_block(
         &self,
         signatures: &[Complex<T>],
@@ -584,23 +836,10 @@ impl<T: RealScalar> Conversions<T> {
         scratch: &mut ConversionScratch<T>,
     ) {
         let p = self.p;
-        let (len, samples, azimuths, bases) = (
-            self.expansion_len(),
-            self.samples(),
-            self.azimuths,
-            self.bases,
-        );
+        let (samples, azimuths, bases) = (self.samples(), self.azimuths, self.bases);
         let w = 4 * nb;
-        let ConversionScratch {
-            expansions,
-            e,
-            o,
-            y,
-            z,
-            ..
-        } = scratch;
         let rows_total = self.expansion_row(p + 1);
-        expansions[..rows_total * w].fill(T::zero());
+        scratch.expansions[..rows_total * w].fill(T::zero());
 
         for i0 in (0..=p).step_by(RING_BLOCK) {
             let h = RING_BLOCK.min(p + 1 - i0);
@@ -610,6 +849,7 @@ impl<T: RealScalar> Conversions<T> {
                 if orders == 0 {
                     continue;
                 }
+                let ConversionScratch { y, z, .. } = &mut *scratch;
                 // Fold the samples of the block's rings onto the base azimuths: rows j hold
                 // the coefficients of Ca (a planes) and Cb (b planes), rows bases + j those of
                 // Sa and Sb.
@@ -670,57 +910,91 @@ impl<T: RealScalar> Conversions<T> {
                     y,
                     columns,
                 );
-                // Fold rings i and 2p − i into E and O sums, then the transposed Legendre
-                // product of the block's rings, continuing each degree's chain.
-                for t in 0..orders {
-                    let mu = r + 4 * t;
-                    let at = self.legendre_at[mu];
-                    let (even, odd) = ((p - mu) / 2 + 1, (p + 1 - mu) / 2);
-                    let source = &y[t * columns..(t + 1) * columns];
-                    for hh in 0..h {
-                        let equator = i0 + hh == p;
-                        for v in 0..w {
-                            let near = source[2 * hh * w + v];
-                            let (ev, od) = if equator {
-                                (near, near)
-                            } else {
-                                let far = source[(2 * hh + 1) * w + v];
-                                (near + far, near - far)
-                            };
-                            e[hh * w + v] = ev;
-                            o[hh * w + v] = od;
-                        }
-                    }
-                    let row = self.expansion_row(mu);
-                    gemm_acc(
-                        even,
-                        w,
-                        h,
-                        &self.legendre[at[2] + i0..],
-                        p + 1,
-                        e,
-                        w,
-                        &mut expansions[row * w..],
-                        w,
-                    );
-                    if odd > 0 {
-                        gemm_acc(
-                            odd,
-                            w,
-                            h,
-                            &self.legendre[at[3] + i0..],
-                            p + 1,
-                            o,
-                            w,
-                            &mut expansions[(row + even) * w..],
-                            w,
-                        );
-                    }
-                }
+                self.f2r_legendre(r, i0, h, nb, scratch);
             }
         }
 
-        // Scatter: L̂ₙ^{±μ} += iⁿ (the accumulated sum).
+        self.f2r_scatter(&scratch.expansions, locals, nb);
+    }
+
+    /// F → R's transposed Legendre step of residue r on the rings i0 ≤ i < i0 + h (and their
+    /// partners) of a block of `nb` boxes: row t of `y` holds ā (a planes) and b̄ (b planes) of
+    /// order r + 4t on every ring slot of the block (as [`s2f_legendre`](Self::s2f_legendre)'s
+    /// slots); the rings are folded into E and O sums and each degree's chain in `expansions`
+    /// continued.
+    fn f2r_legendre(
+        &self,
+        r: usize,
+        i0: usize,
+        h: usize,
+        nb: usize,
+        scratch: &mut ConversionScratch<T>,
+    ) {
+        let p = self.p;
+        let w = 4 * nb;
+        let columns = 2 * h * w;
+        let orders = self.orders(r);
+        let ConversionScratch {
+            expansions,
+            e,
+            o,
+            y,
+            ..
+        } = scratch;
+        // Fold rings i and 2p − i into E and O sums, then the transposed Legendre
+        // product of the block's rings, continuing each degree's chain.
+        for t in 0..orders {
+            let mu = r + 4 * t;
+            let at = self.legendre_at[mu];
+            let (even, odd) = ((p - mu) / 2 + 1, (p + 1 - mu) / 2);
+            let source = &y[t * columns..(t + 1) * columns];
+            for hh in 0..h {
+                let equator = i0 + hh == p;
+                for v in 0..w {
+                    let near = source[2 * hh * w + v];
+                    let (ev, od) = if equator {
+                        (near, near)
+                    } else {
+                        let far = source[(2 * hh + 1) * w + v];
+                        (near + far, near - far)
+                    };
+                    e[hh * w + v] = ev;
+                    o[hh * w + v] = od;
+                }
+            }
+            let row = self.expansion_row(mu);
+            gemm_acc(
+                even,
+                w,
+                h,
+                &self.legendre[at[2] + i0..],
+                p + 1,
+                e,
+                w,
+                &mut expansions[row * w..],
+                w,
+            );
+            if odd > 0 {
+                gemm_acc(
+                    odd,
+                    w,
+                    h,
+                    &self.legendre[at[3] + i0..],
+                    p + 1,
+                    o,
+                    w,
+                    &mut expansions[(row + even) * w..],
+                    w,
+                );
+            }
+        }
+    }
+
+    /// F → R's scatter of a block of `nb` boxes: L̂ₙ^{±μ} += iⁿ (the accumulated sum).
+    fn f2r_scatter(&self, expansions: &[T], locals: &mut [T], nb: usize) {
+        let p = self.p;
+        let len = self.expansion_len();
+        let w = 4 * nb;
         let half = (p + 1) * (p + 1);
         for mu in 0..=p {
             let mut row = self.expansion_row(mu);

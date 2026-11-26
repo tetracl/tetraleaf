@@ -22,6 +22,10 @@ cpu = ["gpu", "tetraleaf-kernels/cpu"]
 metal = ["gpu", "tetraleaf-kernels/metal"]
 # CUDA: f32 and f64; type-checked in CI, run by hand on locust's H100 (Phase 4S).
 cuda = ["gpu", "tetraleaf-kernels/cuda"]
+# The diagonal form's φ step by rustfft (Helmholtz CH4.6a1; proposal §6.7, D7): optional, off by
+# default and enabled by no crate of the workspace; the product stays the default and the
+# reference (`HelmholtzPhiStep`).
+rustfft = ["dep:rustfft"]
 
 [dependencies]
 tetraleaf-math = { workspace = true }
@@ -35,6 +39,7 @@ rlst = { workspace = true }
 rayon = { workspace = true }
 thiserror = { workspace = true }
 tetraleaf-kernels = { workspace = true, optional = true }
+rustfft = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

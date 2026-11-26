@@ -125,9 +125,9 @@ use thiserror::Error;
 use super::{
     ChargeKind, Charges, DEFAULT_DENSE_BUDGET, DEFAULT_DIAGONAL_BUILD, DIAGONAL_COST_CONSTANTS,
     DegreeError, DegreeRule, Degrees, Densities, DensityError, DiagonalCosts, DiagonalShape,
-    HelmholtzDiagonal, HelmholtzM2l, HelmholtzOperator, LevelShape, M2lOverride, OperatorError,
-    Output, OverrideError, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit,
-    TableTimings, TransferBuild, Wavenumber, WavenumberKind, auto_batched_max_degree,
+    HelmholtzDiagonal, HelmholtzM2l, HelmholtzOperator, HelmholtzPhiStep, LevelShape, M2lOverride,
+    OperatorError, Output, OverrideError, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit,
+    RcrSplit, TableTimings, TransferBuild, Wavenumber, WavenumberKind, auto_batched_max_degree,
     auto_batched_min_columns, auto_plane_wave_min_degree, diagonal_costs, min_leaf_level,
     offset_class,
 };
@@ -456,6 +456,8 @@ pub struct HelmholtzFmmBuilder {
     v_costs: Option<VCosts>,
     diagonal_budget: usize,
     diagonal_chunk: Option<usize>,
+    phi_step: HelmholtzPhiStep,
+    phi_salt: u64,
     c_leaf: f64,
     p2p: P2pChoice,
     empty_boxes: bool,
@@ -519,6 +521,8 @@ impl HelmholtzFmmBuilder {
             v_costs: None,
             diagonal_budget: DEFAULT_SIGNATURE_NODE_BUDGET,
             diagonal_chunk: None,
+            phi_step: HelmholtzPhiStep::Product,
+            phi_salt: 0,
             c_leaf: DEFAULT_C_LEAF,
             p2p: P2pChoice::Auto,
             empty_boxes: true,
@@ -926,6 +930,28 @@ impl HelmholtzFmmBuilder {
     pub fn diagonal_chunk(mut self, chunk: Option<usize>) -> Self {
         assert_ne!(chunk, Some(0), "a chunk holds at least one target");
         self.diagonal_chunk = chunk;
+        self
+    }
+
+    /// The φ step of the diagonal form's conversions (default [`HelmholtzPhiStep::Product`];
+    /// Helmholtz CH4.6a1; `HelmholtzOperator::with_phi_step`): the product, or with the feature
+    /// `rustfft` rustfft's FFT per box and ring, the product to rounding. At build every rank's
+    /// fingerprint of each diagonal level's φ step (rustfft's version, the architecture, the CPU
+    /// features it dispatches on, N_φ and the precision) is agreed (all-reduce min and max), and
+    /// where they differ every rank runs that level's product, so the output on P ranks stays the
+    /// one-rank FMM's bit for bit (constraints 2 and 9); `HelmholtzOperator::phi_step_on` reports
+    /// what each level runs. The time rule's costs are the product's.
+    pub fn phi_step(mut self, step: HelmholtzPhiStep) -> Self {
+        self.phi_step = step;
+        self
+    }
+
+    /// A test hook (Helmholtz CH4.6a1): `salt` is xored into this rank's φ-step fingerprints
+    /// before the agreement, so that a test can make one rank's differ. 0, the default, in every
+    /// real build.
+    #[doc(hidden)]
+    pub fn phi_fingerprint_salt(mut self, salt: u64) -> Self {
+        self.phi_salt = salt;
         self
     }
 
@@ -1547,6 +1573,7 @@ impl HelmholtzFmmBuilder {
         .with_diagonal_chunk(self.diagonal_chunk)
         .with_diagonal_build(self.diagonal_build)
         .with_diagonal(self.diagonal)
+        .with_phi_step(self.phi_step)
         .with_m2l_overrides(self.m2l_overrides.clone());
         if let Some(mul_add) = self.m2l_mul_add {
             operator = operator.with_m2l_mul_add(mul_add);
@@ -1555,6 +1582,19 @@ impl HelmholtzFmmBuilder {
             operator = operator.with_pool(Arc::clone(pool));
         }
         let operator = operator.build_tables();
+        // The φ step's agreement (Helmholtz CH4.6a1; the operator's `phi` module docs): a level
+        // whose fingerprints differ over the ranks (or that runs the product on some rank) runs
+        // the product on every rank. Without the feature every level runs the product and there
+        // is nothing to agree.
+        #[cfg(feature = "rustfft")]
+        let operator = {
+            let local = operator.phi_fingerprints(self.phi_salt);
+            let (mut low, mut high) = (vec![0u64; local.len()], vec![0u64; local.len()]);
+            comm.all_reduce_into(&local[..], &mut low[..], SystemOperation::min());
+            comm.all_reduce_into(&local[..], &mut high[..], SystemOperation::max());
+            let product: Vec<bool> = low.iter().zip(&high).map(|(a, b)| a != b).collect();
+            operator.with_phi_product(product)
+        };
         // The degrees the operator runs at (raised on the levels with waves below 10⁻⁶).
         let degrees: Vec<usize> = (0..degrees.len()).map(|l| operator.degree(l)).collect();
         timings.tables = operator.table_timings();

@@ -8,16 +8,19 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/gates/<milestone>.md`.
 
 Status (2026-11-26): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
-`gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). CH0.9 (S9, the FFT
-track's first task, item 13) done and D7 signed off: the product stays the default, rustfft becomes the
-one optional FFT back end (CH4.6a, next), and the FFTW route (CHR.3, CH4.6b) leaves the list; then H2
-and H5 (items 14–15). Eight H4 tasks stay open off the list. The project was
-renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are
-done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's
-history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show
-8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show 4d28d41:docs/helmholtz/roadmap.md`; until
-its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show
-6bad3c2:docs/helmholtz/roadmap.md`; until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`.
+`gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). The FFT track
+(item 13): CH0.9 done, D7 signed off (the product the default, rustfft the one optional FFT back
+end); CH4.6a split into CH4.6a1–a3, and CH4.6a1 (the φ step behind a trait, rustfft behind the
+feature `rustfft`, on the product's grid) done in its PR. Next CH4.6a2 (the time per level on
+locust, Kathleen and the M6, with a question on the smooth grid), then H2 and H5 (items 14–15).
+Eight H4 tasks stay open off the list. The project was renamed tetraleaf on 2026-11-21. HR, H0,
+H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The
+history of this line until H6.G is in `progress.md` and in this file's history (`git show
+4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show 8475009:docs/helmholtz/roadmap.md`;
+until the H4 gate in `git show 4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git
+show 03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show
+6bad3c2:docs/helmholtz/roadmap.md`; until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`;
+until CH4.6a1 in `git show 34e3caf:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -102,7 +105,7 @@ CHA.10a as item 12, before the FFT track.
 11. CH4.8 The constant density on W2 (CH4.8a, CH4.8b; split on 2026-11-24), then H4.G again
     (added on 2026-11-24 at the H4 gate; H4.G closed on 2026-11-25)
 12. CHA.10a The report scripts' shared module (added on 2026-11-25 at the H4 gate's second run)
-13. CH0.9 S9, CH4.6a the optional rustfft back end. D7, signed off at CH0.9 (the user on #264,
+13. CH0.9 S9, CH4.6a the optional rustfft back end (CH4.6a1–a3; split on 2026-11-26). D7, signed off at CH0.9 (the user on #264,
     2026-11-26: "Q1-3 as recommended"), moved CHR.3 and CH4.6b, the FFTW route, off the list
 14. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
     CH2.1 and CH2.2 wait for D4, which CH2.1 prepares)
@@ -665,22 +668,38 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   leaf on NEON after H4 (CH4.0d3 chose 128 at ε ≥ 10⁻⁷ for the evaluation alone; at 1 × 72 W1 at
   kD = 1000 builds in 13.4–14.0 s at 128 against 7.6 s at 256, CH4.5 §5): W1 and W2 at kD = 250–1000
   on locust at 1 × 72 and 4 × 18, the build and the evaluation apart. *Needs:* CH4.5. *Machines:* Kathleen, locust.
-- [ ] **CH4.6a The optional rustfft back end of the φ step.** Added at CH0.9 (D7; the user on #264, 2026-11-26: "Q1-3 as
-  recommended"; proposal §6.7, §10). In `tetraleaf-exec` behind an optional feature, beside the product behind the internal trait.
-  *Done when:* against the product to round-off; per-box plans with bits the same across batch
-  positions, sizes and threads (S9's layout: 2P − 1 rings, interleaved class-0 buffers, a two-box
-  per-thread scratch); at build rustfft's version, N_φ and the dispatched CPU features all-gathered,
-  and with one of two ranks made to differ (a test hook) both ranks run the product; off by default,
-  one CI job with the feature; a level's grid (the product's `azimuth_count` or the smooth size,
-  under its own cache key) chosen by the level's measured time; time per level against the product
-  on locust, Kathleen and the M6 (the M6 with the user's go-ahead; S9 did not time it). *Needs:*
-  CH4.1b, CH0.9, D7. *Machines:* locust, Kathleen, the M6.
+- CH4.6a The optional rustfft back end of the φ step. Added at CH0.9 (D7; the user on #264,
+  2026-11-26: "Q1-3 as recommended"; proposal §6.7, §10). Split on 2026-11-26 into CH4.6a1–a3,
+  measuring before the second grid is built (the user: "Split a1/a2/a3 (Recommended)"); rustfft
+  pinned `=6.4.1` (the user, 2026-11-26: "Exact =6.4.1 (Recommended)").
+- [x] **CH4.6a1 The trait and rustfft on the product's grid.** `HelmholtzPhiStep::RustFft` behind
+  `tetraleaf-exec`'s feature `rustfft`: ≤ 5.1 u from the product per conversion (p ≤ 245); in the FMM
+  the form's own 1 u sensitivity, errors 1.0000×; fingerprints agreed over the ranks; CI
+  `run-tests-rustfft`. Record `docs/helmholtz/tasks/CH4.6a1.md`. That reading of §10's
+  "round-off" signed off 2026-11-26 (the user on #265: "I accept PR Question 1").
+- [ ] **CH4.6a2 The time per level against the product, both grids priced.** *Done when:* each
+  diagonal level's conversions and level call, the product against rustfft on the product's grid,
+  on locust, Kathleen and the M6 (the M6 with the user's go-ahead; S9 did not time it), on W1 at
+  kD = 250–1000 and W3 at kD = 500; the smooth grid priced from S9's per-box FFT times and the
+  level's measured pair cost at its larger N_φ; a question for sign-off: build the smooth grid
+  (CH4.6a3) or keep the product's grid and close CH4.6a3 unrun. Also (from CH4.6a1): the harness
+  (`tetraleaf-validate`'s `helmholtz_accuracy`) takes the φ step as a setting and records the back
+  end and rustfft's CPU features that ran (proposal §6.7: results files record the back end); and
+  whether the time rule's `DiagonalCosts` need an FFT variant (CH4.6a1 kept the product's costs, so
+  rustfft never changes which levels take the form). *Needs:* CH4.6a1. *Machines:* locust,
+  Kathleen, the M6.
+- [ ] **CH4.6a3 The smooth grid, chosen per level by its time.** *Done when:* `Grid` at a chosen
+  N_φ (4P − 3 up to a 7-smooth multiple of 4), the conversions and transfer functions on it under
+  their own table key, round-off against the product's grid; a level's grid (the product's or the
+  smooth one) chosen by a rule fitted on CH4.6a2's times per machine class (constraint 9: no time
+  measured at run time); the time per level against the product on the M6, locust and Kathleen.
+  *Needs:* CH4.6a2 and its sign-off. *Machines:* locust, Kathleen, the M6.
 - [ ] **CH4.6b The optional FFTW back end of the φ step.** CH4.6 until CH0.9; off the priority list
   since then (D7). *Done when:* against the product to round-off; per-box plans with bits the same
   across batch positions, sizes and threads, and fingerprints all-gathered; off by default, a default
   build linking no FFTW, cargo-deny, a CI job with the feature; the GPL warning in the crate
   documentation, the README, the builder option and `Cargo.toml`. *Needs:* CH4.1b, CHR.3, CH0.9,
-  D7, CH4.6a (the trait).
+  D7, CH4.6a1 (the trait).
 - [x] **CH4.8a The constant density on W2: the error mapped and a remedy chosen.** The degree rule's
   truncation on W2's deep tree against a face; `h1` (one degree after the cap) chosen. Report
   `tetraleaf-validate/results/helmholtz-ch4-8a.md`. Added at the H4 gate (M15). Signed off on #260 (2026-11-24).

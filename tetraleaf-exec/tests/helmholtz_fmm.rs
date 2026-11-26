@@ -3193,6 +3193,8 @@ fn check_diagonal(scenario: &Scenario, comm: &SimpleCommunicator) -> usize {
         }
         check_one_rank(&what, &diagonal, &inputs, kind, &want, comm);
         if setting == "Rotation" {
+            #[cfg(feature = "rustfft")]
+            check_phi_step(&what, scenario, &diagonal, &inputs, &want, comm);
             check_interpolated(
                 &what,
                 scenario,
@@ -3255,6 +3257,133 @@ fn check_diagonal(scenario: &Scenario, comm: &SimpleCommunicator) -> usize {
     let mut mixed_anywhere = 0;
     comm.all_reduce_into(&mixed, &mut mixed_anywhere, SystemOperation::max());
     mixed_anywhere
+}
+
+/// The diagonal form's φ step by rustfft (Helmholtz CH4.6a1, feature `rustfft`) on `diagonal`'s
+/// settings, against the product's output `want` of the same settings: every diagonal level runs
+/// rustfft; the output's distance from the product's (relative ℓ2 over every value) within
+/// `PHI_SHARE` of the product's error against the direct sum (each conversion is the product's
+/// within a few u, and the form's low-frequency conditioning amplifies that as it does the
+/// product's own rounding: the operator's unit test `rustfft_within_the_forms_own_rounding`;
+/// 4.8·10⁻¹² and 1.8·10⁻⁸ here, at most 3.1·10⁻³ of the error), and its errors within
+/// `PHI_RATIO` of the product's; 2 threads (4 in release builds) and
+/// chunks of 3 bit for bit; on several ranks the one-rank FMM bit for bit; and the test hook: one
+/// rank's fingerprints salted, every level runs the product on every rank, the product's output
+/// bit for bit (on one rank the salt changes nothing).
+#[cfg(feature = "rustfft")]
+fn check_phi_step(
+    what: &str,
+    scenario: &Scenario,
+    diagonal: &HelmholtzFmmBuilder,
+    inputs: &Inputs,
+    want: &Output<f64>,
+    comm: &SimpleCommunicator,
+) {
+    use tetraleaf_exec::helmholtz::HelmholtzPhiStep;
+    const PHI_SHARE: f64 = 0.03;
+    const PHI_RATIO: f64 = 1.01;
+    let kind = scenario.charges;
+    let what = format!("{what}, φ step by rustfft");
+    let fft = diagonal.clone().phi_step(HelmholtzPhiStep::RustFft);
+    let steps = |fmm: &HelmholtzFmm<'_, f64>| -> Vec<Option<HelmholtzPhiStep>> {
+        (0..fmm.nlevels())
+            .map(|l| fmm.operator().phi_step_on(l))
+            .collect()
+    };
+    let (fmm, got) = run(&fft, inputs, kind, comm);
+    let on = steps(&fmm);
+    check_diagonal_times(&what, &fmm, 1, 1, comm);
+    drop(fmm);
+    assert!(
+        everywhere(
+            on.iter().any(Option::is_some)
+                && on.iter().flatten().all(|&s| s == HelmholtzPhiStep::RustFft),
+            comm
+        ),
+        "{what}: the levels' φ steps {on:?}"
+    );
+    // Round-off against the product.
+    let values =
+        |o: &Output<f64>| -> Vec<f64> { bits(o).into_iter().map(f64::from_bits).collect() };
+    let (g, w) = (values(&got), values(want));
+    let difference = global_sum(g.iter().zip(&w).map(|(a, b)| (a - b) * (a - b)).sum(), comm);
+    let norm = global_sum(w.iter().map(|b| b * b).sum(), comm);
+    let relative = (difference / norm).sqrt();
+    let (fft_errors, product_errors) = (
+        errors(scenario, inputs, &got, 0, comm),
+        errors(scenario, inputs, want, 0, comm),
+    );
+    if comm.rank() == 0 {
+        println!(
+            "{what}: levels {on:?}; {relative:.2e} from the product; φ {:.3e} against the \
+             product's {:.3e} ({:.4}×)",
+            fft_errors.0,
+            product_errors.0,
+            fft_errors.0 / product_errors.0
+        );
+    }
+    assert!(
+        relative <= PHI_SHARE * product_errors.0,
+        "{what}: {relative:.2e} from the product, its error {:.2e}",
+        product_errors.0
+    );
+    assert!(
+        fft_errors.0 <= PHI_RATIO * product_errors.0
+            && fft_errors.1 <= PHI_RATIO * product_errors.1,
+        "{what}: errors {fft_errors:?} against the product's {product_errors:?}"
+    );
+    // Threads and chunks (4 threads in release builds).
+    let mut runs = vec![(2, None), (2, Some(3)), (1, Some(1))];
+    if !cfg!(debug_assertions) {
+        runs.push((4, None));
+    }
+    for (threads, chunk) in runs {
+        let (_, again) = run(
+            &fft.clone().threads(threads).diagonal_chunk(chunk),
+            inputs,
+            kind,
+            comm,
+        );
+        assert_same(
+            &format!("{what} at {threads} threads, chunks of {chunk:?}"),
+            &again,
+            &got,
+            comm,
+        );
+    }
+    check_one_rank(&what, &fft, inputs, kind, &got, comm);
+    // The hook: rank 0's fingerprints salted.
+    let salted = fft
+        .clone()
+        .phi_fingerprint_salt(if comm.rank() == 0 { 0x5a17 } else { 0 });
+    let (fmm, product) = run(&salted, inputs, kind, comm);
+    let on = steps(&fmm);
+    drop(fmm);
+    if comm.size() > 1 {
+        assert!(
+            everywhere(
+                on.iter().flatten().all(|&s| s == HelmholtzPhiStep::Product),
+                comm
+            ),
+            "{what}: one rank's fingerprints differ, yet the levels run {on:?}"
+        );
+        assert_same(
+            &format!("{what}: one rank's fingerprints differ, the product"),
+            &product,
+            want,
+            comm,
+        );
+    } else {
+        assert_same(
+            &format!("{what}: salted on one rank, rustfft"),
+            &product,
+            &got,
+            comm,
+        );
+    }
+    if comm.rank() == 0 {
+        println!("{what}: threads, chunks, one rank and the fingerprints' agreement checked");
+    }
 }
 
 /// Costs under which the diagonal form beats every other M2L wherever a class passes.

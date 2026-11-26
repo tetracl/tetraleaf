@@ -4865,3 +4865,80 @@ request, using this template:
 - Laplace: not touched (a spike outside both workspaces, documents, a script).
 - Follow-ups: CH4.6a (the rustfft back end, item 13, next), with the M6's times and the grid per
   level; CHR.3 and CH4.6b off the list (roadmap).
+
+## 2026-11-26: CH4.6a1 The trait and rustfft on the product's grid
+- Done:
+  - CH4.6a split into CH4.6a1–a3, measuring before the smooth grid is built. The user,
+    2026-11-26: "Split a1/a2/a3 (Recommended)". rustfft is pinned `=6.4.1`, the user: "Exact
+    =6.4.1 (Recommended)".
+  - `tetraleaf-tables`: `Conversions::{s2f_modes, f2r_modes, rings}`.
+    - S → F stops after the Legendre step: each ring's Fourier modes, laid out as an inverse
+      DFT's input.
+    - F → R starts from a forward DFT's output.
+    - The gather, the Legendre steps and the scatter are the product's code, moved into
+      helpers. `s2f` and `f2r` are bit for bit as before: a hash of their outputs, p = 3–41,
+      f64 and f32, is the same before and after.
+  - `tetraleaf-exec`, the setting and the back end:
+    - `HelmholtzPhiStep` (`#[non_exhaustive]`): `Product`, the default and the reference;
+      `RustFft` only with the new optional feature `rustfft = ["dep:rustfft"]`.
+    - The crate-internal trait `PhiTransform`: one plan per (level, N_φ, direction), made for
+      f32 or f64 through `Any`.
+    - S → F writes the modes into each box's own signature and transforms them in place; F → R
+      transforms each accumulator in place (`s2f_by`, `f2r_by`).
+  - `tetraleaf-exec`, the agreement of the ranks:
+    - The operator's `with_phi_step`, `phi_step_on`, `phi_fingerprints` and `with_phi_product`;
+      the builder's `phi_step`, and the hidden `phi_fingerprint_salt` (the test hook).
+    - `build` agrees each level's fingerprint over the ranks (all-reduce min and max). The
+      fingerprint covers rustfft's version, the architecture, the CPU features rustfft
+      dispatches on, N_φ and the precision. A level whose fingerprints differ runs the product
+      on every rank.
+  - CI:
+    - The job `run-tests-rustfft`: Clippy with the feature, the φ step's unit tests, and
+      `helmholtz_fmm` with the feature at 1 and 2 ranks.
+    - `run-mpi-tests.sh` gains `MPI_TESTS_ONLY` and `MPI_TESTS_FEATURES`, and fails on an empty
+      selection.
+    - `run-licence-check` fails if rustfft is in the default graph.
+  - Documentation: the crate's features section, the operator docs, and the root, exec and
+    tables `CLAUDE.md`.
+  - Record: `docs/helmholtz/tasks/CH4.6a1.md`.
+- Tests:
+  - `tetraleaf-tables`, `tests/helmholtz/diagonal_modes.rs`: the halves with the φ step as a
+    plain DFT, against the reference and the product, within 256 u. Also the run layout and the
+    padding, a box's bits in every batch, f32, and the refusals.
+  - `tetraleaf-exec` unit tests:
+    - rustfft against the product: ≤ 2.4 u at p ≤ 24, and ≤ 5.1 u up to p = 245 in release.
+    - A box's bits in batches of 1, 2, 7 and 33, on 1, 2 and 4 threads.
+    - `rustfft_within_the_forms_own_rounding`: on physical pairs, the FFT's distance from the
+      product is at most 2.2× the product's own response to 1 u of its F or G. That distance
+      reaches 0.73 at k a 0.3, in pairs the rule never takes: the form's low-frequency
+      conditioning.
+  - `check_phi_step` in `tests/helmholtz_fmm.rs`:
+    - Every diagonal level runs rustfft. The output is 4.8·10⁻¹² (the cube) and 1.8·10⁻⁸ (the
+      clusters) from the product's, at most 3.1·10⁻³ of the error, and its errors are 1.0000×
+      the product's.
+    - Threads and chunks bit for bit; the one-rank FMM bit for bit.
+    - With one rank's fingerprints salted, every level runs the product with the product's
+      bits.
+  - The first bound of that check, 10⁻¹³, failed at 4.8·10⁻¹². The cause was measured (the cube's
+    level 3, k a 2.5) and then shown by the pair test, before the bound was set on the error.
+- Checks (the M6):
+  - fmt; Clippy default, examples, `--workspace --all-targets`; docs. Clippy and docs also with
+    `--features rustfft`.
+  - `cargo test` (1,402 passed) and `cargo test --workspace` (1,446 passed) at opt-level 1.
+  - The MPI list at 2 and 4 ranks, all passed (`helmholtz_fmm` 59 s and 52 s).
+  - `helmholtz_fmm` with the feature: 76 s at 1 rank and 92 s at 2.
+  - `cargo deny --locked check licenses`, with and without the feature: both pass.
+  - No fftw-sys and no rustfft in the default graph; `cargo check --workspace --all-targets`.
+    The lock file only adds rustfft, primal-check, strength_reduce and transpose.
+  - A self-review by a subagent: nothing blocking. Fixed before the PR: a cited test file that
+    does not exist, `#[non_exhaustive]`, the operator's agreement documented, the salt hook's
+    zero, the licence step's match, the script's empty selection, and 4 threads in release.
+  - Not run: rustfft on x86_64. Its first run is CI's `run-tests-rustfft`, on AVX or SSE4.1 code.
+- Decisions: the split and the pin, above. Question 1 of the PR: "against the product to
+  round-off" is met in this reading, ≤ 5.1 u per conversion, and in the FMM within the form's
+  own sensitivity to 1 u. Signed off on #265 by the user, 2026-11-26: "I accept PR Question 1".
+- Laplace: not touched. No Laplace path changed: tables' `helmholtz::diagonal`, exec's Helmholtz
+  operator and builder only. `mpi_exec` and `invariance` passed at 2 and 4 ranks. No benchmark
+  run is needed (D9): no code Laplace runs changed.
+- Follow-ups: CH4.6a2, with its new Also: the harness records the back end, and the time rule's
+  costs for the FFT. Then CH4.6a3, depending on CH4.6a2's sign-off.

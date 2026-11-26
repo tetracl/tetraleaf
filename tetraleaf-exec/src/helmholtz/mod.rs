@@ -78,14 +78,15 @@ pub use operator::{
     AUTO_PLANE_WAVE_MAX_IM_KAPPA, DEFAULT_DENSE_BUDGET, DEFAULT_DIAGONAL_BUILD, DEFAULT_RCR_BUFFER,
     DIAGONAL_AUTO_MIN_KA, DIAGONAL_COST_CONSTANTS, DIAGONAL_COSTS_NEON, DIAGONAL_COSTS_X86,
     DIAGONAL_F32_MIN_TOLERANCE, DiagonalCosts, DiagonalCounts, DiagonalShape, DiagonalTimes,
-    HelmholtzDiagonal, HelmholtzM2l, HelmholtzOperator, LevelShape, M2L_MIN_BLOCK_TARGETS,
-    M2lOverride, MIN_BUFFER_BOXES, OperatorError, OverrideError, OverrideM2l, PlaneWaveCounts,
-    PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, PlaneWaveTimes, RCR_PAIR_FEW_DEGREE,
-    RCR_PAIR_MIN_DEGREE, RCR_PAIR_SHARE, RcrCounts, RcrSplit, TIMED_KINDS, TableTimings,
-    TransferBuild, WaveLevelChoice, auto_batched_max_degree, auto_batched_min_columns,
-    auto_m2l_mul_add, auto_plane_wave_min_degree, batched_block_targets, diagonal_auto_in_range,
+    HelmholtzDiagonal, HelmholtzM2l, HelmholtzOperator, HelmholtzPhiStep, LevelShape,
+    M2L_MIN_BLOCK_TARGETS, M2lOverride, MIN_BUFFER_BOXES, OperatorError, OverrideError,
+    OverrideM2l, PlaneWaveCounts, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit,
+    PlaneWaveTimes, RCR_PAIR_FEW_DEGREE, RCR_PAIR_MIN_DEGREE, RCR_PAIR_SHARE, RUSTFFT_VERSION,
+    RcrCounts, RcrSplit, TIMED_KINDS, TableTimings, TransferBuild, WaveLevelChoice,
+    auto_batched_max_degree, auto_batched_min_columns, auto_m2l_mul_add,
+    auto_plane_wave_min_degree, batched_block_targets, diagonal_auto_in_range,
     diagonal_beats_plane_waves, diagonal_beats_rcr, diagonal_chunk_targets, diagonal_costs,
-    diagonal_rule_classes, offset_class, rcr_by_pairs, wave_level_choice,
+    diagonal_rule_classes, offset_class, rcr_by_pairs, rustfft_cpu_features, wave_level_choice,
 };
 
 /// The deepest level of a Morton key, 16 (CONVENTIONS §3.12).

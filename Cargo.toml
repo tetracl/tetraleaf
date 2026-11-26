@@ -48,6 +48,11 @@ rlst = "0.12.0"
 rand_chacha = "0.10"
 # Host threading of the Laplace FMM (Phase 3 T10); tetraleaf-exec only.
 rayon = "1"
+# Helmholtz CH4.6a1: the optional FFT back end of the diagonal form's φ step (D7, signed off at
+# CH0.9), behind tetraleaf-exec's feature `rustfft`, enabled by no workspace crate. Pinned exactly
+# (the user, 2026-11-26: "Exact =6.4.1 (Recommended)"), the version spike S9 measured, so that the
+# version in the build's agreement across ranks is the one built. MIT OR Apache-2.0.
+rustfft = "=6.4.1"
 # tetraleaf-octree/ does not use these entries yet (a separate decision).
 tetraleaf-octree = { path = "tetraleaf-octree" }
 tetraleaf-plan = { path = "tetraleaf-plan" }
