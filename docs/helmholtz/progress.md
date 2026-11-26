@@ -4855,9 +4855,13 @@ request, using this template:
     (the grid, D7's evidence, rustfft against FFTW, the accuracy maximum); all were fixed before
     the PR.
   - Nothing pending.
-- Decisions: D7 proposed for sign-off on the PR (question 1): the product the default; rustfft the
-  one optional back end, if its task adds a check across ranks and the M6's times; FFTW's CHR.3
-  and CH4.6 off the list. Questions 2 and 3 are on §6.7.
+- Decisions: questions 1–3 signed off on #264 by the user, 2026-11-26: "Q1-3 as recommended".
+  - D7: the product the default and reference on every machine; rustfft the one optional FFT back
+    end (CH4.6a), with a check across ranks and the M6's times; FFTW's CHR.3 and CH4.6b (CH4.6
+    until now) off the priority list, kept in the roadmap.
+  - §6.7's plans confirmed (2P − 1 rings, interleaved class-0 buffers, a two-box scratch).
+  - §6.7's grid amended: the product uses `azimuth_count`; a level's FFT grid is CH4.6a's choice.
+  - Proposal amended (§6.7, §9 item 6, §10's CH4.6 split and diagram, §12 D7, Appendix A).
 - Laplace: not touched (a spike outside both workspaces, documents, a script).
-- Follow-ups: D7's answer decides CHR.3, CH4.6 and the priority list's item 13. The M6's times
-  (deferred by the user) go to the back end's task.
+- Follow-ups: CH4.6a (the rustfft back end, item 13, next), with the M6's times and the grid per
+  level; CHR.3 and CH4.6b off the list (roadmap).

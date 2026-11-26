@@ -236,6 +236,10 @@ Read per row: "FFTW smooth ÷ product φ" is the FFT against the φ step it repl
 
 ## 6. The outputs §10 asks for
 
+Signed off on #264 by the user, 2026-11-26: "Q1-3 as recommended". D7 as recommended below (CH4.6
+split into CH4.6a, rustfft, on the priority list, and CH4.6b, FFTW, off it with CHR.3), §6.7's plans
+confirmed and its grid sizes amended (proposal Appendix A, "Amended at CH0.9").
+
 - **The plan layout and scratch of §6.7: confirmed.** One plan per (level, N_φ) of 2P − 1 rings,
   `Rigor::Estimate`, executed box by box on class-0 buffers packed back to back, with interleaved
   scratch. The per-thread scratch needs two boxes (synthesis input kept zero outside the mode

@@ -150,4 +150,6 @@ M6 (tests, record, fingerprints; no times, the user). Raw outputs in `spikes/fft
    and committed lock file `spikes/fft-plans/Cargo.lock`: the user, 2026-11-26, "Go ahead
    (Recommended)".
 2. The M6 times: the user, 2026-11-26, "Skip the M6". Its tests, record and fingerprints ran.
-3. For sign-off on the PR: D7, the batch and layout, the grid (`SPIKE_REPORT.md` §6).
+3. For sign-off on the PR: D7, the batch and layout, the grid (`SPIKE_REPORT.md` §6). The user on
+   #264, 2026-11-26: "Q1-3 as recommended". Recorded in the roadmap (D7, item 13, CH4.6a and
+   CH4.6b) and the proposal (§6.7, §9, §10, §12, Appendix A).
