@@ -11,7 +11,8 @@ Status (2026-11-26): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`,
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). The FFT track
 (item 13) is done: CH0.9, CH4.6a1 and CH4.6a2 (rustfft 0.89–0.99× of an evaluation on Kathleen and
 locust, on the product's grid), CH4.6a3 closed unrun at CH4.6a2's sign-off, D7 amended (the M6 not
-timed, at the user's word). Next H2 and H5 (items 14–15), CH2.1 first. Eight H4 tasks stay open off
+timed, at the user's word). Next CH4.9a and CH4.9b, the leaf expansions P2M and L2P by SIMD
+kernels (item 14, added on 2026-11-26), then H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off
 the list. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open;
 of H0, CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is
 in `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until
@@ -77,7 +78,10 @@ H2 then H5; CHA.7a before H8; CH4.7, CH4.3f and CH4.0k stay off the list. Amende
 by the gate's run (`gates/H4.md` §9; the user: "Keep H4 open, CH4.8 (Recommended)"): CH4.8 and
 H4.G as item 11, before the FFT track. Amended on 2026-11-25 at the H4 gate's second run
 (`gates/H4.md` §0.8, question 4; the user on #262: "CHA.10a, then FFT, H2, H5 (Recommended)"):
-CHA.10a as item 12, before the FFT track.
+CHA.10a as item 12, before the FFT track. Amended on 2026-11-26 after CH4.6a2 (the user: "Yes. Add P2M
+and L2P to the priority list as tasks"): CH4.9a and CH4.9b as item 14, before H2 (P2M and L2P were
+13–31 % of an evaluation under the defaults on Kathleen, job 673083, against 8–17 % for M2M and L2L
+on the diagonal levels).
 
 1. CH4.0 The M2L rule's sparse-level term
 2. CH4.0b The worst-box concentration
@@ -106,9 +110,11 @@ CHA.10a as item 12, before the FFT track.
 12. CHA.10a The report scripts' shared module (added on 2026-11-25 at the H4 gate's second run)
 13. CH0.9 S9, CH4.6a the optional rustfft back end (CH4.6a1–a3; split on 2026-11-26). D7, signed off at CH0.9 (the user on #264,
     2026-11-26: "Q1-3 as recommended"), moved CHR.3 and CH4.6b, the FFTW route, off the list
-14. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
+14. CH4.9a, CH4.9b The Helmholtz leaf expansions P2M and L2P by SIMD kernels (added on 2026-11-26
+    after CH4.6a2, the user: "Yes. Add P2M and L2P to the priority list as tasks")
+15. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
     CH2.1 and CH2.2 wait for D4, which CH2.1 prepares)
-15. CH5.1, CH5.2, CH5.3 and H5.G Complex wavenumber (added on 2026-11-24 at the H4 gate)
+16. CH5.1, CH5.2, CH5.3 and H5.G Complex wavenumber (added on 2026-11-24 at the H4 gate)
 
 Off the list, in file order: CH0.8b, CH0.5 and H0.G; CHR.3 and CH4.6b (moved off at CH0.9 by D7, the user on #264, 2026-11-26: "Q1-3 as recommended"); CH4.0f (the user, 2026-11-12, on #211);
 CH4.7 (added at CH4.5, its question 4; the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."); CH4.3f (added at CH4.3b2c, off the list until CH4.5, kept off at CH4.5, its question 3, by the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."; the user on #251, 2026-11-22: "Q1-5 as recommended"); CH4.2d (added at CH4.2b2, off the list until CH4.5, kept off at CH4.5, its question 2, by the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."; the user on #239, 2026-11-20: "All 4 questions as recommended.");
@@ -703,6 +709,28 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
 - [x] **CH4.8b The constant density on W2: the remedy as the default.** `DegreeRule::margin` the default
   (§3.5 amended); W1–W3's constant density within 0.67 ε and 76.3 ε at all six ε, 1.01–1.02× the time.
   Report `tetraleaf-validate/results/helmholtz-ch4-8b.md`. Signed off on #261 (2026-11-25).
+- CH4.9 The Helmholtz leaf expansions by SIMD kernels. Added on 2026-11-26 after CH4.6a2 (the user:
+  "Yes. Add P2M and L2P to the priority list as tasks"; item 14 of the priority list; no proposal §10
+  entry, so the acceptance is the *Done when* below with constraint 1). Measured on Kathleen (job
+  673083, 1 × 40, the defaults, `helmholtz_accuracy --levels` with P2M, M2M, L2L and L2P per level,
+  outputs `~/projects/fmm-archive/kathleen/runs/explore-kinds/`): P2M + L2P 13–31 % of an
+  evaluation on W1 at kD = 250–1000 and W3 at kD = 500 (largest at 10⁻⁸ and at kD = 250; L2P the
+  larger, 1.58 s of W1 at kD = 1000's 15.2 s on the finest level), where they run one scalar
+  `tetraleaf_ref::helmholtz::leaf` call per point (`Densities::{p2m, l2p}`).
+- [ ] **CH4.9a P2M by a SIMD kernel.** *Done when:* `helmholtz_accuracy --levels` prints P2M, M2M,
+  L2L and L2P per level (the table of job 673083); a P2M kernel in `tetraleaf-simd`, vectorised over
+  a leaf's points on the P2P's ISAs (AVX-512, AVX2, NEON, scalar), for real and complex k, real and
+  complex charges and m vectors, run by the operator's `P2pChoice` (`Reference` keeps the per-point
+  reference calls, the trusted path); within a contract per leaf against
+  `tetraleaf_ref::helmholtz::leaf::p2m` in f64 and f32; a leaf's bits the same at every thread count
+  and on P ranks the one-rank FMM's; the FMM's errors within 1.01× the reference path's; P2M's time
+  per level against the reference path on Kathleen and locust (the M6 with the user's go-ahead).
+  Constraint 1: Laplace's kernels and outputs in `tetraleaf-simd` unchanged. Yukawa's
+  `p2m_yukawa` an Also for H2. *Needs:* CH3.4c. *Machines:* Kathleen, locust.
+- [ ] **CH4.9b L2P with gradients by a SIMD kernel.** *Done when:* as CH4.9a for L2P, potentials and
+  gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, sharing CH4.9a's recurrences; the
+  evaluation's time under the defaults before and after CH4.9a–b on CH4.6a2's cases. *Needs:*
+  CH4.9a. *Machines:* Kathleen, locust.
 - [x] **H4.G Gate.** `/milestone-gate H4`. Report `docs/helmholtz/gates/H4.md`, reviews
   `docs/reviews/2026-11-24-H4.md` and `docs/reviews/2026-11-25-H4.md`. The first run (#258, 2026-11-24)
   kept H4 open for CH4.8; the second (#262, 2026-11-25) found the condition met on both machine

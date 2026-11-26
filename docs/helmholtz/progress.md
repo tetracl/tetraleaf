@@ -4982,4 +4982,10 @@ request, using this template:
   with a line in its Appendix A; D7 amended in the roadmap.
 - Laplace: not touched (the harness, scripts, documents and one CI step).
 - Follow-ups: an Also on CH4.7: the levels the time rule keeps on the waves where the form is
-  faster under either step; next H2 (CH2.1).
+  faster under either step. After the sign-off, a measurement of the other kinds per level (Kathleen
+  job 673083, an uncommitted harness table): P2M + L2P 13–31 % of an evaluation, M2M + L2L on the
+  diagonal levels 8–17 % (the ceiling of an MLFMA-style signature-domain translation, not pursued);
+  CH4.9a and CH4.9b (P2M and L2P by SIMD kernels) added as item 14 of the priority list, before H2
+  (the user, 2026-11-26: "Yes. Add P2M and L2P to the priority list as tasks"). Also seen there: at
+  kD = 1000 the M2M into levels 0–1 (degree 0, read by nothing) costs 0.45 s of 15.2 s, not yet a
+  task.
