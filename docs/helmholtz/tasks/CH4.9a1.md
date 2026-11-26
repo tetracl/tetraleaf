@@ -96,7 +96,30 @@ CH4.6a2's timing: "Skip the M6"; asked again for this task only if needed).
   prints the sum of the parts against the whole.
 
 ## Pending runs
-(filled in step 6)
+None. Kathleen job 673085 (node-c11a-142, one core, 20:45–20:51) and locust (one core, 20:45–20:52,
+started by the quiet gate) ran `smoke` and `parts`; every launch exited 0, every case's parts
+reassembled the reference bit for bit (90 per machine). Outputs in
+`~/projects/fmm-archive/{kathleen,locust}/runs/ch4-9a1/`.
+
+## Results (the report `tetraleaf-validate/results/helmholtz-ch4-9a1.md`)
+From p = 12 on the harmonics take 44–81 % of a point's P2M (f64) and 58–84 % of L2P with gradients;
+the radial functions most of the rest; the sum 4–10 %. f32 barely faster (subnormal slowdowns on
+x86 at p = 41–45). The per-point cost on one core equals the in-FMM thread time per point.
+Recommendation: CH4.9a2 as restructured safe Rust (harmonics from coefficients tabulated per degree,
+real radial recursion for real k, points batched), no `tetraleaf-simd` change.
+
+## Checks run (the M6)
+`/verify`: fmt; Clippy default, examples, `--workspace --all-targets`; `cargo doc` with `-D
+warnings`; at opt-level 1 `cargo test` (1,402 passed) and `cargo test --workspace` (1,446 passed);
+`tests/helmholtz_accuracy.rs` at opt-level 1 (passed, 17.8 s; the strengthened `check_leaves`); the
+tables script's `selftest`; the example's smoke run (bit for bit). Not run: the MPI list (no change
+to tetraleaf-exec, -plan or -octree); `cargo deny` (no manifest change).
 
 ## Open questions
 Asked before implementing, answered 2026-11-26: the split, "Split a1/a2 (Recommended)".
+
+For sign-off on the PR (the report §4):
+1. CH4.9a2's kernel: restructured safe Rust first (recommended), or ISA kernels in `tetraleaf-simd`,
+   or both.
+2. The order: the leaf harmonics routine built with P2M in CH4.9a2 and reused by CH4.9b
+   (recommended), or one task for both.

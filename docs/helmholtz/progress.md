@@ -4993,3 +4993,35 @@ request, using this template:
   priority list (the user, 2026-11-26: "Please add it to the roadmap"). Also seen there: at 1 × 40
   the forward charges and backward output take about 690 ms of the 1,916 ms evaluation at p = 8 on
   one rank, not yet a task.
+
+## 2026-11-26: CH4.9a1 Where a leaf point's P2M and L2P time goes, and the per-level table
+- Done:
+  - CH4.9a split into CH4.9a1 and CH4.9a2, measuring before the kernel (the user: "Split a1/a2
+    (Recommended)").
+  - `helmholtz_accuracy --levels` prints P2M, M2M, L2L and L2P per level (the table "Translations
+    and leaf expansions", from `Row::kind_seconds`).
+  - The `helmholtz_leaf` example: one point's P2M and L2P (without and with gradients) and their
+    parts timed apart; the parts reassemble the reference bit for bit before any timing.
+  - `tools/helmholtz/ch4-9a1-runs.sh`, `ch4-9a1-tables.py` on `common.py`.
+  - Report `tetraleaf-validate/results/helmholtz-ch4-9a1.md`; record `docs/helmholtz/tasks/CH4.9a1.md`.
+- Results (Kathleen job 673085, node-c11a-142; locust; one core each; p = 8–45, k̂ = 0.5–16, f64
+  and f32):
+  - The harmonics take 44–81 % of a point's P2M in f64 from p = 12 on, and with their derivatives
+    58–84 % of L2P with gradients; the radial functions most of the rest; the sum 4–10 %.
+  - The harmonics routine takes a square root and divisions per term and `powi` rescalings, all of
+    (n, m) alone; the radial recursion complex divisions per step, also for real k.
+  - The per-point cost on one core equals the in-FMM thread time per point (Kathleen, p = 17:
+    2.98 µs against about 3.3 µs).
+  - f32 is barely faster (0.93–1.08× on Kathleen, 0.77–0.90× on locust at p ≤ 32); on Kathleen
+    f32 at p = 41–45 is 1.37–1.40× f64 (subnormal values at small k̂).
+- Tests: `check_leaves` in `tests/helmholtz_accuracy.rs` asserts P2M and L2P on every level with
+  occupied leaves and M2M and L2L somewhere; the example's bit-for-bit check (180 cases).
+- Checks: `/verify` on the M6 (fmt; Clippy default, examples, workspace; docs; `cargo test` 1,402
+  and `--workspace` 1,446 passed at opt-level 1); the harness test at opt-level 1 (17.8 s). Not run:
+  the MPI list (no change to exec, plan or octree), `cargo deny` (no manifest change). Nothing
+  pending.
+- Decisions: the split, above. For sign-off on the PR: (1) CH4.9a2's kernel, restructured safe Rust
+  first (recommended); (2) the shared leaf harmonics built with P2M in CH4.9a2 and reused by CH4.9b.
+- Laplace: not touched (the harness, a new example, scripts and documents).
+- Follow-ups: CH4.9a2 (its design by question 1), with an Also: the f32 subnormal slowdown on x86.
+

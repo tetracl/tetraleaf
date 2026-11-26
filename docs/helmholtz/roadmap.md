@@ -9,18 +9,18 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-26): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). The FFT track
-(item 13) is done: CH0.9, CH4.6a1 and CH4.6a2 (rustfft 0.89–0.99× of an evaluation on Kathleen and
-locust, on the product's grid), CH4.6a3 closed unrun at CH4.6a2's sign-off, D7 amended (the M6 not
-timed, at the user's word). Next CH4.9a and CH4.9b, the leaf expansions P2M and L2P by SIMD
-kernels (item 14, added on 2026-11-26), then H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off
-the list. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open;
-of H0, CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is
-in `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until
-H1.G in `git show 8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show
-4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git show
-03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show 6bad3c2:docs/helmholtz/roadmap.md`;
-until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`; until CH4.6a1 in `git show
-34e3caf:docs/helmholtz/roadmap.md`; until CH4.6a2 in `git show 7c8177d:docs/helmholtz/roadmap.md`.
+(item 13) is done (CH4.6a2 merged; CH4.6a3 closed unrun). Item 14, the leaf expansions: CH4.9a split
+into CH4.9a1 and CH4.9a2; CH4.9a1 (where a leaf point's P2M and L2P time goes: the harmonics, 44–84 %)
+done in its PR, with CH4.9a2's design for sign-off. Next CH4.9a2, then CH4.9b, then H2 and H5 (items
+15–16), CH2.1 first. Eight H4 tasks stay open off the list, and CH4.9c. The project was renamed
+tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are
+done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's
+history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show
+8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show 4d28d41:docs/helmholtz/roadmap.md`;
+until its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show
+6bad3c2:docs/helmholtz/roadmap.md`; until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`;
+until CH4.6a1 in `git show 34e3caf:docs/helmholtz/roadmap.md`; until CH4.6a2 in `git show
+7c8177d:docs/helmholtz/roadmap.md`; until CH4.9a1 in `git show 9758028:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -730,16 +730,16 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   thread count and on P ranks the one-rank FMM's, the FMM's errors within 1.01× the reference
   path's, P2M's time per level on Kathleen and locust (the M6 with the user's go-ahead); constraint
   1; Yukawa's `p2m_yukawa` an Also for H2.
-- [ ] **CH4.9a1 Where a point's P2M and L2P time goes, and the per-level table.** *Done when:*
-  `helmholtz_accuracy --levels` prints P2M, M2M, L2L and L2P per level (with its documentation and a
-  test); an MPI-free example times one point's P2M and L2P (with and without gradients) by part
-  (the radial functions, the harmonics and their derivatives, the sum, the rest) on one core, at
-  the leaf levels' degrees and k ρ of W1–W3 under the defaults, f64 and f32, against the reference
-  call, on Kathleen and locust; a question for sign-off: the kernel's design (restructured safe Rust
-  in `tetraleaf-exec` or `tetraleaf-tables`, an ISA kernel in `tetraleaf-simd`, or both) and the
-  order of CH4.9a2 and CH4.9b. *Needs:* CH3.4c. *Machines:* Kathleen, locust.
+- [x] **CH4.9a1 Where a point's P2M and L2P time goes, and the per-level table.** The harmonics take
+  44–81 % of a leaf point's P2M (f64, p ≥ 12) and 58–84 % of L2P with gradients, the sum 4–10 %, on
+  Kathleen and locust; `helmholtz_accuracy --levels`' per-level kinds and the `helmholtz_leaf`
+  example. Report `tetraleaf-validate/results/helmholtz-ch4-9a1.md`, record
+  `docs/helmholtz/tasks/CH4.9a1.md`. Questions 1–2 of the PR (CH4.9a2's design and order) for
+  sign-off.
 - [ ] **CH4.9a2 P2M by the kernel chosen.** *Done when:* CH4.9a's *Done when* less the table, the
-  kernel as signed off at CH4.9a1. *Needs:* CH4.9a1 and its sign-off. *Machines:* Kathleen, locust.
+  kernel as signed off at CH4.9a1. Also (from CH4.9a1): in f32 at p = 41–45 and small k̂ the
+  reference ran 1.37–1.40× f64's time on Kathleen (subnormal values on x86); the f32 kernel avoids
+  or reports it. *Needs:* CH4.9a1 and its sign-off. *Machines:* Kathleen, locust.
 - [ ] **CH4.9b L2P with gradients by a SIMD kernel.** *Done when:* as CH4.9a for L2P, potentials and
   gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, sharing CH4.9a's recurrences; the
   evaluation's time under the defaults before and after CH4.9a–b on CH4.6a2's cases. *Needs:*
