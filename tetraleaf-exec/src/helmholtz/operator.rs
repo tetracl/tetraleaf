@@ -404,6 +404,8 @@ use crate::operator::{M2L_BLOCK_TARGETS, P2pChoice};
 
 #[path = "operator_diagonal.rs"]
 mod diagonal;
+#[path = "operator_phi.rs"]
+mod phi;
 #[path = "operator_plane_wave.rs"]
 mod plane_wave;
 #[path = "operator_rcr.rs"]
@@ -417,6 +419,7 @@ pub use diagonal::{
     diagonal_rule_classes, offset_class, wave_level_choice,
 };
 use diagonal::{DiagonalBuffer, DiagonalLevel, DiagonalScratch, DiagonalSettings};
+pub use phi::{HelmholtzPhiStep, RUSTFFT_VERSION, rustfft_cpu_features};
 pub use plane_wave::{MIN_BUFFER_BOXES, PlaneWaveCounts, PlaneWaveSplit, PlaneWaveTimes};
 use plane_wave::{PlaneBuffer, PlaneScratch};
 use rcr::RcrBuffer;
@@ -1863,10 +1866,16 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         self.plane_wave_times.fill(PlaneWaveTimes::default());
         // The class scratch, the batched columns and the exponential M2L's buffers are sized
         // by their tables' largest level.
-        // One per thread of the pool, made on its threads (Helmholtz CH4.0h; no value depends
-        // on which), the old sets dropped first: at p = 135 a set holds about 27 MB.
+        self.make_scratch_sets();
+        self.size_rcr_buffer();
+    }
+
+    /// One scratch set per thread of the pool, made on its threads (Helmholtz CH4.0h; no value
+    /// depends on which), the old sets dropped first: at p = 135 a set holds about 27 MB.
+    fn make_scratch_sets(&mut self) {
+        let parts = PoolParts(self.execution.pool.as_deref());
         let clock = Instant::now();
-        let kernel = &*kernel;
+        let kernel = &self.kernel;
         let n = self
             .execution
             .pool
@@ -1874,8 +1883,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
             .map_or(1, |pool| pool.current_num_threads().max(1));
         self.execution.scratch.clear();
         self.execution.scratch = parts.map(n, &|_| Mutex::new(Scratch::new(kernel)));
-        timings.scratch += clock.elapsed();
-        self.size_rcr_buffer();
+        self.table_timings.scratch += clock.elapsed();
     }
 
     /// Sizes the Rotation M2L's buffer for the plan's levels that run by pairs on the
@@ -2118,6 +2126,70 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         self.kernel
             .diagonal_level(level)
             .map(|d| d.m2l.stored_classes())
+    }
+
+    /// Runs the diagonal form's φ step by `step` (Helmholtz CH4.6a1; module documentation,
+    /// "M2L"; default [`HelmholtzPhiStep::Product`]): the product, or with the feature `rustfft`
+    /// rustfft's FFT per box and ring on every diagonal level, the product to rounding. The
+    /// tables are chosen again.
+    pub fn with_phi_step(mut self, step: HelmholtzPhiStep) -> Self {
+        self.kernel.diagonal_settings.phi = step;
+        self.select_tables();
+        self
+    }
+
+    /// The φ step's setting ([`with_phi_step`](Self::with_phi_step)).
+    pub fn phi_step(&self) -> HelmholtzPhiStep {
+        self.kernel.diagonal_settings.phi
+    }
+
+    /// The φ step `level` runs: `None` without the diagonal form there, else the setting's, or
+    /// the product where [`with_phi_product`](Self::with_phi_product) put the level on it.
+    pub fn phi_step_on(&self, level: usize) -> Option<HelmholtzPhiStep> {
+        self.kernel
+            .diagonal_level(level)
+            .map(|d| d.phi_step(self.kernel.diagonal_settings.phi))
+    }
+
+    /// Each level's fingerprint of its φ step (Helmholtz CH4.6a1; the `phi` module docs): 0 on a
+    /// level without the diagonal form or with the product, else a hash of the FFT back end, its
+    /// version, the architecture, the CPU features it dispatches on, N_φ and the precision, xor
+    /// `salt` (a test hook: 0 in every real build). Ranks whose fingerprints of a level differ
+    /// may give a box other bits there; `HelmholtzFmmBuilder` agrees them and puts such a level
+    /// on the product ([`with_phi_product`](Self::with_phi_product)).
+    pub fn phi_fingerprints(&self, salt: u64) -> Vec<u64> {
+        (0..self.kernel.tables.nlevels())
+            .map(|l| match self.kernel.diagonal_level(l) {
+                Some(d) if d.phi.is_some() => phi::fingerprint(
+                    self.kernel.diagonal_settings.phi,
+                    d.conversions.azimuths(),
+                    size_of::<T>(),
+                    salt,
+                ),
+                _ => 0,
+            })
+            .collect()
+    }
+
+    /// Runs the levels `product` names (true) on the product's φ step whatever the setting
+    /// (Helmholtz CH4.6a1; the agreement of the ranks' fingerprints): their plans are dropped and
+    /// the scratch sets made again, the tables kept; a later choice of the tables keeps it.
+    pub fn with_phi_product(mut self, product: Vec<bool>) -> Self {
+        let mut changed = false;
+        for (l, level) in self.kernel.diagonal.iter_mut().enumerate() {
+            if let Some(level) = level
+                && product.get(l).copied().unwrap_or(false)
+                && level.phi.is_some()
+            {
+                level.phi = None;
+                changed = true;
+            }
+        }
+        self.kernel.diagonal_settings.phi_product = product;
+        if changed && !self.unbuilt {
+            self.make_scratch_sets();
+        }
+        self
     }
 
     /// The bytes of the diagonal form: the transfer functions and conversions of its levels,

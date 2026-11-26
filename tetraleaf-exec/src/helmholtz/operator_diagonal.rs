@@ -54,6 +54,14 @@
 //! offset by S → F of the source, the pair and F → R of the pair alone: the level call to
 //! rounding (there a target's diagonal pairs are summed as signatures before one F → R).
 //!
+//! The φ step of S → F and F → R is the product by default; under
+//! [`HelmholtzPhiStep`](super::HelmholtzPhiStep)'s FFT (feature `rustfft`, Helmholtz CH4.6a1;
+//! the `phi` module docs) a level holds the plans of its N_φ, S → F writes the Legendre step's
+//! modes into each box's signature and the plan transforms it in place, and F → R transforms each
+//! accumulator in place before the transposed Legendre step. A box's bits depend on its own
+//! input alone in either path, so the guarantees above hold for both; the two paths agree to
+//! rounding. The time rule's costs are the product's.
+//!
 //! [`with_diagonal_sources`]: super::HelmholtzOperator::with_diagonal_sources
 
 use std::sync::{LazyLock, PoisonError};
@@ -70,6 +78,7 @@ use tetraleaf_tables::helmholtz::diagonal::{
 };
 use tetraleaf_tables::parts::Parts;
 
+use super::phi::{self, HelmholtzPhiStep, PhiTransform};
 use super::{HelmholtzOperator, Isa, Kernel, SimdScalar};
 
 /// The diagonal M2L of the high-frequency levels (Helmholtz CH4.2b1; module documentation of
@@ -525,6 +534,11 @@ pub(super) struct DiagonalSettings {
     /// Each level's V lists for the time rule, agreed over the ranks, if known; else the
     /// uniform level's.
     pub(super) shapes: Option<Vec<DiagonalShape>>,
+    /// The φ step of the conversions (Helmholtz CH4.6a1).
+    pub(super) phi: HelmholtzPhiStep,
+    /// The levels that run the product whatever `phi` names: where the ranks' fingerprints
+    /// differ (the builder's agreement).
+    pub(super) phi_product: Vec<bool>,
 }
 
 impl Default for DiagonalSettings {
@@ -539,6 +553,8 @@ impl Default for DiagonalSettings {
             chunk: None,
             costs: None,
             shapes: None,
+            phi: HelmholtzPhiStep::Product,
+            phi_product: Vec::new(),
         }
     }
 }
@@ -584,6 +600,8 @@ impl DiagonalSettings {
 pub(super) struct DiagonalLevel<T> {
     pub(super) m2l: DiagonalM2l<T>,
     pub(super) conversions: Conversions<T>,
+    /// The φ step's plans, or `None` for the product (Helmholtz CH4.6a1).
+    pub(super) phi: Option<Box<dyn PhiTransform<T>>>,
     /// The wall time of building the transfer functions and the conversions (Helmholtz
     /// CH4.2b2).
     pub(super) build: (Duration, Duration),
@@ -592,6 +610,131 @@ pub(super) struct DiagonalLevel<T> {
 impl<T: SimdScalar> DiagonalLevel<T> {
     fn samples(&self) -> usize {
         self.conversions.samples()
+    }
+
+    /// The φ step the level runs.
+    pub(super) fn phi_step(&self, setting: HelmholtzPhiStep) -> HelmholtzPhiStep {
+        if self.phi.is_some() {
+            setting
+        } else {
+            HelmholtzPhiStep::Product
+        }
+    }
+
+    /// S → F of a batch of expansions into a slice of strides (box b at `b * stride`), by the
+    /// level's φ step; `phi` is the thread's FFT scratch of this level.
+    fn s2f_strides(
+        &self,
+        expansions: &[T],
+        strides: &mut [Complex<T>],
+        stride: usize,
+        conversion: &mut ConversionScratch<T>,
+        phi: &mut [Complex<T>],
+    ) {
+        s2f_by(
+            &self.conversions,
+            self.phi.as_deref(),
+            expansions,
+            strides,
+            stride,
+            conversion,
+            phi,
+        );
+    }
+
+    /// F → R of boxes `first..` of `signatures` into a batch of locals, adding, by the level's
+    /// φ step; the FFT transforms those signatures in place (they are accumulators, zeroed
+    /// before their next use).
+    fn f2r_from(
+        &self,
+        signatures: &mut Signatures<T>,
+        first: usize,
+        locals: &mut [T],
+        conversion: &mut ConversionScratch<T>,
+        phi: &mut [Complex<T>],
+    ) {
+        match self.phi.as_deref() {
+            None => self
+                .conversions
+                .f2r_from(signatures, first, locals, conversion),
+            Some(fft) => {
+                let stride = signatures.stride();
+                let strides = &mut signatures.strides_mut()[first * stride..];
+                f2r_by(
+                    &self.conversions,
+                    Some(fft),
+                    strides,
+                    stride,
+                    locals,
+                    conversion,
+                    phi,
+                );
+            }
+        }
+    }
+}
+
+/// S → F of a batch of expansions into a slice of strides (box b at `b * stride`): the product
+/// (`fft` `None`, `Conversions::s2f_strides`), or the Legendre step's modes written into each
+/// box's samples and transformed there by `fft`'s synthesis with the scratch `phi` (Helmholtz
+/// CH4.6a1). A box's bits depend on its own expansion alone in both.
+fn s2f_by<T: SimdScalar>(
+    conversions: &Conversions<T>,
+    fft: Option<&dyn PhiTransform<T>>,
+    expansions: &[T],
+    strides: &mut [Complex<T>],
+    stride: usize,
+    conversion: &mut ConversionScratch<T>,
+    phi: &mut [Complex<T>],
+) {
+    match fft {
+        None => conversions.s2f_strides(expansions, strides, stride, conversion),
+        Some(fft) => {
+            let (azimuths, samples) = (conversions.azimuths(), conversions.samples());
+            conversions.s2f_modes(expansions, strides, azimuths, stride, conversion);
+            let boxes = expansions.len() / conversions.expansion_len();
+            for b in 0..boxes {
+                fft.synthesis(&mut strides[b * stride..b * stride + samples], phi);
+            }
+        }
+    }
+}
+
+/// F → R of a batch of signatures in a slice of strides (box b at `b * stride`) into a batch of
+/// locals, adding: the product (`fft` `None`), or each box's samples transformed in place by
+/// `fft`'s analysis with the scratch `phi`, then `Conversions::f2r_modes` (Helmholtz CH4.6a1).
+/// A box's bits depend on its own signature and local alone in both.
+fn f2r_by<T: SimdScalar>(
+    conversions: &Conversions<T>,
+    fft: Option<&dyn PhiTransform<T>>,
+    strides: &mut [Complex<T>],
+    stride: usize,
+    locals: &mut [T],
+    conversion: &mut ConversionScratch<T>,
+    phi: &mut [Complex<T>],
+) {
+    let (azimuths, samples, len) = (
+        conversions.azimuths(),
+        conversions.samples(),
+        conversions.expansion_len(),
+    );
+    let boxes = locals.len() / len;
+    match fft {
+        None => {
+            for b in 0..boxes {
+                conversions.f2r(
+                    &strides[b * stride..b * stride + samples],
+                    &mut locals[b * len..(b + 1) * len],
+                    conversion,
+                );
+            }
+        }
+        Some(fft) => {
+            for b in 0..boxes {
+                fft.analysis(&mut strides[b * stride..b * stride + samples], phi);
+            }
+            conversions.f2r_modes(strides, azimuths, stride, locals, conversion);
+        }
     }
 }
 
@@ -658,9 +801,16 @@ pub(super) fn select<T: SimdScalar>(
             let transfer = clock.elapsed();
             let clock = Instant::now();
             let conversions = Conversions::new(p, level.scale());
+            let step = if settings.phi_product.get(l).copied().unwrap_or(false) {
+                HelmholtzPhiStep::Product
+            } else {
+                settings.phi
+            };
+            let phi = phi::transform::<T>(step, conversions.azimuths());
             Some(DiagonalLevel {
                 m2l,
                 conversions,
+                phi,
                 build: (transfer, clock.elapsed()),
             })
         })
@@ -681,6 +831,8 @@ fn store_for<T: SimdScalar>(layouts: impl Iterator<Item = (usize, usize)>) -> Si
 /// and the gather buffer of `BLOCK_BOXES` expansions of two planes.
 pub(super) struct DiagonalScratch<T> {
     conversions: Vec<Option<ConversionScratch<T>>>,
+    /// Each level's FFT scratch (empty for the product; Helmholtz CH4.6a1).
+    phi: Vec<Vec<Complex<T>>>,
     accumulators: Signatures<T>,
     gather: Vec<T>,
     /// This thread's time by part since the level call last drained it (the thread-seconds of
@@ -703,6 +855,16 @@ impl<T: SimdScalar> DiagonalScratch<T> {
                 .iter()
                 .map(|d| d.as_ref().map(|d| ConversionScratch::new(&d.conversions)))
                 .collect(),
+            phi: levels
+                .iter()
+                .map(|d| {
+                    let len = d
+                        .as_ref()
+                        .and_then(|d| d.phi.as_ref())
+                        .map_or(0, |f| f.scratch_len());
+                    vec![Complex::new(T::zero(), T::zero()); len]
+                })
+                .collect(),
             accumulators: store_for(levels.iter().flatten().map(|d| (d.samples(), boxes))),
             gather: vec![T::zero(); BLOCK_BOXES * 2 * Layout::new(p_max).len()],
             parts: DiagonalTimes::default(),
@@ -716,6 +878,7 @@ impl<T: SimdScalar> DiagonalScratch<T> {
             .flatten()
             .map(ConversionScratch::bytes)
             .sum::<usize>()
+            + self.phi.iter().map(Vec::len).sum::<usize>() * size_of::<Complex<T>>()
             + self.accumulators.bytes()
             + self.gather.len() * size_of::<T>()
     }
@@ -819,6 +982,7 @@ impl<T: SimdScalar> Kernel<T> {
         let mlen = planes * len / 2;
         let DiagonalScratch {
             conversions: scratches,
+            phi,
             accumulators,
             gather,
             ..
@@ -826,17 +990,18 @@ impl<T: SimdScalar> Kernel<T> {
         let conversion = scratches[level]
             .as_mut()
             .expect("the scratch has the level's conversions");
+        let phi = &mut phi[level];
         accumulators.relayout(samples, 2);
         let stride = accumulators.stride();
         for (v, local) in local.chunks_exact_mut(len).enumerate() {
             let expansion = &mut gather[..len];
             widen(&multipole[v * mlen..(v + 1) * mlen], planes, expansion);
             let (signature, accumulator) = accumulators.strides_mut().split_at_mut(stride);
-            conversions.s2f_strides(expansion, signature, stride, conversion);
+            diagonal.s2f_strides(expansion, signature, stride, conversion, phi);
             let accumulator = &mut accumulator[..samples];
             accumulator.fill(Complex::new(T::zero(), T::zero()));
             m2l.pair(d, &signature[..samples], accumulator);
-            conversions.f2r(accumulator, local, conversion);
+            diagonal.f2r_from(accumulators, 1, local, conversion, phi);
         }
     }
 }
@@ -857,10 +1022,10 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
             ..
         } = batch;
         let kernel = &self.kernel;
-        let diagonal = kernel
+        let form = kernel
             .diagonal_level(level)
             .expect("a diagonal level has tables");
-        let (m2l, conversions) = (&diagonal.m2l, &diagonal.conversions);
+        let (m2l, conversions) = (&form.m2l, &form.conversions);
         let (planes, m) = (
             kernel.densities.multipole_planes(),
             kernel.densities.vectors(),
@@ -932,6 +1097,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
                 |j, strides, scratch| {
                     let DiagonalScratch {
                         conversions: scratches,
+                        phi,
                         gather,
                         parts,
                         ..
@@ -954,7 +1120,13 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
                     let conversion = scratches[level]
                         .as_mut()
                         .expect("the scratch has the level's conversions");
-                    conversions.s2f_strides(&gather[..nb * len], strides, stride, conversion);
+                    form.s2f_strides(
+                        &gather[..nb * len],
+                        strides,
+                        stride,
+                        conversion,
+                        &mut phi[level],
+                    );
                     parts.s2f += busy.elapsed();
                 },
             );
@@ -981,6 +1153,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
                 } = scratch;
                 let DiagonalScratch {
                     conversions: scratches,
+                    phi,
                     accumulators,
                     parts,
                     ..
@@ -1027,11 +1200,12 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
                     while end < n && has_diagonal(t0 + end) {
                         end += 1;
                     }
-                    conversions.f2r_from(
+                    form.f2r_from(
                         accumulators,
                         i * m,
                         &mut block[i * size..end * size],
                         conversion,
+                        &mut phi[level],
                     );
                     i = end;
                 }
@@ -1235,5 +1409,294 @@ mod tests {
         }
         assert_eq!(diagonal_costs(Isa::Avx2), DIAGONAL_COSTS_X86);
         assert_eq!(diagonal_costs(Isa::Scalar), DIAGONAL_COSTS_X86);
+    }
+}
+
+/// The φ step by rustfft against the product, and a box's bits under it (Helmholtz CH4.6a1).
+///
+/// Error measure: the largest absolute difference of a signature sample (S → F) or local value
+/// (F → R) over the largest absolute value of the product's result, within `PHI_BOUND` u of the
+/// precision. A box in a batch, at any position and on any thread, against the box alone: bit
+/// for bit (`to_bits`).
+#[cfg(all(test, feature = "rustfft"))]
+mod phi_tests {
+    use super::*;
+    use rayon::prelude::*;
+
+    /// The bound in u; the measured worst is printed.
+    const PHI_BOUND: f64 = 256.0;
+
+    /// A box converted alone: its signature's bits, and its local's.
+    type Alone = (Vec<(u64, u64)>, Vec<u64>);
+
+    fn values<T: SimdScalar>(count: usize, seed: u64) -> Vec<T> {
+        let mut state = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+        (0..count)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                T::from_f64((state >> 11) as f64 / (1u64 << 52) as f64 - 1.0)
+            })
+            .collect()
+    }
+
+    fn largest(values: impl Iterator<Item = f64>) -> f64 {
+        values.fold(0.0, f64::max)
+    }
+
+    fn plans<T: SimdScalar>(conversions: &Conversions<T>) -> Box<dyn PhiTransform<T>> {
+        phi::transform::<T>(HelmholtzPhiStep::RustFft, conversions.azimuths())
+            .expect("rustfft's plans")
+    }
+
+    /// S → F and F → R of `boxes` boxes by rustfft against the product; returns the worst errors
+    /// in u.
+    fn against_the_product<T: SimdScalar>(p: usize, scale: f64, boxes: usize) -> (f64, f64) {
+        let conversions = Conversions::<T>::new(p, scale);
+        let fft = plans(&conversions);
+        let mut conversion = ConversionScratch::new(&conversions);
+        let mut scratch = vec![Complex::new(T::zero(), T::zero()); fft.scratch_len()];
+        let (len, samples) = (conversions.expansion_len(), conversions.samples());
+        let stride = Signatures::<T>::stride_for(samples);
+        let zero = Complex::new(T::zero(), T::zero());
+        let u = T::epsilon().to_f64();
+
+        let multipoles = values::<T>(boxes * len, p as u64 + 1);
+        let (mut product, mut fast) = (vec![zero; boxes * stride], vec![zero; boxes * stride]);
+        s2f_by(
+            &conversions,
+            None,
+            &multipoles,
+            &mut product,
+            stride,
+            &mut conversion,
+            &mut scratch,
+        );
+        s2f_by(
+            &conversions,
+            Some(&*fft),
+            &multipoles,
+            &mut fast,
+            stride,
+            &mut conversion,
+            &mut scratch,
+        );
+        let mut s2f_worst = 0.0f64;
+        for b in 0..boxes {
+            let (e, f) = (
+                &product[b * stride..][..samples],
+                &fast[b * stride..][..samples],
+            );
+            let scale = largest(e.iter().map(|z| z.norm().to_f64()));
+            let error = largest(e.iter().zip(f).map(|(a, b)| (a - b).norm().to_f64()));
+            s2f_worst = s2f_worst.max(error / (u * scale));
+        }
+
+        let signatures = values::<T>(2 * boxes * stride, p as u64 + 2);
+        let mut strides: Vec<Complex<T>> = signatures
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&[re, im]| Complex::new(re, im))
+            .collect();
+        let start = values::<T>(boxes * len, p as u64 + 3);
+        let (mut expected, mut got) = (start.clone(), start);
+        let mut copy = strides.clone();
+        f2r_by(
+            &conversions,
+            None,
+            &mut copy,
+            stride,
+            &mut expected,
+            &mut conversion,
+            &mut scratch,
+        );
+        f2r_by(
+            &conversions,
+            Some(&*fft),
+            &mut strides,
+            stride,
+            &mut got,
+            &mut conversion,
+            &mut scratch,
+        );
+        let scale = largest(expected.iter().map(|v| v.abs().to_f64()));
+        let f2r_worst = largest(
+            expected
+                .iter()
+                .zip(&got)
+                .map(|(a, b)| (*a - *b).abs().to_f64()),
+        ) / (u * scale);
+        (s2f_worst, f2r_worst)
+    }
+
+    fn check<T: SimdScalar>(degrees: &[usize]) {
+        for &p in degrees {
+            for scale in [1.0, 0.61] {
+                let (s2f, f2r) = against_the_product::<T>(p, scale, 5);
+                println!(
+                    "rustfft against the product, {} p = {p} s = {scale}: S → F {s2f:.1} u, F → R {f2r:.1} u",
+                    core::any::type_name::<T>()
+                );
+                assert!(s2f <= PHI_BOUND, "S → F p {p}: {s2f:.1} u");
+                assert!(f2r <= PHI_BOUND, "F → R p {p}: {f2r:.1} u");
+            }
+        }
+    }
+
+    #[test]
+    fn rustfft_against_the_product() {
+        check::<f64>(&[0, 1, 2, 6, 12, 24]);
+        check::<f32>(&[6, 12]);
+    }
+
+    #[test]
+    #[ignore = "large degrees: run in release"]
+    fn rustfft_against_the_product_at_large_degrees() {
+        check::<f64>(&[41, 72, 131, 245]);
+        check::<f32>(&[41, 72]);
+    }
+
+    /// A box's signature and local by rustfft in batches of 1, 2, 7 and 33 at every position and
+    /// on pools of 1, 2 and 4 threads (a scratch per worker), bit for bit the box alone.
+    #[test]
+    fn a_box_has_the_same_bits_in_every_batch_and_thread() {
+        let p = 11;
+        let conversions = Conversions::<f64>::new(p, 1.0);
+        let fft = plans(&conversions);
+        let (len, samples) = (conversions.expansion_len(), conversions.samples());
+        let stride = Signatures::<f64>::stride_for(samples);
+        let zero = Complex::new(0.0, 0.0);
+        let total = 33;
+        let multipoles = values::<f64>(total * len, 7);
+        let starts = values::<f64>(total * len, 9);
+        let bits = |z: &[Complex<f64>]| -> Vec<(u64, u64)> {
+            z.iter().map(|z| (z.re.to_bits(), z.im.to_bits())).collect()
+        };
+        // Each box alone: its signature, and its local from that signature.
+        let mut conversion = ConversionScratch::new(&conversions);
+        let mut scratch = vec![zero; fft.scratch_len()];
+        let alone: Vec<Alone> = (0..total)
+            .map(|b| {
+                let mut signature = vec![zero; stride];
+                s2f_by(
+                    &conversions,
+                    Some(&*fft),
+                    &multipoles[b * len..(b + 1) * len],
+                    &mut signature,
+                    stride,
+                    &mut conversion,
+                    &mut scratch,
+                );
+                let kept = bits(&signature[..samples]);
+                let mut local = starts[b * len..(b + 1) * len].to_vec();
+                f2r_by(
+                    &conversions,
+                    Some(&*fft),
+                    &mut signature,
+                    stride,
+                    &mut local,
+                    &mut conversion,
+                    &mut scratch,
+                );
+                (kept, local.iter().map(|v| v.to_bits()).collect())
+            })
+            .collect();
+        for batch in [1, 2, 7, 33] {
+            for threads in [1, 2, 4] {
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .expect("a pool");
+                let mut signatures = vec![zero; total * stride];
+                let mut locals = starts.clone();
+                pool.install(|| {
+                    signatures
+                        .par_chunks_mut(batch * stride)
+                        .zip(multipoles.par_chunks(batch * len))
+                        .zip(locals.par_chunks_mut(batch * len))
+                        .for_each_init(
+                            || {
+                                (
+                                    ConversionScratch::new(&conversions),
+                                    vec![zero; fft.scratch_len()],
+                                )
+                            },
+                            |(conversion, scratch), ((strides, expansions), locals)| {
+                                s2f_by(
+                                    &conversions,
+                                    Some(&*fft),
+                                    expansions,
+                                    strides,
+                                    stride,
+                                    conversion,
+                                    scratch,
+                                );
+                                f2r_by(
+                                    &conversions,
+                                    Some(&*fft),
+                                    strides,
+                                    stride,
+                                    locals,
+                                    conversion,
+                                    scratch,
+                                );
+                            },
+                        );
+                });
+                // The signatures were transformed in place by F → R; the locals are checked.
+                for (b, (_, local)) in alone.iter().enumerate() {
+                    assert!(
+                        locals[b * len..(b + 1) * len]
+                            .iter()
+                            .map(|v| v.to_bits())
+                            .eq(local.iter().copied()),
+                        "F → R box {b}, batch {batch}, {threads} threads"
+                    );
+                }
+            }
+        }
+        // S → F in batches against the box alone (before F → R transforms the samples).
+        for batch in [1, 2, 7, 33] {
+            for threads in [1, 2, 4] {
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .expect("a pool");
+                let mut signatures = vec![zero; total * stride];
+                pool.install(|| {
+                    signatures
+                        .par_chunks_mut(batch * stride)
+                        .zip(multipoles.par_chunks(batch * len))
+                        .for_each_init(
+                            || {
+                                (
+                                    ConversionScratch::new(&conversions),
+                                    vec![zero; fft.scratch_len()],
+                                )
+                            },
+                            |(conversion, scratch), (strides, expansions)| {
+                                s2f_by(
+                                    &conversions,
+                                    Some(&*fft),
+                                    expansions,
+                                    strides,
+                                    stride,
+                                    conversion,
+                                    scratch,
+                                );
+                            },
+                        );
+                });
+                for (b, (kept, _)) in alone.iter().enumerate() {
+                    assert_eq!(
+                        &bits(&signatures[b * stride..][..samples]),
+                        kept,
+                        "S → F box {b}, batch {batch}, {threads} threads"
+                    );
+                }
+            }
+        }
     }
 }
