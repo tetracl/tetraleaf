@@ -4988,4 +4988,8 @@ request, using this template:
   CH4.9a and CH4.9b (P2M and L2P by SIMD kernels) added as item 14 of the priority list, before H2
   (the user, 2026-11-26: "Yes. Add P2M and L2P to the priority list as tasks"). Also seen there: at
   kD = 1000 the M2M into levels 0–1 (degree 0, read by nothing) costs 0.45 s of 15.2 s, not yet a
-  task.
+  task. Laplace measured the same way (Kathleen job 673084, `scaling --kinds`, the cube at N = 10⁷):
+  P2M + L2P 19–42 % of the compute at p = 3–18, also per-point reference calls; CH4.9c added off the
+  priority list (the user, 2026-11-26: "Please add it to the roadmap"). Also seen there: at 1 × 40
+  the forward charges and backward output take about 690 ms of the 1,916 ms evaluation at p = 8 on
+  one rank, not yet a task.

@@ -731,6 +731,22 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, sharing CH4.9a's recurrences; the
   evaluation's time under the defaults before and after CH4.9a–b on CH4.6a2's cases. *Needs:*
   CH4.9a. *Machines:* Kathleen, locust.
+- [ ] **CH4.9c Laplace's P2M and L2P by SIMD kernels.** Added on 2026-11-26 (the user: "Please add it
+  to the roadmap"); off the priority list. A Laplace task: constraint 1 binds in full. Measured on
+  Kathleen (job 673084, the cube at N = 10⁷, f64, the library's defaults, gradients, `scaling --kinds`
+  at 1 × 40 and 40 × 1; outputs `~/projects/fmm-archive/kathleen/runs/laplace-kinds/`): P2M + L2P
+  19 % of the compute at p = 3, 34–35 % at p = 8, 39–42 % at p = 12 and 36–40 % at p = 18, 1.3–6.5×
+  the P2P from p = 8 on, L2P 1.5–2.3× P2M; they run `tetraleaf_ref::leaf::{p2m_many, l2p_many}`
+  per point (`LaplaceOperator::{p2m, l2p}`). *Done when:* P2M (charges and dipoles) and L2P (with
+  gradients) kernels in `tetraleaf-simd` on the P2P's ISAs, vectorised over a leaf's points and
+  sharing CH4.9a–b's design where it fits, run under `P2pChoice` (`Reference` the per-point calls,
+  the trusted path); within a contract per leaf against `tetraleaf_ref::leaf` in f64 and f32; the
+  FMM's errors within the C3.2 and C3.3 gates; every bit-identity check of `mpi_exec`,
+  `invariance` and `multi_rank` (threads, overlap, ranks, several vectors) holding for the new
+  kernel; Laplace's outputs on `Reference` unchanged bit for bit; on the default kernel new bits
+  only with the user's sign-off (constraint 1), and the Laplace fixtures kept; the device path
+  unchanged; D9's benchmarks before and after on the M6 (with the user's go-ahead), locust and
+  Kathleen. *Needs:* CH4.9b (the design shared). *Machines:* Kathleen, locust, the M6.
 - [x] **H4.G Gate.** `/milestone-gate H4`. Report `docs/helmholtz/gates/H4.md`, reviews
   `docs/reviews/2026-11-24-H4.md` and `docs/reviews/2026-11-25-H4.md`. The first run (#258, 2026-11-24)
   kept H4 open for CH4.8; the second (#262, 2026-11-25) found the condition met on both machine
