@@ -46,6 +46,9 @@ CH4.6a3 (the smooth grid) is built.
    noise or a mix of gain and loss).
 6. **The M6** (§7): skipped at the user's word before any run (2026-11-26: "Skip the M6"; question
    3).
+7. **Signed off** on #266 (2026-11-26, the user: "Q1-3 as recommended"): the product's grid kept and
+   CH4.6a3 closed unrun; no FFT variant of `DiagonalCosts`; CH4.6a's acceptance without the M6.
+   Proposal §6.7, §10 and D7 amended.
 
 ## 1. Setup
 

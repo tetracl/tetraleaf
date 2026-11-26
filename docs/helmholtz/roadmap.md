@@ -9,18 +9,17 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-26): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). The FFT track
-(item 13): CH0.9 and CH4.6a1 done; CH4.6a2 (the time per level, product against rustfft) done in its
-PR on Kathleen and locust, the M6 skipped by the user; its questions ask to keep the
-product's grid (CH4.6a3 closed unrun) and the product's time-rule costs. Next, after its sign-off,
-H2 and H5 (items 14–15), CH2.1 first. Eight H4 tasks stay open off the list. The project was renamed
-tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are
-done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's
-history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show
-8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show 4d28d41:docs/helmholtz/roadmap.md`;
-until its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show
-6bad3c2:docs/helmholtz/roadmap.md`; until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`;
-until CH4.6a1 in `git show 34e3caf:docs/helmholtz/roadmap.md`; until CH4.6a2 in `git show
-7c8177d:docs/helmholtz/roadmap.md`.
+(item 13) is done: CH0.9, CH4.6a1 and CH4.6a2 (rustfft 0.89–0.99× of an evaluation on Kathleen and
+locust, on the product's grid), CH4.6a3 closed unrun at CH4.6a2's sign-off, D7 amended (the M6 not
+timed, at the user's word). Next H2 and H5 (items 14–15), CH2.1 first. Eight H4 tasks stay open off
+the list. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open;
+of H0, CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is
+in `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until
+H1.G in `git show 8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show
+4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git show
+03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show 6bad3c2:docs/helmholtz/roadmap.md`;
+until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`; until CH4.6a1 in `git show
+34e3caf:docs/helmholtz/roadmap.md`; until CH4.6a2 in `git show 7c8177d:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -135,7 +134,7 @@ The proposal's Section 12, plus D0. A decision is recorded here when the user ta
 | D4 | Yukawa: its own operator type, or the wavenumber kind as a type parameter | one `HelmholtzOperator<T, K>` if CH2.1 shows no cost to the complex path | CH2.1 | CH2.2 | open |
 | D5 | Source types of the first release | real and complex charges, potentials and gradients; dipoles once C6.4 exists for Laplace (note: Laplace dipoles were merged in Phase 6 T8 and T8d, so the condition is met) | – | CH1.1 | signed off 2026-10-29: charges now, dipoles later; §3.15 fixes real and complex charges with potentials and gradients, and dipoles get a later, separate task; that task is CH9.0, added at the H1 gate (the user, 2026-11-19, on #230: "Add CH9.0 (Recommended)") |
 | D6 | Order of H4 and H6 | H6 first | H3.G | CH6.1, CH4.1 | signed off 2026-11-02 (H3 gate, question 2): "i agree with the recommendations", H6 first, as recommended; on the gate report's reason (§3.3): the calibrated degrees cut the low-frequency share of the far field at kD = 500 to about half (an estimate), and the FMM is slowest against FMM3D on low-frequency trees at tight ε, which H6 targets |
-| D7 | Host back ends of the φ step | the product as default and reference; FFTW behind the optional `fftw` feature; rustfft if S9 finds it deterministic per box and faster, decided per machine | CH0.9 | CH4.6a, CHR.3, CH4.6b | signed off 2026-11-26: "Q1-3 as recommended" (#264; `spikes/fft-plans/SPIKE_REPORT.md` §6): the product the default and reference on every machine; rustfft the one optional FFT back end (CH4.6a), with a check across ranks and the M6's times; FFTW (CHR.3, CH4.6b) off the priority list, kept in the roadmap |
+| D7 | Host back ends of the φ step | the product as default and reference; FFTW behind the optional `fftw` feature; rustfft if S9 finds it deterministic per box and faster, decided per machine | CH0.9 | CH4.6a, CHR.3, CH4.6b | signed off 2026-11-26: "Q1-3 as recommended" (#264; `spikes/fft-plans/SPIKE_REPORT.md` §6): the product the default and reference on every machine; rustfft the one optional FFT back end (CH4.6a), with a check across ranks and the M6's times; FFTW (CHR.3, CH4.6b) off the priority list, kept in the roadmap. Amended 2026-11-26 (CH4.6a2, questions 1–3; the user on #266: "Q1-3 as recommended"): rustfft on the product's grid (CH4.6a3 closed unrun), the time rule's costs the product's under either φ step, the M6's times not taken (the user: "Skip the M6"); proposal §6.7, §10 and §12 amended |
 | D8 | Exponential M2L as a default on low-frequency levels | after CH6.2 | CH6.2h | CH7.5d | signed off 2026-11-08 (CH6.2h, questions 1–5; the user: "1–5 as recommended"): `Auto` takes the exponential M2L by default where p_l ≥ d_pw (Batched's crossover + 1; 12 on AVX-512 with two planes), CH6.1e's rule gives a quadrature (ε ≥ 10⁻⁶) and Im κ_l < 5π, f64 only; no boxes term (Batched's few-box levels to CH4.0); proposal §5.3 and §6.4 amended. Amended 2026-11-11 (CH6.1g, question 2; the user: "Lift for 10⁻⁸–10⁻⁷ only (Recommended)"): `Auto` also takes it at 10⁻⁸ ≤ ε < 10⁻⁷, where the rule runs iprec 3 at the raised degree max(p_l, 32), and not at 10⁻⁷ ≤ ε < 10⁻⁶ until CH6.1h; proposal §5.3 amended. Amended 2026-11-11 (CH6.1h, question 2; the user: "Lift it (Recommended)"): `Auto` also takes it at 10⁻⁷ ≤ ε < 10⁻⁶, with the raised degree on the M2L alone there (`PlaneWaveRaise::Rule`); proposal §5.3 amended. Amended 2026-11-22 (CH4.3b2c, question 3; the user on #251, 2026-11-22: "Q1-5 as recommended"): with the diagonal form's time rule the builder's default, a level of D8's rule in its range (k a ≥ 2.8) keeps the waves unless the form beats them at the level's resolving degree, then runs the cheaper of the form and RCR; proposal §5.3, §6.4 and §12 amended |
 | D9 | What "within noise" means for Laplace's benchmarks (constraint 1) | the run-to-run spread of the Laplace baseline, repeated on each machine before the change, per benchmark; plus the C3S.4 throughput gate | – | CHR.2, CH2.0 | signed off 2026-10-26: as recommended, the measured spread of the baseline per benchmark and machine, plus the C3S.4 gate. Clarified 2026-10-26 (CHR.2): one-sided, slower than `main` by more than the spread fails, faster passes when the outputs are bit for bit identical; from CH2.0 on five runs per side in the order A B B A A B B A A B, the spread max − min of `main`'s five run medians, never pooled with the branch's. Amended 2026-10-31 (CH2.0, the user: "as recommended"): a failing row may be repeated once and the repeat counts, with both results reported. Amended 2026-10-31 (the machine move, the user: "Amend: M6 replaces M3 Max"): the M6 (`tools/m6/machine.md`) replaces the M3 Max as a machine of record, its C3S.4 reference `spikes/p2p-simd/results-m6.md` |
 | D10 | cubek-fft on the device | after S5: adopt, contribute upstream first, or keep the transform as a GEMM | CH0.5 | CH7.4 | open |
@@ -686,15 +685,12 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   1 × 40) and 0.91–0.99× (locust, 1 × 72), errors 0.993–1.000×; the smooth grid 1.000–1.005× per
   evaluation; the time rule's costs need no FFT variant; the harness's `--phi-step`. Report
   `tetraleaf-validate/results/helmholtz-ch4-6a2.md`, record `docs/helmholtz/tasks/CH4.6a2.md`. The M6
-  skipped (the user, 2026-11-26: "Skip the M6"). Questions 1–3 of the PR (keep the product's grid
-  and close CH4.6a3 unrun; no FFT costs; the acceptance without the M6) for sign-off.
-- [ ] **CH4.6a3 The smooth grid, chosen per level by its time.** CH4.6a2 recommends closing it
-  unrun (its question 1: the smooth grid priced at 1.000–1.005× of an evaluation on Kathleen and locust). *Done when:* `Grid` at a chosen
-  N_φ (4P − 3 up to a 7-smooth multiple of 4), the conversions and transfer functions on it under
-  their own table key, round-off against the product's grid; a level's grid (the product's or the
-  smooth one) chosen by a rule fitted on CH4.6a2's times per machine class (constraint 9: no time
-  measured at run time); the time per level against the product on the M6, locust and Kathleen.
-  *Needs:* CH4.6a2 and its sign-off. *Machines:* locust, Kathleen, the M6.
+  skipped (the user, 2026-11-26: "Skip the M6"). Signed off on #266 (2026-11-26, the user: "Q1-3 as
+  recommended"): the product's grid kept and CH4.6a3 closed unrun; no FFT costs; the acceptance
+  without the M6; proposal §6.7, §10 and D7 amended.
+- [x] **CH4.6a3 The smooth grid, chosen per level by its time.** Closed unrun by CH4.6a2's sign-off
+  (#266, 2026-11-26: "Q1-3 as recommended"): the smooth grid priced at 1.000–1.005× of an
+  evaluation on Kathleen and locust; rustfft stays on the product's grid.
 - [ ] **CH4.6b The optional FFTW back end of the φ step.** CH4.6 until CH0.9; off the priority list
   since then (D7). *Done when:* against the product to round-off; per-box plans with bits the same
   across batch positions, sizes and threads, and fingerprints all-gathered; off by default, a default

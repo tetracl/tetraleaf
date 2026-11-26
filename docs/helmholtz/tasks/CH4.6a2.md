@@ -157,3 +157,9 @@ spread, two statements of §2, the plan's pending runs, the misplaced doc commen
 
 ## Open questions
 Asked before any run, 2026-11-26: the M6's timing launches; the user: "Skip the M6".
+
+For sign-off on #266, signed off 2026-11-26, the user: "Q1-3 as recommended":
+1. Keep the product's grid for rustfft and close CH4.6a3 unrun.
+2. No FFT variant of `DiagonalCosts`; the product's costs stay the rule's under either φ step.
+3. CH4.6a's acceptance without the M6's times.
+Proposal §6.7, §10 (CH4.6a) and §12 (D7) amended inline ("amended at CH4.6a2"), Appendix A.

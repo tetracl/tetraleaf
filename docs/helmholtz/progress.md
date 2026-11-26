@@ -4976,9 +4976,10 @@ request, using this template:
   `helmholtz_accuracy` 400 s at load 11); the harness test with the feature at 1 rank (92 passed) and
   2 ranks by hand. Not run: the MPI list (no change to exec, plan or octree). The M6 not run (the
   user, 2026-11-26: "Skip the M6"). Nothing pending.
-- Decisions: questions for sign-off on the PR: (1) keep the product's grid and close CH4.6a3 unrun;
-  (2) no FFT variant of `DiagonalCosts`; (3) CH4.6a's acceptance without the M6's times.
+- Decisions: questions 1–3 of #266 signed off by the user, 2026-11-26: "Q1-3 as recommended":
+  (1) the product's grid kept, CH4.6a3 closed unrun; (2) no FFT variant of `DiagonalCosts`;
+  (3) CH4.6a's acceptance without the M6's times. Proposal §6.7, §10 (CH4.6a) and §12 (D7) amended,
+  with a line in its Appendix A; D7 amended in the roadmap.
 - Laplace: not touched (the harness, scripts, documents and one CI step).
-- Follow-ups: CH4.6a3 (closed unrun if question 1 is signed off, else built); an Also on CH4.7: the
-  levels the time rule keeps on the waves where the form is faster under either step; then H2
-  (CH2.1).
+- Follow-ups: an Also on CH4.7: the levels the time rule keeps on the waves where the form is
+  faster under either step; next H2 (CH2.1).
