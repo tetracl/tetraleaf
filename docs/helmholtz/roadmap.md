@@ -110,8 +110,9 @@ on the diagonal levels).
 12. CHA.10a The report scripts' shared module (added on 2026-11-25 at the H4 gate's second run)
 13. CH0.9 S9, CH4.6a the optional rustfft back end (CH4.6a1–a3; split on 2026-11-26). D7, signed off at CH0.9 (the user on #264,
     2026-11-26: "Q1-3 as recommended"), moved CHR.3 and CH4.6b, the FFTW route, off the list
-14. CH4.9a, CH4.9b The Helmholtz leaf expansions P2M and L2P by SIMD kernels (added on 2026-11-26
-    after CH4.6a2, the user: "Yes. Add P2M and L2P to the priority list as tasks")
+14. CH4.9a (CH4.9a1, CH4.9a2; split on 2026-11-26), CH4.9b The Helmholtz leaf expansions P2M and
+    L2P by SIMD kernels (added on 2026-11-26 after CH4.6a2, the user: "Yes. Add P2M and L2P to the
+    priority list as tasks")
 15. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
     CH2.1 and CH2.2 wait for D4, which CH2.1 prepares)
 16. CH5.1, CH5.2, CH5.3 and H5.G Complex wavenumber (added on 2026-11-24 at the H4 gate)
@@ -717,20 +718,32 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   evaluation on W1 at kD = 250–1000 and W3 at kD = 500 (largest at 10⁻⁸ and at kD = 250; L2P the
   larger, 1.58 s of W1 at kD = 1000's 15.2 s on the finest level), where they run one scalar
   `tetraleaf_ref::helmholtz::leaf` call per point (`Densities::{p2m, l2p}`).
-- [ ] **CH4.9a P2M by a SIMD kernel.** *Done when:* `helmholtz_accuracy --levels` prints P2M, M2M,
-  L2L and L2P per level (the table of job 673083); a P2M kernel in `tetraleaf-simd`, vectorised over
-  a leaf's points on the P2P's ISAs (AVX-512, AVX2, NEON, scalar), for real and complex k, real and
-  complex charges and m vectors, run by the operator's `P2pChoice` (`Reference` keeps the per-point
-  reference calls, the trusted path); within a contract per leaf against
-  `tetraleaf_ref::helmholtz::leaf::p2m` in f64 and f32; a leaf's bits the same at every thread count
-  and on P ranks the one-rank FMM's; the FMM's errors within 1.01× the reference path's; P2M's time
-  per level against the reference path on Kathleen and locust (the M6 with the user's go-ahead).
-  Constraint 1: Laplace's kernels and outputs in `tetraleaf-simd` unchanged. Yukawa's
-  `p2m_yukawa` an Also for H2. *Needs:* CH3.4c. *Machines:* Kathleen, locust.
+- CH4.9a P2M by a SIMD kernel. Split on 2026-11-26 into CH4.9a1 and CH4.9a2, measuring before the
+  kernel is built (the user: "Split a1/a2 (Recommended)"): on Kathleen the reference took about
+  10 ns per term for P2M and 24 ns for L2P with gradients (W1 at kD = 1000, p = 17), so most of a
+  point's time is setup (the radial recursion, the harmonics, the exponential), and the kernel's
+  shape is not yet known. The original *Done when*, with the table first: `helmholtz_accuracy
+  --levels` prints P2M, M2M, L2L and L2P per level; a P2M kernel vectorised over a leaf's points on
+  the P2P's ISAs, for real and complex k, real and complex charges and m vectors, run by the
+  operator's `P2pChoice` (`Reference` the per-point reference calls), within a contract per leaf
+  against `tetraleaf_ref::helmholtz::leaf::p2m` in f64 and f32, a leaf's bits the same at every
+  thread count and on P ranks the one-rank FMM's, the FMM's errors within 1.01× the reference
+  path's, P2M's time per level on Kathleen and locust (the M6 with the user's go-ahead); constraint
+  1; Yukawa's `p2m_yukawa` an Also for H2.
+- [ ] **CH4.9a1 Where a point's P2M and L2P time goes, and the per-level table.** *Done when:*
+  `helmholtz_accuracy --levels` prints P2M, M2M, L2L and L2P per level (with its documentation and a
+  test); an MPI-free example times one point's P2M and L2P (with and without gradients) by part
+  (the radial functions, the harmonics and their derivatives, the sum, the rest) on one core, at
+  the leaf levels' degrees and k ρ of W1–W3 under the defaults, f64 and f32, against the reference
+  call, on Kathleen and locust; a question for sign-off: the kernel's design (restructured safe Rust
+  in `tetraleaf-exec` or `tetraleaf-tables`, an ISA kernel in `tetraleaf-simd`, or both) and the
+  order of CH4.9a2 and CH4.9b. *Needs:* CH3.4c. *Machines:* Kathleen, locust.
+- [ ] **CH4.9a2 P2M by the kernel chosen.** *Done when:* CH4.9a's *Done when* less the table, the
+  kernel as signed off at CH4.9a1. *Needs:* CH4.9a1 and its sign-off. *Machines:* Kathleen, locust.
 - [ ] **CH4.9b L2P with gradients by a SIMD kernel.** *Done when:* as CH4.9a for L2P, potentials and
   gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, sharing CH4.9a's recurrences; the
   evaluation's time under the defaults before and after CH4.9a–b on CH4.6a2's cases. *Needs:*
-  CH4.9a. *Machines:* Kathleen, locust.
+  CH4.9a2. *Machines:* Kathleen, locust.
 - [ ] **CH4.9c Laplace's P2M and L2P by SIMD kernels.** Added on 2026-11-26 (the user: "Please add it
   to the roadmap"); off the priority list. A Laplace task: constraint 1 binds in full. Measured on
   Kathleen (job 673084, the cube at N = 10⁷, f64, the library's defaults, gradients, `scaling --kinds`
