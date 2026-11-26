@@ -9,18 +9,18 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-26): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). The FFT track
-(item 13): CH0.9 done, D7 signed off (the product the default, rustfft the one optional FFT back
-end); CH4.6a split into CH4.6a1–a3, and CH4.6a1 (the φ step behind a trait, rustfft behind the
-feature `rustfft`, on the product's grid) done in its PR. Next CH4.6a2 (the time per level on
-locust, Kathleen and the M6, with a question on the smooth grid), then H2 and H5 (items 14–15).
-Eight H4 tasks stay open off the list. The project was renamed tetraleaf on 2026-11-21. HR, H0,
-H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The
-history of this line until H6.G is in `progress.md` and in this file's history (`git show
-4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show 8475009:docs/helmholtz/roadmap.md`;
-until the H4 gate in `git show 4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git
-show 03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show
+(item 13): CH0.9 and CH4.6a1 done; CH4.6a2 (the time per level, product against rustfft) done in its
+PR on Kathleen, locust pending there, the M6 skipped by the user; its questions ask to keep the
+product's grid (CH4.6a3 closed unrun) and the product's time-rule costs. Next, after its sign-off,
+H2 and H5 (items 14–15), CH2.1 first. Eight H4 tasks stay open off the list. The project was renamed
+tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are
+done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's
+history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show
+8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show 4d28d41:docs/helmholtz/roadmap.md`;
+until its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show
 6bad3c2:docs/helmholtz/roadmap.md`; until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`;
-until CH4.6a1 in `git show 34e3caf:docs/helmholtz/roadmap.md`.
+until CH4.6a1 in `git show 34e3caf:docs/helmholtz/roadmap.md`; until CH4.6a2 in `git show
+7c8177d:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -677,18 +677,16 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   the form's own 1 u sensitivity, errors 1.0000×; fingerprints agreed over the ranks; CI
   `run-tests-rustfft`. Record `docs/helmholtz/tasks/CH4.6a1.md`. That reading of §10's
   "round-off" signed off 2026-11-26 (the user on #265: "I accept PR Question 1").
-- [ ] **CH4.6a2 The time per level against the product, both grids priced.** *Done when:* each
-  diagonal level's conversions and level call, the product against rustfft on the product's grid,
-  on locust, Kathleen and the M6 (the M6 with the user's go-ahead; S9 did not time it), on W1 at
-  kD = 250–1000 and W3 at kD = 500; the smooth grid priced from S9's per-box FFT times and the
-  level's measured pair cost at its larger N_φ; a question for sign-off: build the smooth grid
-  (CH4.6a3) or keep the product's grid and close CH4.6a3 unrun. Also (from CH4.6a1): the harness
-  (`tetraleaf-validate`'s `helmholtz_accuracy`) takes the φ step as a setting and records the back
-  end and rustfft's CPU features that ran (proposal §6.7: results files record the back end); and
-  whether the time rule's `DiagonalCosts` need an FFT variant (CH4.6a1 kept the product's costs, so
-  rustfft never changes which levels take the form). *Needs:* CH4.6a1. *Machines:* locust,
-  Kathleen, the M6.
-- [ ] **CH4.6a3 The smooth grid, chosen per level by its time.** *Done when:* `Grid` at a chosen
+- [x] **CH4.6a2 The time per level against the product, both grids priced.** On Kathleen (1 × 40)
+  rustfft's conversions 0.23–0.60× the product's, the diagonal levels 0.63–0.93×, the evaluation
+  0.89–0.95×, errors 1.0000×; the smooth grid 1.000–1.004× per evaluation; the time rule's costs need
+  no FFT variant (one level of 13 cases moves, within noise); the harness's `--phi-step`. Report
+  `tetraleaf-validate/results/helmholtz-ch4-6a2.md`, record `docs/helmholtz/tasks/CH4.6a2.md`. The M6
+  skipped (the user, 2026-11-26: "Skip the M6"); locust pending in the PR. Questions 1–3 of the PR
+  (keep the product's grid and close CH4.6a3 unrun; no FFT costs; the acceptance without the M6)
+  for sign-off.
+- [ ] **CH4.6a3 The smooth grid, chosen per level by its time.** CH4.6a2 recommends closing it
+  unrun (its question 1: the smooth grid priced at 1.000–1.004× of an evaluation on Kathleen). *Done when:* `Grid` at a chosen
   N_φ (4P − 3 up to a 7-smooth multiple of 4), the conversions and transfer functions on it under
   their own table key, round-off against the product's grid; a level's grid (the product's or the
   smooth one) chosen by a rule fitted on CH4.6a2's times per machine class (constraint 9: no time

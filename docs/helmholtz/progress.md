@@ -4942,3 +4942,37 @@ request, using this template:
   run is needed (D9): no code Laplace runs changed.
 - Follow-ups: CH4.6a2, with its new Also: the harness records the back end, and the time rule's
   costs for the FFT. Then CH4.6a3, depending on CH4.6a2's sign-off.
+
+## 2026-11-26: CH4.6a2 The time per level against the product, both grids priced
+- Done:
+  - The harness: `helmholtz_accuracy --phi-step product|rustfft` (`Case::phi_step`,
+    `Row::{phi_step, phi_steps}`), the line "φ step:" (rustfft's version and CPU features), a column
+    "φ" of "Diagonal M2L"; tetraleaf-validate's feature `rustfft` passes tetraleaf-exec's through
+    (no new dependency). CI's `run-tests-rustfft` runs Clippy of the harness with it.
+  - `tools/helmholtz/ch4-6a2-runs.sh` (`smoke`, `levels`, `waves`, `ffts`) and
+    `ch4-6a2-tables.py` on `common.py` (`runs`, `levels`, `smooth`, `rule`).
+  - Report `tetraleaf-validate/results/helmholtz-ch4-6a2.md`; record `docs/helmholtz/tasks/CH4.6a2.md`.
+- Results (Kathleen, 1 × 40, jobs 673075, 673077, 673078, one φ step per launch, ABBA):
+  - rustfft's S → F 0.27–0.46× and F → R 0.23–0.60× the product's thread time per conversion; the
+    diagonal levels' M2L 0.63–0.93×; the evaluation 0.89–0.95× (W3's within the product's spread),
+    build plus one evaluation 0.94–0.97×; errors 1.0000×, checksums agree per setting.
+  - The smooth grid, priced from S9's per-box times at the levels' degrees and the level's pairs at
+    the larger N_φ: 0.98–1.03× per level, 1.000–1.004× per evaluation; 0.991–1.001× with the FFT's
+    difference scaled to the level's whole conversion (an upper bound).
+  - The time rule: with the form's conversions at rustfft's ratio one level of 13 cases moves from
+    the waves to the form (W3, kD = 200, 10⁻⁶, level 4), 1.6 % of that level, within noise.
+  - CH4.1a estimated the FFT at 1–2 % of build plus one evaluation; measured 3–6 %.
+- Tests: `check_diagonal` (`tests/helmholtz_accuracy.rs`) checks the φ steps as built; with the
+  feature, `check_rustfft`: rustfft on every diagonal level, the product's classes, pairs and
+  conversions, errors within 1.01×, threads bit for bit.
+- Checks: ran on the M6 `/verify` (fmt; Clippy default, examples, workspace, the harness with the
+  feature; docs; `cargo check --workspace --all-targets`; `cargo deny`; no rustfft in the default
+  graph; `cargo test` 1,402 and `--workspace` 1,446 passed at opt-level 1; the debug one-rank run of
+  `helmholtz_accuracy` 400 s at load 11); the harness test with the feature at 1 rank (92 passed) and
+  2 ranks by hand. Not run: the MPI list (no change to exec, plan or octree). Pending: locust's
+  `levels`, `waves` and `ffts` (waiting for a quiet node). The M6 not run (the user, 2026-11-26:
+  "Skip the M6").
+- Decisions: questions for sign-off on the PR: (1) keep the product's grid and close CH4.6a3 unrun;
+  (2) no FFT variant of `DiagonalCosts`; (3) CH4.6a's acceptance without the M6's times.
+- Laplace: not touched (the harness, scripts, documents and one CI step).
+- Follow-ups: CH4.6a3 (closed unrun if question 1 is signed off, else built); then H2 (CH2.1).
