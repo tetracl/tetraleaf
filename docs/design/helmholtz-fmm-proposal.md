@@ -1149,7 +1149,11 @@ to a multiple of 4 (580 at p = 144, and 580 = 4 · 5 · 29). On that size an FFT
 (FFTW) and 3.9× (rustfft) its time on the smooth one, and still mostly beat the product's φ step;
 the smooth size costs up to 5.9 % more samples at p = 33–261. Which grid a level with an FFT
 uses, the product's or the smooth one under its own table cache key, is chosen by the FFT back
-end's task (CH4.6a) from a level's measured time.
+end's task (CH4.6a) from a level's measured time. Chosen at CH4.6a2 (amended at CH4.6a2;
+`tetraleaf-validate/results/helmholtz-ch4-6a2.md`): rustfft runs on the product's grid at every
+level; the smooth grid, priced per level on Kathleen and locust, changed an evaluation by
+1.000–1.005× (its pairs' extra samples cost what the faster FFT saves, and on NEON rustfft is often
+slower on it), so no level uses it and no second set of tables is built (CH4.6a3 closed unrun).
 
 **Plans per box.** A box's φ step is one plan of 2P − 1 rings of length N_φ (FFTW's
 howmany = 2P − 1, or 2P with one zero ring if S9 finds an even batch faster), fixed per
@@ -1727,7 +1731,7 @@ flowchart LR
 | CH4.3 | The per-(level, class) rule, calibrated | C_T and θ from S6 confirmed in the full FMM on W1 and W3; the time crossover per class; the fallback of a whole level to RCR when the scratch budget binds | CH4.2 |
 | CH4.4 | kD sweep, with the FMM3D gate | FMM against the direct sum (sampled targets) on W1 to kD = 1000, W2 to 500 and W3 to 200, beside `hfmm3d` against the same sum; the full-target crosscheck mapped to levels and classes, with no error concentrated at a class boundary; time, memory and build cost per k | CH4.3, CH1.4 |
 | CH4.5 | Host performance against FMM3D at matched accuracy | as C6.8: for each of our tolerances the `eps` of FMM3D with the closest error; time and memory, setup apart, one node, on the sweep of CH4.4 | CH4.4 |
-| CH4.6a | Optional rustfft back end of the φ step, behind an optional feature of `tetraleaf-exec` (added at CH0.9, D7) | against the product to round-off; per-box plans with bits identical across batch positions, batch sizes and thread counts; at build rustfft's version, N_φ and the dispatched CPU features all-gathered, and with one of two ranks made to differ (a test hook) both ranks run the product; the feature off by default, one CI job with the feature; a level's grid (the product's or the smooth one) chosen by its measured time; the time per level against the product on the M6, locust and Kathleen | CH4.1, CH0.9 |
+| CH4.6a | Optional rustfft back end of the φ step, behind an optional feature of `tetraleaf-exec` (added at CH0.9, D7) | against the product to round-off; per-box plans with bits identical across batch positions, batch sizes and thread counts; at build rustfft's version, N_φ and the dispatched CPU features all-gathered, and with one of two ranks made to differ (a test hook) both ranks run the product; the feature off by default, one CI job with the feature; a level's grid (the product's or the smooth one) chosen by its measured time; the time per level against the product on the M6, locust and Kathleen (amended at CH4.6a2: the product's grid at every level, by the times measured on Kathleen and locust; the M6 not timed, at the user's word) | CH4.1, CH0.9 |
 | CH4.6b | Optional FFTW back end of the φ step, behind the `fftw` feature (CH4.6 until CH0.9; off the priority list, D7) | against the product to round-off; per-box plans with bits identical across batch positions, batch sizes and thread counts, and fingerprints all-gathered at build; the feature off by default, a default build linking no FFTW, the `cargo deny` check, one CI job with the feature; the GPL warning of Section 6.7 in the crate documentation, the README, the builder option and `Cargo.toml` | CH4.1, CHR.3, CH0.9 |
 | **H5** | **Complex wavenumber** | | |
 | CH5.1 | Classifier and pruning for Im k > 0 | regimes as Section 3.6, with S6's damped results; error within target over a grid of (Re k D, Im k D) on W1 | CH2.3, CH4.3 |
@@ -1784,7 +1788,7 @@ these.
 | D4 | Yukawa: own operator type, or the wavenumber kind as a type parameter of one operator | one operator, `HelmholtzOperator<T, K>`, with K resolved at build (Section 6.3), if CH2.1 shows no cost to the complex path |
 | D5 | Source types in the first release | charges, real and complex, with potentials and gradients; dipoles when C6.4 exists for Laplace |
 | D6 | Order of H4 and H6 | H6 first by default (Sections 7 and 10); H4 first only if D1 puts most of the work at kD of several hundred or more and loose tolerances |
-| D7 | Host back ends for the φ step | the product as the default and reference; FFTW through RLST 0.12 behind the optional `fftw` feature (CH4.6), with the GPL warning; rustfft as a fast default without FFTW if S9 shows it deterministic per box and faster than the product, decided per machine (Homebrew's FFTW on the M3 Max has no SIMD); all behind a trait internal to `tetraleaf-exec`, since RLST provides none (its DF4). Signed off at CH0.9 (2026-11-26, amended at CH0.9; Section 6.7): the product the default and reference on every machine; rustfft the one optional FFT back end (CH4.6a), with a check across ranks and the M6's times; FFTW (CHR.3, CH4.6b) kept, off the priority list |
+| D7 | Host back ends for the φ step | the product as the default and reference; FFTW through RLST 0.12 behind the optional `fftw` feature (CH4.6), with the GPL warning; rustfft as a fast default without FFTW if S9 shows it deterministic per box and faster than the product, decided per machine (Homebrew's FFTW on the M3 Max has no SIMD); all behind a trait internal to `tetraleaf-exec`, since RLST provides none (its DF4). Signed off at CH0.9 (2026-11-26, amended at CH0.9; Section 6.7): the product the default and reference on every machine; rustfft the one optional FFT back end (CH4.6a), with a check across ranks and the M6's times; FFTW (CHR.3, CH4.6b) kept, off the priority list. Amended at CH4.6a2 (2026-11-26): the M6's times not taken (the user: "Skip the M6"); rustfft on the product's grid; the time rule's costs the product's under either φ step |
 | D8 | Whether the exponential M2L may become a default on low-frequency levels | after CH6.2, as Laplace's T11 decides for `PlaneWave`. Signed off at CH6.2h (2026-11-08), amended at CH6.1g and CH6.1h (2026-11-11): `Auto` takes it by the rule of Section 5.3; amended at CH4.3b2c (2026-11-22): unless the diagonal form's time rule, the default since, moves the level (Sections 5.3, 6.4) |
 | D9 | What "within noise" means in constraint 1 of Section 2 | the run-to-run spread of the Laplace baseline, repeated on each machine of record before the change, per benchmark; plus the C3S.4 throughput gate |
 | D10 | cubek-fft on the device | after S5 (CH0.5): adopt it (a new dependency, and the cubecl pin moved to the current 0.11.x, 0.11.3 on 2026-10-22, if 0.3.1 is needed), contribute twiddle tables and radix 3 and 5 upstream first, or keep the transform as a GEMM |
@@ -2122,6 +2126,12 @@ these.
   end, and D7's outcome (rustfft the one optional FFT back end, FFTW off the priority list);
   Section 9, item 6; Section 10, CH4.6 split into CH4.6a (rustfft) and CH4.6b (FFTW), the diagram
   and the text after the phase list; Section 12, D7 signed off.
+
+- **Amended at CH4.6a2, 2026-11-26** (`tetraleaf-validate/results/helmholtz-ch4-6a2.md`; PR #266,
+  its questions 1–3, signed off by the user, "Q1-3 as recommended"): Section 6.7, "Grid sizes" (the
+  product's grid at every level with rustfft, the smooth grid not built, CH4.6a3 closed unrun);
+  Section 10, the CH4.6a row (the grid chosen, the M6 not timed); Section 12, D7 (the M6's times
+  not taken; the time rule's costs the product's under either φ step).
 
 ## Appendix B. The stability check behind Section 3.6
 

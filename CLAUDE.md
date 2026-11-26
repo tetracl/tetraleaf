@@ -233,7 +233,8 @@ Run it locally after any manifest change.
 
 A sixth job, `run-tests-rustfft` (Helmholtz CH4.6a1), builds tetraleaf-exec with its optional
 feature `rustfft` (the diagonal form's φ step by rustfft, pinned `=6.4.1`): Clippy with the
-feature, the φ step's unit tests, and `helmholtz_fmm` built by `run-mpi-tests.sh` with
+feature (also of tetraleaf-validate, whose feature `rustfft` passes it through for the harness's
+`--phi-step`, Helmholtz CH4.6a2), the φ step's unit tests, and `helmholtz_fmm` built by `run-mpi-tests.sh` with
 `MPI_TESTS_ONLY=helmholtz_fmm MPI_TESTS_FEATURES=rustfft` and run at 1 and 2 ranks (the
 fingerprints' agreement). `run-licence-check` also fails if `cargo tree --workspace -e normal -i
 rustfft` finds rustfft in the default graph.

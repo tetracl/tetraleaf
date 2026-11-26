@@ -4942,3 +4942,54 @@ request, using this template:
   run is needed (D9): no code Laplace runs changed.
 - Follow-ups: CH4.6a2, with its new Also: the harness records the back end, and the time rule's
   costs for the FFT. Then CH4.6a3, depending on CH4.6a2's sign-off.
+
+## 2026-11-26: CH4.6a2 The time per level against the product, both grids priced
+- Done:
+  - The harness: `helmholtz_accuracy --phi-step product|rustfft` (`Case::phi_step`,
+    `Row::{phi_step, phi_steps}`), the line "φ step:" (rustfft's version and CPU features), a column
+    "φ" of "Diagonal M2L"; tetraleaf-validate's feature `rustfft` passes tetraleaf-exec's through
+    (no new dependency). CI's `run-tests-rustfft` runs Clippy of the harness with it.
+  - `tools/helmholtz/ch4-6a2-runs.sh` (`smoke`, `levels`, `waves`, `ffts`) and
+    `ch4-6a2-tables.py` on `common.py` (`runs`, `levels`, `smooth`, `rule`).
+  - Report `tetraleaf-validate/results/helmholtz-ch4-6a2.md`; record `docs/helmholtz/tasks/CH4.6a2.md`.
+- Results (Kathleen, 1 × 40, jobs 673075, 673077, 673078; locust, 1 × 72, 19:35–19:44 once the node
+  was quiet; one φ step per launch, ABBA; Kathleen's ranges, locust's in the report §6):
+  - rustfft's S → F 0.27–0.46× and F → R 0.23–0.60× the product's thread time per conversion; the
+    diagonal levels' M2L 0.63–0.93×; the evaluation 0.89–0.95× (W3's within the product's spread),
+    build plus one evaluation 0.94–0.97×; errors 1.0000×, checksums agree per setting.
+  - The smooth grid, priced from S9's per-box times at the levels' degrees and the level's pairs at
+    the larger N_φ: 0.98–1.03× per level, 1.000–1.004× per evaluation; 0.991–1.001× with the FFT's
+    difference scaled to the level's whole conversion (an upper bound).
+  - The time rule: with the form's conversions at rustfft's ratio one level of 13 cases moves from
+    the waves to the form (W3, kD = 200, 10⁻⁶, level 4), 1.6 % of that level, within noise.
+  - CH4.1a estimated the FFT at 1–2 % of build plus one evaluation; measured 3–6 %.
+  - locust: the conversions 0.31–0.71×, the levels 0.60–0.95×, the evaluation 0.91–0.99×, errors
+    0.993–1.000×; the smooth grid 1.000–1.005× per evaluation (rustfft often slower on NEON's smooth
+    grid); the time rule moves two levels (one a 3 % loss, one a gain where the form beats the waves
+    with the product too).
+- Tests: `check_diagonal` (`tests/helmholtz_accuracy.rs`) checks the φ steps as built; with the
+  feature, `check_rustfft`: rustfft on every diagonal level, the product's classes, pairs and
+  conversions, errors within 1.01×, threads bit for bit.
+- Checks: ran on the M6 `/verify` (fmt; Clippy default, examples, workspace, the harness with the
+  feature; docs; `cargo check --workspace --all-targets`; `cargo deny`; no rustfft in the default
+  graph; `cargo test` 1,402 and `--workspace` 1,446 passed at opt-level 1; the debug one-rank run of
+  `helmholtz_accuracy` 400 s at load 11); the harness test with the feature at 1 rank (92 passed) and
+  2 ranks by hand. Not run: the MPI list (no change to exec, plan or octree). The M6 not run (the
+  user, 2026-11-26: "Skip the M6"). Nothing pending.
+- Decisions: questions 1–3 of #266 signed off by the user, 2026-11-26: "Q1-3 as recommended":
+  (1) the product's grid kept, CH4.6a3 closed unrun; (2) no FFT variant of `DiagonalCosts`;
+  (3) CH4.6a's acceptance without the M6's times. Proposal §6.7, §10 (CH4.6a) and §12 (D7) amended,
+  with a line in its Appendix A; D7 amended in the roadmap.
+- Laplace: not touched (the harness, scripts, documents and one CI step).
+- Follow-ups: an Also on CH4.7: the levels the time rule keeps on the waves where the form is
+  faster under either step. After the sign-off, a measurement of the other kinds per level (Kathleen
+  job 673083, an uncommitted harness table): P2M + L2P 13–31 % of an evaluation, M2M + L2L on the
+  diagonal levels 8–17 % (the ceiling of an MLFMA-style signature-domain translation, not pursued);
+  CH4.9a and CH4.9b (P2M and L2P by SIMD kernels) added as item 14 of the priority list, before H2
+  (the user, 2026-11-26: "Yes. Add P2M and L2P to the priority list as tasks"). Also seen there: at
+  kD = 1000 the M2M into levels 0–1 (degree 0, read by nothing) costs 0.45 s of 15.2 s, not yet a
+  task. Laplace measured the same way (Kathleen job 673084, `scaling --kinds`, the cube at N = 10⁷):
+  P2M + L2P 19–42 % of the compute at p = 3–18, also per-point reference calls; CH4.9c added off the
+  priority list (the user, 2026-11-26: "Please add it to the roadmap"). Also seen there: at 1 × 40
+  the forward charges and backward output take about 690 ms of the 1,916 ms evaluation at p = 8 on
+  one rank, not yet a task.

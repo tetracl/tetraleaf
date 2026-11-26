@@ -398,6 +398,10 @@ jobs:
       - name: Clippy with the feature
         run: cargo clippy -p tetraleaf-exec --all-targets --features rustfft -- -D warnings
 
+      # The harness's `--phi-step rustfft` (Helmholtz CH4.6a2), so that it keeps building.
+      - name: Clippy of the harness with the feature
+        run: cargo clippy -p tetraleaf-validate --all-targets --features rustfft -- -D warnings
+
       - name: The φ step's unit tests
         run: cargo test -p tetraleaf-exec --features rustfft --lib phi -- --show-output
 

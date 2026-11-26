@@ -195,6 +195,15 @@
 //!   (`interpolated`, the rule at C_T = 0.23; the library's default since CH4.2c2's sign-off),
 //!   each `--diagonal` run other than `off` with each build in turn; the column "M2L" ends
 //!   with `/interp` for the interpolated build.
+//! - `--phi-step product|rustfft,…` (Helmholtz CH4.6a2, `HelmholtzFmmBuilder::phi_step`): the φ
+//!   step of the diagonal form's conversions, the product (the default, the library's) or
+//!   rustfft (only in a build with this crate's feature `rustfft`; refused before MPI starts
+//!   otherwise), each `--diagonal` run other than `off` with each in turn, inside
+//!   `--diagonal-build`'s loop; the column "M2L" ends with `/rustfft` for it, a line "φ step:"
+//!   under the machine's names rustfft's version and the CPU features it dispatches on (rank
+//!   0's; the build agrees them over the ranks), and `--levels`' table "Diagonal M2L" has a
+//!   column "φ" with the step each level ran (`Row::phi_steps`: the product where the ranks'
+//!   rustfft builds differ).
 //! - `--diagonal-costs machine|form|rcr,…` (Helmholtz CH4.3b2a,
 //!   `HelmholtzFmmBuilder::diagonal_costs`): the time rule's costs, the machine class's
 //!   (`machine`, the default), or costs that force one option on every level the rule reaches
@@ -234,8 +243,9 @@ use mpi::Threading;
 use mpi::traits::*;
 use tetraleaf_exec::helmholtz::{
     ChargeKind, DEFAULT_DENSE_BUDGET, DIAGONAL_AUTO_MIN_KA, DegreeRule, Degrees, DiagonalCosts,
-    HelmholtzDiagonal, HelmholtzM2l, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit,
-    TransferBuild, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WxNear, s7_degree,
+    HelmholtzDiagonal, HelmholtzM2l, HelmholtzPhiStep, PlaneWavePrecision, PlaneWaveRaise,
+    PlaneWaveSplit, RUSTFFT_VERSION, RcrSplit, TransferBuild, VAfterPlan, VNear, VRaisedPrice,
+    Wavenumber, WxNear, rustfft_cpu_features, s7_degree,
 };
 use tetraleaf_exec::operator::{MulAdd, P2pChoice};
 use tetraleaf_math::Complex;
@@ -273,6 +283,8 @@ struct Arguments {
     rcr_splits: Vec<Option<RcrSplit>>,
     diagonals: Vec<HelmholtzDiagonal>,
     diagonal_builds: Vec<TransferBuild>,
+    /// `--phi-step` (Helmholtz CH4.6a2).
+    phi_steps: Vec<HelmholtzPhiStep>,
     diagonal_costs: Vec<Option<DiagonalCosts>>,
     raises: Vec<Option<PlaneWaveRaise>>,
     terms: Vec<bool>,
@@ -343,6 +355,28 @@ fn workload(name: &str, kd: f64) -> Option<Workload> {
     }
 }
 
+/// A `--phi-step` entry: `product`, or `rustfft` in a build with the feature `rustfft` (`None`
+/// otherwise, so that the option is refused before MPI starts).
+fn phi_step(name: &str) -> Option<HelmholtzPhiStep> {
+    match name {
+        "product" => Some(HelmholtzPhiStep::Product),
+        #[cfg(feature = "rustfft")]
+        "rustfft" => Some(HelmholtzPhiStep::RustFft),
+        _ => None,
+    }
+}
+
+/// The φ step in one word, for the tables (Helmholtz CH4.6a2).
+fn phi_name(step: HelmholtzPhiStep) -> &'static str {
+    match step {
+        HelmholtzPhiStep::Product => "product",
+        #[cfg(feature = "rustfft")]
+        HelmholtzPhiStep::RustFft => "rustfft",
+        // `HelmholtzPhiStep` is non-exhaustive: a back end of a later task.
+        _ => "other",
+    }
+}
+
 /// Parses the options of the module documentation; exits with a message on anything else.
 fn arguments() -> Arguments {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -359,7 +393,7 @@ fn arguments() -> Arguments {
              [--reach corner|r,…] \
              [--split auto|parents|children,…] [--raise rule|level|leaves|m2l,…] \
              [--rcr-split auto|boxes|pairs,…] [--diagonal off|rule|auto|<ε>,…] \
-             [--diagonal-build direct|interpolated,…] \
+             [--diagonal-build direct|interpolated,…] [--phi-step product|rustfft,…] \
              [--term on|off,…] [--block auto|w,…] [--empty-boxes on|off,…] [--near-v off|cost|n|inf,…] [--near-wx off|cost|n|inf,…] \
              [--v-after-plan off|taken|all,…] [--leaf-size auto|n,…] [--c-leaf auto|c,…] [--levels] \
              [--evaluations n]; got {args:?}"
@@ -388,6 +422,7 @@ fn arguments() -> Arguments {
         rcr_splits: vec![None],
         diagonals: vec![HelmholtzDiagonal::Off],
         diagonal_builds: vec![TransferBuild::Direct],
+        phi_steps: vec![HelmholtzPhiStep::Product],
         diagonal_costs: vec![None],
         raises: vec![None],
         terms: vec![true],
@@ -606,6 +641,12 @@ fn arguments() -> Arguments {
                         })
                         .collect::<Option<Vec<_>>>()
                         .map(|b| parsed.diagonal_builds = b)
+                        .is_some(),
+                    "--phi-step" => value
+                        .split(',')
+                        .map(phi_step)
+                        .collect::<Option<Vec<_>>>()
+                        .map(|p| parsed.phi_steps = p)
                         .is_some(),
                     "--raise" => value
                         .split(',')
@@ -927,11 +968,16 @@ fn setting_name(row: &Row) -> String {
 /// For a row with the diagonal M2L `/diag` (at the FMM's tolerance), `/diag<ε>` (Helmholtz
 /// CH4.2b2) or `/diagauto` (the time rule, Helmholtz CH4.3b1; `/diagauto:form` and
 /// `/diagauto:rcr` at `FORM_COSTS` and `RCR_COSTS`, Helmholtz CH4.3b2a), followed by `/interp`
-/// for the interpolated build (Helmholtz CH4.2c2); else empty.
+/// for the interpolated build (Helmholtz CH4.2c2) and `/rustfft` for rustfft's φ step (Helmholtz
+/// CH4.6a2); else empty.
 fn diagonal_suffix(row: &Row) -> String {
-    let build = match row.diagonal_build_kind {
+    let interpolated = match row.diagonal_build_kind {
         TransferBuild::Direct => "",
         TransferBuild::Interpolated => "/interp",
+    };
+    let build = match row.phi_step {
+        HelmholtzPhiStep::Product => interpolated.to_string(),
+        step => format!("{interpolated}/{}", phi_name(step)),
     };
     match row.diagonal {
         HelmholtzDiagonal::Off => String::new(),
@@ -1054,6 +1100,34 @@ fn main() {
         );
         println!();
         println!("Density: {}", arguments.density.name());
+        println!();
+        // The φ step's back ends (Helmholtz CH4.6a2; proposal §6.7: results record the back
+        // end): rustfft's version and the CPU features it dispatches on, this rank's.
+        let features = rustfft_cpu_features();
+        println!(
+            "φ step: {}{}",
+            arguments
+                .phi_steps
+                .iter()
+                .map(|&s| phi_name(s))
+                .collect::<Vec<_>>()
+                .join(", "),
+            match arguments
+                .phi_steps
+                .iter()
+                .any(|&s| s != HelmholtzPhiStep::Product)
+            {
+                true => format!(
+                    "; rustfft {RUSTFFT_VERSION}, {} features {}",
+                    std::env::consts::ARCH,
+                    match features.is_empty() {
+                        true => "none".to_string(),
+                        false => features.join(", "),
+                    }
+                ),
+                false => String::new(),
+            }
+        );
         println!();
         println!(
             "| Workload | N | kD | degrees | charges | m | P2P | M2L | ranks × threads | levels \
@@ -1318,7 +1392,8 @@ fn main() {
                             "| {} | {} | {kd_string} | {degrees_name} | {} | {} × {} | {l} | {} \
                              | {} | {diagonal} | {rcr} | {:.6} | {:.0} | {signatures:.6} \
                              | {targets:.6} | {s2f:.6} | {pairs:.6} | {f2r:.6} | {rcr_s:.6} \
-                             | {forward} | {back} | {} | {} | {transfer:.3} | {conversions:.3} |",
+                             | {forward} | {back} | {} | {} | {transfer:.3} | {conversions:.3} \
+                             | {} |",
                             workload.name(),
                             problem.len(),
                             setting_name(row),
@@ -1330,6 +1405,7 @@ fn main() {
                             1e9 * row.m2l_seconds[l] / (diagonal + rcr).max(1) as f64,
                             rate(forward, s2f),
                             rate(back, f2r),
+                            row.phi_steps[l].map_or("–", phi_name),
                         )
                     })
                     .collect()
@@ -1624,18 +1700,26 @@ fn main() {
             let mut diagonals = Vec::new();
             for &diagonal in &arguments.diagonals {
                 if diagonal == HelmholtzDiagonal::Off {
-                    diagonals.push((diagonal, arguments.diagonal_builds[0], None));
+                    diagonals.push((
+                        diagonal,
+                        arguments.diagonal_builds[0],
+                        HelmholtzPhiStep::Product,
+                        None,
+                    ));
                 } else {
+                    // `--phi-step` inside `--diagonal-build`'s loop (Helmholtz CH4.6a2).
                     for &build in &arguments.diagonal_builds {
-                        if diagonal == HelmholtzDiagonal::Auto {
-                            diagonals.extend(
-                                arguments
-                                    .diagonal_costs
-                                    .iter()
-                                    .map(|&c| (diagonal, build, c)),
-                            );
-                        } else {
-                            diagonals.push((diagonal, build, None));
+                        for &phi in &arguments.phi_steps {
+                            if diagonal == HelmholtzDiagonal::Auto {
+                                diagonals.extend(
+                                    arguments
+                                        .diagonal_costs
+                                        .iter()
+                                        .map(|&c| (diagonal, build, phi, c)),
+                                );
+                            } else {
+                                diagonals.push((diagonal, build, phi, None));
+                            }
                         }
                     }
                 }
@@ -1644,7 +1728,7 @@ fn main() {
             // CH4.3b2b), inside `--near-v`'s loop: with the cost model's V rule only, `taken`
             // only with the time rule.
             let mut runs_by_rule = Vec::new();
-            for &(diagonal, build, costs) in &diagonals {
+            for &(diagonal, build, phi, costs) in &diagonals {
                 for &rcr in &arguments.rcr_splits {
                     for &tree in &trees {
                         for &rule in &rules {
@@ -1670,7 +1754,7 @@ fn main() {
                                 for &after in &afters {
                                     runs_by_rule.push((
                                         diagonal,
-                                        build,
+                                        (build, phi),
                                         costs,
                                         rcr,
                                         tree,
@@ -1686,7 +1770,7 @@ fn main() {
             let rules = runs_by_rule;
             for (
                 diagonal,
-                diagonal_build,
+                (diagonal_build, phi_step),
                 diagonal_costs,
                 rcr_split,
                 (leaf_size, c_leaf),
@@ -1698,6 +1782,7 @@ fn main() {
                 case.v_after_plan = v_after_plan;
                 case.diagonal = diagonal;
                 case.diagonal_build = diagonal_build;
+                case.phi_step = phi_step;
                 case.diagonal_costs = diagonal_costs;
                 case.rcr_split = rcr_split;
                 case.max_points_per_leaf = leaf_size;
@@ -2019,7 +2104,9 @@ fn main() {
                  the thread-seconds of S → F, the pairs, F → R and the RCR pairs (each the \
                  slowest rank's), the conversions S → F and F → R (summed), their rate per \
                  thread in GF/s (2 × multiply-adds per conversion; one rank only), and the build of the \
-                 level's transfer functions and conversions (seconds)."
+                 level's transfer functions and conversions (seconds), and the φ step the level \
+                 ran (Helmholtz CH4.6a2; under rustfft the GF/s are the product's multiply-adds \
+                 over rustfft's time, a product-equivalent rate)."
             );
             println!();
             println!(
@@ -2027,12 +2114,12 @@ fn main() {
                  | diagonal pairs | RCR pairs | M2L s | ns per pair | S → F pass s \
                  | targets pass s | S → F thread-s | pairs thread-s | F → R thread-s \
                  | RCR thread-s | S → F | F → R | S → F GF/s | F → R GF/s | transfer build s \
-                 | conversions build s |"
+                 | conversions build s | φ |"
             );
             println!(
                 "| --- | ---: | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: \
                  | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: \
-                 | ---: | ---: |"
+                 | ---: | ---: | --- |"
             );
             for line in &diagonal_rows {
                 println!("{line}");

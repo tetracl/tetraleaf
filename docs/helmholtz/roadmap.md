@@ -9,18 +9,18 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-26): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). The FFT track
-(item 13): CH0.9 done, D7 signed off (the product the default, rustfft the one optional FFT back
-end); CH4.6a split into CH4.6a1–a3, and CH4.6a1 (the φ step behind a trait, rustfft behind the
-feature `rustfft`, on the product's grid) done in its PR. Next CH4.6a2 (the time per level on
-locust, Kathleen and the M6, with a question on the smooth grid), then H2 and H5 (items 14–15).
-Eight H4 tasks stay open off the list. The project was renamed tetraleaf on 2026-11-21. HR, H0,
-H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The
-history of this line until H6.G is in `progress.md` and in this file's history (`git show
-4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show 8475009:docs/helmholtz/roadmap.md`;
-until the H4 gate in `git show 4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git
-show 03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show
-6bad3c2:docs/helmholtz/roadmap.md`; until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`;
-until CH4.6a1 in `git show 34e3caf:docs/helmholtz/roadmap.md`.
+(item 13) is done: CH0.9, CH4.6a1 and CH4.6a2 (rustfft 0.89–0.99× of an evaluation on Kathleen and
+locust, on the product's grid), CH4.6a3 closed unrun at CH4.6a2's sign-off, D7 amended (the M6 not
+timed, at the user's word). Next CH4.9a and CH4.9b, the leaf expansions P2M and L2P by SIMD
+kernels (item 14, added on 2026-11-26), then H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off
+the list. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open;
+of H0, CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is
+in `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until
+H1.G in `git show 8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show
+4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git show
+03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show 6bad3c2:docs/helmholtz/roadmap.md`;
+until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`; until CH4.6a1 in `git show
+34e3caf:docs/helmholtz/roadmap.md`; until CH4.6a2 in `git show 7c8177d:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -78,7 +78,10 @@ H2 then H5; CHA.7a before H8; CH4.7, CH4.3f and CH4.0k stay off the list. Amende
 by the gate's run (`gates/H4.md` §9; the user: "Keep H4 open, CH4.8 (Recommended)"): CH4.8 and
 H4.G as item 11, before the FFT track. Amended on 2026-11-25 at the H4 gate's second run
 (`gates/H4.md` §0.8, question 4; the user on #262: "CHA.10a, then FFT, H2, H5 (Recommended)"):
-CHA.10a as item 12, before the FFT track.
+CHA.10a as item 12, before the FFT track. Amended on 2026-11-26 after CH4.6a2 (the user: "Yes. Add P2M
+and L2P to the priority list as tasks"): CH4.9a and CH4.9b as item 14, before H2 (P2M and L2P were
+13–31 % of an evaluation under the defaults on Kathleen, job 673083, against 8–17 % for M2M and L2L
+on the diagonal levels).
 
 1. CH4.0 The M2L rule's sparse-level term
 2. CH4.0b The worst-box concentration
@@ -107,9 +110,11 @@ CHA.10a as item 12, before the FFT track.
 12. CHA.10a The report scripts' shared module (added on 2026-11-25 at the H4 gate's second run)
 13. CH0.9 S9, CH4.6a the optional rustfft back end (CH4.6a1–a3; split on 2026-11-26). D7, signed off at CH0.9 (the user on #264,
     2026-11-26: "Q1-3 as recommended"), moved CHR.3 and CH4.6b, the FFTW route, off the list
-14. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
+14. CH4.9a, CH4.9b The Helmholtz leaf expansions P2M and L2P by SIMD kernels (added on 2026-11-26
+    after CH4.6a2, the user: "Yes. Add P2M and L2P to the priority list as tasks")
+15. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
     CH2.1 and CH2.2 wait for D4, which CH2.1 prepares)
-15. CH5.1, CH5.2, CH5.3 and H5.G Complex wavenumber (added on 2026-11-24 at the H4 gate)
+16. CH5.1, CH5.2, CH5.3 and H5.G Complex wavenumber (added on 2026-11-24 at the H4 gate)
 
 Off the list, in file order: CH0.8b, CH0.5 and H0.G; CHR.3 and CH4.6b (moved off at CH0.9 by D7, the user on #264, 2026-11-26: "Q1-3 as recommended"); CH4.0f (the user, 2026-11-12, on #211);
 CH4.7 (added at CH4.5, its question 4; the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."); CH4.3f (added at CH4.3b2c, off the list until CH4.5, kept off at CH4.5, its question 3, by the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."; the user on #251, 2026-11-22: "Q1-5 as recommended"); CH4.2d (added at CH4.2b2, off the list until CH4.5, kept off at CH4.5, its question 2, by the user on #257, 2026-11-24: "Accept all 4 decisions as recommended."; the user on #239, 2026-11-20: "All 4 questions as recommended.");
@@ -135,7 +140,7 @@ The proposal's Section 12, plus D0. A decision is recorded here when the user ta
 | D4 | Yukawa: its own operator type, or the wavenumber kind as a type parameter | one `HelmholtzOperator<T, K>` if CH2.1 shows no cost to the complex path | CH2.1 | CH2.2 | open |
 | D5 | Source types of the first release | real and complex charges, potentials and gradients; dipoles once C6.4 exists for Laplace (note: Laplace dipoles were merged in Phase 6 T8 and T8d, so the condition is met) | – | CH1.1 | signed off 2026-10-29: charges now, dipoles later; §3.15 fixes real and complex charges with potentials and gradients, and dipoles get a later, separate task; that task is CH9.0, added at the H1 gate (the user, 2026-11-19, on #230: "Add CH9.0 (Recommended)") |
 | D6 | Order of H4 and H6 | H6 first | H3.G | CH6.1, CH4.1 | signed off 2026-11-02 (H3 gate, question 2): "i agree with the recommendations", H6 first, as recommended; on the gate report's reason (§3.3): the calibrated degrees cut the low-frequency share of the far field at kD = 500 to about half (an estimate), and the FMM is slowest against FMM3D on low-frequency trees at tight ε, which H6 targets |
-| D7 | Host back ends of the φ step | the product as default and reference; FFTW behind the optional `fftw` feature; rustfft if S9 finds it deterministic per box and faster, decided per machine | CH0.9 | CH4.6a, CHR.3, CH4.6b | signed off 2026-11-26: "Q1-3 as recommended" (#264; `spikes/fft-plans/SPIKE_REPORT.md` §6): the product the default and reference on every machine; rustfft the one optional FFT back end (CH4.6a), with a check across ranks and the M6's times; FFTW (CHR.3, CH4.6b) off the priority list, kept in the roadmap |
+| D7 | Host back ends of the φ step | the product as default and reference; FFTW behind the optional `fftw` feature; rustfft if S9 finds it deterministic per box and faster, decided per machine | CH0.9 | CH4.6a, CHR.3, CH4.6b | signed off 2026-11-26: "Q1-3 as recommended" (#264; `spikes/fft-plans/SPIKE_REPORT.md` §6): the product the default and reference on every machine; rustfft the one optional FFT back end (CH4.6a), with a check across ranks and the M6's times; FFTW (CHR.3, CH4.6b) off the priority list, kept in the roadmap. Amended 2026-11-26 (CH4.6a2, questions 1–3; the user on #266: "Q1-3 as recommended"): rustfft on the product's grid (CH4.6a3 closed unrun), the time rule's costs the product's under either φ step, the M6's times not taken (the user: "Skip the M6"); proposal §6.7, §10 and §12 amended |
 | D8 | Exponential M2L as a default on low-frequency levels | after CH6.2 | CH6.2h | CH7.5d | signed off 2026-11-08 (CH6.2h, questions 1–5; the user: "1–5 as recommended"): `Auto` takes the exponential M2L by default where p_l ≥ d_pw (Batched's crossover + 1; 12 on AVX-512 with two planes), CH6.1e's rule gives a quadrature (ε ≥ 10⁻⁶) and Im κ_l < 5π, f64 only; no boxes term (Batched's few-box levels to CH4.0); proposal §5.3 and §6.4 amended. Amended 2026-11-11 (CH6.1g, question 2; the user: "Lift for 10⁻⁸–10⁻⁷ only (Recommended)"): `Auto` also takes it at 10⁻⁸ ≤ ε < 10⁻⁷, where the rule runs iprec 3 at the raised degree max(p_l, 32), and not at 10⁻⁷ ≤ ε < 10⁻⁶ until CH6.1h; proposal §5.3 amended. Amended 2026-11-11 (CH6.1h, question 2; the user: "Lift it (Recommended)"): `Auto` also takes it at 10⁻⁷ ≤ ε < 10⁻⁶, with the raised degree on the M2L alone there (`PlaneWaveRaise::Rule`); proposal §5.3 amended. Amended 2026-11-22 (CH4.3b2c, question 3; the user on #251, 2026-11-22: "Q1-5 as recommended"): with the diagonal form's time rule the builder's default, a level of D8's rule in its range (k a ≥ 2.8) keeps the waves unless the form beats them at the level's resolving degree, then runs the cheaper of the form and RCR; proposal §5.3, §6.4 and §12 amended |
 | D9 | What "within noise" means for Laplace's benchmarks (constraint 1) | the run-to-run spread of the Laplace baseline, repeated on each machine before the change, per benchmark; plus the C3S.4 throughput gate | – | CHR.2, CH2.0 | signed off 2026-10-26: as recommended, the measured spread of the baseline per benchmark and machine, plus the C3S.4 gate. Clarified 2026-10-26 (CHR.2): one-sided, slower than `main` by more than the spread fails, faster passes when the outputs are bit for bit identical; from CH2.0 on five runs per side in the order A B B A A B B A A B, the spread max − min of `main`'s five run medians, never pooled with the branch's. Amended 2026-10-31 (CH2.0, the user: "as recommended"): a failing row may be repeated once and the repeat counts, with both results reported. Amended 2026-10-31 (the machine move, the user: "Amend: M6 replaces M3 Max"): the M6 (`tools/m6/machine.md`) replaces the M3 Max as a machine of record, its C3S.4 reference `spikes/p2p-simd/results-m6.md` |
 | D10 | cubek-fft on the device | after S5: adopt, contribute upstream first, or keep the transform as a GEMM | CH0.5 | CH7.4 | open |
@@ -667,7 +672,11 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   with the user's go-ahead). Also (the H4 gate's second run, the user on #262, 2026-11-25: "Accept all (Recommended)"; review 2026-11-25, A11): 128 against 256 points per
   leaf on NEON after H4 (CH4.0d3 chose 128 at ε ≥ 10⁻⁷ for the evaluation alone; at 1 × 72 W1 at
   kD = 1000 builds in 13.4–14.0 s at 128 against 7.6 s at 256, CH4.5 §5): W1 and W2 at kD = 250–1000
-  on locust at 1 × 72 and 4 × 18, the build and the evaluation apart. *Needs:* CH4.5. *Machines:* Kathleen, locust.
+  on locust at 1 × 72 and 4 × 18, the build and the evaluation apart. Also (from CH4.6a2, its report
+  §5–§6): the levels the time rule keeps on the waves where the form runs faster under either φ
+  step, Kathleen's W3 at kD = 500, 10⁻⁸, level 4 (0.87× with the product) and locust's W1 at
+  kD = 200, 10⁻⁷, level 4 (0.61×), W1 at kD = 500, 10⁻⁸, level 5 (0.91×) and W3 at kD = 200, 10⁻⁸,
+  level 3 (0.88×), in that scoring. *Needs:* CH4.5. *Machines:* Kathleen, locust.
 - CH4.6a The optional rustfft back end of the φ step. Added at CH0.9 (D7; the user on #264,
   2026-11-26: "Q1-3 as recommended"; proposal §6.7, §10). Split on 2026-11-26 into CH4.6a1–a3,
   measuring before the second grid is built (the user: "Split a1/a2/a3 (Recommended)"); rustfft
@@ -677,23 +686,17 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   the form's own 1 u sensitivity, errors 1.0000×; fingerprints agreed over the ranks; CI
   `run-tests-rustfft`. Record `docs/helmholtz/tasks/CH4.6a1.md`. That reading of §10's
   "round-off" signed off 2026-11-26 (the user on #265: "I accept PR Question 1").
-- [ ] **CH4.6a2 The time per level against the product, both grids priced.** *Done when:* each
-  diagonal level's conversions and level call, the product against rustfft on the product's grid,
-  on locust, Kathleen and the M6 (the M6 with the user's go-ahead; S9 did not time it), on W1 at
-  kD = 250–1000 and W3 at kD = 500; the smooth grid priced from S9's per-box FFT times and the
-  level's measured pair cost at its larger N_φ; a question for sign-off: build the smooth grid
-  (CH4.6a3) or keep the product's grid and close CH4.6a3 unrun. Also (from CH4.6a1): the harness
-  (`tetraleaf-validate`'s `helmholtz_accuracy`) takes the φ step as a setting and records the back
-  end and rustfft's CPU features that ran (proposal §6.7: results files record the back end); and
-  whether the time rule's `DiagonalCosts` need an FFT variant (CH4.6a1 kept the product's costs, so
-  rustfft never changes which levels take the form). *Needs:* CH4.6a1. *Machines:* locust,
-  Kathleen, the M6.
-- [ ] **CH4.6a3 The smooth grid, chosen per level by its time.** *Done when:* `Grid` at a chosen
-  N_φ (4P − 3 up to a 7-smooth multiple of 4), the conversions and transfer functions on it under
-  their own table key, round-off against the product's grid; a level's grid (the product's or the
-  smooth one) chosen by a rule fitted on CH4.6a2's times per machine class (constraint 9: no time
-  measured at run time); the time per level against the product on the M6, locust and Kathleen.
-  *Needs:* CH4.6a2 and its sign-off. *Machines:* locust, Kathleen, the M6.
+- [x] **CH4.6a2 The time per level against the product, both grids priced.** rustfft's conversions
+  0.23–0.71× the product's, the diagonal levels 0.60–0.95×, the evaluation 0.89–0.95× (Kathleen,
+  1 × 40) and 0.91–0.99× (locust, 1 × 72), errors 0.993–1.000×; the smooth grid 1.000–1.005× per
+  evaluation; the time rule's costs need no FFT variant; the harness's `--phi-step`. Report
+  `tetraleaf-validate/results/helmholtz-ch4-6a2.md`, record `docs/helmholtz/tasks/CH4.6a2.md`. The M6
+  skipped (the user, 2026-11-26: "Skip the M6"). Signed off on #266 (2026-11-26, the user: "Q1-3 as
+  recommended"): the product's grid kept and CH4.6a3 closed unrun; no FFT costs; the acceptance
+  without the M6; proposal §6.7, §10 and D7 amended.
+- [x] **CH4.6a3 The smooth grid, chosen per level by its time.** Closed unrun by CH4.6a2's sign-off
+  (#266, 2026-11-26: "Q1-3 as recommended"): the smooth grid priced at 1.000–1.005× of an
+  evaluation on Kathleen and locust; rustfft stays on the product's grid.
 - [ ] **CH4.6b The optional FFTW back end of the φ step.** CH4.6 until CH0.9; off the priority list
   since then (D7). *Done when:* against the product to round-off; per-box plans with bits the same
   across batch positions, sizes and threads, and fingerprints all-gathered; off by default, a default
@@ -706,6 +709,44 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
 - [x] **CH4.8b The constant density on W2: the remedy as the default.** `DegreeRule::margin` the default
   (§3.5 amended); W1–W3's constant density within 0.67 ε and 76.3 ε at all six ε, 1.01–1.02× the time.
   Report `tetraleaf-validate/results/helmholtz-ch4-8b.md`. Signed off on #261 (2026-11-25).
+- CH4.9 The Helmholtz leaf expansions by SIMD kernels. Added on 2026-11-26 after CH4.6a2 (the user:
+  "Yes. Add P2M and L2P to the priority list as tasks"; item 14 of the priority list; no proposal §10
+  entry, so the acceptance is the *Done when* below with constraint 1). Measured on Kathleen (job
+  673083, 1 × 40, the defaults, `helmholtz_accuracy --levels` with P2M, M2M, L2L and L2P per level,
+  outputs `~/projects/fmm-archive/kathleen/runs/explore-kinds/`): P2M + L2P 13–31 % of an
+  evaluation on W1 at kD = 250–1000 and W3 at kD = 500 (largest at 10⁻⁸ and at kD = 250; L2P the
+  larger, 1.58 s of W1 at kD = 1000's 15.2 s on the finest level), where they run one scalar
+  `tetraleaf_ref::helmholtz::leaf` call per point (`Densities::{p2m, l2p}`).
+- [ ] **CH4.9a P2M by a SIMD kernel.** *Done when:* `helmholtz_accuracy --levels` prints P2M, M2M,
+  L2L and L2P per level (the table of job 673083); a P2M kernel in `tetraleaf-simd`, vectorised over
+  a leaf's points on the P2P's ISAs (AVX-512, AVX2, NEON, scalar), for real and complex k, real and
+  complex charges and m vectors, run by the operator's `P2pChoice` (`Reference` keeps the per-point
+  reference calls, the trusted path); within a contract per leaf against
+  `tetraleaf_ref::helmholtz::leaf::p2m` in f64 and f32; a leaf's bits the same at every thread count
+  and on P ranks the one-rank FMM's; the FMM's errors within 1.01× the reference path's; P2M's time
+  per level against the reference path on Kathleen and locust (the M6 with the user's go-ahead).
+  Constraint 1: Laplace's kernels and outputs in `tetraleaf-simd` unchanged. Yukawa's
+  `p2m_yukawa` an Also for H2. *Needs:* CH3.4c. *Machines:* Kathleen, locust.
+- [ ] **CH4.9b L2P with gradients by a SIMD kernel.** *Done when:* as CH4.9a for L2P, potentials and
+  gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, sharing CH4.9a's recurrences; the
+  evaluation's time under the defaults before and after CH4.9a–b on CH4.6a2's cases. *Needs:*
+  CH4.9a. *Machines:* Kathleen, locust.
+- [ ] **CH4.9c Laplace's P2M and L2P by SIMD kernels.** Added on 2026-11-26 (the user: "Please add it
+  to the roadmap"); off the priority list. A Laplace task: constraint 1 binds in full. Measured on
+  Kathleen (job 673084, the cube at N = 10⁷, f64, the library's defaults, gradients, `scaling --kinds`
+  at 1 × 40 and 40 × 1; outputs `~/projects/fmm-archive/kathleen/runs/laplace-kinds/`): P2M + L2P
+  19 % of the compute at p = 3, 34–35 % at p = 8, 39–42 % at p = 12 and 36–40 % at p = 18, 1.4–7.1×
+  the P2P from p = 8 on, L2P 1.5–2.3× P2M; they run `tetraleaf_ref::leaf::{p2m_many, l2p_many}`
+  per point (`LaplaceOperator::{p2m, l2p}`). *Done when:* P2M (charges and dipoles) and L2P (with
+  gradients) kernels in `tetraleaf-simd` on the P2P's ISAs, vectorised over a leaf's points and
+  sharing CH4.9a–b's design where it fits, run under `P2pChoice` (`Reference` the per-point calls,
+  the trusted path); within a contract per leaf against `tetraleaf_ref::leaf` in f64 and f32; the
+  FMM's errors within the C3.2 and C3.3 gates; every bit-identity check of `mpi_exec`,
+  `invariance` and `multi_rank` (threads, overlap, ranks, several vectors) holding for the new
+  kernel; Laplace's outputs on `Reference` unchanged bit for bit; on the default kernel new bits
+  only with the user's sign-off (constraint 1), and the Laplace fixtures kept; the device path
+  unchanged; D9's benchmarks before and after on the M6 (with the user's go-ahead), locust and
+  Kathleen. *Needs:* CH4.9b (the design shared). *Machines:* Kathleen, locust, the M6.
 - [x] **H4.G Gate.** `/milestone-gate H4`. Report `docs/helmholtz/gates/H4.md`, reviews
   `docs/reviews/2026-11-24-H4.md` and `docs/reviews/2026-11-25-H4.md`. The first run (#258, 2026-11-24)
   kept H4 open for CH4.8; the second (#262, 2026-11-25) found the condition met on both machine
