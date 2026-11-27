@@ -811,6 +811,16 @@ columns follow CH4.9a1's. `tools/helmholtz/ch4-9a2a-runs.sh` runs it (`smoke`, `
 `ch4-9a2a-tables.py` makes the report's tables (`summary`, `cases`, `lanes`). Its report is
 `results/helmholtz-ch4-9a2a.md`.
 
+Helmholtz CH4.9a2b (P2M by the batched kernel; docs/helmholtz/tasks/CH4.9a2b.md) added
+`helmholtz_accuracy::Case::reference_leaves` (`HelmholtzFmmBuilder::reference_leaves`, `false` in
+`Case::new` and `Case::defaults`) and `Row::p2m_batched`, the example's `--leaves kernel|reference`
+(the column "P2P" ending `/ref-p2m` where an ISA's P2P ran with the reference's P2M), and to
+`helmholtz_leaf` the kernel per point over the batch as one leaf (`tetraleaf_tables::helmholtz::leaf::
+LeafP2m`, checked against the reference first; its ratio to the reference and the projection, and
+its sum's part). `tools/helmholtz/ch4-9a2b-runs.sh` runs the task's stages (`smoke`, `levels`,
+`worst`, `parts`), `ch4-9a2b-tables.py` makes the report's tables (`runs`, `levels`, `worst`,
+`parts`). Its report is `results/helmholtz-ch4-9a2b.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

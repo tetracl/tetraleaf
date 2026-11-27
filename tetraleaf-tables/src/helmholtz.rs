@@ -174,6 +174,7 @@ pub mod batched;
 pub mod classes;
 pub mod dense;
 pub mod diagonal;
+pub mod leaf;
 pub mod plane_wave;
 
 use tetraleaf_math::coaxial::CoaxialTable;

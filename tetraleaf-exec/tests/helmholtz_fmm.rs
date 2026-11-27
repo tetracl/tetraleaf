@@ -15,11 +15,15 @@
 //!   in rank order (`SimpleCommunicator::self_comm()`, on every rank) bit for bit.
 //!
 //! Every scenario runs the default P2P kernel (`P2pChoice::Auto`, the vectorised kernel of
-//! `tetraleaf-simd` on the default ISA). On two scenarios the P2P kernels (Helmholtz CH3.4c):
-//! `Reference` and every ISA this machine offers, `Isa::Scalar` bit for bit `Reference`,
-//! `Auto` bit for bit `Isa(Isa::detect())`, and every ISA within `KERNEL_TOLERANCE` of
-//! `Reference` (relative L2 over every rank's targets) and within the scenario's bound of
-//! the direct sum.
+//! `tetraleaf-simd` on the default ISA), and with it the batched P2M (Helmholtz CH4.9a2b). On two
+//! scenarios the P2P kernels (Helmholtz CH3.4c): `Reference` and every ISA this machine offers,
+//! `Isa::Scalar` with the reference's P2M (`reference_leaves`) bit for bit `Reference`, `Auto`
+//! bit for bit `Isa(Isa::detect())`, and every ISA within `KERNEL_TOLERANCE` of `Reference`
+//! (relative L2 over every rank's targets) and within the scenario's bound of the direct sum.
+//! On every scenario and a cube of complex k with real charges the batched P2M
+//! (`check_leaf_kernel`): against the reference's P2M on the same ISA within
+//! `LEAF_TOLERANCE`, the errors against the direct sum within `LEAF_RATIO` (1.01) of the
+//! reference's, and on P ranks the one-rank FMM bit for bit under both.
 //!
 //! On the same two scenarios the Dense M2L (Helmholtz CH3.2a): within `DENSE_TOLERANCE` of
 //! Rotation's output (relative L2 over every rank's targets) and the scenario's bound of the
@@ -176,6 +180,15 @@ const P8_BOUND: f64 = 1e-3;
 /// is a few tens of u_T per term at these k r; measured at most 6.9e-16 on the M6
 /// (NEON). As Laplace's tolerance for its kernels in f64 (`tests/mpi_exec.rs`).
 const KERNEL_TOLERANCE: f64 = 1e-13;
+
+/// The batched P2M's FMM output may differ from the reference P2M's by this much (relative L2
+/// of φ and of ∇φ over every rank's targets): the kernel's contract per coefficient is a few
+/// u times the terms' sizes (`tetraleaf-tables`' `tests/helmholtz/leaf.rs`).
+const LEAF_TOLERANCE: f64 = 1e-13;
+
+/// The batched P2M's errors against the direct sum within this factor of the reference P2M's,
+/// φ and ∇φ: the acceptance of Helmholtz CH4.9a2b (docs/helmholtz/roadmap.md).
+const LEAF_RATIO: f64 = 1.01;
 
 /// The Dense or Classes M2L's output may differ from Rotation's by this much (relative L2
 /// of φ and of ∇φ over every rank's targets): the same operator in another order of
@@ -738,9 +751,25 @@ fn check_kernels(scenario: &Scenario, comm: &SimpleCommunicator) {
         assert_eq!(fmm.p2p_kernel(), P2pChoice::Isa(isa));
         drop(fmm);
         if isa == Isa::Scalar {
+            // P2P's scalar kernel is the reference's bits; P2M's batched kernel is not, so the
+            // identity holds with the reference's P2M (Helmholtz CH4.9a2b).
+            let (fmm, scalar) = run(
+                &builder
+                    .clone()
+                    .p2p_kernel(P2pChoice::Isa(isa))
+                    .reference_leaves(true),
+                &inputs,
+                kind,
+                comm,
+            );
+            assert!(!fmm.operator().p2m_batched());
+            drop(fmm);
             assert_same(
-                &format!("{}: Isa::Scalar against Reference", scenario.name),
-                &output,
+                &format!(
+                    "{}: Isa::Scalar with the reference's P2M against Reference",
+                    scenario.name
+                ),
+                &scalar,
                 &reference,
                 comm,
             );
@@ -778,6 +807,58 @@ fn check_kernels(scenario: &Scenario, comm: &SimpleCommunicator) {
     if rank == 0 {
         println!("{}: P2P kernels passed", scenario.name);
     }
+}
+
+/// The batched P2M (Helmholtz CH4.9a2b; module documentation): the default (the kernel under
+/// `Auto`) against the reference's P2M on the same P2P kernel, within `LEAF_TOLERANCE`, the
+/// errors against the direct sum within `LEAF_RATIO` of the reference's, and on P ranks the
+/// one-rank FMM bit for bit with the reference's P2M (the default's is in [`check`]).
+fn check_leaf_kernel(scenario: &Scenario, comm: &SimpleCommunicator) {
+    let name = scenario.name;
+    let kind = scenario.charges;
+    let inputs = Inputs::new(scenario, 1, comm);
+    let builder = builder(scenario);
+    let (fmm, batched) = run(&builder, &inputs, kind, comm);
+    assert!(
+        fmm.operator().p2m_batched(),
+        "{name}: the default runs the batched P2M"
+    );
+    drop(fmm);
+    let reference_builder = builder.clone().reference_leaves(true);
+    let (fmm, reference) = run(&reference_builder, &inputs, kind, comm);
+    assert!(!fmm.operator().p2m_batched());
+    assert!(fmm.operator().reference_leaves());
+    drop(fmm);
+    let (phi, grad) = difference(&batched, &reference, comm);
+    let ours = errors(scenario, &inputs, &batched, 0, comm);
+    let theirs = errors(scenario, &inputs, &reference, 0, comm);
+    if comm.rank() == 0 {
+        println!(
+            "{name}: batched P2M against the reference's: relative L2 φ {phi:.2e}, ∇φ \
+             {grad:.2e}; errors φ {:.4e} against {:.4e} ({:.4}×), ∇φ {:.4e} against {:.4e}",
+            ours.0,
+            theirs.0,
+            ours.0 / theirs.0,
+            ours.1,
+            theirs.1
+        );
+    }
+    assert!(
+        phi <= LEAF_TOLERANCE && grad <= LEAF_TOLERANCE,
+        "{name}: batched P2M against the reference's: φ {phi:e}, ∇φ {grad:e}"
+    );
+    assert!(
+        ours.0 <= LEAF_RATIO * theirs.0 && ours.1 <= LEAF_RATIO * theirs.1,
+        "{name}: errors {ours:?} against the reference P2M's {theirs:?}"
+    );
+    check_one_rank(
+        &format!("{name}, the reference's P2M"),
+        &reference_builder,
+        &inputs,
+        kind,
+        &reference,
+        comm,
+    );
 }
 
 /// The Dense M2L (Helmholtz CH3.2a), the Classes M2L (Helmholtz CH3.2b) or the Batched M2L
@@ -4819,6 +4900,15 @@ fn helmholtz_fmm() {
     // charges and separate targets.
     check_kernels(&scenarios()[0], &comm);
     check_kernels(&scenarios()[2], &comm);
+    // The batched P2M (CH4.9a2b): every scenario (complex k with complex charges, real k with
+    // complex and with real charges), and complex k with real charges.
+    for scenario in scenarios()
+        .iter()
+        .filter(|s| !debug || s.debug)
+        .chain(&resolving_scenarios()[1..2])
+    {
+        check_leaf_kernel(scenario, &comm);
+    }
     // The Dense, Classes and Batched M2L: complex k with complex charges, real k with real
     // charges (real multipoles, one plane).
     let mut chunked = false;

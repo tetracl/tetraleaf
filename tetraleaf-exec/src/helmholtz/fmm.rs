@@ -66,7 +66,10 @@
 //! this machine, [`P2pChoice::Reference`] the trusted slower path
 //! (`tetraleaf_ref::helmholtz::p2p::p2p`). The choice changes the output only in the last bits
 //! (the kernel's accuracy contract, the [`operator`](super::operator) module documentation,
-//! "P2P kernel"); [`HelmholtzFmm::p2p_kernel`] reports the kernel that runs.
+//! "P2P kernel"); [`HelmholtzFmm::p2p_kernel`] reports the kernel that runs. It also chooses
+//! P2M (Helmholtz CH4.9a2b): the batched kernel of `tetraleaf_tables::helmholtz::leaf` under every
+//! ISA, the reference's per-point calls under [`P2pChoice::Reference`] or with
+//! [`HelmholtzFmmBuilder::reference_leaves`] (the operator module documentation, "P2M kernel").
 //!
 //! Not yet: overlap, the device path, the near rule and the work cut, and table caches.
 //!
@@ -460,6 +463,7 @@ pub struct HelmholtzFmmBuilder {
     phi_salt: u64,
     c_leaf: f64,
     p2p: P2pChoice,
+    reference_leaves: bool,
     empty_boxes: bool,
     near_v: VNear,
     near_wx: WxNear,
@@ -525,6 +529,7 @@ impl HelmholtzFmmBuilder {
             phi_salt: 0,
             c_leaf: DEFAULT_C_LEAF,
             p2p: P2pChoice::Auto,
+            reference_leaves: false,
             empty_boxes: true,
             near_v: VNear::CostModel,
             near_wx: WxNear::CostModel,
@@ -977,6 +982,14 @@ impl HelmholtzFmmBuilder {
     /// every rank, the others returning [`HelmholtzFmmError::OtherRank`].
     pub fn p2p_kernel(mut self, choice: P2pChoice) -> Self {
         self.p2p = choice;
+        self
+    }
+
+    /// P2M by the reference's per-point calls whatever the P2P kernel (default `false`: the
+    /// batched kernel under every ISA; Helmholtz CH4.9a2b; the operator module documentation, "P2M
+    /// kernel"). A measurement and test setting, the trusted path of the batched kernel.
+    pub fn reference_leaves(mut self, reference: bool) -> Self {
+        self.reference_leaves = reference;
         self
     }
 
@@ -1538,6 +1551,7 @@ impl HelmholtzFmmBuilder {
         )?
         .with_p2p(self.p2p)
         .expect("the P2P kernel's ISA is available (checked in step 1)")
+        .with_reference_leaves(self.reference_leaves)
         .with_m2l_max_degree(Some(usize::try_from(max_degree).unwrap_or(usize::MAX)))
         .with_m2l_plane_wave_min_degree(Some(
             usize::try_from(plane_wave_min_degree).unwrap_or(usize::MAX),
