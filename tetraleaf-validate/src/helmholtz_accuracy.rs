@@ -1118,7 +1118,10 @@ fn signature_scratch<C: CommunicatorCollectives>(
 /// reset to it ([`reset_peak_resident`]), and the peak after the last evaluation
 /// ([`peak_resident`]); the growth is the peak less the size before, so the harness's own
 /// arrays (the points, the charges, the oracle, FMM3D's outputs) are left out, and the FMM's
-/// output is in.
+/// output is in. The growth counts only pages the process did not hold at the reset: an FMM
+/// built after other work in the same process (an earlier run, a larger FMM freed) can reuse
+/// pages the allocator kept from it, so the growth is then a lower bound on the FMM's
+/// footprint, and can be 0 (main's CI, 2026-11-27).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Memory {
     /// The largest growth of one rank.

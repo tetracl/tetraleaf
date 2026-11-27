@@ -728,7 +728,11 @@ helmholtz` takes `<workload>@<kD>/<density>`, `H_SETTINGS` and FMM3D's memory pe
 `tools/helmholtz/ch4-4a-runs.sh` runs the task's stages, `ch4-4a-tables.py` makes the report's
 tables. Its report is `results/helmholtz-ch4-4a.md`. The one-rank debug run of
 `tests/helmholtz_accuracy.rs` took 437.8 s on the M6 at load 19–24 (16 s at opt-level 1), not
-comparable with CH4.0e's 246 s at load 2–3.
+comparable with CH4.0e's 246 s at load 2–3. The growth counts only pages the process did not
+hold at the reset, so an FMM after other work in one process (the test's later checks, the
+example's second ε) can reuse pages the allocator kept and grow less, even 0: since
+2026-11-27 (a flake of `growth_max > 0` on main's CI) `check_defaults` holds the FMM's columns
+to consistency and the peak itself to a 128 MiB probe (`check_peak_probe`).
 
 Helmholtz CH4.4b (the crosscheck mapped to levels and classes; docs/helmholtz/tasks/CH4.4b.md)
 added `helmholtz_accuracy::Case::m2l_overrides` (`HelmholtzFmmBuilder::m2l_overrides`, empty in
