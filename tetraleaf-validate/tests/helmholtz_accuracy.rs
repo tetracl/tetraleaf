@@ -994,9 +994,18 @@ fn check_leaves(world: &SimpleCommunicator) {
         assert!(row.leaves_by_level.iter().all(|c| c[1] <= c[0]));
         assert_eq!(row.kind_seconds.len(), row.levels);
         assert_eq!(row.far_leaf_entries.len(), row.levels);
-        // Every level with leaves holding points ran L2P (its fourth kind).
+        // Every level with leaves holding points ran L2P (its fourth kind) and, since sources
+        // equal targets, P2M (its first; the table "Translations and leaf expansions", Helmholtz
+        // CH4.9a1); M2M and L2L ran on some level.
         assert!(
-            (0..row.levels).all(|l| row.leaves_by_level[l][1] == 0 || row.kind_seconds[l][3] > 0.0),
+            (0..row.levels).all(|l| row.leaves_by_level[l][1] == 0
+                || (row.kind_seconds[l][3] > 0.0 && row.kind_seconds[l][0] > 0.0)),
+            "{:?}",
+            row.kind_seconds
+        );
+        assert!(
+            row.kind_seconds.iter().any(|k| k[1] > 0.0)
+                && row.kind_seconds.iter().any(|k| k[2] > 0.0),
             "{:?}",
             row.kind_seconds
         );
