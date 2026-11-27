@@ -986,7 +986,7 @@ impl HelmholtzFmmBuilder {
     }
 
     /// P2M by the reference's per-point calls whatever the P2P kernel (default `false`: the
-    /// batched kernel under every ISA; Helmholtz CH4.9a2b; the module documentation, "P2P
+    /// batched kernel under every ISA; Helmholtz CH4.9a2b; the operator module documentation, "P2M
     /// kernel"). A measurement and test setting, the trusted path of the batched kernel.
     pub fn reference_leaves(mut self, reference: bool) -> Self {
         self.reference_leaves = reference;

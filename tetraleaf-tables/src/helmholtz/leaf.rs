@@ -124,8 +124,8 @@ impl<T> LeafCharges<'_, T> {
 }
 
 /// The batched P2M of a leaf up to a degree (the [module documentation](self)): the leaf
-/// harmonics' table. It allocates once, in [`LeafP2m::new`], and is read-only after, so one
-/// serves every thread.
+/// harmonics' table. It allocates once, in [`LeafP2m::new`], and is read-only after, so one can
+/// serve every thread.
 #[derive(Clone, Debug)]
 pub struct LeafP2m<T> {
     harmonics: LeafHarmonics<T>,

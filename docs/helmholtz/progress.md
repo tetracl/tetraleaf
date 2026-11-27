@@ -5100,7 +5100,7 @@ request, using this template:
   - Per leaf: every coefficient within C u √((2n + 1)/(4π)) Σⱼ |qⱼ eⱼ| (((n + 1)² + N) |ĵₙ| +
     |kρⱼ| |ĵₙ′|), C measured about 1.0 (f64 to p = 45, f32 to p = 32) against the tests' 10. The first
     contract, without the last term, failed near a zero of ĵ₀ (ρ by `sqrt`, the reference's by `hypot`).
-  - FMM: errors 0.998–1.000× the reference P2M's on CH4.9's cases and W1's and W2's constant density
+  - FMM: errors 0.993–1.000× the reference P2M's on CH4.9's cases (three printed digits) and W1's and W2's constant density
     at kD = 500 on both machines; tests 1.0000×, outputs within 3.0·10⁻¹⁶.
   - P2M per run 0.25–0.31× (Kathleen) and 0.15–0.27× (locust), from 3.2–8.5 % of an evaluation to
     0.6–2.4 %; the evaluation 0.92–0.99× and 0.94–0.97×.
@@ -5108,8 +5108,9 @@ request, using this template:
     The batched sum is 27–56 % of it on Kathleen and no faster than the scalar sum there (0.96–1.23×;
     locust 0.70–0.83×): the workspace builds for the baseline (SSE2, NEON; two f64 lanes, no fma) and
     the sum pays a lane reduction per term.
-  - f32: the reference's Kathleen slowdown (1.40× f64 at p = 45) does not reach the kernel (0.72× its
-    f64 time); the f32 sum is only 0.88× the f64 sum there, not diagnosed.
+  - f32: the reference's Kathleen slowdown (1.40× f64 at p = 45) is gone from the routines, but the
+    pattern moved into the batched sum: there the f32 sum is 0.88× the f64 sum and 1.45× the scalar
+    sum (subnormal products possible, not diagnosed); the f32 kernel 0.72× its f64 time.
 - Tests: `tetraleaf-tables/tests/helmholtz/leaf.rs` (the contract in f64 and f32, vectors bit for bit,
   real charges the real plane of complex ones bit for bit, accumulation, scratch, refusals);
   `tetraleaf-exec/tests/helmholtz/densities.rs` (`the_batched_p2m_is_the_reference_to_rounding`);
@@ -5125,6 +5126,7 @@ request, using this template:
   now, carried to CH4.9b).
 - Laplace: not touched (a new Helmholtz module of `tetraleaf-tables`, Helmholtz code of
   `tetraleaf-exec`, the harness, scripts and documents; `P2pChoice` read, not changed).
-- Follow-ups: an Also on CH4.9b: the ISA question carried (L2P's sum needs no lane reduction; one ISA
+- Follow-ups: an Also on CH2.1: Yukawa's P2M by a batched kernel (the acceptance's Also for H2). An
+  Also on CH4.9b, conditional on question 1: the ISA question carried (L2P's sum needs no lane reduction; one ISA
   kernel for both sums if L2P's stays far from its floor on x86), the f32 sum, `reference_leaves` for
   L2P.

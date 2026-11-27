@@ -35,6 +35,12 @@ the batched sum decides the ISA question.
 - `tetraleaf-validate/examples/helmholtz_leaf.rs`, `helmholtz_accuracy.rs` (`--levels`, `--p2p`).
 
 ## Changes
+As built (the self-review): the kernel sums each term over the 16 lanes per batch (a pairwise
+reduction) and adds it to the coefficient, rather than per-lane accumulators summed once per leaf,
+so that the scratch does not grow with the coarse levels' degrees (the operator sizes it by the
+largest degree of every level); `P2mScratch::new(p, vectors)`. The accumulators per leaf are the
+report's third alternative (§7). The plan as written follows.
+
 - `tetraleaf-tables/src/helmholtz/leaf.rs` (new, `pub mod leaf` of `helmholtz`):
   - `LANES` = 16 (CH4.9a2a §5).
   - `LeafCharges<'a, T> { values, vectors, complex }`: a leaf's strengths point-major, as the
@@ -141,13 +147,14 @@ smoke run of `helmholtz_leaf`, its numbers not used).
   C about 1.0 measured against the tests' 10 (as built: the first contract, without the conditioning
   term, failed at p = 2, k̂ = 16 near a zero of ĵ₀, where ρ by `sqrt` and by `hypot` differ in the
   last bit).
-- FMM: errors 0.998–1.000× the reference P2M's (W1's and W2's constant density at kD = 500 included);
+- FMM: errors 0.993–1.000× the reference P2M's (three printed digits) (W1's and W2's constant density at kD = 500 included);
   tests 1.0000×, outputs within 3.0·10⁻¹⁶.
 - P2M per run 0.25–0.31× (Kathleen), 0.15–0.27× (locust); 0.6–2.4 % of an evaluation after; the
   evaluation 0.92–0.99× and 0.94–0.97×.
 - Per point: the kernel 0.20–0.24× and 0.12–0.20× the reference (f64); its batched sum no faster than
   the scalar sum on Kathleen (baseline SSE2, two lanes, a lane reduction per term).
-- f32: the reference's slowdown does not reach the kernel (0.72× f64 at p = 45 on Kathleen).
+- f32: the kernel 0.72× its f64 time at p = 45 on Kathleen, but its batched sum shows the slowdown's
+  pattern (0.88× the f64 sum, 1.45× the scalar sum); not diagnosed.
 
 ## Checks run (the M6)
 `/verify`: fmt; Clippy default, examples, `--workspace --all-targets` (one `is_multiple_of` lint in the

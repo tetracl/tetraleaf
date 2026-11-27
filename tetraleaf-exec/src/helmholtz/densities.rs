@@ -495,9 +495,11 @@ impl Densities {
             vectors: self.vectors,
             complex: self.charges == ChargeKind::Complex,
         };
-        debug_assert_eq!(
+        // The kernel reads real k from k̂ rounded to T; the path's kind decides the storage.
+        assert_eq!(
             LeafP2m::planes(&level, charges.complex),
-            self.multipole_planes()
+            self.multipole_planes(),
+            "k̂ = k r rounded to T changed the kind of k"
         );
         let points = coordinates.as_chunks::<3>().0;
         scratch

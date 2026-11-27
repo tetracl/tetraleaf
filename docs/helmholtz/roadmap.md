@@ -10,9 +10,9 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 Status (2026-11-27): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). Item 14, the leaf
 expansions: CH4.9a1 and CH4.9a2a merged; CH4.9a2b (P2M by the batched kernel under every ISA, 0.25–0.31×
-the reference's per run on Kathleen and 0.15–0.27× on locust, the FMM's errors 0.998–1.000×) done in
-its PR, its ISA question for sign-off. Next CH4.9b (L2P, the ISA question carried to it as
-recommended), then H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and
+the reference's per run on Kathleen and 0.15–0.27× on locust, the FMM's errors 0.993–1.000×) done in
+its PR, its ISA question for sign-off. Next CH4.9b (L2P; with question 1 as recommended the ISA
+question is carried to it), then H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and
 CH4.9c. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of
 H0, CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in
 `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G
@@ -337,7 +337,10 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   at least 90 % of the spike (C3S.4). *Needs:* CH2.4a. *Machines:* locust, Kathleen.
 - [ ] **CH2.1 The real `HelmholtzOperator` path.** On CH2.0's drivers (or copies), Rotation
   and Dense M2L. *Done when:* the FMM against the direct sum on W1, W3 and W4 for κD from
-  10⁻² to 10³; deterministic. *Needs:* CH2.0, D12. *Sign-off:* D4.
+  10⁻² to 10³; deterministic. Also (from CH4.9a2b): Yukawa's leaf P2M by a batched kernel,
+  `p2m_yukawa` restated as `tetraleaf_tables::helmholtz::leaf::LeafP2m` restates `p2m` (`LeafP2m`
+  refuses Yukawa; `Densities::p2m_kernel` keeps the per-point `p2m_yukawa` there), with its contract
+  and the FMM's errors within 1.01× the per-point path's. *Needs:* CH2.0, D12. *Sign-off:* D4.
 - [ ] **CH2.2 Per-level tables with per-level cache keys.** *Done when:* build cost and
   memory reported; levels reused across an octave sweep. *Needs:* CH2.1, D4.
 - [ ] **CH2.3 Pruning and the calibration of p_l.** *Done when:* the relative error within
@@ -763,7 +766,7 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
 - [x] **CH4.9a2b P2M by the kernel.** `tetraleaf_tables::helmholtz::leaf::LeafP2m` (16 points per
   batch on CH4.9a2a's routines, safe Rust) under every ISA, the reference under `Reference` or
   `reference_leaves`; within C = 10 of its contract per coefficient (about 1 measured, f64 and f32), the
-  FMM's errors 0.998–1.000× the reference path's (W1's and W2's constant density included); P2M per run
+  FMM's errors 0.993–1.000× the reference path's (W1's and W2's constant density included); P2M per run
   0.25–0.31× on Kathleen and 0.15–0.27× on locust, now 0.6–2.4 % of an evaluation. Report
   `tetraleaf-validate/results/helmholtz-ch4-9a2b.md`, record `docs/helmholtz/tasks/CH4.9a2b.md`.
   Question 1 (the ISA question: on x86's baseline build the batched sum is no faster than the scalar
@@ -772,7 +775,8 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, reusing CH4.9a2's leaf harmonics and
   radial functions and adding their derivatives (CH4.9a1's question 2); the
   evaluation's time under the defaults before and after CH4.9a–b on CH4.6a2's cases. Also (from
-  CH4.9a2b, its question 1 as recommended): the ISA question carried here. The workspace builds for
+  CH4.9a2b, if its question 1 is signed off as recommended; until then pending): the ISA question
+  carried here. The workspace builds for
   each architecture's baseline (SSE2, NEON: two f64 lanes), on which P2M's batched sum, with a lane
   reduction per term, was no faster than the scalar sum on Kathleen (0.96–1.23×, report §5); L2P sums
   over terms per target, with no reduction across lanes, so measure its sum against its floor on

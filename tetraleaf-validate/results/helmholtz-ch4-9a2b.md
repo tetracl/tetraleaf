@@ -17,19 +17,23 @@ trusted path, and measures it per point and per level on Kathleen and locust.
    |kρⱼ| |ĵₙ′|), with the measured C about **1.0** in f64 (p ≤ 45) and in f32 (p ≤ 32) against the
    test's 10; the kernel's multipole within 1.3–2.2·10⁻¹⁵ (f64) and 0.8–1.3·10⁻⁶ (f32) of the
    reference's largest value on the runs' leaves.
-3. **Accuracy, FMM** (§3): the errors against the direct sum **0.998–1.000×** the reference P2M's on
-   every case on both machines (the acceptance: within 1.01×), W1's and W2's constant density at
+3. **Accuracy, FMM** (§3): the errors against the direct sum **0.993–1.000×** the reference P2M's on
+   every case on both machines (the harness prints three digits, so a printed 1.000 means at most
+   about 1.007) (the acceptance: within 1.01×), W1's and W2's constant density at
    kD = 500 included; in the tests 1.0000× on five scenarios, the outputs within 3.0·10⁻¹⁶.
 4. **Time per run** (§4, one rank, every core): P2M **0.25–0.31× (Kathleen) and 0.15–0.27×
    (locust)** the reference's, from 3.3–8.5 % (Kathleen) and 3.2–7.2 % (locust) of an evaluation to
-   1.0–2.4 % and 0.6–1.4 %; the evaluation 0.92–0.99× (Kathleen) and 0.94–0.97× (locust).
+   1.0–2.4 % and 0.6–1.4 %; the evaluation 0.92–0.99× (Kathleen) and 0.94–0.97× (locust), several
+   of those within the runs' spread (§4); the P2M ratios are the robust result.
 5. **Time per point** (§5, one core): the kernel 0.20–0.24× (Kathleen) and 0.12–0.20× (locust) the
    reference's P2M in f64. Its batched sum is 27–56 % of it on Kathleen, where it is **no faster than
    the reference's scalar sum** (0.96–1.23×), and 16–47 % on locust (0.70–0.83×): the build targets
    baseline x86-64 and NEON, so the safe-Rust sum runs on 128-bit vectors and pays a lane reduction
    per term. That is the ISA question (§7).
-6. **f32** (§6): the reference's slowdown on Kathleen (f32 at p = 45 1.40× f64's time) does not
-   reach the kernel, whose f32 time is 0.72× its f64 time there (0.76× on locust).
+6. **f32** (§6): the kernel's f32 time is 0.72× its f64 time at p = 45 on Kathleen (0.76× on
+   locust), where the reference's is 1.40×; but the slowdown's pattern moved into the batched sum,
+   which in f32 grows from 0.71× to 1.45× the scalar sum between p = 8 and 45 on Kathleen (not
+   diagnosed).
 
 ## 1. Setup
 
@@ -92,7 +96,8 @@ kD = 20 (real charges) and the cube at kD = 20 + 2i with real charges at 10⁻�
 the executable (threads, pair by pair, vectors, one rank) now runs the kernel.
 
 The runs, the errors' ratio kernel ÷ reference (each setting's first launch; the harness prints
-three digits, so 0.998 is one unit of the last digit):
+three digits, so 0.998 and 0.993 are one unit of the last digit: 4.63 against 4.64, 1.45 against
+1.46):
 
 | case | Kathleen φ | Kathleen ∇φ | locust φ | locust ∇φ |
 | --- | ---: | ---: | ---: | ---: |
@@ -136,6 +141,9 @@ locust (1 × 72):
 | W1, kD = 500, 10⁻⁸ | 0.0249 | 0.1668 | 0.149 | 7.2 % → 1.1 % | 2.170 | 2.310 | 0.939 (1.009) |
 | W3 (10⁶), kD = 500, 10⁻⁶ | 0.0123 | 0.0626 | 0.197 | 3.2 % → 0.6 % | 1.920 | 1.985 | 0.967 (1.010) |
 
+On Kathleen the evaluation's ratios at kD = 1000 (0.992, spread 1.065) and on W3 (0.984, 1.043)
+lie within the run-to-run spread; the P2M ratios do not.
+
 Per level with occupied leaves (levels whose reference P2M takes less than 1 ms, the level call's
 overhead alone, left out), Kathleen: 0.245–0.274× (p = 12–32) but W3's level 5, 0.308×; locust: 0.14–0.26× (W1 at 10⁻⁸, p = 32: 0.14–0.16×; p = 8–26: 0.18–0.26×). The full
 tables: `python3 tools/helmholtz/ch4-9a2b-tables.py levels <out-dir>`.
@@ -154,6 +162,9 @@ values (CH4.9a2a's "sum, leaf values").
 | 26 | 5.240 | 1.036 | 0.20 | 1.09 | 0.52 | 1.18 | 4.098 | 0.541 | 0.13 | 0.92 | 0.40 | 0.83 |
 | 32 | 7.377 | 1.459 | 0.20 | 1.10 | 0.54 | 1.22 | 5.768 | 0.738 | 0.13 | 0.92 | 0.42 | 0.83 |
 | 45 | 13.437 | 2.660 | 0.20 | 1.12 | 0.56 | 1.23 | 10.342 | 1.284 | 0.12 | 0.91 | 0.47 | 0.83 |
+
+The per-point runs and the FMM's cases take real k only; the complex-k path (`bessel_j` and the
+factor's `exp` per lane) is tested for accuracy (§2, §3) but not timed.
 
 On locust the kernel is a little below CH4.9a2a's projection (0.91–0.94×); on Kathleen it reaches it
 at p = 8–12 and lies above it from p = 17 (1.05–1.12×), because its batched sum is slower than the
@@ -176,7 +187,9 @@ CH4.9a1's f32 slowdown of the reference on Kathleen (1.40× f64 at p = 45 here) 
 kernel. The f32 kernel's sum is still only 0.88× its f64 sum at p = 45 on Kathleen (1.31 against
 1.50 µs) and 1.45× the scalar sum on the routines' f32 values: four f32 lanes in SSE2 should give
 more. Subnormal products q e ĵₙ Q̄ₙᵐ (CH4.9a2a §4's remaining case) may contribute; not diagnosed.
-f32 is reserved for low degrees (CONVENTIONS §3.15) and the FMM runs f64 only.
+Between p = 8 and 45 on Kathleen the f32 kernel over its projection rises from 0.91 to 1.24 and its
+sum's share to 0.69: the subnormal pattern of CH4.9a1 now in the batched sum rather than gone. f32
+is reserved for low degrees (CONVENTIONS §3.15) and the FMM runs f64 only.
 
 ## 7. Question for sign-off
 
