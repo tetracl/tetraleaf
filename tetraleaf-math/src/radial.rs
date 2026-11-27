@@ -22,6 +22,9 @@
 //!   whichever is larger) from its closed form, a power series for |z| < 0.5, and the
 //!   values upward. No pass overflows. The start order is a function of z and the
 //!   length only, computed in f64 for every `T`.
+//! - [`bessel_j_real`] (Helmholtz CH4.9a2a): [`bessel_j`] at real arguments in real arithmetic,
+//!   for a batch of arguments as lanes, the same values bit for bit but for under-range values
+//!   beyond the turning point, which it sets to zero.
 //! - [`hankel_h`] and [`modified_k`]: the upward recursion from the closed forms of orders
 //!   0 and 1, the stable direction.
 //! - Derivatives from the neighbouring orders: jₙ′ = (n jₙ₋₁ − (n + 1) jₙ₊₁)/(2n + 1),
@@ -172,6 +175,96 @@ pub fn bessel_j<T: RealScalar>(
             };
         }
     }
+}
+
+/// ĵₙ(x) = jₙ(x)/sⁿ of real x ≥ 0 for n < `values.len()`, for B arguments at once as lanes
+/// (`values[n][j]` is ĵₙ of `x[j]`), in real arithmetic (Helmholtz CH4.9a2a).
+///
+/// Each lane runs [`bessel_j`]'s operations on its real parts: the start order of
+/// `start_order_j` (restated in real arithmetic, the same orders), the backward ratio recursion
+/// (run from the largest start order of the lanes, each lane entering at its own, its ratio 0
+/// above it as [`bessel_j`] starts at 0), the zero-denominator guard, ĵ₀ or ĵ₁ from the power
+/// series or the closed forms, and the upward pass. A lane's values are therefore
+/// [`bessel_j`]`(Complex::new(x, 0), s, …)`'s real parts bit for bit, the same at every B and in
+/// every position, but for one difference: beyond the turning point (n ≥ x, where jₙ(x) has no
+/// zero and falls with n) a value below the under-range threshold τ (2⁻⁹⁰⁰ for f64's range,
+/// 2⁻¹⁰⁰ for f32's; [`crate::orthonormal::leaf`], "Under-range values") is set to zero,
+/// and so are the lane's later values, so that no operand of the pass is subnormal. The power
+/// series drops a term below τ, which changes no bit of ĵ₀ or ĵ₁ (each at least 1/3 there).
+/// The lanes are fixed-size arrays and the special cases selects, so the compiler vectorises
+/// the recursions without `unsafe`; the start orders and the closed forms (`sin`, `cos`) run per
+/// lane.
+///
+/// ```
+/// use tetraleaf_math::Complex;
+/// use tetraleaf_math::radial::{bessel_j, bessel_j_real};
+///
+/// let x = [2.0_f64, 0.25];
+/// let mut lanes = [[0.0; 2]; 5];
+/// bessel_j_real(&x, 1.0, &mut lanes);
+/// let mut one = [Complex::new(0.0, 0.0); 5];
+/// bessel_j(Complex::new(x[1], 0.0), 1.0, &mut one, None);
+/// assert!(lanes.iter().zip(&one).all(|(l, j)| l[1] == j.re));
+/// ```
+///
+/// # Panics
+///
+/// If s is not in (0, 1] or an argument is negative or not finite.
+pub fn bessel_j_real<T: RealScalar, const B: usize>(x: &[T; B], s: T, values: &mut [[T; B]]) {
+    check_scale(s);
+    assert!(
+        x.iter().all(|&x| x.is_finite() && x >= T::zero()),
+        "bessel_j_real needs finite x ≥ 0"
+    );
+    let len = values.len();
+    if len == 0 {
+        return;
+    }
+    let tau = crate::orthonormal::under_range::<T>();
+    let starts: [usize; B] = core::array::from_fn(|j| start_order_j_real(len, x[j].to_f64()));
+    let top = starts.iter().copied().max().unwrap_or(0);
+    // The ratios rₙ = jₙ/jₙ₋₁ for n = 1..len, values[n − 1] holding rₙ.
+    let mut r = [T::zero(); B];
+    for n in (1..=top).rev() {
+        let c = int::<T>(2 * n + 1);
+        for j in 0..B {
+            let mut d = c - x[j] * r[j];
+            if d == T::zero() {
+                d = T::epsilon() * c;
+            }
+            r[j] = if n <= starts[j] { x[j] / d } else { T::zero() };
+        }
+        if n < len {
+            values[n - 1] = r;
+        }
+    }
+    let mut prev = [T::zero(); B];
+    let mut j1s = [T::zero(); B];
+    let mut use_j1 = [false; B];
+    for j in 0..B {
+        let (j0, j1) = j0_j1_real(x[j], tau);
+        prev[j] = j0;
+        j1s[j] = j1;
+        use_j1[j] = j1.abs() > j0.abs();
+    }
+    for n in 1..len {
+        let rn = values[n - 1];
+        values[n - 1] = prev;
+        let past = int::<T>(n);
+        for j in 0..B {
+            let next = if n == 1 && use_j1[j] {
+                j1s[j] / s
+            } else {
+                prev[j] * rn[j] / s
+            };
+            prev[j] = if past >= x[j] && next.abs() < tau {
+                T::zero()
+            } else {
+                next
+            };
+        }
+    }
+    values[len - 1] = prev;
 }
 
 /// ĥₙ(z) = e^{Im z} hₙ⁽¹⁾(z) sⁿ for n < `values.len()`, and ĥ′ₙ in `derivatives` if given.
@@ -345,6 +438,23 @@ fn start_order_j(len: usize, z: Complex<f64>) -> usize {
     n.max(len + 2)
 }
 
+/// [`start_order_j`] for real z = x, in real arithmetic: the same orders, since Smith's
+/// division of two reals is their quotient.
+fn start_order_j_real(len: usize, x: f64) -> usize {
+    if x == 0.0 {
+        return len + 2;
+    }
+    let (mut g, mut f) = (0.0f64, 1.0f64);
+    let mut n = len;
+    while f.abs() < GROWTH {
+        let next = f * (2 * n + 1) as f64 / x - g;
+        g = f;
+        f = next;
+        n += 1;
+    }
+    n.max(len + 2)
+}
+
 /// [`start_order_j`] for iₙ, whose recursion iₙ₊₁ = iₙ₋₁ − (2n + 1)/x iₙ has the
 /// forward-growing solution (−1)ⁿ kₙ.
 fn start_order_i(len: usize, x: f64) -> usize {
@@ -390,6 +500,34 @@ fn j0_j1<T: RealScalar>(z: Complex<T>) -> (Complex<T>, Complex<T>) {
     let sin = (plus - minus) * Complex::new(T::zero(), T::from_f64(-0.5)); // ÷ 2i
     let cos = (plus + minus) * T::from_f64(0.5);
     (div(sin, z), div(div(sin, z), z) - div(cos, z))
+}
+
+/// [`j0_j1`] of real x ≥ 0 in real arithmetic, the real parts of its complex values bit for
+/// bit; the series drops a term once it is below `tau` (which changes no bit of the sums, each
+/// at least 1/3 below [`SERIES`]).
+fn j0_j1_real<T: RealScalar>(x: T, tau: T) -> (T, T) {
+    if x == T::zero() {
+        return (T::one(), T::zero());
+    }
+    if x.to_f64() < SERIES {
+        let w = x * x * T::from_f64(-0.5);
+        let (mut s0, mut s1) = (T::zero(), T::zero());
+        let mut term = T::one();
+        let (mut d0, mut d1) = (T::one(), int::<T>(3));
+        for k in 0..SERIES_TERMS {
+            s0 = s0 + term / d0;
+            s1 = s1 + term / d1;
+            term = term * w / int::<T>(k + 1);
+            if term.abs() < tau {
+                term = T::zero();
+            }
+            d0 = d0 * int(2 * k + 3);
+            d1 = d1 * int(2 * k + 5);
+        }
+        return (s0, x * s1);
+    }
+    let (sin, cos) = (x.sin(), x.cos());
+    (sin / x, sin / x / x - cos / x)
 }
 
 /// a / b by Smith's algorithm, which forms neither |b|² nor a product of the two moduli.
