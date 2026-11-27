@@ -130,7 +130,33 @@ the batched sum decides the ISA question.
 - Risk: `Isa::Scalar` no longer `Reference`'s FMM bits; kept by `reference_leaves`.
 
 ## Pending runs
-None yet.
+None. Kathleen job 673212 (node-c11a-080, 1 × 40; `smoke`, `levels`, `worst`, `parts`; 17 min 52 s,
+2026-11-27 16:45–17:01) and locust (1 × 72, 16:45–16:57, after a gate: one-minute load below 2, no
+other process of this account busy; a root `find` took 0.3–1 core throughout); every launch exit 0.
+Outputs in `~/projects/fmm-archive/{kathleen,locust}/runs/ch4-9a2b/`. The M6 not timed (a short
+smoke run of `helmholtz_leaf`, its numbers not used).
+
+## Results (the report `tetraleaf-validate/results/helmholtz-ch4-9a2b.md`)
+- Per leaf: within the contract C u √((2n + 1)/(4π)) Σⱼ |qⱼ eⱼ| (((n + 1)² + N) |ĵₙ| + |kρⱼ| |ĵₙ′|),
+  C about 1.0 measured against the tests' 10 (as built: the first contract, without the conditioning
+  term, failed at p = 2, k̂ = 16 near a zero of ĵ₀, where ρ by `sqrt` and by `hypot` differ in the
+  last bit).
+- FMM: errors 0.998–1.000× the reference P2M's (W1's and W2's constant density at kD = 500 included);
+  tests 1.0000×, outputs within 3.0·10⁻¹⁶.
+- P2M per run 0.25–0.31× (Kathleen), 0.15–0.27× (locust); 0.6–2.4 % of an evaluation after; the
+  evaluation 0.92–0.99× and 0.94–0.97×.
+- Per point: the kernel 0.20–0.24× and 0.12–0.20× the reference (f64); its batched sum no faster than
+  the scalar sum on Kathleen (baseline SSE2, two lanes, a lane reduction per term).
+- f32: the reference's slowdown does not reach the kernel (0.72× f64 at p = 45 on Kathleen).
+
+## Checks run (the M6)
+`/verify`: fmt; Clippy default, examples, `--workspace --all-targets` (one `is_multiple_of` lint in the
+new test, fixed); `cargo doc` with `-D warnings`; at opt-level 1 `cargo test` (1,421 passed) and
+`cargo test --workspace` (1,465 passed); the MPI list at 2 and 4 ranks (every executable passed;
+`helmholtz_fmm` 53.7 s and 49.4 s); `helmholtz_fmm` at one rank, opt-level 1, 53 s. Not run:
+`cargo deny` (no manifest change), Laplace's benchmarks (no Laplace path).
 
 ## Open questions
-None yet.
+For sign-off on the PR (the report §7):
+1. The ISA question: no ISA kernel for P2M now, the question carried to CH4.9b (recommended); or an
+   ISA kernel of P2M's sum in `tetraleaf-simd` now; or lane accumulators per leaf in safe Rust.

@@ -5080,3 +5080,51 @@ request, using this template:
   documents).
 - Follow-ups: CH4.9a2b, with two new Alsos on its line: subnormal products in the f32 sum, and 16
   lanes with the sum deciding the ISA question.
+
+## 2026-11-27: CH4.9a2b P2M by the kernel
+- Done:
+  - `tetraleaf_tables::helmholtz::leaf` (`LeafP2m`, `P2mScratch`, `LeafCharges`, `LANES` = 16): a
+    leaf's P2M for every charge vector in one call, 16 points per batch on CH4.9a2a's routines
+    (`LeafHarmonics::columns`; `bessel_j_real` for real k, `bessel_j` per lane for complex k), the
+    reference's products in its order, each term summed over the lanes pairwise in a fixed order.
+    Safe Rust, no `tetraleaf-simd` change, no dependency; Yukawa refused (H2's path).
+  - `tetraleaf-exec`: `Densities::p2m_kernel`, `LeafScratch::with_vectors`; the P2P choice chooses P2M
+    (the kernel under every ISA, the per-point reference under `Reference`);
+    `HelmholtzOperator::{with_reference_leaves, reference_leaves, p2m_batched}` and
+    `HelmholtzFmmBuilder::reference_leaves`, a measurement and test setting.
+  - The harness's `--leaves kernel|reference` (`Case::reference_leaves`, `Row::p2m_batched`);
+    `helmholtz_leaf` times the kernel per point; `tools/helmholtz/ch4-9a2b-runs.sh` (`smoke`, `levels`,
+    `worst`, `parts`) and `ch4-9a2b-tables.py` on `common.py`.
+  - Report `tetraleaf-validate/results/helmholtz-ch4-9a2b.md`; record `docs/helmholtz/tasks/CH4.9a2b.md`.
+- Results (Kathleen job 673212, node-c11a-080, 1 × 40; locust 1 × 72; one P2M per launch, ABBA):
+  - Per leaf: every coefficient within C u √((2n + 1)/(4π)) Σⱼ |qⱼ eⱼ| (((n + 1)² + N) |ĵₙ| +
+    |kρⱼ| |ĵₙ′|), C measured about 1.0 (f64 to p = 45, f32 to p = 32) against the tests' 10. The first
+    contract, without the last term, failed near a zero of ĵ₀ (ρ by `sqrt`, the reference's by `hypot`).
+  - FMM: errors 0.998–1.000× the reference P2M's on CH4.9's cases and W1's and W2's constant density
+    at kD = 500 on both machines; tests 1.0000×, outputs within 3.0·10⁻¹⁶.
+  - P2M per run 0.25–0.31× (Kathleen) and 0.15–0.27× (locust), from 3.2–8.5 % of an evaluation to
+    0.6–2.4 %; the evaluation 0.92–0.99× and 0.94–0.97×.
+  - Per point, one core, f64: the kernel 0.20–0.24× (Kathleen) and 0.12–0.20× (locust) the reference.
+    The batched sum is 27–56 % of it on Kathleen and no faster than the scalar sum there (0.96–1.23×;
+    locust 0.70–0.83×): the workspace builds for the baseline (SSE2, NEON; two f64 lanes, no fma) and
+    the sum pays a lane reduction per term.
+  - f32: the reference's Kathleen slowdown (1.40× f64 at p = 45) does not reach the kernel (0.72× its
+    f64 time); the f32 sum is only 0.88× the f64 sum there, not diagnosed.
+- Tests: `tetraleaf-tables/tests/helmholtz/leaf.rs` (the contract in f64 and f32, vectors bit for bit,
+  real charges the real plane of complex ones bit for bit, accumulation, scratch, refusals);
+  `tetraleaf-exec/tests/helmholtz/densities.rs` (`the_batched_p2m_is_the_reference_to_rounding`);
+  `tests/helmholtz_fmm.rs`: `check_leaf_kernel` (errors within `LEAF_RATIO` 1.01, outputs within
+  `LEAF_TOLERANCE` 1e-13, the one-rank FMM with the reference's P2M); `check_kernels`' `Isa::Scalar`
+  bit for bit `Reference` now with `reference_leaves` (the P2P kernel's identity; the batched P2M is
+  not the reference's bits); every other check of the executable runs the kernel.
+- Checks: ran on the M6 `/verify` (fmt; Clippy default, examples, workspace; docs; at opt-level 1
+  `cargo test` 1,421 and `--workspace` 1,465 passed; the MPI list at 2 and 4 ranks passed,
+  `helmholtz_fmm` 53.7 and 49.4 s). Not run: `cargo deny` (no manifest change); Laplace's benchmarks
+  (no Laplace path). Nothing pending.
+- Decisions: question 1 of the PR for sign-off (the ISA question; recommended: no ISA kernel for P2M
+  now, carried to CH4.9b).
+- Laplace: not touched (a new Helmholtz module of `tetraleaf-tables`, Helmholtz code of
+  `tetraleaf-exec`, the harness, scripts and documents; `P2pChoice` read, not changed).
+- Follow-ups: an Also on CH4.9b: the ISA question carried (L2P's sum needs no lane reduction; one ISA
+  kernel for both sums if L2P's stays far from its floor on x86), the f32 sum, `reference_leaves` for
+  L2P.
