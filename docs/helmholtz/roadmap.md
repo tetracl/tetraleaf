@@ -12,7 +12,7 @@ Status (2026-11-27): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`,
 (item 13) is done (CH4.6a2 merged; CH4.6a3 closed unrun). Item 14, the leaf expansions: CH4.9a1
 merged (the harmonics 44–84 % of a leaf point); CH4.9a2 split on 2026-11-27 into a2a and a2b, and
 CH4.9a2a (the leaf harmonics and the real radial functions, batched; P2M projected at 0.14–0.23×)
-done in its PR, its question waiting for sign-off. Next CH4.9a2b (the P2M kernel), then CH4.9b,
+done in its PR, its question signed off on 2026-11-27 (CH4.9a2b's kernel on these routines). Next CH4.9a2b (the P2M kernel), then CH4.9b,
 then H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and CH4.9c. The project was renamed
 tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are
 done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's
@@ -758,8 +758,11 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   bits in f64 (f32 flushes under-range values); on one core the harmonics 0.06–0.09× and the radial functions 0.13–0.24× the reference's, P2M
   projected at 0.14–0.23× (f64), Kathleen's f32 slowdown gone. Report
   `tetraleaf-validate/results/helmholtz-ch4-9a2a.md`, record `docs/helmholtz/tasks/CH4.9a2a.md`.
+  Question 1 signed off 2026-11-27 (the user on #268: "Q1 as recommended"): CH4.9a2b's kernel on
+  these routines, the FMM's errors in CH4.9a2b confirming them.
 - [ ] **CH4.9a2b P2M by the kernel.** *Done when:* CH4.9a's *Done when* less the table, on
-  CH4.9a2a's routines: the P2M kernel (in `tetraleaf-tables::helmholtz`, against
+  CH4.9a2a's routines (its question 1, the user on #268, 2026-11-27: "Q1 as recommended"; the FMM's
+  errors within 1.01× here are their FMM evidence): the P2M kernel (in `tetraleaf-tables::helmholtz`, against
   `tetraleaf_ref::helmholtz::leaf::p2m`, a leaf's points batched, the sum vectorised over points
   without `unsafe`, real k on `bessel_j_real`, complex k on `bessel_j`) run by the operator's
   `P2pChoice` (`Reference` the per-point reference calls), real and complex k, real and complex

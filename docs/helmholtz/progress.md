@@ -5074,8 +5074,8 @@ request, using this template:
   the runs was flushed, so the times stand); fixed besides: the coordinate range and f32's degree
   range in the docs, the contract's wording, the example's radial check, locust's load, the
   `values` times, 16 lanes as the defaults. Nothing pending.
-- Decisions: the split, by the skill's rule. For sign-off on the PR: CH4.9a2b's kernel on these
-  routines (question 1).
+- Decisions: the split, by the skill's rule. Signed off 2026-11-27 (the user on #268: "Q1 as
+  recommended"): (1) CH4.9a2b's kernel on these routines, the FMM's errors there confirming them.
 - Laplace: not touched (additions to `tetraleaf-math`'s Helmholtz modules, an example, scripts and
   documents).
 - Follow-ups: CH4.9a2b, with two new Alsos on its line: subnormal products in the f32 sum, and 16

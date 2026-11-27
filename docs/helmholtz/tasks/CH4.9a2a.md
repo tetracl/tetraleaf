@@ -168,6 +168,7 @@ MPI list (no change to exec, plan or octree), `cargo deny` (no manifest change),
 (no code Laplace runs changed: the new items are additions to `tetraleaf-math`'s Helmholtz modules).
 
 ## Open questions
-For sign-off on the PR (the report §6):
-1. CH4.9a2b's P2M kernel on `LeafHarmonics` and `bessel_j_real` (recommended), the FMM's evidence
-   in CH4.9a2b; or the telescoped recurrence with tabulated coefficients.
+For sign-off on the PR (the report §6), signed off 2026-11-27, the user on #268: "Q1 as
+recommended":
+1. CH4.9a2b's P2M kernel on `LeafHarmonics` and `bessel_j_real` (recommended, taken), the FMM's
+   evidence in CH4.9a2b; or the telescoped recurrence with tabulated coefficients.

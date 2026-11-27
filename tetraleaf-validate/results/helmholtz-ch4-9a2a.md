@@ -178,6 +178,8 @@ CH4.9a2b takes 16 lanes in both precisions unless its own measurement says other
 
 ## 6. Question for sign-off
 
+Signed off 2026-11-27, the user on #268: "Q1 as recommended" (the routines adopted for CH4.9a2b).
+
 1. **The routines for CH4.9a2b** (recommended: adopt them). CH4.9a2b builds the P2M kernel on
    `LeafHarmonics` and `bessel_j_real`. The radial values are the reference's bits in f64; the harmonics
    differ from the telescoped reference by at most 1.02 (n + 1)² u √((2n + 1)/(4π)) per term in
