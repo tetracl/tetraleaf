@@ -30,10 +30,12 @@
 //!   would stream them), and `tetraleaf_math::radial::bessel_j_real` (real k only). Checked
 //!   before timing: the radial values against `bessel_j`'s real parts (the values that differ
 //!   are counted; each must be one the routine flushed), and the harmonics' largest difference
-//!   from `harmonics` over (n + 1)² u √((2n + 1)/(4π)), the contract of its tests. "projected
-//!   P2M" is the reference P2M less its harmonics and radial parts plus the column-wise
-//!   harmonics and the real radial functions: what P2M would take with the two routines alone
-//!   replaced (the sum and the rest as the reference's).
+//!   from `harmonics` over (n + 1)² u √((2n + 1)/(4π)), the contract of its tests. "sum, leaf
+//!   radial" is the sum part again on its point's radial values from `bessel_j_real` (which
+//!   flushes under-range values: in f32 the reference's subnormal values make the sum slow).
+//!   "projected P2M" is the reference P2M less its harmonics, radial and sum parts plus the
+//!   column-wise harmonics, the real radial functions and that sum: what P2M would take with the
+//!   two routines replaced and the reference's sum loop kept (the rest as the reference's).
 //!
 //! Every figure is µs per point, the median over batches (`tetraleaf_validate::bench::
 //! median_time_per_call`); "ns per term" divides by (p + 1)². One precision per launch
@@ -149,6 +151,8 @@ struct Times {
     radial_derivatives: f64,
     harmonics_derivatives: f64,
     leaf: Leaf,
+    /// The sum on the flushed radial values; `None` for complex k.
+    sum_leaf: Option<f64>,
 }
 
 /// The leaf routines' times, µs per point, and their checks (module documentation).
@@ -302,6 +306,27 @@ fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize, lanes: usize) -> 
         black_box(&multipole);
     });
 
+    // The same sum on that point's radial values from `bessel_j_real` (real k only), whose
+    // under-range values are flushed to zero: the sum as a kernel on the leaf routines would
+    // see its operands (CH4.9a1's f32 slowdown).
+    let sum_leaf = (level.k().im == T::zero()).then(|| {
+        let [a, b, c] = points[0];
+        let x = [level.k().re * a.hypot(b).hypot(c)];
+        let mut lanes = vec![[T::zero(); 1]; p + 1];
+        bessel_j_real(&x, level.scale(), &mut lanes);
+        let flushed: Vec<Complex<T>> = lanes
+            .iter()
+            .map(|v| Complex::new(v[0], T::zero()))
+            .collect();
+        per_point(n, || {
+            let (re, im) = multipole.split_at_mut(len);
+            for &q in &charges {
+                sum(p, q * e, &flushed, &harm, re, im);
+            }
+            black_box(&multipole);
+        })
+    });
+
     let local: Vec<T> = (0..2 * len).map(|_| uniform()).collect();
     let mut potential = vec![Complex::new(T::zero(), T::zero()); n];
     let mut gradient = vec![[Complex::new(T::zero(), T::zero()); 3]; n];
@@ -366,6 +391,7 @@ fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize, lanes: usize) -> 
         radial_derivatives,
         harmonics_derivatives: harmonics_derivatives_t,
         leaf,
+        sum_leaf,
     }
 }
 
@@ -494,11 +520,12 @@ fn main() {
         "| p | k̂ | P2M µs | radial µs | harmonics µs | exp µs | sum µs | parts ÷ P2M \
          | P2M ns per term | check | L2P µs | L2P ∇ µs | radial ′ µs | harmonics ′ µs \
          | rest ∇ µs | L2P ∇ ns per term | leaf harmonics µs | leaf columns µs | real radial µs \
-         | radial check | harmonics check | projected P2M µs | projected ÷ P2M |"
+         | radial check | harmonics check | sum, leaf radial µs | projected P2M µs \
+         | projected ÷ P2M |"
     );
     println!(
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: \
-         | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |"
+         | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |"
     );
     let start = Instant::now();
     for &p in &arguments.ps {
@@ -513,12 +540,14 @@ fn main() {
             let rest = t.l2p_gradient - t.radial_derivatives - t.harmonics_derivatives;
             let leaf = &t.leaf;
             let radial = leaf.radial.unwrap_or(t.radial);
-            let projected = t.p2m - t.harmonics - t.radial + leaf.columns + radial;
+            let sum_leaf = t.sum_leaf.unwrap_or(t.sum);
+            let projected =
+                t.p2m - t.harmonics - t.radial - t.sum + leaf.columns + radial + sum_leaf;
             let or_dash = |v: Option<String>| v.unwrap_or_else(|| "–".to_string());
             println!(
                 "| {p} | {khat} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.2} | {:.1} | {} \
                  | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.1} | {:.3} | {:.3} | {} | {} \
-                 | {:.2} | {:.3} | {:.2} |",
+                 | {:.2} | {} | {:.3} | {:.2} |",
                 t.p2m,
                 t.radial,
                 t.harmonics,
@@ -542,6 +571,7 @@ fn main() {
                     format!("{d} flushed")
                 })),
                 leaf.harmonics_error,
+                or_dash(t.sum_leaf.map(|v| format!("{v:.3}"))),
                 projected,
                 projected / t.p2m,
             );
