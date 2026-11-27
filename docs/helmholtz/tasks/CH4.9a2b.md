@@ -166,6 +166,7 @@ debug runs at opt-level 0, load 3–6: `helmholtz_fmm` 951 s (`main` 934 s in a 
 `cargo deny` (no manifest change), Laplace's benchmarks (no Laplace path).
 
 ## Open questions
-For sign-off on the PR (the report §7):
+For sign-off on the PR (the report §7), signed off 2026-11-27, the user on #269: "Q1 as
+recommended":
 1. The ISA question: no ISA kernel for P2M now, the question carried to CH4.9b (recommended); or an
    ISA kernel of P2M's sum in `tetraleaf-simd` now; or lane accumulators per leaf in safe Rust.

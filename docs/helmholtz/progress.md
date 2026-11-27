@@ -5123,11 +5123,11 @@ request, using this template:
   `helmholtz_fmm` 53.7 and 49.4 s); the one-rank debug runs at opt-level 0, load 3–6: `helmholtz_fmm`
   951 s (`main` 934 s, +1.8 %), `tetraleaf-exec`'s `helmholtz` 129 s, `tetraleaf-tables`' `helmholtz` 44 s.
   Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path). Nothing pending.
-- Decisions: question 1 of the PR for sign-off (the ISA question; recommended: no ISA kernel for P2M
-  now, carried to CH4.9b).
+- Decisions: question 1 of #269 signed off 2026-11-27 (the user: "Q1 as recommended"): no ISA kernel
+  for P2M now, the ISA question carried to CH4.9b.
 - Laplace: not touched (a new Helmholtz module of `tetraleaf-tables`, Helmholtz code of
   `tetraleaf-exec`, the harness, scripts and documents; `P2pChoice` read, not changed).
 - Follow-ups: an Also on CH2.1: Yukawa's P2M by a batched kernel (the acceptance's Also for H2). An
-  Also on CH4.9b, conditional on question 1: the ISA question carried (L2P's sum needs no lane reduction; one ISA
+  Also on CH4.9b (question 1): the ISA question carried (L2P's sum needs no lane reduction; one ISA
   kernel for both sums if L2P's stays far from its floor on x86), the f32 sum, `reference_leaves` for
   L2P.

@@ -193,6 +193,9 @@ is reserved for low degrees (CONVENTIONS §3.15) and the FMM runs f64 only.
 
 ## 7. Question for sign-off
 
+Signed off 2026-11-27, the user on #269: "Q1 as recommended" (no ISA kernel for P2M now; the question
+carried to CH4.9b).
+
 1. **The ISA question** (the roadmap's: an ISA kernel only if the measured time stays far from the
    sum's). On Kathleen the batched sum is 27–56 % of the kernel and no faster than the scalar sum;
    the kernel is 1.05–1.12× the projection from p = 17. An ISA kernel of the sum (AVX-512 and AVX2 on

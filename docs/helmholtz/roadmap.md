@@ -11,8 +11,7 @@ Status (2026-11-27): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`,
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). Item 14, the leaf
 expansions: CH4.9a1 and CH4.9a2a merged; CH4.9a2b (P2M by the batched kernel under every ISA, 0.25–0.31×
 the reference's per run on Kathleen and 0.15–0.27× on locust, the FMM's errors 0.993–1.000×) done in
-its PR, its ISA question for sign-off. Next CH4.9b (L2P; with question 1 as recommended the ISA
-question is carried to it), then H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and
+its PR, its ISA question signed off as recommended (carried to CH4.9b). Next CH4.9b (L2P), then H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and
 CH4.9c. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of
 H0, CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in
 `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G
@@ -769,14 +768,14 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   FMM's errors 0.993–1.000× the reference path's (W1's and W2's constant density included); P2M per run
   0.25–0.31× on Kathleen and 0.15–0.27× on locust, now 0.6–2.4 % of an evaluation. Report
   `tetraleaf-validate/results/helmholtz-ch4-9a2b.md`, record `docs/helmholtz/tasks/CH4.9a2b.md`.
-  Question 1 (the ISA question: on x86's baseline build the batched sum is no faster than the scalar
-  one) for sign-off on its PR.
+  Question 1 signed off 2026-11-27 (the user on #269: "Q1 as recommended"): no ISA kernel for P2M
+  now, the ISA question carried to CH4.9b.
 - [ ] **CH4.9b L2P with gradients by a SIMD kernel.** *Done when:* as CH4.9a for L2P, potentials and
   gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, reusing CH4.9a2's leaf harmonics and
   radial functions and adding their derivatives (CH4.9a1's question 2); the
   evaluation's time under the defaults before and after CH4.9a–b on CH4.6a2's cases. Also (from
-  CH4.9a2b, if its question 1 is signed off as recommended; until then pending): the ISA question
-  carried here. The workspace builds for
+  CH4.9a2b, its question 1, signed off 2026-11-27, the user on #269: "Q1 as recommended"): the ISA
+  question carried here. The workspace builds for
   each architecture's baseline (SSE2, NEON: two f64 lanes), on which P2M's batched sum, with a lane
   reduction per term, was no faster than the scalar sum on Kathleen (0.96–1.23×, report §5); L2P sums
   over terms per target, with no reduction across lanes, so measure its sum against its floor on
