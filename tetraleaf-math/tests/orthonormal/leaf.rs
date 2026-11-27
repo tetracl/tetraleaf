@@ -40,6 +40,9 @@ fn directions() -> Vec<[f64; 3]> {
         [0.6, -0.8, 0.0],
         [0.0, 0.6, 0.8],
         [0.0, -0.6, -0.8],
+        // ρ² and r² below the normal range (Helmholtz CH4.9b1: the directions' rescale).
+        [3e-200, -4e-200, 5e-200],
+        [3e-170, 4e-170, 1e-200],
     ]);
     for e in [1, 2, 3, 5, 8, 12, 20, 40, 100, 160, 300] {
         let t = 10f64.powi(-e);
@@ -351,10 +354,13 @@ fn the_derivative_columns_are_the_columns_and_the_layout() {
                         (q.len(), d.len(), u.len()),
                         (p + 1 - m, p + 1 - m, p + 1 - m)
                     );
+                    let bits = |rows: &[[f64; B]]| -> Vec<u64> {
+                        rows.iter().flatten().map(|v| v.to_bits()).collect()
+                    };
                     assert_eq!(
-                        q,
-                        &columns[m][..],
-                        "q is `columns`' column, B = {B}, m = {m}"
+                        bits(q),
+                        bits(&columns[m]),
+                        "q is `columns`' column bit for bit, B = {B}, m = {m}"
                     );
                     for j in 0..batch.len() {
                         let k = shift + start * B + j;
@@ -410,7 +416,8 @@ fn the_derivative_columns_are_the_columns_and_the_layout() {
 /// Degree 1 at the poles and the centre, where ∂θ and (1/sin θ) ∂φ are the limits of the frame
 /// φ = 0 (`harmonics_derivatives`' doctest): at the north pole and the centre (θ = 0)
 /// ∂θ Y₁¹ = (1/sin θ) ∂φ Y₁⁻¹ = √(3/(4π)); at the south pole (θ = π) ∂θ Y₁¹ = −√(3/(4π)) and
-/// (1/sin θ) ∂φ Y₁⁻¹ = √(3/(4π)); ∂θ Y₁⁰ = 0 at all three.
+/// (1/sin θ) ∂φ Y₁⁻¹ = √(3/(4π)); ∂θ Y₁⁰, ∂θ Y₁⁻¹, (1/sin θ) ∂φ Y₁⁰ and (1/sin θ) ∂φ Y₁¹ are 0 at all
+/// three.
 #[test]
 fn degree_one_at_the_poles_and_the_centre() {
     let c = (3.0 / (4.0 * PI)).sqrt();
@@ -431,9 +438,11 @@ fn degree_one_at_the_poles_and_the_centre() {
             "∂φ Y₁⁻¹ / sin θ, point {j}"
         );
         assert!(t[layout.idx(1, 0)][j].abs() < 1e-15, "∂θ Y₁⁰, point {j}");
+        assert!(t[layout.idx(1, -1)][j].abs() < 1e-15, "∂θ Y₁⁻¹, point {j}");
         assert!(
             f[layout.idx(1, 1)][j].abs() < 1e-15,
             "∂φ Y₁¹ / sin θ, point {j}"
         );
+        assert_eq!(f[layout.idx(1, 0)][j], 0.0, "∂φ Y₁⁰ / sin θ, point {j}");
     }
 }

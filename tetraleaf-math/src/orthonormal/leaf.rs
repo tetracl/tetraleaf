@@ -75,8 +75,10 @@
 //! column held values below about τ 2⁴³ as Q̄'s does, and ∂θ at most n times that, far below u in
 //! both precisions. Both terms of ∂θ are of the size n |U|, so its rounding is about n times U's,
 //! the recurrence's n² u: `tests/orthonormal/leaf.rs` holds ∂θ and (1/sin θ) ∂φ per term to
-//! 10 (n + 1)³ u √((2n + 1)/(4π)) against `harmonics_derivatives` (0.87 and 0.59 of it measured on
-//! the M6 in f64 to p = 100, 0.76 and 0.26 in f32 to p = 64), the values to the contract above.
+//! 10 (n + 1)³ u √((2n + 1)/(4π)) against `harmonics_derivatives` (measured on the M6: at most 0.87
+//! and 0.59 (n + 1)³ u √((2n + 1)/(4π)) in f64 to p = 100, 0.61–0.80 at every degree of p = 100 for
+//! ∂θ, so the power is the growth's; 0.76 and 0.26 in f32 to p = 64), the values to the contract
+//! above.
 //!
 //! # Lanes
 //!
@@ -540,6 +542,7 @@ impl<T: RealScalar, const B: usize> Lanes<T, B> {
         };
         let (one, min) = (T::one(), T::min_positive_value());
         let big = rescale::<T>();
+        let small = T::one() / big;
         for (j, &[x, y, z]) in points.iter().enumerate() {
             // Where ρ² or r² falls below the normal range, the coordinates are scaled by a power of
             // two first, so that the direction keeps its precision (module docs); elsewhere the
@@ -552,7 +555,13 @@ impl<T: RealScalar, const B: usize> Lanes<T, B> {
             let s_theta = if r2 < min { big } else { one };
             let (xt, yt, zt) = (x * s_theta, y * s_theta, z * s_theta);
             let r = (xt * xt + yt * yt + zt * zt).sqrt();
-            let rho = rho_s / s_phi * s_theta;
+            // ρ in the units of r: ρ's own scale where the two agree, else (ρ scaled, r not) ρ
+            // scaled back by the exact 2⁻⁶⁰⁰ (2⁻¹⁰⁰), never through a subnormal on the way.
+            let rho = if s_phi == s_theta {
+                rho_s
+            } else {
+                rho_s * small
+            };
             // Selects: a zero radius keeps θ = 0, a zero ρ keeps φ = 0.
             let (r_safe, rho_safe) = (
                 if r > T::zero() { r } else { T::one() },

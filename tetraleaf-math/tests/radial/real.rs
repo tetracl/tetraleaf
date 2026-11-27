@@ -181,6 +181,7 @@ fn the_real_radial_derivatives_in_f32_but_the_flushed() {
         + check_derivatives::<f32, 8>(tau)
         + check_derivatives::<f32, 16>(tau);
     println!("f32: {differ} derivatives differ beside flushed values");
+    assert!(differ > 0, "the f32 cases reach the flush");
 }
 
 /// Lengths that differ refuse.
