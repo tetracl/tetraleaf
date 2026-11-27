@@ -38,7 +38,8 @@ use tetraleaf_tables::helmholtz::plane_wave::quadrature::RHO_MAX;
 use tetraleaf_validate::fmm_accuracy::Distribution;
 use tetraleaf_validate::helmholtz_accuracy::{
     BUILD_PARTS, Case, Density, FORM_COSTS, Oracle, PLANE_WAVE_DIRECTION, Problem, RCR_COSTS, Row,
-    checksum, complex_k, reduce_checksum, run, run_output, sweep_crossovers,
+    checksum, complex_k, peak_resident, reduce_checksum, reset_peak_resident, run, run_output,
+    sweep_crossovers,
 };
 use tetraleaf_validate::helmholtz_boxes::{Errors, Reference, box_sample};
 use tetraleaf_validate::helmholtz_calibration::Curve;
@@ -700,8 +701,9 @@ fn helmholtz_accuracy_harness() {
 /// 10⁻⁷ (a tree where the time rule weighs the diagonal form), the harness's checksum is that
 /// of an FMM built by `HelmholtzFmmBuilder::new` with nothing set but the charges, the
 /// gradients and the threads (the trusted path for "the defaults"), within ε; the settings
-/// as built are the library's; `Row::memory` is read on Linux (the growth within the peak)
-/// and absent on macOS, which has no peak to reset. Helmholtz CH4.4b: `Case::m2l_overrides`
+/// as built are the library's; `Row::memory` is read on Linux (the growth within the peak,
+/// consistent but possibly 0, and the peak itself by [`check_peak_probe`]) and absent on macOS,
+/// which has no peak to reset. Helmholtz CH4.4b: `Case::m2l_overrides`
 /// reaches the builder (level 2 on RCR, the other levels' M2L unchanged, within ε).
 fn check_defaults(world: &SimpleCommunicator) {
     let (k, epsilon, threads) = ((30.0, 0.0), 1e-7, 2);
@@ -747,10 +749,17 @@ fn check_defaults(world: &SimpleCommunicator) {
     );
 
     if cfg!(target_os = "linux") {
+        // The growth is measured and consistent, but it may be 0 (main's CI after #268): it is
+        // the growth of the resident size, and this FMM, built after the harness's earlier
+        // ones in the same process, can fit in pages the allocator kept from them (on locust
+        // the same case grew 59 MB alone and 16-28 MB after the other checks, 40 runs). The probe holds
+        // the peak itself to a growth that must happen.
         let memory = row.memory.expect("Linux resets and reads the peak");
-        assert!(memory.growth_max > 0);
-        assert!(memory.growth_max <= memory.growth_sum);
+        assert!(memory.before_sum > 0, "{memory:?}");
+        assert!(memory.peak_sum >= memory.before_sum, "{memory:?}");
+        assert!(memory.growth_max <= memory.growth_sum, "{memory:?}");
         assert_eq!(memory.growth_sum, memory.peak_sum - memory.before_sum);
+        check_peak_probe();
     } else if cfg!(target_os = "macos") {
         assert_eq!(row.memory, None);
     }
@@ -783,6 +792,24 @@ fn check_defaults(world: &SimpleCommunicator) {
     }
     let errors = other.errors.last().expect("over all vectors");
     assert!(errors[0] <= epsilon && errors[1] <= epsilon, "{errors:?}");
+}
+
+/// The peak that `Row::memory` reads, on Linux: 128 MiB written and freed between
+/// [`reset_peak_resident`] and [`peak_resident`] raise the peak by at least half of it. One
+/// allocation larger than glibc's largest mmap threshold (32 MiB) is new pages, whatever pages
+/// the process already holds, and its free (an `munmap`) records them in the peak; half leaves
+/// room for the kernel's per-CPU batching of the resident count (on locust it read 128 MiB
+/// to within 0.6 MiB in 40 runs). The FMM's own growth cannot be held above 0 (see [`check_defaults`]).
+fn check_peak_probe() {
+    const BYTES: usize = 128 << 20;
+    let before = reset_peak_resident().expect("Linux resets the peak");
+    let probe = std::hint::black_box(vec![1u8; BYTES]);
+    drop(probe);
+    let peak = peak_resident().expect("Linux reads the peak");
+    assert!(
+        peak >= before + BYTES as u64 / 2,
+        "the peak {peak} after {BYTES} bytes from {before}"
+    );
 }
 
 /// Helmholtz CH4.0e: the M2L's rotation blocks formed per V pair (a block budget of 0)
