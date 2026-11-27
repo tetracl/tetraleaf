@@ -28,6 +28,8 @@
 //! - **Times.** The build and the evaluation, wall time of the slowest rank.
 //! - **P2P kernel.** [`Case::p2p`] (Helmholtz CH3.4c): `Auto` by default, `Reference` for
 //!   the times before the vectorised kernel; [`Row::p2p`] the kernel that ran.
+//!   [`Case::reference_leaves`] (Helmholtz CH4.9a2b) P2M by the reference whatever the kernel,
+//!   [`Row::p2m_batched`] whether the batched P2M ran.
 //! - **M2L.** [`Case::m2l`] and [`Case::dense_budget`] (Helmholtz CH3.2a, CH3.2b, CH3.2c):
 //!   Rotation by default, or Dense, Classes or Batched on the levels whose tables fit the
 //!   budget, Batched in [`Case::m2l_mul_add`]'s mode (separate by default);
@@ -146,6 +148,10 @@ pub struct Case {
     pub seed: u64,
     /// The FMM's P2P kernel.
     pub p2p: P2pChoice,
+    /// P2M by the reference's per-point calls whatever the P2P kernel
+    /// (`HelmholtzFmmBuilder::reference_leaves`, Helmholtz CH4.9a2b; `false` in [`Case::new`] and
+    /// [`Case::defaults`], the library's default: the batched kernel under every ISA).
+    pub reference_leaves: bool,
     /// The FMM's M2L.
     pub m2l: HelmholtzM2l,
     /// The bytes of the dense, class or batched M2L tables per rank under
@@ -292,6 +298,7 @@ impl Case {
             samples: 1000,
             seed: SEED,
             p2p: P2pChoice::Auto,
+            reference_leaves: false,
             m2l: HelmholtzM2l::Rotation,
             dense_budget: DEFAULT_DENSE_BUDGET,
             m2l_mul_add: None,
@@ -699,6 +706,8 @@ pub struct Row {
     pub threads: usize,
     /// The P2P kernel that ran (never `Auto`).
     pub p2p: P2pChoice,
+    /// Whether P2M ran the batched kernel (`HelmholtzOperator::p2m_batched`; Helmholtz CH4.9a2b).
+    pub p2m_batched: bool,
     /// The M2L setting.
     pub m2l: HelmholtzM2l,
     /// The batched M2L's multiply–add mode.
@@ -1226,6 +1235,7 @@ pub fn run_output<C: CommunicatorCollectives>(
         .gradients(case.gradients)
         .threads(threads)
         .p2p_kernel(case.p2p)
+        .reference_leaves(case.reference_leaves)
         .m2l(case.m2l)
         .dense_budget(case.dense_budget)
         .auto_plane_wave(case.auto_plane_wave)
@@ -1543,6 +1553,7 @@ pub fn run_output<C: CommunicatorCollectives>(
     let row = Row {
         threads,
         p2p: fmm.p2p_kernel(),
+        p2m_batched: fmm.operator().p2m_batched(),
         m2l: fmm.operator().m2l_choice(),
         m2l_mul_add: fmm.operator().m2l_mul_add(),
         m2l_max_degree: fmm.m2l_max_degree(),

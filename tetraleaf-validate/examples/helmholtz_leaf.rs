@@ -37,6 +37,12 @@
 //!   new parts: the column-wise harmonics, the real radial functions (the reference's for
 //!   complex k), the factor's `exp` and that sum; the call's overhead is left out (the
 //!   reference's parts add up to 0.95–1.05 of its call in f64, CH4.9a1).
+//! - **The P2M kernel** (Helmholtz CH4.9a2b; docs/helmholtz/tasks/CH4.9a2b.md): the batch as one
+//!   leaf through `tetraleaf_tables::helmholtz::leaf::LeafP2m` (16 points at a time on the leaf
+//!   routines, the sum vectorised over points), checked against the reference's multipole first
+//!   ("kernel check": the largest difference over the largest value), its time over the
+//!   reference's and the projection's, and "kernel sum": the kernel less the routines' parts
+//!   (the columns, the radial functions, the factor's `exp`), its sum's share.
 //!
 //! Every figure is µs per point, the median over batches (`tetraleaf_validate::bench::
 //! median_time_per_call`); "ns per term" divides by (p + 1)². One precision per launch
@@ -58,6 +64,7 @@ use tetraleaf_math::radial::{bessel_j, bessel_j_real};
 use tetraleaf_math::{Complex, Layout, RealScalar};
 use tetraleaf_ref::Frame;
 use tetraleaf_ref::helmholtz::{Level, Workspace, leaf};
+use tetraleaf_tables::helmholtz::leaf::{LeafCharges, LeafP2m, P2mScratch};
 use tetraleaf_validate::SplitMix64;
 use tetraleaf_validate::bench::{cores, cpu_model, median_time_per_call, target};
 
@@ -154,6 +161,10 @@ struct Times {
     leaf: Leaf,
     /// The sum on the leaf routines' values.
     sum_leaf: f64,
+    /// The batched P2M kernel over the batch as one leaf (Helmholtz CH4.9a2b).
+    kernel: f64,
+    /// The kernel's largest difference from the reference's multipole over its largest value.
+    kernel_check: f64,
 }
 
 /// The leaf routines' times, µs per point, and their checks (module documentation).
@@ -344,6 +355,32 @@ fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize, lanes: usize) -> 
         })
     };
 
+    // The batched P2M kernel (Helmholtz CH4.9a2b): the batch as one leaf, checked against the
+    // reference first.
+    let (kernel, kernel_check) = {
+        let table = LeafP2m::<T>::new(p);
+        let mut scratch = P2mScratch::new(p, 1);
+        let values: Vec<T> = charges.iter().flat_map(|q| [q.re, q.im]).collect();
+        let leaf_charges = LeafCharges {
+            values: &values,
+            vectors: 1,
+            complex: true,
+        };
+        let mut batched = vec![T::zero(); 2 * len];
+        table.p2m(p, &level, &points, leaf_charges, &mut scratch, &mut batched);
+        let scale = reference
+            .iter()
+            .fold(0.0f64, |m, v| m.max(RealScalar::to_f64(*v).abs()));
+        let diff = reference.iter().zip(&batched).fold(0.0f64, |m, (a, b)| {
+            m.max((RealScalar::to_f64(*a) - RealScalar::to_f64(*b)).abs())
+        });
+        let time = per_point(n, || {
+            table.p2m(p, &level, &points, leaf_charges, &mut scratch, &mut batched);
+            black_box(&batched);
+        });
+        (time, diff / scale)
+    };
+
     let local: Vec<T> = (0..2 * len).map(|_| uniform()).collect();
     let mut potential = vec![Complex::new(T::zero(), T::zero()); n];
     let mut gradient = vec![[Complex::new(T::zero(), T::zero()); 3]; n];
@@ -409,6 +446,8 @@ fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize, lanes: usize) -> 
         harmonics_derivatives: harmonics_derivatives_t,
         leaf,
         sum_leaf,
+        kernel,
+        kernel_check,
     }
 }
 
@@ -543,11 +582,13 @@ fn main() {
          | P2M ns per term | check | L2P µs | L2P ∇ µs | radial ′ µs | harmonics ′ µs \
          | rest ∇ µs | L2P ∇ ns per term | leaf harmonics µs | leaf columns µs | real radial µs \
          | radial check | harmonics check | sum, leaf values µs | projected P2M µs \
-         | projected ÷ P2M |"
+         | projected ÷ P2M | P2M kernel µs | kernel ÷ P2M | kernel ÷ projected | kernel sum µs \
+         | kernel check |"
     );
     println!(
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: \
-         | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |"
+         | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: \
+         | ---: | ---: | ---: | ---: | ---: |"
     );
     let start = Instant::now();
     for &p in &arguments.ps {
@@ -567,7 +608,7 @@ fn main() {
             println!(
                 "| {p} | {khat} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.2} | {:.1} | {} \
                  | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.1} | {:.3} | {:.3} | {} | {} \
-                 | {:.2} | {:.3} | {:.3} | {:.2} |",
+                 | {:.2} | {:.3} | {:.3} | {:.2} | {:.3} | {:.2} | {:.2} | {:.3} | {:.1e} |",
                 t.p2m,
                 t.radial,
                 t.harmonics,
@@ -594,6 +635,11 @@ fn main() {
                 t.sum_leaf,
                 projected,
                 projected / t.p2m,
+                t.kernel,
+                t.kernel / t.p2m,
+                t.kernel / projected,
+                t.kernel - (leaf.columns + radial + t.exp),
+                t.kernel_check,
             );
         }
     }

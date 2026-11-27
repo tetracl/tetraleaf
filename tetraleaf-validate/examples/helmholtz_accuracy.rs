@@ -37,7 +37,12 @@
 //!   (`DegreeRule::CH4_3C3`, the default before CH4.8b's margin);
 //! - `--p2p auto|reference|<isa>,…` (default `auto`): the P2P kernels (Helmholtz CH3.4c),
 //!   each case run with each in turn; an ISA this machine lacks is refused before MPI
-//!   starts.
+//!   starts. The kernel also chooses P2M (Helmholtz CH4.9a2b): the batched kernel under every
+//!   ISA, the reference's per-point calls under `reference`.
+//! - `--leaves kernel|reference` (Helmholtz CH4.9a2b, `HelmholtzFmmBuilder::reference_leaves`;
+//!   default `kernel`, the library's): with `reference` P2M by the reference's per-point calls
+//!   whatever the P2P kernel; the column "P2P" ends with `/ref-p2m` where an ISA's P2P ran with
+//!   the reference's P2M.
 //! - `--m2l rotation|dense|classes|batched|batched-fused,…` (default `rotation`, Helmholtz
 //!   CH3.2a, CH3.2b, CH3.2c; `batched-fused` the batched M2L in the fused mode): the M2L,
 //!   each case run with each in turn (and each P2P kernel);
@@ -278,6 +283,8 @@ struct Arguments {
     threads: Vec<usize>,
     oracle_threads: Option<usize>,
     p2p: Vec<P2pChoice>,
+    /// `--leaves` (Helmholtz CH4.9a2b).
+    reference_leaves: bool,
     m2l: Vec<M2lRun>,
     dense_budget: usize,
     plane_wave_budget: Option<usize>,
@@ -389,7 +396,7 @@ fn arguments() -> Arguments {
             "usage: helmholtz_accuracy [--workload w1|w2|w3|w3:<n>|w4-<distribution>:<n>] \
              [--kd x,…] [--kim y] [--eps e,…|--degree p] [--charges real|complex] \
              [--density random|planewave|constant] [--vectors m] [--samples n] [--no-gradients] [--threads t,…] \
-             [--oracle-threads t] [--rule calibrated|ch3-3|ch4-3c2|ch4-3c3|s7] [--p2p auto|reference|<isa>,…] \
+             [--oracle-threads t] [--rule calibrated|ch3-3|ch4-3c2|ch4-3c3|s7] [--p2p auto|reference|<isa>,…] [--leaves kernel|reference] \
              [--m2l rotation|dense|classes|batched|batched-fused|auto|auto:<d>|auto-pw|\
              auto-pw:<d>|sweep|\
              planewave|planewave:<1|2|3>|planewave-scan|planewave-scan:<1|2|3>,…] \
@@ -417,6 +424,7 @@ fn arguments() -> Arguments {
         threads: vec![1],
         oracle_threads: None,
         p2p: vec![P2pChoice::Auto],
+        reference_leaves: false,
         m2l: vec![M2lRun::Fixed(HelmholtzM2l::Rotation, None, None)],
         dense_budget: DEFAULT_DENSE_BUDGET,
         plane_wave_budget: None,
@@ -487,6 +495,17 @@ fn arguments() -> Arguments {
                         .filter(|c| c.iter().all(|c| c.resolve().is_ok()))
                         .map(|c| parsed.p2p = c)
                         .is_some(),
+                    "--leaves" => match value.as_str() {
+                        "kernel" => {
+                            parsed.reference_leaves = false;
+                            true
+                        }
+                        "reference" => {
+                            parsed.reference_leaves = true;
+                            true
+                        }
+                        _ => false,
+                    },
                     "--m2l" => value
                         .split(',')
                         .map(|v| {
@@ -956,6 +975,15 @@ fn reach_suffix(row: &Row) -> String {
     format!("{reach}{split}{raise}")
 }
 
+/// The column "P2P": the kernel that ran, with `/ref-p2m` where an ISA's P2P ran with the
+/// reference's P2M (Helmholtz CH4.9a2b, `--leaves reference`).
+fn p2p_name(row: &Row) -> String {
+    match (row.p2p, row.p2m_batched) {
+        (P2pChoice::Isa(_), false) => format!("{}/ref-p2m", row.p2p),
+        _ => row.p2p.to_string(),
+    }
+}
+
 /// The setting of a row in one word: `rotation`, `dense`, `classes`, `batched`,
 /// `batched-fused`, `auto ≤ d` (`auto ≤ d, pw ≥ e` with waves) or `planewave` (with ` ρ r`
 /// at another reach), ending with `/rcr-boxes` or `/rcr-pairs` where the Rotation M2L's
@@ -1242,7 +1270,7 @@ fn main() {
                     workload.name(),
                     problem.len(),
                     case.vectors,
-                    row.p2p,
+                    p2p_name(row),
                     m2l,
                     row.ranks,
                     row.threads,
@@ -1847,6 +1875,7 @@ fn main() {
                         for &p2p in &arguments.p2p {
                             for &threads in &arguments.threads {
                                 case.p2p = p2p;
+                                case.reference_leaves = arguments.reference_leaves;
                                 // The runs of the entry: (setting, mode, crossover, precisions,
                                 // reach), one (the exponential M2L's at each reach), or the sweep's
                                 // (the first ∞, the others from its degrees), or the scan's
