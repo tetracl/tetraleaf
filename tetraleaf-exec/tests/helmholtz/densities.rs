@@ -1,7 +1,7 @@
 //! Complex densities (Helmholtz CH3.0c; CONVENTIONS §3.15, "Storage" and "Inputs and
 //! outputs"): the sizes of every path against §3.15's table, the chunk indices against
 //! §3.13's several-vector layout, the charges in, P2M and L2P bit for bit against
-//! `tetraleaf_ref::helmholtz::leaf`, Yukawa's complex vectors as two real ones, and the
+//! `tetraleaf_ref::helmholtz::leaf`, the batched P2M to rounding (Helmholtz CH4.9a2b), Yukawa's complex vectors as two real ones, and the
 //! leaf's chunks end to end against the direct sum (`tetraleaf_ref::helmholtz::p2p::
 //! direct_sum`, 1/(4π) applied), relative L2 over the targets.
 
@@ -343,6 +343,68 @@ fn p2m_is_the_reference_bit_for_bit() {
                 one.p2m(&k, r, p, &one_chunk, n, &mut scratch, &mut single);
                 assert_eq!(got, &single[..], "{kind:?} {charges:?} vector {v} alone");
             }
+        }
+    }
+}
+
+/// The batched P2M (Helmholtz CH4.9a2b) against the reference's on every path, three vectors:
+/// each vector's expansion within 1e-13 of its largest coefficient (relative to the
+/// reference's; the contract per term is `tetraleaf-tables`' `tests/helmholtz/leaf.rs`), vector
+/// v the one-vector call's bits, a second call added (+=), and Yukawa the reference's bits.
+#[test]
+fn the_batched_p2m_is_the_reference_to_rounding() {
+    let (domain, key) = leaf_box();
+    let r = geometry::radius(3, &domain);
+    let (n, m, p) = (37, 3, 11);
+    let mut rng = Rng(41);
+    let points = leaf_points(&domain, key, n, &mut rng);
+    let mut scratch = LeafScratch::with_vectors(14, m);
+    for kind in KINDS {
+        let k = wavenumber(kind, 21.0);
+        for charges in CHARGES {
+            let what = format!("{kind:?} {charges:?}");
+            let d = Densities::new(kind, charges, m);
+            let planes = charge_planes(charges, m, n, &mut rng);
+            let chunk = source_chunk(&d, &domain, key, &points, &planes);
+            let mut want = vec![0.0; d.multipole_size(p)];
+            d.p2m(&k, r, p, &chunk, n, &mut scratch, &mut want);
+            let mut got = vec![0.0; d.multipole_size(p)];
+            d.p2m_kernel(&k, r, p, &chunk, n, &mut scratch, &mut got);
+            if kind == WavenumberKind::Yukawa {
+                assert_eq!(got, want, "{what}: Yukawa keeps the reference");
+                continue;
+            }
+            let size = d.multipole_size(p) / m;
+            for v in 0..m {
+                let (a, b) = (
+                    &got[v * size..(v + 1) * size],
+                    &want[v * size..(v + 1) * size],
+                );
+                let largest = b.iter().fold(0.0_f64, |x, y| x.max(y.abs()));
+                let worst = a
+                    .iter()
+                    .zip(b)
+                    .fold(0.0_f64, |x, (y, z)| x.max((y - z).abs()));
+                assert!(
+                    worst <= 1e-13 * largest,
+                    "{what}, vector {v}: {worst:e} of {largest:e}"
+                );
+                let one = Densities::new(kind, charges, 1);
+                let one_chunk = source_chunk(&one, &domain, key, &points, &planes[v..=v]);
+                let mut single = vec![0.0; one.multipole_size(p)];
+                one.p2m_kernel(&k, r, p, &one_chunk, n, &mut scratch, &mut single);
+                assert_eq!(a, &single[..], "{what}: vector {v} alone");
+            }
+            let mut twice = got.clone();
+            d.p2m_kernel(&k, r, p, &chunk, n, &mut scratch, &mut twice);
+            let largest = got.iter().fold(0.0_f64, |x, y| x.max(y.abs()));
+            assert!(
+                twice
+                    .iter()
+                    .zip(&got)
+                    .all(|(t, g)| (t - 2.0 * g).abs() <= 1e-14 * largest),
+                "{what}: a second call adds"
+            );
         }
     }
 }

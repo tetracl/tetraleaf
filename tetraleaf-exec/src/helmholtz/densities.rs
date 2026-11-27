@@ -72,15 +72,20 @@
 //! each source or target is one call of the reference operator of
 //! `tetraleaf_ref::helmholtz::leaf` (the complex path, or the `_yukawa` forms on the Yukawa
 //! path, column by column for complex vectors), in point order, accumulated (+=), so each
-//! vector gets exactly the one-vector operator. Their scratch is a [`LeafScratch`], sized
-//! at construction. The operators that need a second box's frame (P2L, M2P, P2P) belong to
-//! the Helmholtz operator (CH3.1).
+//! vector gets exactly the one-vector operator. [`Densities::p2m_kernel`] (Helmholtz CH4.9a2b)
+//! forms the same multipoles by the batched kernel of
+//! `tetraleaf_tables::helmholtz::leaf` (all the leaf's points and vectors in one call, 16 points
+//! at a time; the reference's values to the kernel's contract, not its bits); the Yukawa path
+//! keeps the reference calls. Their scratch is a [`LeafScratch`], sized at construction. The
+//! operators that need a second box's frame (P2L, M2P, P2P) belong to the Helmholtz operator
+//! (CH3.1), which chooses between the two P2Ms.
 
 use core::f64::consts::PI;
 
 use tetraleaf_math::{Complex, Layout, RealScalar};
 use tetraleaf_ref::Frame;
 use tetraleaf_ref::helmholtz::{Level, Workspace, leaf};
+use tetraleaf_tables::helmholtz::leaf::{LeafCharges, LeafP2m, P2mScratch};
 use thiserror::Error;
 
 use super::{Wavenumber, WavenumberKind};
@@ -456,6 +461,50 @@ impl Densities {
         }
     }
 
+    /// P2M in a leaf's own frame by the batched kernel (Helmholtz CH4.9a2b): adds what
+    /// [`p2m`](Self::p2m) adds, the m multipoles of degree p of the leaf's n sources, by one call
+    /// of `tetraleaf_tables::helmholtz::leaf::LeafP2m::p2m` on the leaf's points and every
+    /// vector's charges as the chunk holds them. Within the kernel's contract of the reference's
+    /// values, not its bits; a leaf's values depend on its chunk alone, and vector v is the
+    /// one-vector call's bits. On the Yukawa path it is [`p2m`](Self::p2m) (H2's path).
+    ///
+    /// # Panics
+    ///
+    /// As [`p2m`](Self::p2m), and if `scratch` holds fewer vectors than the path.
+    #[allow(clippy::too_many_arguments)]
+    pub fn p2m_kernel<T: SimdScalar>(
+        &self,
+        k: &Wavenumber,
+        radius: f64,
+        p: usize,
+        chunk: &[T],
+        n: usize,
+        scratch: &mut LeafScratch<T>,
+        multipoles: &mut [T],
+    ) {
+        if self.kind == WavenumberKind::Yukawa {
+            self.p2m(k, radius, p, chunk, n, scratch, multipoles);
+            return;
+        }
+        let (level, _) = self.leaf_level::<T>(k, radius);
+        assert!(scratch.p >= p, "scratch for degree {}, not {p}", scratch.p);
+        assert_eq!(multipoles.len(), self.multipole_size(p), "multipoles");
+        let (coordinates, strengths) = chunk.split_at(3 * n);
+        let charges = LeafCharges {
+            values: &strengths[..self.columns() * n],
+            vectors: self.vectors,
+            complex: self.charges == ChargeKind::Complex,
+        };
+        debug_assert_eq!(
+            LeafP2m::planes(&level, charges.complex),
+            self.multipole_planes()
+        );
+        let points = coordinates.as_chunks::<3>().0;
+        scratch
+            .kernel
+            .p2m(p, &level, points, charges, &mut scratch.batch, multipoles);
+    }
+
     /// L2P in a leaf's own frame: adds the potentials of the m locals of degree p
     /// (`locals`, [`local_size`](Self::local_size)`(p)` values), and with `gradients` their
     /// gradients, at the leaf's targets `targets` (its target input chunk, leaf-scaled)
@@ -613,21 +662,34 @@ impl Densities {
     }
 }
 
-/// The scratch of [`Densities::p2m`] and [`Densities::l2p`] up to a degree, allocated once.
+/// The scratch of [`Densities::p2m`], [`Densities::p2m_kernel`] and [`Densities::l2p`] up to a
+/// degree, allocated once: the reference's workspace, and the batched P2M's table and scratch
+/// for a number of charge vectors.
 pub struct LeafScratch<T: SimdScalar> {
     p: usize,
     workspace: Workspace<T>,
     /// One complex expansion, for the real multipole of real k.
     complex: Vec<T>,
+    /// The batched P2M's table (Helmholtz CH4.9a2b).
+    kernel: LeafP2m<T>,
+    /// The batched P2M's scratch.
+    batch: P2mScratch<T>,
 }
 
 impl<T: SimdScalar> LeafScratch<T> {
-    /// The scratch of operators of degree at most `p`.
+    /// The scratch of operators of degree at most `p`, for one charge vector.
     pub fn new(p: usize) -> Self {
+        Self::with_vectors(p, 1)
+    }
+
+    /// The scratch of operators of degree at most `p`, for up to `vectors` charge vectors.
+    pub fn with_vectors(p: usize, vectors: usize) -> Self {
         Self {
             p,
             workspace: Workspace::new(p),
             complex: vec![T::zero(); 2 * Layout::new(p).len()],
+            kernel: LeafP2m::new(p),
+            batch: P2mScratch::new(p, vectors),
         }
     }
 }
