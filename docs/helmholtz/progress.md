@@ -5120,8 +5120,9 @@ request, using this template:
   not the reference's bits); every other check of the executable runs the kernel.
 - Checks: ran on the M6 `/verify` (fmt; Clippy default, examples, workspace; docs; at opt-level 1
   `cargo test` 1,421 and `--workspace` 1,465 passed; the MPI list at 2 and 4 ranks passed,
-  `helmholtz_fmm` 53.7 and 49.4 s). Not run: `cargo deny` (no manifest change); Laplace's benchmarks
-  (no Laplace path). Nothing pending.
+  `helmholtz_fmm` 53.7 and 49.4 s); the one-rank debug runs at opt-level 0, load 3–6: `helmholtz_fmm`
+  951 s (`main` 934 s, +1.8 %), `tetraleaf-exec`'s `helmholtz` 129 s, `tetraleaf-tables`' `helmholtz` 44 s.
+  Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path). Nothing pending.
 - Decisions: question 1 of the PR for sign-off (the ISA question; recommended: no ISA kernel for P2M
   now, carried to CH4.9b).
 - Laplace: not touched (a new Helmholtz module of `tetraleaf-tables`, Helmholtz code of

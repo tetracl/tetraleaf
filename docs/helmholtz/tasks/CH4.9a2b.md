@@ -160,7 +160,9 @@ smoke run of `helmholtz_leaf`, its numbers not used).
 `/verify`: fmt; Clippy default, examples, `--workspace --all-targets` (one `is_multiple_of` lint in the
 new test, fixed); `cargo doc` with `-D warnings`; at opt-level 1 `cargo test` (1,421 passed) and
 `cargo test --workspace` (1,465 passed); the MPI list at 2 and 4 ranks (every executable passed;
-`helmholtz_fmm` 53.7 s and 49.4 s); `helmholtz_fmm` at one rank, opt-level 1, 53 s. Not run:
+`helmholtz_fmm` 53.7 s and 49.4 s); `helmholtz_fmm` at one rank, opt-level 1, 53 s; the one-rank
+debug runs at opt-level 0, load 3–6: `helmholtz_fmm` 951 s (`main` 934 s in a worktree of its own,
++1.8 %), `tetraleaf-exec`'s `helmholtz` 129 s, `tetraleaf-tables`' `helmholtz` 44 s. Not run:
 `cargo deny` (no manifest change), Laplace's benchmarks (no Laplace path).
 
 ## Open questions
