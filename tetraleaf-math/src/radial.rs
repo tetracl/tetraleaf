@@ -24,7 +24,8 @@
 //!   length only, computed in f64 for every `T`.
 //! - [`bessel_j_real`] (Helmholtz CH4.9a2a): [`bessel_j`] at real arguments in real arithmetic,
 //!   for a batch of arguments as lanes, the same values bit for bit (in f32 but for under-range
-//!   values beyond the turning point, which it sets to zero).
+//!   values beyond the turning point, which it sets to zero); [`bessel_j_real_derivatives`]
+//!   (Helmholtz CH4.9b1) adds [`bessel_j`]'s derivatives, the same bits.
 //! - [`hankel_h`] and [`modified_k`]: the upward recursion from the closed forms of orders
 //!   0 and 1, the stable direction.
 //! - Derivatives from the neighbouring orders: jₙ′ = (n jₙ₋₁ − (n + 1) jₙ₊₁)/(2n + 1),
@@ -214,11 +215,58 @@ pub fn bessel_j<T: RealScalar>(
 ///
 /// If s is not in (0, 1] or an argument is negative or not finite.
 pub fn bessel_j_real<T: RealScalar, const B: usize>(x: &[T; B], s: T, values: &mut [[T; B]]) {
+    real_j(x, s, values, None);
+}
+
+/// [`bessel_j_real`]'s values (its bits) and the derivatives ĵₙ′ per lane, for B real arguments at
+/// once (Helmholtz CH4.9b1): `derivatives[n][j]` is ĵₙ′ of `x[j]`, formed by [`bessel_j`]'s
+/// formula from the neighbouring orders, with ĵ of the order one beyond the last from the ratio
+/// that the backward recursion passes there (as [`bessel_j`] keeps it). Each lane's derivatives
+/// are therefore [`bessel_j`]`(Complex::new(x, 0), s, …, Some(…))`'s real parts bit for bit, in f64
+/// at every B and in every position. In f32 the flush of [`bessel_j_real`] applies: ĵ of the order
+/// beyond the last, and a derivative, below τ = 2⁻¹⁰⁰ beyond the turning point (n ≥ x) are set to
+/// zero, so no output is subnormal; a derivative formed from a flushed neighbour differs from the
+/// reference by at most about (n + 1) τ / s, far below the unit roundoff.
+///
+/// ```
+/// use tetraleaf_math::Complex;
+/// use tetraleaf_math::radial::{bessel_j, bessel_j_real_derivatives};
+///
+/// let x = [2.0_f64, 0.25];
+/// let (mut values, mut derivatives) = ([[0.0; 2]; 5], [[0.0; 2]; 5]);
+/// bessel_j_real_derivatives(&x, 1.0, &mut values, &mut derivatives);
+/// let zero = Complex::new(0.0, 0.0);
+/// let (mut one, mut d_one) = ([zero; 5], [zero; 5]);
+/// bessel_j(Complex::new(x[0], 0.0), 1.0, &mut one, Some(&mut d_one));
+/// assert!(derivatives.iter().zip(&d_one).all(|(l, d)| l[0] == d.re));
+/// ```
+///
+/// # Panics
+///
+/// As [`bessel_j_real`], and if `derivatives` differs in length from `values`.
+pub fn bessel_j_real_derivatives<T: RealScalar, const B: usize>(
+    x: &[T; B],
+    s: T,
+    values: &mut [[T; B]],
+    derivatives: &mut [[T; B]],
+) {
+    real_j(x, s, values, Some(derivatives));
+}
+
+/// [`bessel_j_real`] and, if asked, [`bessel_j_real_derivatives`]' derivatives: one code path, so
+/// that the values are the same bits either way.
+fn real_j<T: RealScalar, const B: usize>(
+    x: &[T; B],
+    s: T,
+    values: &mut [[T; B]],
+    derivatives: Option<&mut [[T; B]]>,
+) {
     check_scale(s);
     assert!(
         x.iter().all(|&x| x.is_finite() && x >= T::zero()),
         "bessel_j_real needs finite x ≥ 0"
     );
+    check_derivatives(values.len(), &derivatives);
     let len = values.len();
     if len == 0 {
         return;
@@ -232,8 +280,10 @@ pub fn bessel_j_real<T: RealScalar, const B: usize>(x: &[T; B], s: T, values: &m
     };
     let starts: [usize; B] = core::array::from_fn(|j| start_order_j_real(len, x[j].to_f64()));
     let top = starts.iter().copied().max().unwrap_or(0);
-    // The ratios rₙ = jₙ/jₙ₋₁ for n = 1..len, values[n − 1] holding rₙ.
+    // The ratios rₙ = jₙ/jₙ₋₁ for n = 1..len, values[n − 1] holding rₙ; r_len kept apart for the
+    // derivative of the last order (zero where the recursion starts below it, as `bessel_j`'s).
     let mut r = [T::zero(); B];
+    let mut r_top = [T::zero(); B];
     for n in (1..=top).rev() {
         let c = int::<T>(2 * n + 1);
         for j in 0..B {
@@ -243,7 +293,9 @@ pub fn bessel_j_real<T: RealScalar, const B: usize>(x: &[T; B], s: T, values: &m
             }
             r[j] = if n <= starts[j] { x[j] / d } else { T::zero() };
         }
-        if n < len {
+        if n == len {
+            r_top = r;
+        } else if n < len {
             values[n - 1] = r;
         }
     }
@@ -274,6 +326,39 @@ pub fn bessel_j_real<T: RealScalar, const B: usize>(x: &[T; B], s: T, values: &m
         }
     }
     values[len - 1] = prev;
+    if let Some(der) = derivatives {
+        // ĵ_len, flushed as the values are; then `bessel_j`'s formula per order, its operations on
+        // the real parts.
+        let top_order = int::<T>(len);
+        let next: [T; B] = core::array::from_fn(|j| {
+            let v = if len == 1 && use_j1[j] {
+                j1s[j] / s
+            } else {
+                prev[j] * r_top[j] / s
+            };
+            if top_order >= x[j] && v.abs() < flush {
+                T::zero()
+            } else {
+                v
+            }
+        });
+        for n in 0..len {
+            let up = if n + 1 < len { values[n + 1] } else { next };
+            let past = int::<T>(n);
+            der[n] = if n == 0 {
+                core::array::from_fn(|j| -(up[j] * s))
+            } else {
+                let (a, b, c) = (past / s, int::<T>(n + 1) * s, int::<T>(2 * n + 1));
+                let below = values[n - 1];
+                core::array::from_fn(|j| (below[j] * a - up[j] * b) / c)
+            };
+            for (d, &xj) in der[n].iter_mut().zip(x) {
+                if past >= xj && d.abs() < flush {
+                    *d = T::zero();
+                }
+            }
+        }
+    }
 }
 
 /// ĥₙ(z) = e^{Im z} hₙ⁽¹⁾(z) sⁿ for n < `values.len()`, and ĥ′ₙ in `derivatives` if given.
