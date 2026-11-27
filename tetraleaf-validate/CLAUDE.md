@@ -797,6 +797,15 @@ multipole bit for bit before any timing. `tools/helmholtz/ch4-9a1-runs.sh` runs 
 `parts`), `ch4-9a1-tables.py` makes the report's tables (`shares`, `summary`). Its report is
 `results/helmholtz-ch4-9a1.md`.
 
+Helmholtz CH4.9a2a (the leaf harmonics and the real radial functions; docs/helmholtz/tasks/CH4.9a2a.md)
+added to `helmholtz_leaf` `--lanes 1|4|8|16` and, per case, `tetraleaf_math::orthonormal::LeafHarmonics`
+(`values` and `columns`) and `radial::bessel_j_real` over the same points B at a time, checked first
+(the radial values `bessel_j`'s bits but for flushed ones, the harmonics' largest difference in the
+contract's units), the sum on the flushed radial values, and the projected P2M per point; the new
+columns follow CH4.9a1's. `tools/helmholtz/ch4-9a2a-runs.sh` runs it (`smoke`, `parts`, `lanes`),
+`ch4-9a2a-tables.py` makes the report's tables (`summary`, `cases`, `lanes`). Its report is
+`results/helmholtz-ch4-9a2a.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

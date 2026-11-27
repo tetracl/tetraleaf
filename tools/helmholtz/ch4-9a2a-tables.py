@@ -11,12 +11,12 @@ docs/helmholtz/tasks/CH4.9a2a.md), from the launches of `tools/helmholtz/ch4-9a2
 
 - `summary`: per machine, precision and p, the medians over k̂ of the reference's P2M, harmonics,
   radial functions and sum per point, the leaf harmonics (column by column) and the real radial
-  functions per point with their ratios to the reference's parts, the sum on the flushed radial
+  functions per point with their ratios to the reference's parts, the sum on the leaf routines'
   values, the projected P2M and its ratio, that sum's share of the projected P2M, and over k̂ the largest harmonics check and the flushed
   radial values.
 - `cases`: the same per k̂ (every case).
 - `lanes`: per machine, precision, p and lane count, the leaf harmonics (`values`, columns) and the
-  real radial functions per point and the projected P2M.
+  real radial functions per point.
 
 No timing is asserted; the numbers go into tetraleaf-validate/results/helmholtz-ch4-9a2a.md.
 Python 3.9 standard library only.
@@ -60,7 +60,7 @@ def parts(r):
     p2m, harm, radial, total_sum = n("P2M µs"), n("harmonics µs"), n("radial µs"), n("sum µs")
     columns, real = n("leaf columns µs"), n("real radial µs")
     projected = n("projected P2M µs")
-    leaf_sum = n("sum, leaf radial µs")
+    leaf_sum = n("sum, leaf values µs")
     return {
         "p2m": p2m, "harmonics": harm, "radial": radial, "sum": total_sum,
         "columns": columns, "values": n("leaf harmonics µs"), "real": real,
@@ -88,7 +88,7 @@ def line(machine, precision, p, s, extra=()):
 
 
 HEADER = ["P2M µs", "harmonics µs", "leaf µs", "÷", "radial µs", "real µs", "÷", "sum µs",
-          "sum, leaf radial µs", "projected µs", "÷ P2M", "sum share", "harmonics check", "flushed"]
+          "sum, leaf values µs", "projected µs", "÷ P2M", "sum share", "harmonics check", "flushed"]
 
 
 def cmd_summary(args):
@@ -120,19 +120,20 @@ def cmd_lanes(args):
     for arg in args:
         machine, rs = rows(arg, "lanes")
         for r in rs:
-            s = parts(r)
-            body.append([machine, r["precision"], r["p"], r["lanes"], f"{s['values']:.3f}",
-                         f"{s['columns']:.3f}", f"{s['real']:.3f}", f"{s['projected']:.3f}",
-                         f"{s['projected ratio']:.2f}"])
+            # The lane runs need no sum on the flushed values: their columns are read directly.
+            n = lambda k: common.number(r[k])  # noqa: E731
+            body.append([machine, r["precision"], r["p"], r["lanes"],
+                         f"{n('leaf harmonics µs'):.3f}", f"{n('leaf columns µs'):.3f}",
+                         f"{n('real radial µs'):.3f}"])
     show(["machine", "precision", "p", "lanes", "leaf values µs", "leaf columns µs",
-          "real radial µs", "projected µs", "÷ P2M"], body)
+          "real radial µs"], body)
 
 
 def selftest():
     r = {"P2M µs": "2", "harmonics µs": "1", "radial µs": "0.5", "sum µs": "0.2",
          "leaf columns µs": "0.1", "leaf harmonics µs": "0.12", "real radial µs": "0.25",
          "projected P2M µs": "0.85", "harmonics check": "1.02", "radial check": "12 flushed",
-         "sum, leaf radial µs": "0.17"}
+         "sum, leaf values µs": "0.17"}
     s = parts(r)
     assert s["harm ratio"] == 0.1 and s["radial ratio"] == 0.5 and s["flushed"] == 12
     assert abs(s["projected ratio"] - 0.425) < 1e-12
