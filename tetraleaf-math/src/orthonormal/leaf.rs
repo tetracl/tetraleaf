@@ -31,7 +31,11 @@
 //! [`harmonics`](super::harmonics) (f64 to p = 100, f32 to p = 64). cos θ, sin θ, cos φ and
 //! sin φ come from the coordinates, (cos mφ, sin mφ) by the recursion of (x + iy)/ρ, with no
 //! trigonometric call (§3.5); at the centre θ = 0 and φ = 0, on the z-axis φ = 0, as for
-//! [`harmonics`](super::harmonics).
+//! [`harmonics`](super::harmonics). ρ and r come from x² + y² and x² + y² + z², not `hypot`, so
+//! the coordinates' squares must neither overflow nor underflow wholly: |x|, |y|, |z| up to about
+//! 10¹⁵⁰ in f64 (10¹⁸ in f32; a leaf's offsets lie within √3). A point whose ρ² underflows to zero
+//! (ρ below about 10⁻¹⁶² in f64, 10⁻²³ in f32) is taken on the z-axis, and one whose r² does, at
+//! the centre, which moves its values by about sin θ, far below u for any r of order one.
 //!
 //! # Under-range values
 //!
@@ -41,8 +45,10 @@
 //! x86; CH4.9a1 measured f32 at p = 41–45 up to 1.75× f64's time there). Near the pole
 //! P̄ₙᵐ / P̄ₘᵐ → √C(n + m, 2m), at most about 2⁴¹ for n ≤ 64, so with the normalisation a
 //! zeroed column held values below about τ 2⁴³: 2⁻⁸⁵⁷ in f64 and 2⁻⁵⁷ in f32, far below the unit
-//! roundoff of either. (A tiny cos θ can still make a single product subnormal; points that
-//! close to the equator are rare and cost time only.)
+//! roundoff of either. In f32 the ratio, and with it the bound, grows to about 2⁶⁸ at n = 100
+//! (2⁻³² left), so f32 is held to its contract to p = 64 only (CONVENTIONS §3.15 reserves f32 for
+//! low degrees); f64's margin covers every degree the leaves take. (A tiny cos θ can still make a
+//! single product subnormal; points that close to the equator are rare and cost time only.)
 //!
 //! # Lanes
 //!

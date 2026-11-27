@@ -23,8 +23,8 @@
 //!   values upward. No pass overflows. The start order is a function of z and the
 //!   length only, computed in f64 for every `T`.
 //! - [`bessel_j_real`] (Helmholtz CH4.9a2a): [`bessel_j`] at real arguments in real arithmetic,
-//!   for a batch of arguments as lanes, the same values bit for bit but for under-range values
-//!   beyond the turning point, which it sets to zero.
+//!   for a batch of arguments as lanes, the same values bit for bit (in f32 but for under-range
+//!   values beyond the turning point, which it sets to zero).
 //! - [`hankel_h`] and [`modified_k`]: the upward recursion from the closed forms of orders
 //!   0 and 1, the stable direction.
 //! - Derivatives from the neighbouring orders: jₙ′ = (n jₙ₋₁ − (n + 1) jₙ₊₁)/(2n + 1),
@@ -186,11 +186,14 @@ pub fn bessel_j<T: RealScalar>(
 /// above it as [`bessel_j`] starts at 0), the zero-denominator guard, ĵ₀ or ĵ₁ from the power
 /// series or the closed forms, and the upward pass. A lane's values are therefore
 /// [`bessel_j`]`(Complex::new(x, 0), s, …)`'s real parts bit for bit, the same at every B and in
-/// every position, but for one difference: beyond the turning point (n ≥ x, where jₙ(x) has no
-/// zero and falls with n) a value below the under-range threshold τ (2⁻⁹⁰⁰ for f64's range,
-/// 2⁻¹⁰⁰ for f32's; [`crate::orthonormal::leaf`], "Under-range values") is set to zero,
-/// and so are the lane's later values, so that no operand of the pass is subnormal. The power
-/// series drops a term below τ, which changes no bit of ĵ₀ or ĵ₁ (each at least 1/3 there).
+/// every position. For f32's range there is one difference: beyond the turning point (n ≥ x,
+/// where jₙ(x) has no zero and falls with n) a value below 2⁻¹⁰⁰ (the under-range threshold τ of
+/// [`crate::orthonormal::leaf`], "Under-range values") is set to zero, and so are the lane's later
+/// values, so that no operand of the pass is subnormal (in f32 that happens at the leaf degrees
+/// for k ρ of order one; in f64 only within about 10⁻⁵ of the centre at p ≈ 45, so f64 keeps every
+/// bit). The power series drops a term below τ (2⁻⁹⁰⁰ for f64's range), which changes no bit of ĵ₀
+/// or ĵ₁ (each at least 1/3 there). The identity relies on libm's `sin` and `cos` being odd and
+/// even to the bit, as on glibc and macOS (`tests/radial/real.rs` checks it on each).
 /// The lanes are fixed-size arrays and the special cases selects, so the compiler vectorises
 /// the recursions without `unsafe`; the start orders and the closed forms (`sin`, `cos`) run per
 /// lane.
@@ -221,6 +224,12 @@ pub fn bessel_j_real<T: RealScalar, const B: usize>(x: &[T; B], s: T, values: &m
         return;
     }
     let tau = crate::orthonormal::under_range::<T>();
+    // The upward pass flushes in f32's range only; f64 keeps `bessel_j`'s bits.
+    let flush = if T::max_value().to_f64() > 1e300 {
+        T::zero()
+    } else {
+        tau
+    };
     let starts: [usize; B] = core::array::from_fn(|j| start_order_j_real(len, x[j].to_f64()));
     let top = starts.iter().copied().max().unwrap_or(0);
     // The ratios rₙ = jₙ/jₙ₋₁ for n = 1..len, values[n − 1] holding rₙ.
@@ -257,7 +266,7 @@ pub fn bessel_j_real<T: RealScalar, const B: usize>(x: &[T; B], s: T, values: &m
             } else {
                 prev[j] * rn[j] / s
             };
-            prev[j] = if past >= x[j] && next.abs() < tau {
+            prev[j] = if past >= x[j] && next.abs() < flush {
                 T::zero()
             } else {
                 next

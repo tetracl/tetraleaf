@@ -8,7 +8,7 @@
 #
 # Each launch runs `helmholtz_leaf` on one thread for one precision and one degree, at every k̂ of
 # KHAT (one setting of what a time decides per launch: the degree; review 2026-11-24, B12), pinned
-# to one core where `taskset` exists (CORE, default 2), with LANES lanes (default 8).
+# to one core where `taskset` exists (CORE, default 2), with LANES lanes (default 16).
 # `tools/helmholtz/ch4-9a2a-tables.py` makes the report's tables. Stages:
 #   smoke   p = 8 and 17 at k̂ = 2, f64, 64 points (a check of the script)
 #   parts   PS (default the leaf levels' degrees of CH4.6a2's cases, 8 12 15 17 19 26 32 41 45)
@@ -28,7 +28,7 @@ export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 MKL_NUM
 TIMEOUT=${TIMEOUT:-1800}
 PS=${PS:-8 12 15 17 19 26 32 41 45}
 KHAT=${KHAT:-0.5,2,4,8,16}
-LANES=${LANES:-8}
+LANES=${LANES:-16}
 pin=()
 command -v taskset > /dev/null && pin=(taskset -c "${CORE:-2}")
 

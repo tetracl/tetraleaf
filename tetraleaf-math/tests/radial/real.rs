@@ -1,6 +1,6 @@
 //! `bessel_j_real` against `bessel_j` at real arguments (Helmholtz CH4.9a2a,
-//! docs/helmholtz/tasks/CH4.9a2a.md, "Tests that prove it"): bit for bit, but for the values it
-//! flushes beyond the turning point.
+//! docs/helmholtz/tasks/CH4.9a2a.md, "Tests that prove it"): bit for bit, in f32 but for the
+//! values it flushes beyond the turning point.
 
 use tetraleaf_math::radial::{bessel_j, bessel_j_real};
 use tetraleaf_math::{Complex, RealScalar};
@@ -12,7 +12,8 @@ const XS: [f64; 13] = [
 
 /// Every argument of `XS` in B lanes (rotated so that each sits in several positions), at the
 /// scales and lengths of the plan: each lane's values equal `bessel_j`'s real parts bit for bit,
-/// or are zero where the reference is below τ at an order n ≥ x; no value is subnormal. Values the
+/// or, for τ > 0, are zero where the reference is below τ at an order n ≥ x, and then no value is
+/// subnormal. τ = 0 asks for every bit. Values the
 /// reference does not hold finite (f32 at s < 1 and x of hundreds, an overflow of ĵₙ/sⁿ; a level
 /// with s < 1 has |k| a < 1, so x < 1) are skipped.
 fn check<T: Real, const B: usize>(tau: f64) -> usize {
@@ -48,8 +49,10 @@ fn check<T: Real, const B: usize>(tau: f64) -> usize {
                             flushed += 1;
                         }
                         let g = got.to_f64().abs();
+                        // Where the routine flushes (τ > 0), nothing is subnormal; f64 keeps the
+                        // reference's bits, subnormal ones included.
                         assert!(
-                            g == 0.0 || g >= T::min_positive_value().to_f64(),
+                            tau == 0.0 || g == 0.0 || g >= T::min_positive_value().to_f64(),
                             "subnormal value at x = {}, n = {n}",
                             x[j].to_f64()
                         );
@@ -83,9 +86,9 @@ impl<T: RealScalar + Bits> Real for T {}
 
 #[test]
 fn the_real_radial_functions_are_bessel_j_bit_for_bit_in_f64() {
-    let tau = 2f64.powi(-900);
-    let flushed = check::<f64, 1>(tau) + check::<f64, 4>(tau) + check::<f64, 8>(tau);
-    println!("f64: {flushed} values flushed below 2^-900 beyond the turning point");
+    // f64 flushes nothing: every value is the reference's bits.
+    let flushed = check::<f64, 1>(0.0) + check::<f64, 4>(0.0) + check::<f64, 8>(0.0);
+    assert_eq!(flushed, 0, "f64 keeps every bit");
 }
 
 #[test]

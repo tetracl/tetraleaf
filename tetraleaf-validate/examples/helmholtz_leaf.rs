@@ -23,7 +23,7 @@
 //!   their derivatives (`harmonics_derivatives`); "rest" is the call with gradients less those
 //!   two parts (the sum, the gradient's assembly, the call's overhead).
 //! - **The leaf routines** (Helmholtz CH4.9a2a; docs/helmholtz/tasks/CH4.9a2a.md): the same
-//!   points `--lanes` B at a time (default 8; 1, 4, 8 or 16) through
+//!   points `--lanes` B at a time (default 16, CH4.9a2a's fastest; 1, 4, 8 or 16) through
 //!   `tetraleaf_math::orthonormal::LeafHarmonics`, once storing the full layout (`values`) and
 //!   once column by column with every value added into an accumulator (`columns`, as a kernel
 //!   would stream them), and `tetraleaf_math::radial::bessel_j_real` (real k only). Checked
@@ -87,7 +87,7 @@ fn arguments() -> Arguments {
         kim: 0.0,
         points: 256,
         f32: false,
-        lanes: 8,
+        lanes: 16,
     };
     let list = |v: &str| -> Option<Vec<f64>> { v.split(',').map(|x| x.parse().ok()).collect() };
     let mut i = 0;
@@ -490,9 +490,14 @@ fn leaf_parts<T: RealScalar, const B: usize>(
             bessel_j_real(x, level.scale(), &mut lanes);
             for (j, &xj) in x.iter().enumerate() {
                 bessel_j(Complex::new(xj, T::zero()), level.scale(), &mut one, None);
-                for (row, want) in lanes.iter().zip(&one) {
+                for (order, (row, want)) in lanes.iter().zip(&one).enumerate() {
                     if row[j] != want.re {
-                        assert!(row[j] == T::zero(), "bessel_j_real differs from bessel_j");
+                        // Only f32's flush may differ: a zero where the reference is below
+                        // τ = 2⁻¹⁰⁰ at an order n ≥ x.
+                        let flushed = row[j] == T::zero()
+                            && want.re.abs().to_f64() < 2f64.powi(-100)
+                            && order as f64 >= xj.to_f64();
+                        assert!(flushed, "bessel_j_real differs from bessel_j");
                         differ += 1;
                     }
                 }

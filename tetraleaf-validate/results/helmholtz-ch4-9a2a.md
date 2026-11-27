@@ -14,9 +14,10 @@ against the reference's parts on Kathleen and locust, before CH4.9a2b builds the
    no `tetraleaf-simd` change, no dependency.
 2. **Accuracy** (§2): the harmonics are within 1.02 (n + 1)² u √((2n + 1)/(4π)) per term of
    `harmonics` in f64 to p = 100 (0.87 in f32 to p = 64), over random points of the leaf frame, the
-   poles, near-pole points to sin θ = 10⁻³⁰⁰, the axes, the equator and the centre; the test holds
-   them to 10 times that. The radial functions are `bessel_j`'s real parts **bit for bit**, but for
-   the values flushed beyond the turning point (below 2⁻⁹⁰⁰ in f64, 2⁻¹⁰⁰ in f32).
+   poles, near-pole points (sin θ to 10⁻¹⁶⁰; below about 10⁻¹⁶² a point is taken on the axis), the
+   axes, the equator and the centre; the test holds them to 10 times that. The radial functions are
+   `bessel_j`'s real parts **bit for bit** in f64, and in f32 but for the values flushed beyond the
+   turning point (below 2⁻¹⁰⁰).
 3. **Time per point** (§3, one core, 16 lanes, medians over k̂): the harmonics take **0.06–0.09×**
    the reference's in f64 on both machines (0.03–0.06× in f32), the radial functions 0.13–0.24×.
    With the reference's sum loop kept, P2M per point is projected at **0.16–0.23× (Kathleen) and
@@ -30,7 +31,10 @@ against the reference's parts on Kathleen and locust, before CH4.9a2b builds the
 
 ## 1. Setup
 
-- **Code**: branch `tbetcke/h-ch4-9a2a` at f9bc99a, release builds, BLAS threads 1.
+- **Code**: branch `tbetcke/h-ch4-9a2a` at f9bc99a, release builds, BLAS threads 1. After the runs
+  (the self-review) f64's radial pass stopped flushing, to keep every bit: no f64 value of the runs
+  was flushed (the column "flushed" is 0 for every f64 case), so its times stand; and the example's
+  radial check gained the τ and n ≥ x conditions of the unit test.
 - **The routines** (`tetraleaf-math/src/orthonormal/leaf.rs`, `radial.rs`, their module docs):
   - `LeafHarmonics::new(p)` tabulates in f64 and rounds to T once: Q̄₀⁰ = 1/√(4π), the diagonal
     factors dₘ (√3 for m = 1, √((2m + 1)/(2m)) after), √(2m + 3), and per (n, m) the
@@ -43,7 +47,7 @@ against the reference's parts on Kathleen and locust, before CH4.9a2b builds the
   - `bessel_j_real::<T, B>` runs `bessel_j`'s operations on the lanes' real parts: the start order
     (restated in real f64, the same orders), the backward ratio recursion from the largest start
     with each lane entering at its own, the closed forms or the series for ĵ₀ and ĵ₁, the upward
-    pass; the only departure is the flush beyond the turning point.
+    pass; the only departure, in f32, is the flush beyond the turning point.
 - **The example** `helmholtz_leaf` (CH4.9a1's, extended; module documentation): per degree p and
   k̂ on one thread, 256 uniform points of the leaf frame with complex charges, real k; the
   reference's P2M and its parts as in CH4.9a1, then the leaf routines on the same points 16 at a
@@ -60,7 +64,8 @@ against the reference's parts on Kathleen and locust, before CH4.9a2b builds the
 - **Kathleen**: job 673107 (`parts`), node-c11a-044, 08:06–08:16; job 673103 (`smoke`, `lanes`),
   node-c11a-043, 07:47–07:49; one core (`taskset -c 2`), 2026-11-27.
 - **locust**: `parts` 08:06–08:15, `smoke` and `lanes` 07:45–07:47, one core (`taskset -c 2`),
-  one-minute load at most 1.05 during the runs, no other process of this account.
+  no other process of this account; one-minute load at most 1.08 during `parts`, and 1.6–2.9 at the
+  start of `smoke` and the `lanes` launches, which followed the build (five-minute 0.67–0.74).
 - **Superseded runs**, kept in the archive and not used: Kathleen job 673105 and a locust run at
   07:52–08:05 (`ch4-9a2a-v1`) timed the sum on one point's flushed radial values, whose f32 figures
   CH4.9a1's one-point sum distorted (§4); a locust run at 07:47–07:53 (`ch4-9a2a-aborted`) ran two
@@ -79,7 +84,7 @@ against the reference's parts on Kathleen and locust, before CH4.9a2b builds the
 | the same in f32 against the f64 reference, p ≤ 64 | the same, plus 2⁻⁵⁷ | 0.87 (bound 10); no subnormal value |
 | lanes B = 1, 4, 8, 16, each point in two positions | bits | the same bits |
 | `columns` against `values`; a larger table at a smaller p | bits | the same bits |
-| `bessel_j_real` against `bessel_j` at real z, f64, 13 arguments 0 to 300 mixed in lanes, s ∈ {1, 0.3, 10⁻³}, lengths 1–101, B = 1, 4, 8 | bits | bit for bit but 767 values flushed below 2⁻⁹⁰⁰ at n ≥ x |
+| `bessel_j_real` against `bessel_j` at real z, f64, 13 arguments 0 to 300 mixed in lanes, s ∈ {1, 0.3, 10⁻³}, lengths 1–101, B = 1, 4, 8 | bits | bit for bit, every value |
 | the same in f32, B = 1, 8, 16 | bits | bit for bit but 6,650 values flushed below 2⁻¹⁰⁰ at n ≥ x; no subnormal value |
 
 The harmonics' error grows like (n + 1)² u, the plain recurrence's n² u near the poles (spike S1,
@@ -110,7 +115,10 @@ or a flushed zero.
 - **The harmonics** fall 11–16× in f64 (0.062–0.092× over every case on both machines): the
   column pass is now a few multiply-adds per term over 16 lanes, where the reference paid two square
   roots and four divisions per term per point (CH4.9a1 §3). At p = 45 they take 0.37 ns per term
-  per point on Kathleen, 0.24 on locust.
+  per point on Kathleen, 0.24 on locust. This is the column pass, timed with every value added into
+  an accumulator as a streaming kernel would consume it; storing the full layout (`values`, the
+  reference's output form) costs more on Kathleen, 1.06–1.16 against 0.79 µs at p = 45 (about
+  0.10×), from the stores, and about the same on locust (0.48–0.54 against 0.51 µs).
 - **The radial functions** fall 4–8× (0.12–0.27× over every case): real arithmetic in place of
   Smith's complex division, and the ratio recursion over 16 lanes. What remains is per lane: the
   start order (a scalar forward recursion in f64) and the closed forms' `sin` and `cos`; they now
@@ -171,7 +179,7 @@ CH4.9a2b takes 16 lanes in both precisions unless its own measurement says other
 ## 6. Question for sign-off
 
 1. **The routines for CH4.9a2b** (recommended: adopt them). CH4.9a2b builds the P2M kernel on
-   `LeafHarmonics` and `bessel_j_real`. The radial values are the reference's bits; the harmonics
+   `LeafHarmonics` and `bessel_j_real`. The radial values are the reference's bits in f64; the harmonics
    differ from the telescoped reference by at most 1.02 (n + 1)² u √((2n + 1)/(4π)) per term in
    f64 (at p = 45 at most about 6·10⁻¹³ absolute at the highest degree, by that bound), the pair-level evidence. The FMM
    evidence follows in CH4.9a2b: its acceptance holds the FMM's errors within 1.01× the reference

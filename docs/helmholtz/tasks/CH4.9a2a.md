@@ -106,8 +106,8 @@ dependency.
   - `columns` and `values` agree bit for bit; p below the table's degree gives the first degrees
     of the table's values bit for bit; p above it panics.
 - `tetraleaf-math/tests/radial/real.rs`:
-  - `bessel_j_real` against `bessel_j(Complex::new(x, 0), s, …)` bit for bit in f64 but for the
-    values flushed below 2⁻⁹⁰⁰ at n ≥ x (as built: one flush rule for both precisions), lanes
+  - `bessel_j_real` against `bessel_j(Complex::new(x, 0), s, …)` bit for bit in f64 (as built: a
+    first version flushed f64 too, below 2⁻⁹⁰⁰; the self-review held it to the acceptance), lanes
     B = 1, 4, 8 with mixed x in a batch (x = 0, 10⁻¹², 10⁻⁶, 0.3, 0.5 (the series' edge), 1, 4,
     17, 60, 300), s ∈ {1, 0.3, 10⁻³}, lengths 1, 2, 9, 46, 101.
   - f32: bit for bit `bessel_j` but where the reference is below τ beyond the turning point (there
@@ -142,14 +142,15 @@ M6 not timed (ask first; not needed).
 ## Pending runs
 None. Kathleen jobs 673103 (`smoke`, `lanes`; node-c11a-043) and 673107 (`parts`, 16 lanes;
 node-c11a-044), locust `smoke` and `lanes` 07:45–07:47 and `parts` 08:06–08:15 (one core, one-minute
-load at most 1.05), 2026-11-27; every launch exited 0, every case's radial values bit for bit or
+load at most 1.08 in `parts`, 1.6–2.9 at the start of `smoke` and `lanes` after the build), 2026-11-27; every launch exited 0, every case's radial values bit for bit or
 flushed zeros. Superseded and unused: Kathleen job 673105 and locust's `ch4-9a2a-v1` (a sum
 measure distorted in f32, replaced), locust's `ch4-9a2a-aborted` (two copies on one core). Outputs
 in `~/projects/fmm-archive/{kathleen,locust}/runs/`.
 
 ## Results (the report `tetraleaf-validate/results/helmholtz-ch4-9a2a.md`)
 - The harmonics within 1.02 (n + 1)² u √((2n + 1)/(4π)) per term of `harmonics` in f64 to p = 100
-  (0.87 in f32 to p = 64); the radial values `bessel_j`'s bits but for flushed under-range values.
+  (0.87 in f32 to p = 64); the radial values `bessel_j`'s bits in f64, and in f32 but for flushed
+  under-range values.
 - One core, 16 lanes, f64, medians over k̂: the harmonics 0.06–0.09× the reference's, the radial
   functions 0.13–0.24×; P2M projected at 0.16–0.23× (Kathleen) and 0.14–0.21× (locust) with the
   reference's sum loop, which is then 20–55 % of it.

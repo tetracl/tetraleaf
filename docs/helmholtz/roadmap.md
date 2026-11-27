@@ -754,8 +754,8 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   f32 at p = 41–45 the reference ran 1.37–1.40× f64's time on Kathleen as the median over k̂, up to
   1.75× at k̂ = 2–4 (likely subnormal values on x86, untested); the f32 kernel avoids or reports it.
 - [x] **CH4.9a2a The leaf harmonics and the real radial functions, batched over points.**
-  `LeafHarmonics` within 1.02 (n + 1)² u per term of `harmonics`, `bessel_j_real` its bits but flushed
-  values; on one core the harmonics 0.06–0.09× and the radial functions 0.13–0.24× the reference's, P2M
+  `LeafHarmonics` within 1.02 (n + 1)² u √((2n + 1)/(4π)) per term of `harmonics`, `bessel_j_real` its
+  bits in f64 (f32 flushes under-range values); on one core the harmonics 0.06–0.09× and the radial functions 0.13–0.24× the reference's, P2M
   projected at 0.14–0.23× (f64), Kathleen's f32 slowdown gone. Report
   `tetraleaf-validate/results/helmholtz-ch4-9a2a.md`, record `docs/helmholtz/tasks/CH4.9a2a.md`.
 - [ ] **CH4.9a2b P2M by the kernel.** *Done when:* CH4.9a's *Done when* less the table, on

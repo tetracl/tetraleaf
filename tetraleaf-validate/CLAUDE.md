@@ -801,7 +801,8 @@ Helmholtz CH4.9a2a (the leaf harmonics and the real radial functions; docs/helmh
 added to `helmholtz_leaf` `--lanes 1|4|8|16` and, per case, `tetraleaf_math::orthonormal::LeafHarmonics`
 (`values` and `columns`) and `radial::bessel_j_real` over the same points B at a time, checked first
 (the radial values `bessel_j`'s bits but for flushed ones, the harmonics' largest difference in the
-contract's units), the sum on the flushed radial values, and the projected P2M per point; the new
+contract's units), the reference's sum loop on the routines' own values of 16 points, and the
+projected P2M per point; the new
 columns follow CH4.9a1's. `tools/helmholtz/ch4-9a2a-runs.sh` runs it (`smoke`, `parts`, `lanes`),
 `ch4-9a2a-tables.py` makes the report's tables (`summary`, `cases`, `lanes`). Its report is
 `results/helmholtz-ch4-9a2a.md`.
