@@ -5033,3 +5033,46 @@ request, using this template:
 - Follow-ups: CH4.9a2 (its design by question 1, written into its roadmap line), with an Also: the
   f32 subnormal slowdown on x86; CH4.9b reuses its routine (question 2).
 
+
+## 2026-11-27: CH4.9a2a The leaf harmonics and the real radial functions, batched over points
+- Done:
+  - CH4.9a2 split into CH4.9a2a and CH4.9a2b by the skill's size rule (a routine in
+    `tetraleaf-math`, a kernel in `tetraleaf-tables`, its dispatch in `tetraleaf-exec`, runs on two
+    machines); both lines in the roadmap, CH4.9b now needs CH4.9a2b.
+  - `tetraleaf_math::orthonormal::leaf` (`LeafHarmonics`, `LeafScratch`): the orthonormal harmonics
+    of B points as lanes by the plain three-term recurrence from coefficients tabulated once in f64,
+    column by column (`columns`) or in §3.6's layout (`values`), under-range lanes zeroed below 2⁻⁹⁰⁰
+    (f64) or 2⁻¹⁰⁰ (f32).
+  - `tetraleaf_math::radial::bessel_j_real`: `bessel_j` at real arguments in real arithmetic, lanes
+    with per-lane start orders, the same operations per lane, values below τ beyond the turning
+    point zeroed.
+  - `helmholtz_leaf --lanes`, the new parts, their checks, the sum on the routines' values and the
+    projected P2M; `tools/helmholtz/ch4-9a2a-runs.sh`, `ch4-9a2a-tables.py` on `common.py`.
+  - Report `tetraleaf-validate/results/helmholtz-ch4-9a2a.md`; record `docs/helmholtz/tasks/CH4.9a2a.md`.
+- Results (Kathleen jobs 673103 and 673107; locust; one core, 16 lanes):
+  - Accuracy: the harmonics within 1.02 (n + 1)² u √((2n + 1)/(4π)) per term of `harmonics` in
+    f64 to p = 100, 0.87 in f32 to p = 64 (the plain recurrence's n² u near the poles); the radial
+    values `bessel_j`'s bits but for the flushed ones.
+  - f64, medians over k̂: the harmonics 0.062–0.092× the reference's, the radial functions
+    0.13–0.24×; P2M projected at 0.16–0.23× on Kathleen and 0.14–0.21× on locust with the reference's
+    sum loop, which is then 20–55 % of it; at p = 45 the two routines cost about the sum's time.
+  - f32: Kathleen's slowdown (1.40–1.42× f64 at p = 41–45) is gone from the routines and from the
+    sum on their values (projected 1.07–1.54 µs, 0.63× f64's at p = 45); the reference's one-point
+    sum part is no measure of f32 there (subnormal operands; a first projection subtracting it went
+    negative, job 673105, superseded).
+  - 16 lanes fastest of 4, 8, 16 or within 5 % on both machines.
+- Tests: `tetraleaf-math/tests/orthonormal/leaf.rs` (the contract in f64 and f32, no subnormal
+  output, lanes and positions bit for bit, `columns` against `values`, a larger table, the
+  refusal), `tests/radial/real.rs` (bit for bit `bessel_j` in f64 and f32 but the flushed values,
+  lanes 1–16, no subnormal output). The first contract, (n + 1) u, failed at p = 8 near a pole; the
+  measured growth set it to (n + 1)² u with C = 10.
+- Checks: `/verify` on the M6 (fmt; Clippy default, examples, workspace; docs; `cargo test` 1,410
+  and `--workspace` 1,454 passed at opt-level 1; the math executables' debug time unchanged:
+  `orthonormal` 20.3 s, main 20.5 s). Not run: the MPI list (no change to exec, plan or octree),
+  `cargo deny` (no manifest change). Nothing pending.
+- Decisions: the split, by the skill's rule. For sign-off on the PR: CH4.9a2b's kernel on these
+  routines (question 1).
+- Laplace: not touched (additions to `tetraleaf-math`'s Helmholtz modules, an example, scripts and
+  documents).
+- Follow-ups: CH4.9a2b, with two new Alsos on its line: subnormal products in the f32 sum, and 16
+  lanes with the sum deciding the ISA question.

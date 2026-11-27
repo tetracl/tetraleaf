@@ -96,8 +96,9 @@ dependency.
   - `values` against `harmonics` per point and term, f64, p ∈ {0, 1, 2, 5, 8, 17, 32, 45, 64,
     100}, on 1,000 random points of [−1, 1)³, the poles (0, 0, ±1), near-pole points (sin θ from
     10⁻¹ to 10⁻³⁰⁰), the axes, the equator (z = 0), the plane x = 0, the centre, the cube's
-    corners; the contract |Y − Y_ref| ≤ c (n + 1) u √((2n + 1)/(4π)) (c from the measured worst
-    with a margin of about 10, root `CLAUDE.md`'s glibc lesson), printed.
+    corners; the contract |Y − Y_ref| ≤ c (n + 1)² u √((2n + 1)/(4π)) (as built: the first guess,
+    (n + 1) u, failed at p = 8 near the pole, the plain recurrence's n² u; c = 10, about ten times
+    the measured worst of 1.02, root `CLAUDE.md`'s glibc lesson), printed.
   - f32 against the f64 reference, p ≤ 64, the same contract with u = 2⁻²⁴ plus τ; no subnormal in
     any output (asserted).
   - lanes: B = 1, 4, 8, 16 give the same bits per point (a point's values do not depend on its
@@ -105,11 +106,13 @@ dependency.
   - `columns` and `values` agree bit for bit; p below the table's degree gives the first degrees
     of the table's values bit for bit; p above it panics.
 - `tetraleaf-math/tests/radial/real.rs`:
-  - `bessel_j_real` against `bessel_j(Complex::new(x, 0), s, …)` bit for bit in f64, lanes
+  - `bessel_j_real` against `bessel_j(Complex::new(x, 0), s, …)` bit for bit in f64 but for the
+    values flushed below 2⁻⁹⁰⁰ at n ≥ x (as built: one flush rule for both precisions), lanes
     B = 1, 4, 8 with mixed x in a batch (x = 0, 10⁻¹², 10⁻⁶, 0.3, 0.5 (the series' edge), 1, 4,
     17, 60, 300), s ∈ {1, 0.3, 10⁻³}, lengths 1, 2, 9, 46, 101.
   - f32: bit for bit `bessel_j` but where the reference is below τ beyond the turning point (there
-    0), and no subnormal output.
+    0), and no subnormal output; references outside f32's range (x = 300 at s < 1, no level's
+    case) skipped.
 
 ## Checks
 `/verify` (the root checks, the strict workspace checks; tetraleaf-math's and tetraleaf-validate's
@@ -137,7 +140,33 @@ M6 not timed (ask first; not needed).
   arrays so that LLVM sees whole vectors.
 
 ## Pending runs
-None yet.
+None. Kathleen jobs 673103 (`smoke`, `lanes`; node-c11a-043) and 673107 (`parts`, 16 lanes;
+node-c11a-044), locust `smoke` and `lanes` 07:45–07:47 and `parts` 08:06–08:15 (one core, one-minute
+load at most 1.05), 2026-11-27; every launch exited 0, every case's radial values bit for bit or
+flushed zeros. Superseded and unused: Kathleen job 673105 and locust's `ch4-9a2a-v1` (a sum
+measure distorted in f32, replaced), locust's `ch4-9a2a-aborted` (two copies on one core). Outputs
+in `~/projects/fmm-archive/{kathleen,locust}/runs/`.
+
+## Results (the report `tetraleaf-validate/results/helmholtz-ch4-9a2a.md`)
+- The harmonics within 1.02 (n + 1)² u √((2n + 1)/(4π)) per term of `harmonics` in f64 to p = 100
+  (0.87 in f32 to p = 64); the radial values `bessel_j`'s bits but for flushed under-range values.
+- One core, 16 lanes, f64, medians over k̂: the harmonics 0.06–0.09× the reference's, the radial
+  functions 0.13–0.24×; P2M projected at 0.16–0.23× (Kathleen) and 0.14–0.21× (locust) with the
+  reference's sum loop, which is then 20–55 % of it.
+- f32: CH4.9a1's Kathleen slowdown gone from the routines and the sum on their values (projected
+  1.07–1.54 µs at p = 41–45, 0.63× f64's at p = 45); subnormal products in the f32 sum left to
+  CH4.9a2b.
+- 16 lanes fastest or within 5 % on both machines.
+
+## Checks run (the M6)
+`/verify`: fmt; Clippy default, examples, `--workspace --all-targets`; `cargo doc` with `-D warnings`;
+at opt-level 1 `cargo test` (1,410 passed) and `cargo test --workspace` (1,454 passed); the debug
+run at opt-level 0 of `tetraleaf-math`'s `orthonormal` (20.3 s, main 20.5 s) and `radial` (1.1 s,
+main 1.1 s), load 3.3–4.0; the tables script's `selftest`; the example's smoke runs. Not run: the
+MPI list (no change to exec, plan or octree), `cargo deny` (no manifest change), Laplace's benchmarks
+(no code Laplace runs changed: the new items are additions to `tetraleaf-math`'s Helmholtz modules).
 
 ## Open questions
-None yet.
+For sign-off on the PR (the report §6):
+1. CH4.9a2b's P2M kernel on `LeafHarmonics` and `bessel_j_real` (recommended), the FMM's evidence
+   in CH4.9a2b; or the telescoped recurrence with tabulated coefficients.

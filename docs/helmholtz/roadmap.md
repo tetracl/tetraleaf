@@ -9,11 +9,11 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-27): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). The FFT track
-(item 13) is done (CH4.6a2 merged; CH4.6a3 closed unrun). Item 14, the leaf expansions: CH4.9a split
-into CH4.9a1 and CH4.9a2; CH4.9a1 (where a leaf point's P2M and L2P time goes: the harmonics, 44–84 %)
-done in its PR, its questions signed off on 2026-11-27 (CH4.9a2 a restructured kernel in safe Rust,
-the shared leaf harmonics built with P2M and reused by CH4.9b). Next CH4.9a2, then CH4.9b, then H2 and H5 (items
-15–16), CH2.1 first. Eight H4 tasks stay open off the list, and CH4.9c. The project was renamed
+(item 13) is done (CH4.6a2 merged; CH4.6a3 closed unrun). Item 14, the leaf expansions: CH4.9a1
+merged (the harmonics 44–84 % of a leaf point); CH4.9a2 split on 2026-11-27 into a2a and a2b, and
+CH4.9a2a (the leaf harmonics and the real radial functions, batched; P2M projected at 0.14–0.23×)
+done in its PR, its question waiting for sign-off. Next CH4.9a2b (the P2M kernel), then CH4.9b,
+then H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and CH4.9c. The project was renamed
 tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are
 done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's
 history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show
@@ -21,7 +21,8 @@ history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G in `git show
 until its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`; until CHA.10a in `git show
 6bad3c2:docs/helmholtz/roadmap.md`; until CH0.9 in `git show dc69cd4:docs/helmholtz/roadmap.md`;
 until CH4.6a1 in `git show 34e3caf:docs/helmholtz/roadmap.md`; until CH4.6a2 in `git show
-7c8177d:docs/helmholtz/roadmap.md`; until CH4.9a1 in `git show 9758028:docs/helmholtz/roadmap.md`.
+7c8177d:docs/helmholtz/roadmap.md`; until CH4.9a1 in `git show 9758028:docs/helmholtz/roadmap.md`;
+until CH4.9a2a in `git show a62c5b9:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -752,19 +753,11 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   the measured time stays far from the sum's (then a question in the PR). Also (from CH4.9a1): in
   f32 at p = 41–45 the reference ran 1.37–1.40× f64's time on Kathleen as the median over k̂, up to
   1.75× at k̂ = 2–4 (likely subnormal values on x86, untested); the f32 kernel avoids or reports it.
-- [ ] **CH4.9a2a The leaf harmonics and the real radial functions, batched over points.** *Done
-  when:* `tetraleaf_math::orthonormal::LeafHarmonics` (the orthonormal harmonics by the plain
-  three-term recurrence from coefficients tabulated once in f64 up to a degree and rounded to T,
-  for a batch of points as lanes, column by column, written to vectorise without `unsafe`; values
-  below an under-range threshold flushed to zero so that no operand is subnormal) within a
-  contract per term against `harmonics` over the leaf frame's directions (random points of
-  [−1, 1)³, the poles, near-pole points, the axes, the equator, the centre), f64 to p = 100 and f32
-  to p = 64; `tetraleaf_math::radial::bessel_j_real` (ĵₙ of real arguments in real arithmetic,
-  lanes with per-lane start orders) bit for bit `bessel_j` at real z in f64, and in f32 but for
-  the values it flushes beyond the turning point; the `helmholtz_leaf` example times both per point
-  against the reference's parts (f64 and f32) on one core of Kathleen and locust, with P2M per point
-  projected from CH4.9a1's parts; CH4.9a1's f32 slowdown checked on the new routines. No Laplace
-  path, no dependency. *Needs:* CH4.9a1 and its sign-off. *Machines:* Kathleen, locust.
+- [x] **CH4.9a2a The leaf harmonics and the real radial functions, batched over points.**
+  `LeafHarmonics` within 1.02 (n + 1)² u per term of `harmonics`, `bessel_j_real` its bits but flushed
+  values; on one core the harmonics 0.06–0.09× and the radial functions 0.13–0.24× the reference's, P2M
+  projected at 0.14–0.23× (f64), Kathleen's f32 slowdown gone. Report
+  `tetraleaf-validate/results/helmholtz-ch4-9a2a.md`, record `docs/helmholtz/tasks/CH4.9a2a.md`.
 - [ ] **CH4.9a2b P2M by the kernel.** *Done when:* CH4.9a's *Done when* less the table, on
   CH4.9a2a's routines: the P2M kernel (in `tetraleaf-tables::helmholtz`, against
   `tetraleaf_ref::helmholtz::leaf::p2m`, a leaf's points batched, the sum vectorised over points
@@ -775,7 +768,11 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   path's, P2M's time per level on Kathleen and locust (the M6 with the user's go-ahead); the ISA
   question (above) in the PR if the time stays far from the sum's; no `tetraleaf-simd` change;
   Yukawa's `p2m_yukawa` an Also for H2. Also (from CH4.9a1): the f32 slowdown, avoided or
-  reported. *Needs:* CH4.9a2a. *Machines:* Kathleen, locust.
+  reported; CH4.9a2a removed it from the routines and the sum on their values, but the products
+  q e ĵₙ Yₙᵐ and the high-degree multipole coefficients may still be subnormal in f32 (report §4).
+  Also (from CH4.9a2a): 16 lanes, the fastest of 4, 8 and 16 on both machines (report §5); with the
+  routines replaced the sum is 20–55 % of P2M, so the batched sum decides the ISA question.
+  *Needs:* CH4.9a2a. *Machines:* Kathleen, locust.
 - [ ] **CH4.9b L2P with gradients by a SIMD kernel.** *Done when:* as CH4.9a for L2P, potentials and
   gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, reusing CH4.9a2's leaf harmonics and
   radial functions and adding their derivatives (CH4.9a1's question 2); the
