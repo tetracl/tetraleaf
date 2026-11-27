@@ -138,6 +138,29 @@ derivative routines fall against the reference's L2P parts and how much of the p
 gradients is left to the sum, which CH4.9b2's kernel and its ISA question read. The M6 not timed
 (ask first; not needed).
 
+## As built
+- The contract of the derivatives: the first guess, C (n + 1)³ u √((2n + 1)/(4π)) with C = 10, held.
+  The worst measured on the M6 is 0.87 (∂θ) and 0.59 ((1/sin θ) ∂φ) in those units in f64 to
+  p = 100, and 0.76 and 0.26 in f32 to p = 64. The self-review's probe, per degree at p = 100, put ∂θ
+  at 0.61–0.80 at every degree, so the third power is the growth, not a low-degree effect.
+- Not in "Changes" above: `LeafHarmonics`' directions (`Lanes::of`, shared with `columns` and so with
+  CH4.9a2b's P2M kernel) scale x and y, and z, by 2⁶⁰⁰ (f64) or 2¹⁰⁰ (f32) where ρ² or r² is below
+  the normal range. The first test run failed at (10⁻¹⁶⁰, 0, 1) in f64 and (−10⁻⁴⁰, 10⁻⁴⁰, −0.5) in
+  f32: cos φ and sin φ from a subnormal ρ² lost precision. The values never showed it, since they
+  carry sinᵐ θ, but the derivatives of order 1 do not. The scale is a select, 1 elsewhere, so every
+  other point keeps its bits. A point whose ρ² underflowed used to be taken on the z-axis; now only
+  x = y = 0 is. In the self-review's fix, ρ is scaled back by an exact power of two, not by a
+  division, so sin θ keeps its precision where both scales apply, and the test directions reach both
+  branches.
+- `LeafScratch` holds six columns (the values, order 1's, U and order 1's U, ∂θ, and a zero column
+  that order 0 hands out as u).
+- `bessel_j_real` and `bessel_j_real_derivatives` share a private routine (`real_j`); the values'
+  path is unchanged, plus the ratio at the requested length, which the derivative of the last order
+  reads.
+- The example checks, before timing, that its restated L2P sum with gradients on the reference's own
+  values is `leaf::l2p` with gradients bit for bit at 16 points (f64, f32, real and complex k). It also
+  asserts the derivatives' contract (C = 10).
+
 ## Constraints and risks
 - Constraint 1: no Laplace path; `tetraleaf-math` gains items in its Helmholtz modules only.
   Constraint 6: each routine against its reference (`harmonics_derivatives`, `bessel_j`).
@@ -151,7 +174,44 @@ gradients is left to the sum, which CH4.9b2's kernel and its ISA question read. 
 - Risk: the m = 0 ladder needs order 1 first; a slip there shows in the pole tests.
 
 ## Pending runs
-(filled in step 6)
+- Kathleen job 673246 (`run.sbatch`, `singlenode`, 1 h 30, `--exclude=node-c11b-004,node-c11b-013`):
+  the release build of `helmholtz_leaf` on f3d24bc (synced while the job was pending), then
+  `tools/helmholtz/ch4-9b1-runs.sh /scratch/scratch/ucahtbe/fmm/logs/ch4-9b1 smoke parts`.
+  - Submitted 2026-11-27 21:55; at 23:00 still pending (the partition full: 189 nodes allocated).
+  - It decides Kathleen's row of the report §3: the routines and the projection on x86's SSE2
+    baseline build, which CH4.9b2's ISA question reads.
+- Done: locust 22:28–22:41 on f3d24bc (`parts`, every launch exit 0; one-minute load at most 1.21 at
+  a launch's start, from the build) and the rescale's ABBA on locust 22:47–22:58. Superseded: locust
+  21:57–22:10 on ae26e8f (`ch4-9b1-v1`, before the self-review's fix; within about 1 % per row).
+  Outputs in `~/projects/fmm-archive/locust/runs/ch4-9b1{,-v1,-ab}/`.
+
+## Checks run (the M6)
+`/verify` on f3d24bc:
+- fmt.
+- Clippy: default, examples, `--workspace --all-targets`.
+- `cargo doc` with `-D warnings`.
+- At opt-level 1: `cargo test` (1,429 passed) and `cargo test --workspace` (1,473 passed).
+- The MPI test `helmholtz_fmm` at 2 and 4 ranks (54.3 s and 49.1 s), since the batched P2M reads
+  `LeafHarmonics`' changed directions.
+- The debug time of `tetraleaf-math`'s `orthonormal` at opt-level 0: 22.7 s, against `main`'s 22.3 s
+  in a worktree of its own at the same load, about 6. A first reading of 29.2 s was taken under a
+  load of 20–54.
+- The example's checks on the M6, short smoke runs with their times not used: the restated gradient
+  sum bit for bit `leaf::l2p` (f64, f32, real and complex k) and the contracts.
+
+The same checks ran on ae26e8f before the self-review's fixes, with the same results.
+
+Not run:
+- the rest of the MPI list (no change to exec, plan or octree);
+- `cargo deny` (no manifest change);
+- Laplace's benchmarks (no Laplace path; `tetraleaf-simd` untouched).
+
+A self-review by a subagent found nothing blocking. Fixed:
+- `Lanes::of`'s ρ through a subnormal where both scales apply;
+- the example's gradient sum checked against `leaf::l2p`;
+- the derivatives' contract asserted in the example;
+- the record of the rescale;
+- the test nits: the signs of zero in the bit test, the f32 radial flush reached, degree 1's zeros.
 
 ## Open questions
-(filled when they arise)
+None.
