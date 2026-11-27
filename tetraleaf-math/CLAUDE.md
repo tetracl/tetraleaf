@@ -16,6 +16,13 @@ Helmholtz CH1.2c added `coaxial` (CONVENTIONS §3.15): the coaxial coefficients
 recursions and by three projections, chosen by §3.15's rule (the recursion where
 Re(k) a ≤ 40); its tests are `tests/coaxial/` (tables beyond p = 100 ignored, run in
 release).
+Helmholtz CH4.9a2a added `orthonormal::leaf` (`LeafHarmonics`, `LeafScratch`: the orthonormal
+harmonics of a batch of points as lanes by the plain three-term recurrence from coefficients
+tabulated once, for the leaf operators; within 10 (n + 1)² u √((2n + 1)/(4π)) per term of
+`harmonics` in the tests, 1.02 measured, under-range columns zeroed) and `radial::bessel_j_real`
+(`bessel_j` at real arguments in real arithmetic, lanes, bit for bit, in f32 but for the
+under-range values beyond the turning point, which it zeroes); tests
+`tests/orthonormal/leaf.rs` and `tests/radial/real.rs`.
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.

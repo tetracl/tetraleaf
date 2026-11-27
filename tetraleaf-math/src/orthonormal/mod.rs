@@ -13,6 +13,8 @@
 //!   overflow-free and accurate near the poles at any degree (spike S1).
 //! - [`harmonics`] and [`harmonics_derivatives`]: Yₙᵐ(x̂) in the layout of §3.6, and
 //!   ∂θ Yₙᵐ and (1/sin θ) ∂φ Yₙᵐ.
+//! - [`leaf`] ([`LeafHarmonics`]): the same harmonics of a batch of points at the leaf degrees, from
+//!   coefficients tabulated once (Helmholtz CH4.9a2a), for the leaf operators.
 //! - [`rotation`]: the y-rotation blocks by the Gumerov–Duraiswami recursion, the π − β
 //!   signs and the full z-y-z blocks.
 //!
@@ -20,7 +22,10 @@
 //! in f64 only until decision D3; f32 is checked at low degree only.
 
 mod harmonics;
+pub mod leaf;
 pub mod legendre;
 pub mod rotation;
 
 pub use harmonics::{DerivativeScratch, harmonics, harmonics_derivatives};
+pub(crate) use leaf::under_range;
+pub use leaf::{LeafHarmonics, LeafScratch};
