@@ -122,8 +122,9 @@ to tetraleaf-exec, -plan or -octree); `cargo deny` (no manifest change).
 ## Open questions
 Asked before implementing, answered 2026-11-26: the split, "Split a1/a2 (Recommended)".
 
-For sign-off on the PR (the report §4):
-1. CH4.9a2's kernel: restructured safe Rust first (recommended), or ISA kernels in `tetraleaf-simd`,
-   or both.
+For sign-off on the PR (the report §4), signed off 2026-11-27, the user on #267: "Q1-2 as
+recommended":
+1. CH4.9a2's kernel: restructured safe Rust first (recommended, taken), or ISA kernels in
+   `tetraleaf-simd`, or both.
 2. The order: the leaf harmonics routine built with P2M in CH4.9a2 and reused by CH4.9b
-   (recommended), or one task for both.
+   (recommended, taken), or one task for both.

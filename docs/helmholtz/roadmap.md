@@ -7,11 +7,12 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/tasks/<ID>.md`; each milestone's gate report is
 `docs/helmholtz/gates/<milestone>.md`.
 
-Status (2026-11-26): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
+Status (2026-11-27): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). The FFT track
 (item 13) is done (CH4.6a2 merged; CH4.6a3 closed unrun). Item 14, the leaf expansions: CH4.9a split
 into CH4.9a1 and CH4.9a2; CH4.9a1 (where a leaf point's P2M and L2P time goes: the harmonics, 44–84 %)
-done in its PR, with CH4.9a2's design for sign-off. Next CH4.9a2, then CH4.9b, then H2 and H5 (items
+done in its PR, its questions signed off on 2026-11-27 (CH4.9a2 a restructured kernel in safe Rust,
+the shared leaf harmonics built with P2M and reused by CH4.9b). Next CH4.9a2, then CH4.9b, then H2 and H5 (items
 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and CH4.9c. The project was renamed
 tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and CH0.9 are
 done, and of H7, CH7.5a–c. The history of this line until H6.G is in `progress.md` and in this file's
@@ -734,14 +735,24 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   44–81 % of a leaf point's P2M (f64, p ≥ 12, medians over k̂) and 58–84 % of L2P with gradients,
   the sum 4–10 %, on Kathleen and locust; `helmholtz_accuracy --levels`' per-level kinds and the `helmholtz_leaf`
   example. Report `tetraleaf-validate/results/helmholtz-ch4-9a1.md`, record
-  `docs/helmholtz/tasks/CH4.9a1.md`. Questions 1–2 of the PR (CH4.9a2's design and order) for
-  sign-off.
+  `docs/helmholtz/tasks/CH4.9a1.md`. Questions 1–2 signed off 2026-11-27 (the user on #267: "Q1-2
+  as recommended"): CH4.9a2's kernel restructured safe Rust first, the leaf harmonics built with
+  P2M in CH4.9a2 and reused by CH4.9b.
 - [ ] **CH4.9a2 P2M by the kernel chosen.** *Done when:* CH4.9a's *Done when* less the table, the
-  kernel as signed off at CH4.9a1. Also (from CH4.9a1): in f32 at p = 41–45 the reference ran
+  kernel as signed off at CH4.9a1 (its questions 1–2; the user on #267, 2026-11-27: "Q1-2 as
+  recommended"): a restructured kernel in safe Rust, not an ISA kernel first, with (1) the leaf
+  harmonics from coefficients tabulated once per degree, a routine shared with L2P beside
+  `tetraleaf_math::orthonormal::harmonics` (or in `tetraleaf-tables::helmholtz`), tested against it
+  per point within a contract over the leaf frame's directions, the poles included; (2) the radial
+  functions in real arithmetic for real k (complex k keeps the reference's path); (3) a leaf's
+  points batched, the sum written to vectorise over points without `unsafe`; no `tetraleaf-simd`
+  change (constraint 1), and an ISA kernel only if the measured time stays far from the sum's (then
+  a question in the PR). Also (from CH4.9a1): in f32 at p = 41–45 the reference ran
   1.37–1.40× f64's time on Kathleen as the median over k̂, up to 1.75× at k̂ = 2–4 (likely subnormal
   values on x86, untested); the f32 kernel avoids or reports it. *Needs:* CH4.9a1 and its sign-off. *Machines:* Kathleen, locust.
 - [ ] **CH4.9b L2P with gradients by a SIMD kernel.** *Done when:* as CH4.9a for L2P, potentials and
-  gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, sharing CH4.9a's recurrences; the
+  gradients, against `tetraleaf_ref::helmholtz::leaf::l2p`, reusing CH4.9a2's leaf harmonics and
+  radial functions and adding their derivatives (CH4.9a1's question 2); the
   evaluation's time under the defaults before and after CH4.9a–b on CH4.6a2's cases. *Needs:*
   CH4.9a2. *Machines:* Kathleen, locust.
 - [ ] **CH4.9c Laplace's P2M and L2P by SIMD kernels.** Added on 2026-11-26 (the user: "Please add it

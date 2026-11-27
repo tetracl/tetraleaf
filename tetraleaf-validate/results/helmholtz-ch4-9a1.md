@@ -115,6 +115,8 @@ and the start order can come from a closed-form estimate.
 
 ## 4. Question for sign-off: CH4.9a2's design
 
+Signed off 2026-11-27, the user on #267: "Q1-2 as recommended" (both recommendations taken).
+
 1. **The kernel** (recommended: restructured safe Rust first).
    - Leaf harmonics (and, for L2P, their angular derivatives) from coefficients tabulated once per
      degree, a new routine beside `tetraleaf_math::orthonormal::harmonics` (or in

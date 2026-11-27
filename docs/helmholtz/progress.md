@@ -5026,8 +5026,10 @@ request, using this template:
   hypothesis, the per-point comparison with the FMM for L2P, the plan's details. Not run:
   the MPI list (no change to exec, plan or octree), `cargo deny` (no manifest change). Nothing
   pending.
-- Decisions: the split, above. For sign-off on the PR: (1) CH4.9a2's kernel, restructured safe Rust
-  first (recommended); (2) the shared leaf harmonics built with P2M in CH4.9a2 and reused by CH4.9b.
+- Decisions: the split, above. Signed off 2026-11-27 (the user on #267: "Q1-2 as recommended"):
+  (1) CH4.9a2's kernel restructured safe Rust first; (2) the shared leaf harmonics built with P2M in
+  CH4.9a2 and reused by CH4.9b.
 - Laplace: not touched (the harness, a new example, scripts and documents).
-- Follow-ups: CH4.9a2 (its design by question 1), with an Also: the f32 subnormal slowdown on x86.
+- Follow-ups: CH4.9a2 (its design by question 1, written into its roadmap line), with an Also: the
+  f32 subnormal slowdown on x86; CH4.9b reuses its routine (question 2).
 
