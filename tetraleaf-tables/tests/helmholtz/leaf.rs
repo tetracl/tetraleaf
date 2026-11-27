@@ -47,7 +47,7 @@ fn points(n: usize, seed: u64) -> Vec<[f64; 3]> {
     let mut rng = Lcg(seed);
     (0..n)
         .map(|j| {
-            if j < special.len() && seed % 2 == 0 {
+            if j < special.len() && seed.is_multiple_of(2) {
                 special[j]
             } else {
                 [rng.next(), rng.next(), rng.next()]

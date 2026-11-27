@@ -942,6 +942,24 @@ feature `rustfft`, `HelmholtzPhiStep`; docs/helmholtz/tasks/CH4.6a1.md).
   errors within 1.01×, 2 threads and chunks bit for bit, the one-rank FMM, and one rank's
   fingerprints salted: every level on the product, the product's bits; on one rank the salt
   changes nothing). CI's `run-tests-rustfft` runs them (root `CLAUDE.md`, "Checks").
+- The batched P2M (Helmholtz CH4.9a2b; the `helmholtz::operator` module docs, "P2M kernel";
+  docs/helmholtz/tasks/CH4.9a2b.md; tetraleaf-validate/results/helmholtz-ch4-9a2b.md): the P2P choice
+  also chooses P2M: under every ISA (`Auto` included) a leaf's P2M is `Densities::p2m_kernel`, one
+  call of `tetraleaf_tables::helmholtz::leaf::LeafP2m` (safe Rust without ISA dispatch, the same
+  bits on every ISA of a machine; Yukawa keeps the reference), under `P2pChoice::Reference` the
+  per-point `Densities::p2m`, the trusted path; `HelmholtzOperator::with_reference_leaves`
+  (`reference_leaves`, `p2m_batched`) and `HelmholtzFmmBuilder::reference_leaves` (a measurement
+  and test setting) give the reference's P2M whatever the P2P kernel. `LeafScratch::with_vectors`
+  holds the kernel's table and scratch per thread. The kernel agrees with the reference to its
+  contract, so `Isa::Scalar` is `Reference`'s FMM output bit for bit only with `reference_leaves`
+  (`check_kernels` asserts that); a leaf's multipole depends on its chunk alone, so threads, ranks
+  and vectors keep their bit identities. `tests/helmholtz/densities.rs`
+  (`the_batched_p2m_is_the_reference_to_rounding`: every path, three vectors, within 1e-13 of the
+  largest coefficient, vector v alone bit for bit, accumulation, Yukawa the reference's bits);
+  `check_leaf_kernel` in `tests/helmholtz_fmm.rs` (every scenario and the cube at kD = 20 + 2i
+  with real charges: against `reference_leaves` within `LEAF_TOLERANCE` (1e-13; 1.6–3.0e-16 on the
+  M6), the errors within `LEAF_RATIO` (1.01; 1.0000× on the M6), the one-rank FMM with the
+  reference's P2M). Its cost: `helmholtz_fmm` at one rank, opt-level 1, 53 s on the M6.
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
   count. No `unsafe`, no atomics, no global pool; per-thread scratch created at

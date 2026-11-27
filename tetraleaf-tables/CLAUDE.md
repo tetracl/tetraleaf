@@ -23,7 +23,8 @@ signature buffers, scratch and driver, and `signed_permutation`); Helmholtz CH4.
 Helmholtz CH4.2b1 (`Signatures::{strides_mut, relayout, fits}` and `Conversions::s2f_strides`, for
 tetraleaf-exec's threaded level call); Helmholtz CH4.2c1 (`TransferBuild`, the interpolated build
 and the build by ring); Helmholtz CH4.6a1
-(`Conversions::{s2f_modes, f2r_modes}`, the conversions' halves around the φ step).
+(`Conversions::{s2f_modes, f2r_modes}`, the conversions' halves around the φ step); Helmholtz
+CH4.9a2b (`helmholtz::leaf`, the batched P2M of a leaf).
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.
@@ -280,6 +281,20 @@ and the build by ring); Helmholtz CH4.6a1
   below it a damped class above 2E is printed as a finding), and the input-relative error (over the field of the same charges at Re k, the direct
   sum) over E with and without the damping factor printed. A change to the degree rule's
   constants changes `calibrated_degree` here too.
+- The fourth exception, `helmholtz::leaf` (Helmholtz CH4.9a2b; its module docs): `LeafP2m`
+  restates `tetraleaf_ref::helmholtz::leaf::p2m` (its products in the reference's order: q e, times
+  ĵₙ, times Q̄ₙᵐ cos mφ) for all the points of a leaf, `LANES` = 16 at a time, on
+  `tetraleaf-math`'s leaf routines (`LeafHarmonics::columns`; `bessel_j_real` for real k, `bessel_j`
+  per lane for complex k), each term's sum over the lanes pairwise in a fixed order and added to
+  the coefficient; keep the two in step. No table: only the harmonics' coefficients, built in f64
+  by `LeafHarmonics::new`. ρ is `sqrt` of the squares (the reference's `hypot`), so the two agree
+  to a contract, not bit for bit: `tests/helmholtz/leaf.rs` holds every coefficient to
+  C u √((2n + 1)/(4π)) Σⱼ |qⱼ eⱼ| (((n + 1)² + N) |ĵₙ| + |kρⱼ| |ĵₙ′|) with C = 10 (about 1
+  measured, f64 to p = 45 and f32 against the f64 reference to p = 32), and checks vector v the
+  one-vector call's bits, real charges the real plane of complex ones with Im q = 0 bit for bit,
+  accumulation, the scratch's degree, Yukawa refused. A leaf's values depend on its points and
+  charges in order alone; no `mul_add`, no allocation in `p2m` (`P2mScratch`, sized by the degree
+  and the vectors).
 - Matrices are column-major with output = A · input. Every application accumulates
   (+=), and none applies 1/(4π) (§3.1).
 - Builds are deterministic: the same inputs give bit-identical tables and cache files.
