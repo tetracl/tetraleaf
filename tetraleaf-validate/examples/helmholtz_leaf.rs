@@ -23,12 +23,24 @@
 //!   their derivatives (`harmonics_derivatives`); "rest" is the call with gradients less those
 //!   two parts (the sum, the gradient's assembly, the call's overhead).
 //!
+//! - **The leaf routines** (Helmholtz CH4.9a2a; docs/helmholtz/tasks/CH4.9a2a.md): the same
+//!   points `--lanes` B at a time (default 8; 1, 4, 8 or 16) through
+//!   `tetraleaf_math::orthonormal::LeafHarmonics`, once storing the full layout (`values`) and
+//!   once column by column with every value added into an accumulator (`columns`, as a kernel
+//!   would stream them), and `tetraleaf_math::radial::bessel_j_real` (real k only). Checked
+//!   before timing: the radial values against `bessel_j`'s real parts (the values that differ
+//!   are counted; each must be one the routine flushed), and the harmonics' largest difference
+//!   from `harmonics` over (n + 1)² u √((2n + 1)/(4π)), the contract of its tests. "projected
+//!   P2M" is the reference P2M less its harmonics and radial parts plus the column-wise
+//!   harmonics and the real radial functions: what P2M would take with the two routines alone
+//!   replaced (the sum and the rest as the reference's).
+//!
 //! Every figure is µs per point, the median over batches (`tetraleaf_validate::bench::
 //! median_time_per_call`); "ns per term" divides by (p + 1)². One precision per launch
 //! (`--precision f64|f32`, default f64). Run in release mode on one core of a quiet machine:
 //!
 //! ```text
-//! cargo run --release -p tetraleaf-validate --example helmholtz_leaf -- --ps 17,32 --khat 4,16
+//! cargo run --release -p tetraleaf-validate --example helmholtz_leaf -- --ps 17,32 --khat 4,16 --lanes 8
 //! ```
 //!
 //! Timings are wall times on this machine, reported and never asserted.
@@ -36,9 +48,11 @@
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
-use tetraleaf_math::orthonormal::{DerivativeScratch, harmonics, harmonics_derivatives};
-use tetraleaf_math::radial::bessel_j;
-use tetraleaf_math::{Complex, RealScalar};
+use tetraleaf_math::orthonormal::{
+    DerivativeScratch, LeafHarmonics, LeafScratch, harmonics, harmonics_derivatives,
+};
+use tetraleaf_math::radial::{bessel_j, bessel_j_real};
+use tetraleaf_math::{Complex, Layout, RealScalar};
 use tetraleaf_ref::Frame;
 use tetraleaf_ref::helmholtz::{Level, Workspace, leaf};
 use tetraleaf_validate::SplitMix64;
@@ -51,6 +65,7 @@ struct Arguments {
     kim: f64,
     points: usize,
     f32: bool,
+    lanes: usize,
 }
 
 /// Parses the options of the module documentation; exits with a message on anything else.
@@ -59,7 +74,7 @@ fn arguments() -> Arguments {
     let usage = || -> ! {
         eprintln!(
             "usage: helmholtz_leaf [--ps p,…] [--khat x,…] [--kim y] [--points n] \
-             [--precision f64|f32]; got {args:?}"
+             [--precision f64|f32] [--lanes 1|4|8|16]; got {args:?}"
         );
         std::process::exit(2);
     };
@@ -69,6 +84,7 @@ fn arguments() -> Arguments {
         kim: 0.0,
         points: 256,
         f32: false,
+        lanes: 8,
     };
     let list = |v: &str| -> Option<Vec<f64>> { v.split(',').map(|x| x.parse().ok()).collect() };
     let mut i = 0;
@@ -96,6 +112,12 @@ fn arguments() -> Arguments {
                 .ok()
                 .filter(|&n: &usize| n > 0)
                 .map(|n| parsed.points = n)
+                .is_some(),
+            "--lanes" => value
+                .parse()
+                .ok()
+                .filter(|b: &usize| [1, 4, 8, 16].contains(b))
+                .map(|b| parsed.lanes = b)
                 .is_some(),
             "--precision" => match value.as_str() {
                 "f64" => Some(false),
@@ -126,6 +148,19 @@ struct Times {
     l2p_gradient: f64,
     radial_derivatives: f64,
     harmonics_derivatives: f64,
+    leaf: Leaf,
+}
+
+/// The leaf routines' times, µs per point, and their checks (module documentation).
+struct Leaf {
+    values: f64,
+    columns: f64,
+    /// `None` for complex k.
+    radial: Option<f64>,
+    /// The radial values that differ from `bessel_j`'s, each one flushed; `None` for complex k.
+    radial_differ: Option<usize>,
+    /// The harmonics' largest difference over (n + 1)² u √((2n + 1)/(4π)).
+    harmonics_error: f64,
 }
 
 /// µs per point of `pass` over `n` points.
@@ -176,7 +211,7 @@ fn sum<T: RealScalar>(
     }
 }
 
-fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize) -> Times {
+fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize, lanes: usize) -> Times {
     let k = Complex::new(T::from_f64(khat), T::from_f64(kim));
     let level = Level::new(k, T::one());
     let frame = Frame::new([T::zero(); 3], T::one());
@@ -313,6 +348,12 @@ fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize) -> Times {
             black_box(&d_phi);
         }
     });
+    let leaf = match lanes {
+        1 => leaf_parts::<T, 1>(p, &level, &points),
+        4 => leaf_parts::<T, 4>(p, &level, &points),
+        8 => leaf_parts::<T, 8>(p, &level, &points),
+        _ => leaf_parts::<T, 16>(p, &level, &points),
+    };
     Times {
         p2m,
         radial: radial_t,
@@ -324,6 +365,112 @@ fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize) -> Times {
         l2p_gradient,
         radial_derivatives,
         harmonics_derivatives: harmonics_derivatives_t,
+        leaf,
+    }
+}
+
+/// The points in batches of B lanes, the last batch padded with the first point.
+fn batches<T: RealScalar, const B: usize>(points: &[[T; 3]]) -> Vec<[[T; 3]; B]> {
+    points
+        .chunks(B)
+        .map(|chunk| core::array::from_fn(|j| *chunk.get(j).unwrap_or(&points[0])))
+        .collect()
+}
+
+/// The leaf routines over the points, B lanes at a time (module documentation).
+fn leaf_parts<T: RealScalar, const B: usize>(
+    p: usize,
+    level: &Level<T>,
+    points: &[[T; 3]],
+) -> Leaf {
+    let n = points.len();
+    let layout = Layout::new(p);
+    let table = LeafHarmonics::<T>::new(p);
+    let mut scratch = LeafScratch::<T, B>::new(p);
+    let blocks = batches::<T, B>(points);
+    let mut out = vec![[T::zero(); B]; layout.len()];
+
+    // The harmonics' check against the reference, per point and term.
+    let unit = T::epsilon().to_f64() / 2.0;
+    let mut reference = vec![T::zero(); layout.len()];
+    let mut harmonics_error = 0.0f64;
+    for (b, block) in blocks.iter().enumerate() {
+        table.values(p, block, &mut scratch, &mut out);
+        for (j, &x) in block.iter().enumerate().take(n - (b * B).min(n)) {
+            harmonics(p, x, &mut reference);
+            for (degree, range) in layout.degrees() {
+                let scale = ((degree + 1) * (degree + 1)) as f64
+                    * unit
+                    * ((2 * degree + 1) as f64 / (4.0 * std::f64::consts::PI)).sqrt();
+                for i in range {
+                    let d = (out[i][j].to_f64() - reference[i].to_f64()).abs();
+                    harmonics_error = harmonics_error.max(d / scale);
+                }
+            }
+        }
+    }
+    let values = per_point(n, || {
+        for block in &blocks {
+            table.values(p, block, &mut scratch, &mut out);
+            black_box(&out);
+        }
+    });
+    let mut sink = [T::zero(); B];
+    let columns = per_point(n, || {
+        for block in &blocks {
+            table.columns(p, block, &mut scratch, |_, q, cos, sin| {
+                for row in q {
+                    for j in 0..B {
+                        sink[j] = sink[j] + row[j] * cos[j] + row[j] * sin[j];
+                    }
+                }
+            });
+        }
+        black_box(&sink);
+    });
+
+    let (radial, radial_differ) = if level.k().im == T::zero() {
+        let k = level.k().re;
+        let xs: Vec<[T; B]> = blocks
+            .iter()
+            .map(|block| {
+                core::array::from_fn(|j| {
+                    let [a, b, c] = block[j];
+                    k * a.hypot(b).hypot(c)
+                })
+            })
+            .collect();
+        let mut lanes = vec![[T::zero(); B]; p + 1];
+        let mut one = vec![Complex::new(T::zero(), T::zero()); p + 1];
+        let mut differ = 0;
+        for x in &xs {
+            bessel_j_real(x, level.scale(), &mut lanes);
+            for (j, &xj) in x.iter().enumerate() {
+                bessel_j(Complex::new(xj, T::zero()), level.scale(), &mut one, None);
+                for (row, want) in lanes.iter().zip(&one) {
+                    if row[j] != want.re {
+                        assert!(row[j] == T::zero(), "bessel_j_real differs from bessel_j");
+                        differ += 1;
+                    }
+                }
+            }
+        }
+        let time = per_point(n, || {
+            for x in &xs {
+                bessel_j_real(x, level.scale(), &mut lanes);
+                black_box(&lanes);
+            }
+        });
+        (Some(time), Some(differ))
+    } else {
+        (None, None)
+    };
+    Leaf {
+        values,
+        columns,
+        radial,
+        radial_differ,
+        harmonics_error,
     }
 }
 
@@ -333,37 +480,45 @@ fn main() {
     println!("# Helmholtz leaf operators per point, by part");
     println!();
     println!(
-        "Machine: {}, {}, {}; one thread; {precision}; {} points per batch; Im k̂ = {}",
+        "Machine: {}, {}, {}; one thread; {precision}; {} points per batch; Im k̂ = {}; \
+         {} lanes",
         cpu_model(),
         cores(),
         target(),
         arguments.points,
-        arguments.kim
+        arguments.kim,
+        arguments.lanes
     );
     println!();
     println!(
         "| p | k̂ | P2M µs | radial µs | harmonics µs | exp µs | sum µs | parts ÷ P2M \
          | P2M ns per term | check | L2P µs | L2P ∇ µs | radial ′ µs | harmonics ′ µs \
-         | rest ∇ µs | L2P ∇ ns per term |"
+         | rest ∇ µs | L2P ∇ ns per term | leaf harmonics µs | leaf columns µs | real radial µs \
+         | radial check | harmonics check | projected P2M µs | projected ÷ P2M |"
     );
     println!(
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: \
-         | ---: | ---: | ---: | ---: |"
+         | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |"
     );
     let start = Instant::now();
     for &p in &arguments.ps {
         for &khat in &arguments.khat {
             let t = if arguments.f32 {
-                run::<f32>(p, khat, arguments.kim, arguments.points)
+                run::<f32>(p, khat, arguments.kim, arguments.points, arguments.lanes)
             } else {
-                run::<f64>(p, khat, arguments.kim, arguments.points)
+                run::<f64>(p, khat, arguments.kim, arguments.points, arguments.lanes)
             };
             let terms = ((p + 1) * (p + 1)) as f64;
             let parts = t.radial + t.harmonics + t.exp + t.sum;
             let rest = t.l2p_gradient - t.radial_derivatives - t.harmonics_derivatives;
+            let leaf = &t.leaf;
+            let radial = leaf.radial.unwrap_or(t.radial);
+            let projected = t.p2m - t.harmonics - t.radial + leaf.columns + radial;
+            let or_dash = |v: Option<String>| v.unwrap_or_else(|| "–".to_string());
             println!(
                 "| {p} | {khat} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.2} | {:.1} | {} \
-                 | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.1} |",
+                 | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.1} | {:.3} | {:.3} | {} | {} \
+                 | {:.2} | {:.3} | {:.2} |",
                 t.p2m,
                 t.radial,
                 t.harmonics,
@@ -378,6 +533,17 @@ fn main() {
                 t.harmonics_derivatives,
                 rest,
                 1e3 * t.l2p_gradient / terms,
+                leaf.values,
+                leaf.columns,
+                or_dash(leaf.radial.map(|r| format!("{r:.3}"))),
+                or_dash(leaf.radial_differ.map(|d| if d == 0 {
+                    "bit for bit".to_string()
+                } else {
+                    format!("{d} flushed")
+                })),
+                leaf.harmonics_error,
+                projected,
+                projected / t.p2m,
             );
         }
     }
