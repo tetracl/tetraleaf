@@ -3186,6 +3186,7 @@ fn check_diagonal(scenario: &Scenario, comm: &SimpleCommunicator) -> usize {
             "{what}: the buffer grew in an evaluation"
         );
         check_diagonal_times(&what, &fmm, 1, 1, comm);
+        check_m2l_tables(&what, &fmm, &diagonal, &inputs, kind, &want, comm);
         let op = fmm.operator();
         let nlevels = fmm.nlevels();
         let direct_classes: Vec<Vec<usize>> = (0..nlevels)
@@ -3351,9 +3352,91 @@ fn check_diagonal(scenario: &Scenario, comm: &SimpleCommunicator) -> usize {
         everywhere(taken > 0, comm),
         "{name}: the time rule took no level at free costs"
     );
+    // A tolerance the form meets on every class of some level (Helmholtz CH2.2b1): that level
+    // has no RCR pair, so no RCR M2L tables.
+    let whole = builder(scenario).diagonal(HelmholtzDiagonal::Tolerance(WHOLE_LEVEL_TOLERANCE));
+    let (fmm, want) = run(&whole, &inputs, kind, comm);
+    let what = format!("{name}, Rotation with the diagonal M2L at {WHOLE_LEVEL_TOLERANCE}");
+    let whole_levels = check_m2l_tables(&what, &fmm, &whole, &inputs, kind, &want, comm);
+    assert!(
+        everywhere(whole_levels > 0, comm),
+        "{what}: no level took every class"
+    );
+    drop(fmm);
+    let (fmm, two) = run(&whole.clone().threads(2), &inputs, kind, comm);
+    drop(fmm);
+    assert_same(&format!("{what} at 2 threads"), &two, &want, comm);
+    check_one_rank(&what, &whole, &inputs, kind, &want, comm);
     let mut mixed_anywhere = 0;
     comm.all_reduce_into(&mixed, &mut mixed_anywhere, SystemOperation::max());
     mixed_anywhere
+}
+
+/// The diagonal form's tolerance at which some level of each diagonal scenario takes all 34
+/// classes (Helmholtz CH2.2b1; its errors are not checked).
+const WHOLE_LEVEL_TOLERANCE: f64 = 0.1;
+
+/// RCR's M2L tables only on the levels with an RCR pair (Helmholtz CH2.2b1), on `fmm`, built by
+/// `builder`, whose output is `want`: on every rank the levels with M2L tables are those from 2
+/// whose M2L is Rotation's and that the diagonal form does not take whole (all 34 classes), the
+/// M2L blocks stored only there; and the FMM with M2L tables on every level from 2
+/// (`m2l_tables_everywhere`, the tables before CH2.2b1) gives `want` bit for bit, with at least
+/// the tables' bytes. Returns the levels the form takes whole.
+fn check_m2l_tables(
+    what: &str,
+    fmm: &HelmholtzFmm<'_, f64>,
+    builder: &HelmholtzFmmBuilder,
+    inputs: &Inputs,
+    kind: ChargeKind,
+    want: &Output<f64>,
+    comm: &SimpleCommunicator,
+) -> usize {
+    let op = fmm.operator();
+    let whole = |l: usize| op.diagonal_classes(l).is_some_and(|c| c.len() == 34);
+    let read = |l: usize| l >= 2 && op.m2l_on(l) == HelmholtzM2l::Rotation && !whole(l);
+    let ok = (0..fmm.nlevels()).all(|l| {
+        op.tables().has_m2l(l) == read(l) && (read(l) || !op.tables().m2l_blocks_stored(l))
+    });
+    assert!(
+        everywhere(ok, comm),
+        "{what}: M2L tables or blocks on a level without an RCR pair, or none on one with"
+    );
+    let wholes = (2..fmm.nlevels()).filter(|&l| whole(l)).count();
+    let dropped: Vec<usize> = (2..fmm.nlevels())
+        .filter(|&l| !op.tables().has_m2l(l))
+        .collect();
+    let bytes = op.tables().bytes();
+    let (all, got) = run(
+        &builder.clone().m2l_tables_everywhere(true),
+        inputs,
+        kind,
+        comm,
+    );
+    let tables = all.operator().tables();
+    let all_bytes = tables.bytes();
+    // Fewer bytes where a level lost its tables: these trees' blocks fit the budget, so no
+    // freed budget stores another level's blocks in their place (which could outweigh them).
+    let ok = (0..all.nlevels()).all(|l| tables.has_m2l(l) == (l >= 2))
+        && all_bytes >= bytes
+        && (dropped.is_empty() || all_bytes > bytes);
+    assert!(
+        everywhere(ok, comm),
+        "{what}: the hook's tables not on every level from 2, or not more bytes"
+    );
+    drop(all);
+    assert_same(
+        &format!("{what}: M2L tables on every level"),
+        &got,
+        want,
+        comm,
+    );
+    if comm.rank() == 0 {
+        println!(
+            "{what}: RCR M2L tables left out on levels {dropped:?} ({wholes} taken whole by the \
+             diagonal form), {bytes} table bytes against {all_bytes} with them on every level"
+        );
+    }
+    wholes
 }
 
 /// The diagonal form's φ step by rustfft (Helmholtz CH4.6a1, feature `rustfft`) on `diagonal`'s
