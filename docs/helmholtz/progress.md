@@ -5550,7 +5550,7 @@ request, using this template:
   - `cargo deny`: no manifest change.
   - Laplace's benchmarks: no Laplace path.
   - locust and the M6 timings.
-- Decisions: questions for sign-off (#PR):
+- Decisions: questions for sign-off (#277):
   1. The on-disk store of §6.3: recommended none for now, §6.3 amended to the in-memory store;
      alternative a CH2.2c.
   2. The RCR M2L tables the diagonal form never reads: recommended an Also on CH2.2b (written on the
