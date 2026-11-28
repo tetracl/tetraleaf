@@ -24,7 +24,8 @@ Helmholtz CH4.2b1 (`Signatures::{strides_mut, relayout, fits}` and `Conversions:
 tetraleaf-exec's threaded level call); Helmholtz CH4.2c1 (`TransferBuild`, the interpolated build
 and the build by ring); Helmholtz CH4.6a1
 (`Conversions::{s2f_modes, f2r_modes}`, the conversions' halves around the φ step); Helmholtz
-CH4.9a2b (`helmholtz::leaf`, the batched P2M of a leaf).
+CH4.9a2b (`helmholtz::leaf`, the batched P2M of a leaf); Helmholtz CH4.9b2 (`helmholtz::leaf`'s
+`LeafL2p`, the batched L2P with gradients).
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.
@@ -295,6 +296,21 @@ CH4.9a2b (`helmholtz::leaf`, the batched P2M of a leaf).
   accumulation, the scratch's degree, Yukawa refused. A leaf's values depend on its points and
   charges in order alone; no `mul_add`, no allocation in `p2m` (`P2mScratch`, sized by the degree
   and the vectors).
+  Since Helmholtz CH4.9b2 `LeafL2p` restates `tetraleaf_ref::helmholtz::leaf::l2p` (its `evaluate`:
+  per degree the three sums Σₘ L̂ Y, Σₘ L̂ ∂θ Y, Σₘ L̂ (1/sin θ) ∂φ Y, then the radial functions, their
+  derivatives and the tangential factor ĵₙ/r with the centre's limit k/(3s), the Cartesian gradient,
+  times e) for all the targets of a leaf, 16 at a time, on `LeafHarmonics::{columns,
+  derivative_columns}`, `bessel_j_real(_derivatives)` for real k and `bessel_j` per lane for
+  complex k, with the terms of ±m taken together (A = c⁺ cos mφ + c⁻ sin mφ, B = c⁻ cos mφ −
+  c⁺ sin mφ) and the gradient's unit vectors from `LeafDirections`; keep the two in step. The output
+  is `LeafOutput`, `tetraleaf-exec`'s target output chunk (two columns per vector), accumulated. No
+  lane reads another, so a target's outputs depend on its offset and the locals alone (any leaf,
+  position, batch); vector v is the one-vector call's bits; the potentials with gradients those
+  without bit for bit. `tests/helmholtz/l2p.rs` holds each output per target to the module docs'
+  contract (φ: C u e Σₙ wₙ Sₙ (((n + 1)² + 2n + 1)|ĵₙ| + |x||ĵₙ′|); each gradient component:
+  C u e Σₙ wₙ Sₙ (|k| (((n + 1)² + 2n + 3)|ĵₙ′| + |x||ĵₙ|) + ((n + 1)³ + n(n + 1)) tₙ)) with C = 10
+  (1.9 measured in f64 to p = 45, 1.3 in f32 against the f64 reference to p = 32, on the M6), and
+  the bits above, accumulation, the refusals. No `mul_add`, no allocation in `l2p` (`L2pScratch`).
 - Matrices are column-major with output = A · input. Every application accumulates
   (+=), and none applies 1/(4π) (§3.1).
 - Builds are deterministic: the same inputs give bit-identical tables and cache files.

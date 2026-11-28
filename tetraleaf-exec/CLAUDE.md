@@ -45,7 +45,8 @@ device's `PlaneWave` on `tetraleaf_kernels::plane_wave`, opt-in until CH7.5c: `D
 CH7.5c, its measurement and adoption: `FmmBuilder::device_plane_wave_layout`,
 `DevicePlaneWaveLayout`, `DevicePlaneWave::Kernels` the default, the layout by backend and p
 and Metal's 1 GB plane-wave budget; tetraleaf-validate/results/helmholtz-ch7-5c.md); Helmholtz CH4.6a1 (the diagonal form's φ step by rustfft,
-feature `rustfft`, `HelmholtzPhiStep`; docs/helmholtz/tasks/CH4.6a1.md).
+feature `rustfft`, `HelmholtzPhiStep`; docs/helmholtz/tasks/CH4.6a1.md); Helmholtz CH4.9a2b and
+CH4.9b2 (the batched P2M and L2P, below).
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.
@@ -960,6 +961,16 @@ feature `rustfft`, `HelmholtzPhiStep`; docs/helmholtz/tasks/CH4.6a1.md).
   with real charges: against `reference_leaves` within `LEAF_TOLERANCE` (1e-13; 1.6–3.0e-16 on the
   M6), the errors within `LEAF_RATIO` (1.01; 1.0000× on the M6), the one-rank FMM with the
   reference's P2M). Its cost: `helmholtz_fmm` at one rank, opt-level 1, 53 s on the M6.
+  Since Helmholtz CH4.9b2 (docs/helmholtz/tasks/CH4.9b2.md; tetraleaf-validate/results/helmholtz-ch4-9b2.md)
+  L2P follows the same choice: `Densities::l2p_kernel`, one call of `LeafL2p` per leaf (potentials and,
+  with the FMM's gradients, gradients; Yukawa keeps the reference), under every ISA, the per-target
+  `Densities::l2p` under `Reference` or `reference_leaves`; `p2m_batched` became
+  `HelmholtzOperator::leaves_batched` (both kernels; the module docs' "Leaf kernels").
+  `tests/helmholtz/densities.rs` (`the_batched_l2p_is_the_reference_to_rounding`: every path, with
+  and without gradients, three vectors, within 1e-13 of the largest output, vector v alone and a
+  second call bit for bit, Yukawa the reference's bits); `check_leaf_kernel` and `check_kernels`
+  now cover both kernels (1.0000× the reference leaves' errors, outputs within 2.3e-16 on the M6).
+  Its cost: `helmholtz_fmm` at one rank, opt-level 1, 55.8 s on the M6.
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
   count. No `unsafe`, no atomics, no global pool; per-thread scratch created at
