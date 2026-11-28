@@ -5358,9 +5358,9 @@ request, using this template:
 
   Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path); locust and the
   M6 timings (one machine class; the change has no ISA-dependent part).
-- Decisions: questions for sign-off on the PR: D4 (recommended: one operator, the kind a field
-  resolved at build, with §5.5, §6.3 and §12 amended) and CH2.1d's priority (recommended: in item 15
-  after CH2.3).
+- Decisions: questions 1 and 2 of #274 signed off 2026-11-28 (the user: "Q1 and Q2 as
+  recommended"): D4, one operator with the kind a field resolved at build (proposal §5.5, §6.3 and
+  §12 amended, Appendix A); CH2.1d on the priority list in item 15 after CH2.3.
 - Laplace: not touched (Helmholtz code of `tetraleaf-exec` and `tetraleaf-validate` only; `driver.rs`,
   `pipeline.rs`, `tetraleaf-tables`, `tetraleaf-simd`, `tetraleaf-plan`, `tetraleaf-octree` unchanged).
 - Follow-ups: CH2.1d (Yukawa's Batched, Classes, exponential M2L and Auto; roadmap line added);

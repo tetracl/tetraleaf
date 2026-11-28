@@ -841,7 +841,10 @@ The Yukawa operator is the real case of the same code: real coefficients, real t
 - **Scaling** above κ r_l ≈ 1 as in Section 3.4.
 
 Whether Yukawa is its own operator type or the wavenumber kind is a type parameter of one
-operator is decision D4 (Section 6.3).
+operator is decision D4 (Section 6.3). Signed off at CH2.1b (amended at CH2.1b): one operator, the
+kind a field resolved at build. As built there, Yukawa's M2L is Rotation or Dense on one-plane
+tables, Auto runs Rotation on every level, and Batched, Classes and the exponential M2L wait for
+CH2.1d (`tetraleaf-validate/results/helmholtz-ch2-1b.md`).
 
 ### 5.6 Complex wavenumber
 
@@ -968,10 +971,14 @@ for their extension to complex expansions.
 
 ### 6.3 The operator
 
-`HelmholtzOperator<T: RealScalar, K: Wavenumber>` implements `FmmOperator` with `Value = T`.
-K is one of `Real`, `Complex` and `Imaginary` (Yukawa); the builder matches on k once and
-constructs the monomorphised operator, so the kind is resolved above the level calls
-(constraint 1, condition 1) and the real shifts of Section 3.1 are compile-time facts.
+`HelmholtzOperator<T: RealScalar>` implements `FmmOperator` with `Value = T` (amended at
+CH2.1b; the draft's sketch was `HelmholtzOperator<T, K: Wavenumber>`, K a type parameter). The
+kind of k (real, complex, Yukawa) is a field resolved at build, read once per level call or leaf
+body and never in an inner loop, so it is resolved above the inner loops; the real shifts of
+Section 3.1 are a property of the tables built for the kind. Measured at CH2.1b: the complex
+path's evaluation 1.003–1.015× (geometric means; within run-to-run spread) with Yukawa added
+(`tetraleaf-validate/results/helmholtz-ch2-1b.md` §5). Decision D4, signed off at CH2.1b. Yukawa's
+complex charges are its real path's 2m real vectors, each a one-plane expansion.
 
 - `multipole_size(level)` = (p_l + 1)² m on the real paths with real charges (Yukawa; real
   k), else 2(p_l + 1)² m; `local_size(level)` = (p_l + 1)² m for Yukawa with real charges,
@@ -1785,7 +1792,7 @@ these.
 | D1 | Target kD range and tolerances | sets the memory budget and, with D6, the order of H4 and H6; for example kD ≤ 500 at 10⁻³ to 10⁻⁸, knowing from Section 3.6 that the diagonal form is expected to pay mainly at 10⁻³ to 10⁻⁶ and on the top levels only at tighter tolerances (S6 confirms) |
 | D2 | Placement: modules in the layer crates (A) or separate crates (B) | A (Section 6.1) |
 | D3 | f32 scope | f64 only until H7; then f32 on low-frequency configurations that pass an accuracy contract; high-frequency levels in f32 only if S6 finds classes stable in f32. No high-frequency Helmholtz on Metal otherwise (Section 1.3) |
-| D4 | Yukawa: own operator type, or the wavenumber kind as a type parameter of one operator | one operator, `HelmholtzOperator<T, K>`, with K resolved at build (Section 6.3), if CH2.1 shows no cost to the complex path |
+| D4 | Yukawa: own operator type, or the wavenumber kind as a type parameter of one operator | one operator, `HelmholtzOperator<T, K>`, with K resolved at build (Section 6.3), if CH2.1 shows no cost to the complex path. Signed off at CH2.1b (2026-11-28, amended at CH2.1b): one operator, `HelmholtzOperator<T>`, the kind a field resolved at build and read per level call or leaf body; no cost to the complex path measured (Section 6.3) |
 | D5 | Source types in the first release | charges, real and complex, with potentials and gradients; dipoles when C6.4 exists for Laplace |
 | D6 | Order of H4 and H6 | H6 first by default (Sections 7 and 10); H4 first only if D1 puts most of the work at kD of several hundred or more and loose tolerances |
 | D7 | Host back ends for the φ step | the product as the default and reference; FFTW through RLST 0.12 behind the optional `fftw` feature (CH4.6), with the GPL warning; rustfft as a fast default without FFTW if S9 shows it deterministic per box and faster than the product, decided per machine (Homebrew's FFTW on the M3 Max has no SIMD); all behind a trait internal to `tetraleaf-exec`, since RLST provides none (its DF4). Signed off at CH0.9 (2026-11-26, amended at CH0.9; Section 6.7): the product the default and reference on every machine; rustfft the one optional FFT back end (CH4.6a), with a check across ranks and the M6's times; FFTW (CHR.3, CH4.6b) kept, off the priority list. Amended at CH4.6a2 (2026-11-26): the M6's times not taken (the user: "Skip the M6"); rustfft on the product's grid; the time rule's costs the product's under either φ step |
@@ -2132,6 +2139,12 @@ these.
   product's grid at every level with rustfft, the smooth grid not built, CH4.6a3 closed unrun);
   Section 10, the CH4.6a row (the grid chosen, the M6 not timed); Section 12, D7 (the M6's times
   not taken; the time rule's costs the product's under either φ step).
+
+- **Amended at CH2.1b, 2026-11-28** (`tetraleaf-validate/results/helmholtz-ch2-1b.md`; PR #274, its
+  questions 1 and 2, signed off by the user, "Q1 and Q2 as recommended"): Section 5.5, D4's outcome
+  and Yukawa's M2L as built (Rotation and Dense, Auto as Rotation, CH2.1d for the rest); Section
+  6.3, the operator's kind a field resolved at build in place of the type parameter K, with the
+  complex path's measured time; Section 12, D4 signed off.
 
 ## Appendix B. The stability check behind Section 3.6
 

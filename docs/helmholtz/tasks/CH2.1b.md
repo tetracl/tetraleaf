@@ -162,6 +162,10 @@ of Yukawa's P2L and M2P are unreachable today (no waves on Yukawa) and kept so t
 others.
 
 ## Open questions
+Both signed off on 2026-11-28 (the user on #274: "Q1 and Q2 as recommended"): D4 one operator, the
+kind a field resolved at build, recorded in the roadmap's decision table, proposal §5.5, §6.3 and §12
+amended (Appendix A); CH2.1d on the priority list in item 15 after CH2.3. The questions as put:
+
 1. **D4.** The proposal recommends one operator `HelmholtzOperator<T, K>`, K a type parameter, "if
    CH2.1 shows no cost to the complex path". Built: one operator `HelmholtzOperator<T>` with the kind
    a runtime field resolved at build (as real and complex k since CH3.1a), read per level call or leaf
