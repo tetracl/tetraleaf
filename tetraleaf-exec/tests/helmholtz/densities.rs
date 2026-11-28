@@ -1,8 +1,8 @@
 //! Complex densities (Helmholtz CH3.0c; CONVENTIONS §3.15, "Storage" and "Inputs and
 //! outputs"): the sizes of every path against §3.15's table, the chunk indices against
 //! §3.13's several-vector layout, the charges in, P2M and L2P bit for bit against
-//! `tetraleaf_ref::helmholtz::leaf`, the batched P2M to rounding (Helmholtz CH4.9a2b; Yukawa's since
-//! CH2.1c), Yukawa's complex vectors as two real ones, and the
+//! `tetraleaf_ref::helmholtz::leaf`, the batched P2M and L2P to rounding (Helmholtz CH4.9a2b and
+//! CH4.9b2; Yukawa's since CH2.1c and CH2.1e), Yukawa's complex vectors as two real ones, and the
 //! leaf's chunks end to end against the direct sum (`tetraleaf_ref::helmholtz::p2p::
 //! direct_sum`, 1/(4π) applied), relative L2 over the targets.
 
@@ -408,7 +408,7 @@ fn the_batched_p2m_is_the_reference_to_rounding() {
 
 /// The batched L2P (Helmholtz CH4.9b2): every path, with and without gradients, three vectors,
 /// within 1e-13 of the largest output of the reference's per-target calls; vector v alone bit
-/// for bit; a second call adds; Yukawa the reference's bits.
+/// for bit; a second call adds; Yukawa too since Helmholtz CH2.1e.
 #[test]
 fn the_batched_l2p_is_the_reference_to_rounding() {
     let (domain, key) = leaf_box();
@@ -432,12 +432,8 @@ fn the_batched_l2p_is_the_reference_to_rounding() {
                 d.l2p(&k, r, p, &locals, u, &mut scratch, &mut want, gradients);
                 let mut got = vec![0.0; len];
                 d.l2p_kernel(&k, r, p, &locals, u, &mut scratch, &mut got, gradients);
-                if kind == WavenumberKind::Yukawa {
-                    assert_eq!(got, want, "{what}: Yukawa keeps the reference");
-                    continue;
-                }
                 // Potentials and gradients apart: their sizes differ.
-                let split = 2 * m * n;
+                let split = d.output_columns() * n;
                 for (part, (a, b)) in [
                     (&got[..split], &want[..split]),
                     (&got[split..], &want[split..]),
@@ -462,7 +458,7 @@ fn the_batched_l2p_is_the_reference_to_rounding() {
                     let local = &locals[v * size..(v + 1) * size];
                     one.l2p_kernel(&k, r, p, local, u, &mut scratch, &mut single, gradients);
                     for i in 0..n {
-                        for part in 0..2 {
+                        for part in 0..d.output_columns() / m {
                             let (o, o1) = (d.output_column(v, part), one.output_column(0, part));
                             assert_eq!(
                                 got[d.potential_index(n, o, i)].to_bits(),
@@ -591,6 +587,12 @@ fn yukawa_complex_vectors_are_two_real_vectors() {
         complex.l2p(&k, r, p, &locals, u, &mut scratch, &mut a, gradients);
         real.l2p(&k, r, p, &locals, u, &mut scratch, &mut b, gradients);
         assert_eq!(a, b);
+        // The batched L2P (Helmholtz CH2.1e) too, bit for bit.
+        let (mut a, mut b) = (vec![0.0; size], vec![0.0; size]);
+        complex.l2p_kernel(&k, r, p, &locals, u, &mut scratch, &mut a, gradients);
+        real.l2p_kernel(&k, r, p, &locals, u, &mut scratch, &mut b, gradients);
+        let bits = |x: &[f64]| x.iter().map(|v| v.to_bits()).collect::<Vec<_>>();
+        assert_eq!(bits(&a), bits(&b), "gradients {gradients}: the batched L2P");
     }
 }
 
