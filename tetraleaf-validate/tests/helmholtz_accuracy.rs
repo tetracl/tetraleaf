@@ -18,7 +18,9 @@
 //! [`PLANE_WAVE_RATIO`] of Rotation's errors on small cases of CH3.1c's matrix, each level's
 //! precision in the row, within ε at 1 and 2 threads and on one rank, and Rotation's output
 //! below the rule's tolerance. Yukawa (Helmholtz CH2.1b) through `check_fmm` on W1's sphere at a
-//! fixed N and on W4's Plummer sphere.
+//! fixed N and on W4's Plummer sphere. The table store (Helmholtz CH2.2a): a sweep of two
+//! octaves sharing one store, each row the storeless row's checksum, the second's levels below
+//! the new coarse one taken from the store.
 //!
 //! One test initialises MPI (at `Funneled`); it passes on any number of ranks, each check
 //! on every rank or on none.
@@ -30,8 +32,8 @@ use tetraleaf_exec::helmholtz::{
     ChargeKind, Charges, DEFAULT_C_LEAF, DEFAULT_DIAGONAL_BUILD, Degrees, Densities,
     HelmholtzDiagonal, HelmholtzFmmBuilder, HelmholtzM2l, HelmholtzPhiStep, LevelShape,
     M2lOverride, Output, OverrideM2l, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, RcrSplit,
-    TransferBuild, V_COSTS_NEON, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WavenumberKind,
-    WxNear, auto_m2l_mul_add, s7_degree,
+    TableStores, TransferBuild, V_COSTS_NEON, VAfterPlan, VNear, VRaisedPrice, Wavenumber,
+    WavenumberKind, WxNear, auto_m2l_mul_add, s7_degree,
 };
 use tetraleaf_exec::operator::Isa;
 use tetraleaf_tables::helmholtz::plane_wave::merge::{plane_wave_degree, precision_for_tolerance};
@@ -714,6 +716,7 @@ fn helmholtz_accuracy_harness() {
     check_leaves(&world);
     check_near_wx(&world);
     check_block_budget(&world);
+    check_table_store(&world);
     check_rcr_split(&world);
     check_diagonal(&world);
     check_defaults(&world);
@@ -1699,5 +1702,74 @@ fn check_diagonal(world: &SimpleCommunicator) {
             row_b.errors,
             row_n.errors
         );
+    }
+}
+
+/// Helmholtz CH2.2a: `Case::table_store` reaches the builder. W1's sphere at a fixed N, kD = 15
+/// then 30 (one octave) under Rotation and under the defaults, the two cases sharing one
+/// store: each row the checksum and errors of the case without a store; the rows' tables per
+/// level (degrees, parts and bytes those of the case without a store); under Rotation the
+/// second case takes every part of its levels below the new coarse level 2 from the store,
+/// under the defaults (three levels) some part; the store's bytes reported.
+fn check_table_store(world: &SimpleCommunicator) {
+    let workload = Workload::W1n { n: 3000 };
+    for defaults in [false, true] {
+        let stores = TableStores::unbounded();
+        for (i, kd) in [15.0, 30.0].into_iter().enumerate() {
+            let plain = match defaults {
+                false => case(workload, (kd, 0.0), Degrees::Tolerance(1e-4)),
+                true => Case::defaults(workload, (kd, 0.0), Degrees::Tolerance(1e-4)),
+            };
+            assert_eq!(plain.table_store, None, "Case::new's and Case::defaults'");
+            let stored = Case {
+                table_store: Some(stores.clone()),
+                ..plain.clone()
+            };
+            let problem = Problem::new(&plain);
+            let oracle = Oracle::sharded(complex_k(&plain), &problem, plain.gradients, 2, world);
+            let row_plain = run(&plain, &problem, &oracle, 1, world).expect("the FMM runs");
+            let row = run(&stored, &problem, &oracle, 2, world).expect("the FMM runs");
+            let what = format!("defaults {defaults}, kD = {kd}");
+            assert_eq!(row.checksum, row_plain.checksum, "{what}");
+            assert_eq!(row.errors, row_plain.errors, "{what}");
+            assert_eq!(row_plain.table_store_bytes, None, "{what}");
+            assert!(row.table_store_bytes.is_some_and(|b| b > 0), "{what}");
+            assert_eq!(row.table_levels.len(), row.levels, "{what}");
+            for (l, t) in row.table_levels.iter().enumerate() {
+                assert_eq!(t.m2l_degree, row.degrees[l], "{what}, level {l}");
+                assert!(t.degree <= t.m2l_degree, "{what}, level {l}");
+                assert_eq!(t.k_hat.1, 0.0, "{what}");
+                let plain_level = &row_plain.table_levels[l];
+                assert_eq!(t.bytes, plain_level.bytes, "{what}, level {l}");
+                assert_eq!(
+                    t.built + t.reused,
+                    plain_level.built + plain_level.reused,
+                    "{what}, level {l}"
+                );
+            }
+            // Under Rotation every level's RCR parts follow k̂_l and the degrees alone; under the
+            // defaults a level's M2L (waves, Batched, the form) also follows the tree's shape and
+            // the budgets, so a level may hold RCR M2L tables at one k and none at the other, and
+            // the defaults' tree (c_leaf 4, 256 points per leaf) has three levels here: some part
+            // is taken from the store or shared.
+            if i == 1 && !defaults {
+                assert!(
+                    row.table_levels[2].built > 0,
+                    "{what}: {:?}",
+                    row.table_levels
+                );
+                for t in &row.table_levels[3..] {
+                    assert_eq!(t.built, 0, "{what}: {:?}", row.table_levels);
+                    assert_eq!(t.seconds, 0.0, "{what}");
+                }
+            }
+            if i == 1 && defaults {
+                assert!(
+                    row.table_levels.iter().any(|t| t.reused > 0),
+                    "{what}: {:?}",
+                    row.table_levels
+                );
+            }
+        }
     }
 }

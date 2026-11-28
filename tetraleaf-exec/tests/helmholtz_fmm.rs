@@ -158,10 +158,10 @@ use tetraleaf_exec::helmholtz::{
     DensityError, DiagonalCosts, DiagonalTimes, HelmholtzDiagonal, HelmholtzFmm,
     HelmholtzFmmBuilder, HelmholtzFmmError, HelmholtzM2l, LeafVShape, M2lOverride,
     MIN_BUFFER_BOXES, Output, OverrideError, OverrideM2l, PlaneWaveCounts, PlaneWavePrecision,
-    PlaneWaveRaise, PlaneWaveSplit, PlaneWaveTimes, RCR_PAIR_FEW_DEGREE, RcrSplit, TransferBuild,
-    V_COSTS_NEON, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WxNear, auto_batched_max_degree,
-    auto_batched_min_columns, auto_m2l_mul_add, auto_plane_wave_min_degree,
-    default_max_points_per_leaf, raised_crossover,
+    PlaneWaveRaise, PlaneWaveSplit, PlaneWaveTimes, RCR_PAIR_FEW_DEGREE, RcrSplit, TableStores,
+    TransferBuild, V_COSTS_NEON, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WxNear,
+    auto_batched_max_degree, auto_batched_min_columns, auto_m2l_mul_add,
+    auto_plane_wave_min_degree, default_max_points_per_leaf, raised_crossover,
 };
 use tetraleaf_exec::operator::{Isa, MulAdd, P2pChoice};
 use tetraleaf_math::Complex;
@@ -4645,6 +4645,95 @@ fn check_near_wx(scenario: &Scenario, crossover: f64, comm: &SimpleCommunicator)
 /// The scenario of [`check_empty_boxes`] whose leaves the leaf rule fills with empty boxes:
 /// points on a sphere at kD = 30, leaves on level 3 or finer, about three quarters of
 /// level 3 empty.
+/// The RCR tables in a store (Helmholtz CH2.2a; `HelmholtzFmmBuilder::table_store`): under the
+/// library's defaults and under Rotation, the FMM with a store, cold and warm (at 2 threads),
+/// the FMM without one bit for bit, the warm build taking every part from the store; and at k
+/// doubled on the same points and domain under Rotation, the output without a store bit for
+/// bit, every RCR part of the levels below the new coarse level 2 taken from the store. On every
+/// rank or none (each rank keeps its own store).
+fn check_table_store(scenario: &Scenario, comm: &SimpleCommunicator) {
+    let kind = scenario.charges;
+    let inputs = Inputs::new(scenario, 1, comm);
+    let k = Wavenumber::new(scenario.k.0, scenario.k.1).unwrap();
+    let defaults = HelmholtzFmmBuilder::new(k, scenario.degrees.clone())
+        .charges(scenario.charges)
+        .gradients(scenario.gradients)
+        .domain(PhysicalBox::new([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]));
+    for (setting, plain) in [("the defaults", defaults), ("Rotation", builder(scenario))] {
+        let name = &format!("{}, the table store, {setting}", scenario.name);
+        let (fmm, expected) = run(&plain, &inputs, kind, comm);
+        let parts = fmm.table_build().built();
+        assert_eq!(fmm.table_build().store_bytes, None, "{name}");
+        drop(fmm);
+        let stores = TableStores::unbounded();
+        let stored = plain.clone().table_store(stores.clone());
+        let (cold, output) = run(&stored, &inputs, kind, comm);
+        assert_same(&format!("{name}: cold"), &output, &expected, comm);
+        let cold_ok = cold.table_build().built() > 0
+            && cold.table_build().built() + cold.table_build().reused() == parts
+            && cold.table_build().store_bytes == Some(stores.of::<f64>().bytes());
+        drop(cold);
+        let (warm, output) = run(&stored.clone().threads(2), &inputs, kind, comm);
+        assert_same(&format!("{name}: warm"), &output, &expected, comm);
+        let warm_ok = warm.table_build().built() == 0 && warm.table_build().reused() == parts;
+        if !(cold_ok && warm_ok) {
+            eprintln!(
+                "rank {}: {name}: {parts} parts; cold {:?}; warm {:?}",
+                comm.rank(),
+                (cold_ok, stores.of::<f64>().bytes()),
+                warm.table_build()
+            );
+        }
+        assert!(everywhere(cold_ok && warm_ok, comm), "{name}: the parts");
+        drop(warm);
+        if setting != "Rotation" {
+            continue;
+        }
+        // The octave: k doubled, the tree's levels and degrees one level down.
+        let double = Wavenumber::new(2.0 * scenario.k.0, 2.0 * scenario.k.1).unwrap();
+        let doubled = HelmholtzFmmBuilder::new(double, scenario.degrees.clone())
+            .charges(scenario.charges)
+            .gradients(scenario.gradients)
+            .domain(PhysicalBox::new([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]))
+            .max_points_per_leaf(32)
+            .c_leaf(C_LEAF)
+            .near_v(VNear::Off)
+            .near_wx(WxNear::Off)
+            .diagonal(HelmholtzDiagonal::Off)
+            .m2l(HelmholtzM2l::Rotation);
+        let (_, fresh) = run(&doubled, &inputs, kind, comm);
+        let (fmm, output) = run(
+            &doubled.clone().table_store(stores.clone()),
+            &inputs,
+            kind,
+            comm,
+        );
+        assert_same(&format!("{name}: k doubled"), &output, &fresh, comm);
+        let report = fmm.table_build();
+        let levels = report.levels.len();
+        let ok = levels > 3
+            && report.levels[2].built > 0
+            && report.levels[3..]
+                .iter()
+                .all(|l| l.built == 0 && l.reused > 0);
+        if !ok || comm.rank() == 0 {
+            println!(
+                "rank {}: {name}: k doubled, {levels} levels, (built, reused) per level {:?}",
+                comm.rank(),
+                report
+                    .levels
+                    .iter()
+                    .map(|l| (l.built, l.reused))
+                    .collect::<Vec<_>>()
+            );
+        }
+        assert!(
+            everywhere(ok, comm),
+            "{name}: k doubled reuses every level below level 2"
+        );
+    }
+}
+
 fn sphere_scenario() -> Scenario {
     Scenario {
         name: "sphere, kD = 30, ε = 1e-3, complex charges, gradients",
@@ -5206,6 +5295,9 @@ fn helmholtz_fmm() {
     check_kernels(&yukawa_scenarios()[0], &comm);
     check_tables(&yukawa_scenarios()[2], HelmholtzM2l::Dense, None, &comm);
     check_rcr_split(&yukawa_scenarios()[1], &comm);
+    // The RCR tables in a store (CH2.2a): real k and Yukawa, cold, warm and at k doubled.
+    check_table_store(&sphere_scenario(), &comm);
+    check_table_store(&yukawa_scenarios()[1], &comm);
     check_errors(&comm);
     if comm.rank() == 0 {
         println!(

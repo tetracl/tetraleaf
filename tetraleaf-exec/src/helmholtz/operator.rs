@@ -429,6 +429,7 @@ use tetraleaf_tables::helmholtz::plane_wave::merge::{
     PlaneWaveM2l, RESOLVING_STEP_TOLERANCE, plane_wave_degree, select,
 };
 use tetraleaf_tables::helmholtz::plane_wave::quadrature::{RHO_MAX, assert_reach, domain_of};
+use tetraleaf_tables::helmholtz::store::{TableBuild, TableStore};
 use tetraleaf_tables::helmholtz::{
     DEFAULT_BLOCK_BUDGET, HelmholtzScratch, HelmholtzTables, TableChoice,
 };
@@ -1000,6 +1001,8 @@ struct Kernel<T: SimdScalar> {
     /// The byte budget of the stored M2L y-blocks, for the tables built again.
     block_budget: usize,
     tables: HelmholtzTables<T>,
+    /// The store of the RCR tables' parts, shared with other operators (Helmholtz CH2.2a).
+    table_store: Option<Arc<TableStore<T>>>,
     /// The M2L setting.
     m2l: HelmholtzM2l,
     /// The byte budget of the M2L tables ([`HelmholtzOperator::with_m2l`]).
@@ -1192,6 +1195,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
             base_degrees: degrees.to_vec(),
             block_budget,
             tables,
+            table_store: None,
             m2l: HelmholtzM2l::Rotation,
             dense_budget: DEFAULT_DENSE_BUDGET,
             max_degree: None,
@@ -1899,9 +1903,17 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
                 block_levels: Some(&rcr),
                 ..TableChoice::new(kernel.block_budget)
             };
-            *tables = HelmholtzTables::build_by(k_root, translation, &choice, &parts);
+            *tables = match &kernel.table_store {
+                Some(store) => {
+                    HelmholtzTables::build_in(k_root, translation, &choice, &parts, store)
+                }
+                None => HelmholtzTables::build_by(k_root, translation, &choice, &parts),
+            };
         } else {
-            tables.set_m2l_blocks(&rcr, kernel.block_budget, &parts);
+            match &kernel.table_store {
+                Some(store) => tables.set_m2l_blocks_in(&rcr, kernel.block_budget, &parts, store),
+                None => tables.set_m2l_blocks(&rcr, kernel.block_budget, &parts),
+            }
         }
         timings.rcr += clock.elapsed();
         // The diagonal form on the RCR levels where the rule takes some class (Helmholtz
@@ -2430,6 +2442,36 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
     /// The batched M2L's multiply–add mode ([`with_m2l_mul_add`](Self::with_m2l_mul_add)).
     pub fn m2l_mul_add(&self) -> MulAdd {
         self.kernel.matrix.mul_add()
+    }
+
+    /// Builds the RCR tables in `store` (Helmholtz CH2.2a; the module documentation, "The table
+    /// store"): each part the store holds is taken from it, each part built is put into it, so
+    /// operators that share the store share the parts of their levels; the tables, and so every
+    /// output, are those built without a store, bit for bit. It takes effect at the tables'
+    /// build: set it before [`build_tables`](Self::build_tables) (the builder's
+    /// `table_store` does), or the tables built already stay as they are.
+    pub fn with_table_store(mut self, store: Arc<TableStore<T>>) -> Self {
+        self.kernel.table_store = Some(store);
+        self
+    }
+
+    /// [`with_table_store`](Self::with_table_store) with `Some` store, or no store with `None`.
+    pub fn with_table_store_option(mut self, store: Option<Arc<TableStore<T>>>) -> Self {
+        self.kernel.table_store = store;
+        self
+    }
+
+    /// The store of the RCR tables, if any ([`with_table_store`](Self::with_table_store)).
+    pub fn table_store(&self) -> Option<&Arc<TableStore<T>>> {
+        self.kernel.table_store.as_ref()
+    }
+
+    /// The build of the RCR tables per level (Helmholtz CH2.2a; [`TableBuild`]): the parts each
+    /// level's tables hold, built or taken from the store, the built parts' thread-seconds and
+    /// the level's bytes, of the last build of the tables (and of the M2L blocks it stored
+    /// since); this rank's.
+    pub fn table_build(&self) -> &TableBuild {
+        self.kernel.tables.build_report()
     }
 
     /// Runs P2M and L2P by the reference's per-point calls ([`Densities::p2m`],

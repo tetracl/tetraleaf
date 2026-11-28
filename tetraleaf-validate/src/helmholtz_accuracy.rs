@@ -101,8 +101,8 @@ use tetraleaf_exec::helmholtz::{
     DiagonalCosts, DiagonalCounts, DiagonalTimes, HelmholtzDiagonal, HelmholtzFmm,
     HelmholtzFmmBuilder, HelmholtzFmmError, HelmholtzM2l, HelmholtzPhiStep, LevelShape,
     M2lOverride, Output, PlaneWaveCounts, PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit,
-    PlaneWaveTimes, RcrSplit, TransferBuild, VAfterPlan, VCosts, VNear, VRaisedPrice, Wavenumber,
-    WxNear, diagonal_rule_classes,
+    PlaneWaveTimes, RcrSplit, TableStores, TransferBuild, VAfterPlan, VCosts, VNear, VRaisedPrice,
+    Wavenumber, WxNear, diagonal_rule_classes,
 };
 use tetraleaf_exec::operator::{M2L_BLOCK_TARGETS, MulAdd, P2pChoice};
 use tetraleaf_math::Complex;
@@ -258,6 +258,10 @@ pub struct Case {
     /// (`HelmholtzFmmBuilder::v_raised_price`, Helmholtz CH4.3b2d; `None` in [`Case::new`], the
     /// library's).
     pub v_raised_price: Option<VRaisedPrice>,
+    /// The stores of the RCR tables' parts (`HelmholtzFmmBuilder::table_store`, Helmholtz
+    /// CH2.2a; `None` in [`Case::new`] and [`Case::defaults`]: every part built for the case
+    /// alone). Cases that share the stores share the parts of their levels.
+    pub table_store: Option<TableStores>,
 }
 
 /// Time-rule costs under which the diagonal form beats every other M2L wherever a class passes
@@ -331,6 +335,7 @@ impl Case {
             v_after_plan: VAfterPlan::Off,
             v_costs: None,
             v_raised_price: None,
+            table_store: None,
         }
     }
 
@@ -700,6 +705,72 @@ pub fn sweep_crossovers(degrees: &[usize]) -> Vec<usize> {
         .collect()
 }
 
+/// One level's share of the build of the RCR tables (Helmholtz CH2.2a; `tetraleaf_tables::
+/// helmholtz::store::LevelBuild` with the level's wavenumber and degrees): the parts its
+/// tables hold, built or reused, are the same on every rank (each builds every level), the
+/// seconds and bytes the largest rank's.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableLevel {
+    /// k̂_l = k r_l, (Re, Im).
+    pub k_hat: (f64, f64),
+    /// The degree p_l of the level's translations.
+    pub degree: usize,
+    /// The degree q_l of its expansions and M2L.
+    pub m2l_degree: usize,
+    /// The parts built, the largest rank's.
+    pub built: usize,
+    /// The parts reused (from the store, or from another level of the build), the largest
+    /// rank's.
+    pub reused: usize,
+    /// The built parts' thread-seconds, the largest rank's.
+    pub seconds: f64,
+    /// The level's bytes, the largest rank's.
+    pub bytes: usize,
+}
+
+/// The build of the RCR tables per level (Helmholtz CH2.2a), reduced over the ranks
+/// ([`TableLevel`]), and the store's bytes, the largest rank's (`None` without a store).
+fn table_levels<C: CommunicatorCollectives>(
+    fmm: &HelmholtzFmm<'_, f64, C>,
+    comm: &C,
+) -> (Vec<TableLevel>, Option<usize>) {
+    let report = fmm.table_build();
+    let tables = fmm.operator().tables();
+    let local: Vec<f64> = report
+        .levels
+        .iter()
+        .flat_map(|l| {
+            [
+                l.built as f64,
+                l.reused as f64,
+                l.seconds.as_secs_f64(),
+                l.bytes as f64,
+            ]
+        })
+        .chain([report.store_bytes.map_or(-1.0, |b| b as f64)])
+        .collect();
+    let mut largest = vec![0.0f64; local.len()];
+    comm.all_reduce_into(&local[..], &mut largest[..], SystemOperation::max());
+    let levels = largest[..4 * report.levels.len()]
+        .chunks(4)
+        .enumerate()
+        .map(|(l, v)| {
+            let k = tables.k_hat(l);
+            TableLevel {
+                k_hat: (k.re, k.im),
+                degree: tables.degree(l),
+                m2l_degree: tables.m2l_degree(l),
+                built: v[0] as usize,
+                reused: v[1] as usize,
+                seconds: v[2],
+                bytes: v[3] as usize,
+            }
+        })
+        .collect();
+    let store = *largest.last().expect("the store's entry");
+    (levels, (store >= 0.0).then_some(store as usize))
+}
+
 /// The outcome of one [`Case`] at one thread count.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
@@ -930,6 +1001,11 @@ pub struct Row {
     /// the plan, summed over the ranks (`HelmholtzFmm::raised_v_shapes`; on the raised levels
     /// under `VRaisedPrice::PerBox`); empty where nothing was counted.
     pub raised_v_shapes: Vec<[u64; 2]>,
+    /// Per level the build of the RCR tables (`HelmholtzFmm::table_build`; Helmholtz CH2.2a),
+    /// [`TableLevel`].
+    pub table_levels: Vec<TableLevel>,
+    /// The store's bytes after the build, the largest rank's, if the case had one.
+    pub table_store_bytes: Option<usize>,
     /// The FMM's resident memory over its build and evaluations (Helmholtz CH4.4a), `None`
     /// where some rank cannot reset and read its peak ([`Memory`]).
     pub memory: Option<Memory>,
@@ -1283,6 +1359,9 @@ pub fn run_output<C: CommunicatorCollectives>(
         .diagonal_costs(case.diagonal_costs)
         .v_after_plan(case.v_after_plan)
         .v_costs(case.v_costs);
+    if let Some(stores) = &case.table_store {
+        builder = builder.table_store(stores.clone());
+    }
     if let Some(price) = case.v_raised_price {
         builder = builder.v_raised_price(price);
     }
@@ -1364,6 +1443,7 @@ pub fn run_output<C: CommunicatorCollectives>(
     }
     let output = output.expect("at least one evaluation");
     let memory = Memory::reduce(resident_before, peak_resident(), comm);
+    let (table_levels, table_store_bytes) = table_levels(&fmm, comm);
     let errors = errors(&output, problem, &block, oracle, comm);
     let checksum = reduce_checksum(checksum(&output, block.start), comm);
     let mut leaves = 0usize;
@@ -1665,6 +1745,8 @@ pub fn run_output<C: CommunicatorCollectives>(
             .raised_v_shapes()
             .map(|shapes| shapes.iter().map(|s| [s.leaves, s.pairs]).collect())
             .unwrap_or_default(),
+        table_levels,
+        table_store_bytes,
         memory,
         errors,
         checksum,
