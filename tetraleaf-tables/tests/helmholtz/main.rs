@@ -35,6 +35,7 @@ mod parts;
 mod plane_wave_merge;
 mod plane_wave_pair;
 mod plane_wave_quadrature;
+mod yukawa;
 
 /// A deterministic input of `planes` planes at degree p whose degree-n coefficients are of
 /// size about 2⁻ⁿ, with a seed.
@@ -527,12 +528,6 @@ fn f32_tables() {
             }
         }
     }
-}
-
-#[test]
-#[should_panic(expected = "Yukawa")]
-fn yukawa_is_refused() {
-    let _ = HelmholtzTables::<f64>::build(Complex::new(0.0, 1.0), &[0, 0, 4], 0);
 }
 
 #[test]

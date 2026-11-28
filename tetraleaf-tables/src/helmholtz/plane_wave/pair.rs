@@ -513,8 +513,8 @@ impl<T: RealScalar> PlaneWaveLevel<T> {
     ///
     /// # Panics
     ///
-    /// Unless k̂ is finite with Re k̂ > 0 and Im k̂ ≥ 0 (as `HelmholtzTables`: Yukawa's real
-    /// path, Re k = 0, is not served), the node slices have one length, and every Nₖ ≥ 1.
+    /// Unless k̂ is finite with Re k̂ > 0 and Im k̂ ≥ 0 (Yukawa's real path, Re k = 0, is not
+    /// served here), the node slices have one length, and every Nₖ ≥ 1.
     pub fn from_nodes(k_hat: Complex<f64>, p: usize, nodes: Nodes<'_>) -> Self {
         let layout = LevelLayout::new(k_hat, p, nodes);
         let parts = (0..layout.parts()).map(|i| layout.part::<T>(i)).collect();

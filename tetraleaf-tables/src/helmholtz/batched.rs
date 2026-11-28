@@ -80,7 +80,8 @@ impl<T: RealScalar> BatchedM2l<T> {
     /// # Panics
     ///
     /// If `levels` and `degrees` differ in length, level 0 or 1 is chosen, or as
-    /// [`HelmholtzTables::build`] panics.
+    /// [`HelmholtzTables::build`] panics; for Yukawa (Re k̂₀ = 0,
+    /// Helmholtz CH2.1a: its dense M2L is `DenseM2l`'s, these tables a later task's).
     pub fn build(k_root: Complex<f64>, degrees: &[usize], levels: &[bool]) -> Self {
         Self::build_on(k_root, degrees, levels, &Serial)
     }
@@ -97,6 +98,11 @@ impl<T: RealScalar> BatchedM2l<T> {
         levels: &[bool],
         parts: &impl Parts,
     ) -> Self {
+        assert!(
+            k_root.re != 0.0,
+            "Yukawa (Re k̂₀ = 0) has no tables here yet: its Dense is CH2.1a's, its batched and \
+             class tables a later task's"
+        );
         assert_eq!(
             levels.len(),
             degrees.len(),

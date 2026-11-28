@@ -25,7 +25,8 @@ tetraleaf-exec's threaded level call); Helmholtz CH4.2c1 (`TransferBuild`, the i
 and the build by ring); Helmholtz CH4.6a1
 (`Conversions::{s2f_modes, f2r_modes}`, the conversions' halves around the φ step); Helmholtz
 CH4.9a2b (`helmholtz::leaf`, the batched P2M of a leaf); Helmholtz CH4.9b2 (`helmholtz::leaf`'s
-`LeafL2p`, the batched L2P with gradients).
+`LeafL2p`, the batched L2P with gradients); Helmholtz CH2.1a (Yukawa's real RCR and dense M2L
+tables in `helmholtz` and `helmholtz::dense`).
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.
@@ -78,6 +79,20 @@ CH4.9a2b (`helmholtz::leaf`, the batched P2M of a leaf); Helmholtz CH4.9b2 (`hel
   expansion. `build` is it with q = p (bit for bit as before). `tests/helmholtz/main.rs`
   checks the translations on the first degrees against `rcr` (the degrees above NaN, or
   left untouched) and M2L bit for bit the tables built at q.
+  Since Helmholtz CH2.1a (docs/helmholtz/tasks/CH2.1a.md; the module docs, "Yukawa") a k̂₀ = iκ̂₀
+  builds Yukawa's real tables (`is_yukawa`, `local_planes` 1): M2M, L2L and M2L the real parts of
+  `rcr`'s `_yukawa` coefficients (i^{n−n′} Ê, i^{n′−n} Ê ½, −i^{n+n′} Ê 4πκ e^{2β − κ|t|}) formed in
+  f64 and rounded once, applied by the real step; M2L from one multipole plane (two refused) into
+  one local plane, `m2l_contribution_len` counting it. `DenseM2l` then holds one real n × n matrix
+  per offset (`local_planes`, `level_bytes_for`, `select_for`; `level_bytes` and `select` the
+  two-plane case, unchanged); `BatchedM2l` and `ClassM2l` refuse Yukawa (a later task).
+  `tests/helmholtz/yukawa.rs` checks M2M, L2L (8 octants, rectangular and raised degrees) and M2L
+  (316 offsets) against `rcr`'s `_yukawa` forms in the FMM-weighted measure within `BOUND` × the
+  conditioning at κ̂₀ = 0.01, 2, 40 (κ̂ a 10⁻³ to 17; at most 6.7e-15 on the M6) and under strong
+  damping (κ̂ a 69 and 173 on level 2, outputs 10⁻¹⁶ and 10⁻⁴¹ of their inputs: within the bound
+  relative to the output, 1.3e-15), Dense against Rotation and `rcr`, the vectors, stored blocks,
+  contributions and the build in parts bit for bit, f32, the bytes and the selection, and the
+  refusals; `print_the_hashes` gave `main`'s hashes for real and complex k after the change.
   `helmholtz::dense` (Helmholtz CH3.2a; its module docs): `DenseM2l`, per level and offset
   the complex M2L as one 2n × n column-major matrix [A_r; A_i], column j Rotation's M2L of
   e_j built by `HelmholtzTables<f64>` and rounded to T (so Dense equals Rotation to
