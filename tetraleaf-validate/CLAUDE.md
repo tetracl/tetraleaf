@@ -849,6 +849,13 @@ as `--kd 0 --kim κ` with no other change (the oracle's `direct_sum` at k = iκ 
 runs the task's stages (`smoke`, `accuracy`, `determinism`, `dense`, `complex`, `checksums`,
 `time`), `ch2-1b-tables.py` makes the report's tables. Its report is `results/helmholtz-ch2-1b.md`.
 
+Helmholtz CH2.1e (Yukawa's batched L2P; docs/helmholtz/tasks/CH2.1e.md) changed no harness code
+(`helmholtz_leaf` names `LeafOutput::planes`, 2): `--leaves kernel|reference` now runs both leaf
+kernels or both references on Yukawa too. `tools/helmholtz/ch2-1e-runs.sh` runs the task's stages
+(CH2.1c's: `smoke`, `accuracy`, `worst`, `levels`), `ch2-1e-tables.py` makes the report's tables
+(`accuracy`, `worst`, `runs`, `levels`: L2P per level beside P2M). Its report is
+`results/helmholtz-ch2-1e.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

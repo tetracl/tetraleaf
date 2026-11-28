@@ -63,6 +63,7 @@ fn kernel<T: RealScalar>(
         LeafOutput {
             values: &mut out,
             vectors,
+            planes: 2,
             gradients,
         },
     );
@@ -387,6 +388,7 @@ fn l2p_accumulates() {
         LeafOutput {
             values: &mut out,
             vectors: 2,
+            planes: 2,
             gradients: true,
         },
     );
@@ -404,6 +406,7 @@ fn l2p_accumulates() {
         LeafOutput {
             values: &mut again,
             vectors: 2,
+            planes: 2,
             gradients: true,
         },
     );
@@ -412,27 +415,6 @@ fn l2p_accumulates() {
             .iter()
             .zip(&fresh)
             .all(|(a, b)| a.to_bits() == b.to_bits())
-    );
-}
-
-#[test]
-#[should_panic(expected = "not Yukawa's")]
-fn yukawa_is_refused() {
-    let p = 4;
-    let level = Level::new(Complex::new(0.0, 2.0), 1.0);
-    let l = vec![0.0; 2 * Layout::new(p).len()];
-    let mut out = vec![0.0; 2];
-    LeafL2p::<f64>::new(p).l2p(
-        p,
-        &level,
-        &[[0.1, 0.2, 0.3]],
-        &l,
-        &mut L2pScratch::new(p, 1),
-        LeafOutput {
-            values: &mut out,
-            vectors: 1,
-            gradients: false,
-        },
     );
 }
 
@@ -452,6 +434,7 @@ fn short_locals_are_refused() {
         LeafOutput {
             values: &mut out,
             vectors: 1,
+            planes: 2,
             gradients: false,
         },
     );
@@ -473,6 +456,7 @@ fn a_short_output_is_refused() {
         LeafOutput {
             values: &mut out,
             vectors: 1,
+            planes: 2,
             gradients: true,
         },
     );
@@ -494,6 +478,7 @@ fn more_vectors_than_the_scratch_are_refused() {
         LeafOutput {
             values: &mut out,
             vectors: 2,
+            planes: 2,
             gradients: false,
         },
     );
@@ -515,6 +500,7 @@ fn a_small_scratch_is_refused() {
         LeafOutput {
             values: &mut out,
             vectors: 1,
+            planes: 2,
             gradients: false,
         },
     );
@@ -536,6 +522,7 @@ fn a_degree_above_the_kernels_is_refused() {
         LeafOutput {
             values: &mut out,
             vectors: 1,
+            planes: 2,
             gradients: false,
         },
     );
@@ -556,6 +543,7 @@ fn no_vectors_are_refused() {
         LeafOutput {
             values: &mut out,
             vectors: 0,
+            planes: 2,
             gradients: false,
         },
     );

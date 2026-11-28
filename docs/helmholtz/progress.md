@@ -5431,3 +5431,63 @@ request, using this template:
 - Follow-ups:
   - CH2.1e (Yukawa's batched L2P; roadmap line added, on the list next);
   - CH2.3's Also (the constant density's gradient on Yukawa; W2 needs a fixed-N form for Yukawa).
+
+## 2026-11-28: CH2.1e Yukawa's batched L2P
+- Done:
+  - `tetraleaf_tables::helmholtz::leaf::LeafL2p` restates `l2p_yukawa` (k = iκ): îₙ and îₙ′ by
+    `modified_i` per lane at the reference's length p + 1, e^{κr − β} per lane, the three flushed
+    below τ as CH2.1c's P2M flushes them, CH4.9b2's per-degree sums per real plane, then the
+    reference's real degree loop with κ and the centre's limit κ/(3s). `LeafOutput::planes` (the
+    output columns per vector: 1 on Yukawa's real path, 2 otherwise) and `LeafL2p::planes`; complex
+    charges' Re q and Im q locals into columns 2v and 2v + 1. The refusal is gone; one column off
+    Yukawa is refused. The module docs' "L2P" gains Yukawa's formula, contract, bits and flush.
+  - `Densities::l2p_kernel` runs the kernel on Yukawa (its fall-back gone, a kind check as
+    `p2m_kernel`'s); the operator's docs: both leaf kernels follow the P2P choice on every kind.
+  - `tools/helmholtz/ch2-1e-runs.sh` and `ch2-1e-tables.py` (on `common.py`).
+  - Report `tetraleaf-validate/results/helmholtz-ch2-1e.md`; record `docs/helmholtz/tasks/CH2.1e.md`.
+- Results (Kathleen job 673289 on node-c11b-046, 1 × 40):
+  - The FMM: CH2.1b's 114 cases within ε (at most 0.267 ε), the batched leaves' errors 1.0000× the
+    reference leaves' in every case; also with complex charges and on the constant density (W1n
+    and W3 at 10⁶).
+  - L2P per level 0.21–0.28× the reference's (per run 0.23–0.24×), from 14–22 % of an evaluation
+    to 3.7–6.5 %; the evaluation with both leaf kernels (CH2.1c and CH2.1e) 0.77–0.89×.
+- Tests:
+  - `tetraleaf-tables/tests/helmholtz/l2p_yukawa.rs`, against `l2p_yukawa` per target and real
+    local, C = 10:
+    - f64: p ≤ 45, κ̂ 10⁻⁶–250, N 1–40, one or two planes, one to three vectors, with and without
+      gradients; 1.94 of C.
+    - f32 against the f64 reference: 0.64, beside the f32 level's own rounding, the harmonics'
+      flushed columns and the flushed îₙ, îₙ′ and e (held apart); next to the centre (r² subnormal
+      or zero) 0.18.
+    - r² underflowing in f64 and the centre: 0.22.
+    - Bits: each column the one-plane, one-vector call's; positions and leaves of 1/16/40; with and
+      without gradients; accumulation. Refusals: one column off Yukawa, short locals and output.
+    - Two mutations (κ dropped from the radial gradient; the centre's limit zero) fail them.
+    - `l2p.rs`' `yukawa_is_refused` is removed (`planes: 2` in its literals).
+  - Real and complex k: `LeafL2p`'s outputs hashed over 192 calls, `ee41f6d8571cd78e` on the branch
+    and on `main`'s kernel.
+  - `tetraleaf-exec/tests/helmholtz/densities.rs`: Yukawa's batched L2P within 1e-13 like the other
+    paths (the "Yukawa keeps the reference" assert goes); complex vectors two real ones under the
+    kernel, bit for bit.
+  - `tests/helmholtz_fmm.rs`: `check_leaf_kernel` on Yukawa's three scenarios covers L2P: 1.0000×,
+    outputs within 4.1·10⁻¹⁶ on the M6.
+- Checks: `/verify` on the M6.
+  - fmt; Clippy default, examples, workspace; docs.
+  - At opt-level 1, `cargo test` 1,478 and `--workspace` 1,522 passed.
+  - The MPI list at 2 and 4 ranks passed (`helmholtz_fmm` 54.5 s and 50.3 s).
+  - Opt-level 0 debug runs:
+    - tables' `helmholtz` 43 s at load 8 (CH2.1c 42 s);
+    - exec's `helmholtz` 122 s at load 7–8 (CH2.1c 120 s);
+    - `helmholtz_fmm` 1,044 s at load 3–8 (CH2.1c 953 s at load 2–5; +9.5 %, under the 20 % flag).
+
+  A self-review by a subagent found no blocking defect. Fixed after it: two stale doc comments
+  (`SUMS`, `L2pScratch`), the flush's absolute bound stated in the module docs, an f32 case next to
+  the centre, the hash comparison and the pending runs in the plan.
+
+  Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path); locust and the
+  M6 timings (the kernel is safe Rust without ISA dispatch; one machine class, as at CH2.1b and
+  CH2.1c).
+- Decisions: none; no questions for sign-off.
+- Laplace: not touched (`tetraleaf-tables`' Helmholtz `leaf` module, `tetraleaf-exec`'s Helmholtz
+  densities, operator docs and tests, one literal in `helmholtz_leaf`).
+- Follow-ups: none new. Next on the list: CH2.2 (per-level tables with per-level cache keys).

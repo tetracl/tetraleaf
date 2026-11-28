@@ -30,6 +30,7 @@ mod diagonal_level;
 mod diagonal_modes;
 mod diagonal_transfer;
 mod l2p;
+mod l2p_yukawa;
 mod leaf;
 mod leaf_yukawa;
 mod parts;
