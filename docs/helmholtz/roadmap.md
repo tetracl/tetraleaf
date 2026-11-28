@@ -403,7 +403,7 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   every level's M2L first (the diagonal classes included) and build RCR M2L tables, and store RCR
   M2L y-blocks, only on the levels with an RCR pair. *Done when:* the operator's and the FMM's
   outputs bit for bit the tables on every level's (tests: pair bodies, the FMM at threads and
-  ranks; Kathleen: the checksums `main`'s); the build of W1 at 10⁶ points, kD 250–1000, and W3 at
+  ranks; Kathleen: the checksums `main`'s); the build of W1 at 10⁶ points, kD 250–1000, and W3 at 10⁶ points at
   kD = 500 under the defaults against `main`'s, on Kathleen. *Needs:* CH2.2a. *Machines:*
   Kathleen.
 - [ ] **CH2.2b2 The diagonal form's tables per level in the store.** `DiagonalM2l` per (k̂_l, p,

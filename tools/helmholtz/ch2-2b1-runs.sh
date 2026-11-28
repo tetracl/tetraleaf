@@ -15,7 +15,7 @@
 #   smoke  W1 at 20,000 points, kD = 30
 #   w1     W1's sphere at 10⁶ points (`w1:1000000`, CH2.2a's tree), kD = KDS (default 250 500 1000),
 #          one case per kD
-#   w3     W3 at kD = 500
+#   w3     W3 at 10⁶ points (`w3:1000000`, CH4.3b2c's) at kD = 500
 # TIMEOUT per launch (default 3600 s), ONLY (a regular expression on the launch names), DRY_RUN
 # (print the launches only). Each launch writes <out-dir>/<name>.md and .err and a line in
 # <out-dir>/runs.log. Times are read on Kathleen's exclusive nodes only, never asserted; no run on
@@ -95,7 +95,7 @@ for stage in "$@"; do
         done
         ;;
     w3)
-        case_abba w3-500 w3 --kd 500 "${DEFAULTS[@]}"
+        case_abba w3-500 w3:1000000 --kd 500 "${DEFAULTS[@]}"
         ;;
     *)
         echo "unknown stage $stage" >&2

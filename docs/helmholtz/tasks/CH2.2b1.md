@@ -20,7 +20,7 @@ included, before the RCR tables, with every output unchanged bit for bit.
   threads and on P ranks against the one-rank FMM); on Kathleen, the checksums `main`'s.
 - On every level with an RCR pair the tables hold the RCR M2L, and on no other (the levels of the
   waves, Batched, Dense, Classes, and the diagonal form's levels that take all 34 classes).
-- The build of W1 at 10⁶ points, kD 250, 500, 1000, and of W3 at kD = 500, under the library's
+- The build of W1 at 10⁶ points, kD 250, 500, 1000, and of W3 at 10⁶ points at kD = 500, under the library's
   defaults against `main`'s on Kathleen: the RCR tables' time, the build, the tables' bytes.
 
 ## Read first
@@ -80,7 +80,7 @@ change).
 Kathleen, `singlenode`, one node, 1 × 40, `--exclude=node-c11b-004,node-c11b-013`: `main`'s
 `helmholtz_accuracy` (63a7a4f, built in `src/main`) and the branch's, one setting per launch, in the
 order main, branch, branch, main per case: W1 at 10⁶ points (`w1:1000000`) at kD 250, 500, 1000 and
-W3 at kD = 500, ε = 10⁻⁶, the library's defaults named (CH2.2a's), `--levels`. Decides nothing: it
+W3 at 10⁶ points (`w3:1000000`, CH4.3b2c's; its default N at kD = 500 is 5·10⁸) at kD = 500, ε = 10⁻⁶, the library's defaults named (CH2.2a's), `--levels`. Decides nothing: it
 shows the RCR tables' time and bytes saved, and the checksums `main`'s.
 
 ## Constraints and risks
