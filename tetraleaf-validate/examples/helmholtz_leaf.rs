@@ -745,6 +745,7 @@ fn leaf_output<T>(values: &mut [T], gradients: bool) -> LeafOutput<'_, T> {
     LeafOutput {
         values,
         vectors: 1,
+        planes: 2,
         gradients,
     }
 }

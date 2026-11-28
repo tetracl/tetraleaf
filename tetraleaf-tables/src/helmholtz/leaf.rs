@@ -134,6 +134,27 @@
 //! (CH4.9a2a, CH4.9b1), 2n + 1 terms per degree summed in another order, and r by `sqrt` against the
 //! reference's `hypot` through ĵₙ′ and ĵₙ″ (bounded by the radial equation). The tests hold C = 10.
 //!
+//! On Yukawa's real path (k = iκ, Helmholtz CH2.1e) the kernel restates
+//! [`tetraleaf_ref::helmholtz::leaf::l2p_yukawa`], φ̃ += Σ L̂ᵞₙᵐ îₙ(κ|v|) e^{κ|v| − β} Yₙᵐ(v̂), with the
+//! same steps on real locals: îₙ (and îₙ′) by [`modified_i`] per lane at the reference's length p + 1,
+//! e = e^{κr − β} per lane, the values of îₙ, îₙ′ and e below the under-range τ set to zero (as P2M
+//! flushes them, "Yukawa"), the per-degree sums of step 2 per real plane, then per lane and plane the
+//! reference's real degree loop: φ̃ = Σₙ îₙ valueₙ, the gradient κ (Σₙ îₙ′ valueₙ) r̂ + (Σₙ tₙ θₙ) θ̂ +
+//! (Σₙ tₙ φₙ) φ̂ with tₙ = îₙ (1/r), or κ/(3s) for n = 1 at the centre, all times e. Each real local
+//! fills one output column ([`LeafOutput::planes`], [`LeafL2p::planes`]): one per vector for real
+//! charges; for complex ones Re q's local into column 2v and Im q's into 2v + 1 (`tetraleaf-exec`'s
+//! densities: a complex vector on Yukawa is two real vectors), each the one-plane kernel's bits on its
+//! local. The bits above hold as for real and complex k, whose arithmetic Yukawa's branch leaves
+//! unchanged. The contract adds e's condition (r by `sqrt` against `hypot`, x = κr, tₙ = îₙ/r):
+//!
+//! ```text
+//! |φ̃ − φ̃_ref|  ≤ C u e Σₙ wₙ Sₙ (((n + 1)² + 2n + 1) îₙ + x (|îₙ′| + îₙ))
+//! |gₐ − gₐ_ref| ≤ C u e Σₙ wₙ Sₙ (κ (((n + 1)² + 2n + 3) |îₙ′| + x îₙ + x |îₙ′|) + ((n + 1)³ + n(n + 1) + x) tₙ)
+//! ```
+//!
+//! (`tests/helmholtz/l2p_yukawa.rs`: C = 10, 1.9 measured in f64 to p = 45 and κ̂ a to 433; 0.6 in f32
+//! against the f64 reference, beside the f32 level's own rounding of s and β, held apart as in P2M).
+//!
 //! # Example
 //!
 //! ```
@@ -481,25 +502,28 @@ impl<T: RealScalar> P2mScratch<T> {
     }
 }
 
-/// A leaf's target output for [`LeafL2p::l2p`]: two columns per charge vector (Re, then Im), as
-/// `tetraleaf-exec`'s Helmholtz densities lay out a target output chunk of n targets (CONVENTIONS
-/// §3.13's chunk of 2m output vectors): column o's potential of target i at o n + i, and with
-/// gradients its gradient's component a at 2m n + 3 (o n + i) + a, column o = 2v + part for vector
-/// v. The kernel adds (+=) into it.
+/// A leaf's target output for [`LeafL2p::l2p`]: c columns per charge vector, as `tetraleaf-exec`'s
+/// Helmholtz densities lay out a target output chunk of n targets (CONVENTIONS §3.13's chunk of c m
+/// output vectors): column o's potential of target i at o n + i, and with gradients its gradient's
+/// component a at c m n + 3 (o n + i) + a, column o = c v + part for vector v. c = `planes` is 2
+/// (Re, then Im) on every path but Yukawa's real one (k = iκ with real charges), where it is 1
+/// ([`LeafL2p::planes`]). The kernel adds (+=) into it.
 #[derive(Debug)]
 pub struct LeafOutput<'a, T> {
-    /// The values, 2m n, or 8m n with gradients.
+    /// The values, c m n, or 4c m n with gradients.
     pub values: &'a mut [T],
     /// The number m ≥ 1 of charge vectors.
     pub vectors: usize,
+    /// The columns c per vector: 2, or 1 on Yukawa's real path (Helmholtz CH2.1e).
+    pub planes: usize,
     /// Whether the chunk holds gradients after the potentials.
     pub gradients: bool,
 }
 
 impl<T> LeafOutput<'_, T> {
-    /// The values per target: 2m, or 8m with gradients.
+    /// The values per target: c m, or 4c m with gradients.
     pub fn per_target(&self) -> usize {
-        2 * self.vectors * if self.gradients { 4 } else { 1 }
+        self.planes * self.vectors * if self.gradients { 4 } else { 1 }
     }
 }
 
@@ -528,6 +552,14 @@ impl<T: RealScalar> LeafL2p<T> {
         self.harmonics.p()
     }
 
+    /// The planes of a local of `level` with these charges, and the output columns per vector: 1 on
+    /// Yukawa's real path with real charges (k = iκ; a real local, CONVENTIONS §3.15's storage), 2
+    /// otherwise: a complex local, or on Yukawa the real locals of Re q and Im q (the [module
+    /// documentation](self), "L2P").
+    pub fn planes(level: &Level<T>, complex: bool) -> usize {
+        if level.is_yukawa() && !complex { 1 } else { 2 }
+    }
+
     /// L2P of a leaf: adds the potentials of the stored locals `locals` of degree `p` of `level`
     /// (whose half-width is the leaf's) at the targets `targets` (offsets from the leaf's centre in
     /// the level's units), and with `output.gradients` their gradients, into `output`, for every
@@ -535,13 +567,16 @@ impl<T: RealScalar> LeafL2p<T> {
     /// complex local, 2 (p + 1)² values in the layout of §3.6, the real plane then the imaginary
     /// plane, the vectors one after the other. The sum of
     /// [`tetraleaf_ref::helmholtz::leaf::l2p`] per target, to the contract of the [module
-    /// documentation](self), "L2P".
+    /// documentation](self), "L2P". On Yukawa's real path (k = iκ, Helmholtz CH2.1e) it is the sum of
+    /// [`tetraleaf_ref::helmholtz::leaf::l2p_yukawa`], φ̃ += Σ L̂ᵞₙᵐ îₙ(κ|v|) e^{κ|v| − β} Yₙᵐ(v̂), per
+    /// real local: `output.planes` real (p + 1)² planes per vector (1 for real charges; Re q's and
+    /// Im q's locals for complex ones), plane `part` into output column c v + part.
     ///
     /// # Panics
     ///
     /// If `p` exceeds the kernel's or the scratch's degree, the output has more vectors than the
-    /// scratch or none, the level is Yukawa's (k = iκ: H2's path), `locals` does not hold
-    /// 2m (p + 1)² values, or `output.values` does not hold
+    /// scratch or none, `output.planes` is not 2 (or on Yukawa 1 or 2), `locals` does not hold
+    /// c m (p + 1)² values, or `output.values` does not hold
     /// [`per_target`](LeafOutput::per_target) values per target.
     pub fn l2p(
         &self,
@@ -564,16 +599,18 @@ impl<T: RealScalar> LeafL2p<T> {
             "{vectors} charge vectors, the scratch holds 1 to {}",
             scratch.vectors
         );
+        let yukawa = level.is_yukawa();
+        let planes = output.planes;
         assert!(
-            !level.is_yukawa(),
-            "the batched L2P takes Helmholtz's complex path, not Yukawa's"
+            planes == 2 || (yukawa && planes == 1),
+            "{planes} output columns per vector: 2, or 1 on Yukawa's real path"
         );
         let len = Layout::new(p).len();
         assert_eq!(
             locals.len(),
-            2 * vectors * len,
+            planes * vectors * len,
             "the locals must hold {} values",
-            2 * vectors * len
+            planes * vectors * len
         );
         let n = targets.len();
         assert_eq!(
@@ -587,8 +624,12 @@ impl<T: RealScalar> LeafL2p<T> {
         let real_k = k.im == T::zero();
         let (s, beta) = (level.scale(), level.damping());
         let e_real = (T::zero() - beta).exp();
-        // The tangential factor's limit at the centre, k ĵ₁(z)/z → k/(3s).
+        // The tangential factor's limit at the centre, k ĵ₁(z)/z → k/(3s) (κ/(3s) on Yukawa, as
+        // the reference forms it).
         let at_centre = k * (T::one() / (T::from_f64(3.0) * s));
+        let kappa = k.im;
+        let at_centre_yukawa = kappa / (T::from_f64(3.0) * s);
+        let tau = under_range::<T>();
         let degrees = p + 1;
         let L2pScratch {
             harmonics: harmonic_scratch,
@@ -598,6 +639,8 @@ impl<T: RealScalar> LeafL2p<T> {
             derivative_im,
             one,
             one_derivative,
+            one_real,
+            one_real_derivative,
             sums,
             ..
         } = scratch;
@@ -632,6 +675,22 @@ impl<T: RealScalar> LeafL2p<T> {
                     bessel_j_real(&x, s, radial);
                 }
                 [e_real; B]
+            } else if yukawa {
+                // îₙ(κr) (and îₙ′) per lane by the reference's routine and length, and
+                // e = e^{κr − β} per lane, the values below τ flushed (module documentation,
+                // "L2P"; as P2M's, "Yukawa").
+                let flush = |x: T| if x.abs() < tau { T::zero() } else { x };
+                for j in 0..B {
+                    let d = gradients.then_some(&mut one_real_derivative[..degrees]);
+                    modified_i(kappa * r[j], s, &mut one_real[..degrees], d);
+                    for n in 0..degrees {
+                        radial[n][j] = flush(one_real[n]);
+                        if gradients {
+                            derivative[n][j] = flush(one_real_derivative[n]);
+                        }
+                    }
+                }
+                array::from_fn(|j| flush((kappa * r[j] - beta).exp()))
             } else {
                 for j in 0..B {
                     let d = gradients.then_some(&mut one_derivative[..degrees]);
@@ -661,9 +720,9 @@ impl<T: RealScalar> LeafL2p<T> {
                             let (q, d) = (&q[row], &d[row]);
                             let mu: [T; B] = array::from_fn(|j| mt * u[row][j]);
                             for v in 0..vectors {
-                                let local = &locals[2 * v * len..2 * (v + 1) * len];
+                                let local = &locals[planes * v * len..planes * (v + 1) * len];
                                 let acc = &mut sums[v * SUMS * degrees..(v + 1) * SUMS * degrees];
-                                for plane in 0..2 {
+                                for plane in 0..planes {
                                     let c = &local[plane * len..(plane + 1) * len];
                                     let (value, rest) = acc.split_at_mut(2 * degrees);
                                     let (theta, phi) = rest.split_at_mut(2 * degrees);
@@ -694,9 +753,9 @@ impl<T: RealScalar> LeafL2p<T> {
                             let centre = n * n + n;
                             let q = &q[row];
                             for v in 0..vectors {
-                                let local = &locals[2 * v * len..2 * (v + 1) * len];
+                                let local = &locals[planes * v * len..planes * (v + 1) * len];
                                 let acc = &mut sums[v * SUMS * degrees..(v + 1) * SUMS * degrees];
-                                for plane in 0..2 {
+                                for plane in 0..planes {
                                     let c = &local[plane * len..(plane + 1) * len];
                                     let at = plane * degrees + n;
                                     if m == 0 {
@@ -721,6 +780,70 @@ impl<T: RealScalar> LeafL2p<T> {
                     T::zero()
                 }
             });
+            if yukawa {
+                // Per lane and real local the reference's real degree loop (`l2p_yukawa`):
+                // plane `plane` of vector v into output column c v + plane.
+                let zero = [T::zero(); B];
+                let base = planes * vectors * n;
+                for v in 0..vectors {
+                    let acc = &sums[v * SUMS * degrees..(v + 1) * SUMS * degrees];
+                    for plane in 0..planes {
+                        let row = |which: usize, n: usize| &acc[(2 * which + plane) * degrees + n];
+                        let column = planes * v + plane;
+                        let mut phi = zero;
+                        for n in 0..degrees {
+                            let (a, jr) = (row(0, n), &radial[n]);
+                            for j in 0..B {
+                                phi[j] = phi[j] + jr[j] * a[j];
+                            }
+                        }
+                        for j in 0..count {
+                            let at = column * n + start + j;
+                            output.values[at] = output.values[at] + phi[j] * e[j];
+                        }
+                        let Some(directions) = &directions else {
+                            continue;
+                        };
+                        // The radial, polar and azimuthal parts, real per lane.
+                        let (mut radial_part, mut polar, mut azimuthal) = (zero, zero, zero);
+                        for n in 0..degrees {
+                            let (value, theta, phi_sum) = (row(0, n), row(1, n), row(2, n));
+                            let (jr, dr) = (&radial[n], &derivative[n]);
+                            // tₙ = îₙ (1/r), or the centre's limit κ/(3s) (n = 1) or zero.
+                            let limit = if n == 1 { at_centre_yukawa } else { T::zero() };
+                            for j in 0..B {
+                                let t = if r[j] > T::zero() {
+                                    jr[j] * inverse[j]
+                                } else {
+                                    limit
+                                };
+                                radial_part[j] = radial_part[j] + dr[j] * value[j];
+                                polar[j] = polar[j] + t * theta[j];
+                                azimuthal[j] = azimuthal[j] + t * phi_sum[j];
+                            }
+                        }
+                        let LeafDirections {
+                            cos_theta: ct,
+                            sin_theta: st,
+                            cos_phi: cp,
+                            sin_phi: sp,
+                        } = *directions;
+                        for j in 0..count {
+                            let (kr, pol, az) = (kappa * radial_part[j], polar[j], azimuthal[j]);
+                            let g = [
+                                kr * (st[j] * cp[j]) + pol * (ct[j] * cp[j]) + az * (-sp[j]),
+                                kr * (st[j] * sp[j]) + pol * (ct[j] * sp[j]) + az * cp[j],
+                                kr * ct[j] + pol * (-st[j]),
+                            ];
+                            let at = base + 3 * (column * n + start + j);
+                            for (axis, g) in g.into_iter().enumerate() {
+                                output.values[at + axis] = output.values[at + axis] + g * e[j];
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
             for v in 0..vectors {
                 let acc = &sums[v * SUMS * degrees..(v + 1) * SUMS * degrees];
                 let row =
@@ -849,6 +972,9 @@ pub struct L2pScratch<T> {
     /// One lane's ĵₙ and ĵₙ′ for complex k.
     one: Vec<Complex<T>>,
     one_derivative: Vec<Complex<T>>,
+    /// One lane's îₙ and îₙ′ on Yukawa's real path.
+    one_real: Vec<T>,
+    one_real_derivative: Vec<T>,
     /// Per vector the [`SUMS`] per-degree sums, p + 1 rows each.
     sums: Vec<[T; B]>,
 }
@@ -869,6 +995,8 @@ impl<T: RealScalar> L2pScratch<T> {
             derivative_im: rows,
             one: vec![zero; degrees],
             one_derivative: vec![zero; degrees],
+            one_real: vec![T::zero(); degrees],
+            one_real_derivative: vec![T::zero(); degrees],
             sums: vec![[T::zero(); B]; SUMS * vectors * degrees],
         }
     }
