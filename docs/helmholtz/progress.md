@@ -5350,7 +5350,7 @@ request, using this template:
   - fmt; Clippy default, examples, workspace; docs.
   - At opt-level 1, `cargo test` 1,464 and `--workspace` 1,508 passed.
   - The MPI list at 2 and 4 ranks passed (`helmholtz_fmm` 51.5 s and 48.6 s).
-  - Opt-level 0: exec's `helmholtz` 119 s at load 4–6 (CH4.9b2 130.1 s); `helmholtz_fmm` DEBUGTIME.
+  - Opt-level 0: exec's `helmholtz` 119 s at load 4–6 (CH4.9b2 130.1 s); `helmholtz_fmm` 936 s at load 2–3.5 (CH4.9b2 967 s).
 
   A self-review by a subagent found no blocking defect. Fixed after it: the V rule's prices on
   Yukawa (the accuracy stages rerun), the far chain's explanation and bound, RCR by pairs on Yukawa, a
