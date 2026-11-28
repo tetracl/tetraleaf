@@ -181,7 +181,7 @@ None.
   - `tetraleaf-math`'s `orthonormal`: 20.5 s (CH4.9b1 22.7 s);
   - `tetraleaf-tables`' `helmholtz`: 44.7 s (CH4.9a2b 44 s);
   - `tetraleaf-exec`'s `helmholtz`: 130.1 s (CH4.9a2b 129 s);
-  - `helmholtz_fmm`: see the PR.
+  - `helmholtz_fmm`: 967 s (CH4.9a2b 951 s, +1.7 %).
 
 Not run:
 - `cargo deny` (no manifest change);

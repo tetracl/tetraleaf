@@ -5243,7 +5243,7 @@ request, using this template:
   - At opt-level 1, `cargo test` 1,441 and `--workspace` 1,488 passed.
   - The MPI list at 2 and 4 ranks passed (`helmholtz_fmm` 55.3 s and 49.4 s).
   - The debug runs at opt-level 0 were unchanged within noise (`orthonormal` 20.5 s, tables'
-    `helmholtz` 44.7 s, exec's `helmholtz` 130.1 s).
+    `helmholtz` 44.7 s, exec's `helmholtz` 130.1 s, `helmholtz_fmm` 967 s against CH4.9a2b's 951 s).
 
   A self-review by a subagent found nothing blocking. Fixed after it:
   - test gaps: f64-subnormal points next to the z-axis, rescaled lanes moved, r² underflow, two
