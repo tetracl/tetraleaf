@@ -26,7 +26,10 @@ point against the reference's parts, before CH4.9b2 builds the L2P kernel on the
      is projected at **0.17–0.24×** of today's in f64 (0.18–0.24× in f32).
    - The sum is then 25–63 % of the projection in f64 (28–70 % in f32), 37–62 % as medians over k̂,
      growing with p: the part CH4.9b2's kernel vectorises.
-4. **Kathleen** (§3): pending (job 673246, queued behind a full partition).
+4. **Kathleen** (§3, one core, the SSE2 baseline): L2P with gradients projected at **0.24–0.27×**
+   in f64 (0.21–0.25× in f32) as medians over k̂. The derivative columns take 0.075–0.100×.
+   The sum is 49–73 % of the projection, at 2.8–3.4 ns per term in either precision, against
+   1.12–1.57 ns on locust: the part CH4.9b2's kernel and its ISA question address.
 5. **A fix to CH4.9a2a's directions** (§4): next to the z-axis, cos φ and sin φ came from a
    subnormal ρ² and lost precision. The values never showed it, but the derivatives of order 1 do.
    The coordinates are now scaled by a power of two there, through a select, so every other point
@@ -69,7 +72,8 @@ point against the reference's parts, before CH4.9b2 builds the L2P kernel on the
     the build before it; no other process of this account was busy. Every launch exited 0.
   - A first locust run on ae26e8f (21:57–22:10, before the self-review's fix to `Lanes::of`) agrees
     within about 1 % per row. It is superseded and kept in `ch4-9b1-v1`.
-  - Kathleen: pending.
+  - Kathleen: job 673246 on node-c11a-016, 2026-11-27 23:53 – 2026-11-28 00:05, on f3d24bc (synced
+    while the job was pending), every launch exit 0.
   - Outputs: `~/projects/fmm-archive/{locust,kathleen}/runs/ch4-9b1/`.
   - Tables: `python3 tools/helmholtz/ch4-9b1-tables.py summary|cases <machine>=<dir>`.
 
@@ -99,7 +103,7 @@ The worst error in units of (n + 1)³ u √((2n + 1)/(4π)) (the values in (n + 
   from 1 to 100 at p = 100 (1.3 to 73 in (n + 1)² units). So (n + 1)³ is the growth: both terms of
   ∂θ are about n |U|, and U carries the recurrence's n² u.
 - The test holds C = 10.
-- In the example's runs the worst "derivatives check" over every case is 0.66 on locust. The example
+- In the example's runs the worst "derivatives check" over every case is 0.66 on both machines. The example
   compares against `harmonics_derivatives` in the run's precision, so in f32 the measure includes
   the reference's own rounding.
 - The radial derivatives (`tests/radial/real.rs`) are `bessel_j`'s derivatives bit for bit in f64
@@ -108,7 +112,7 @@ The worst error in units of (n + 1)³ u √((2n + 1)/(4π)) (the values in (n + 
   - In f32, 7,975 derivatives of the test's grid differ, each beside a flushed value and within
     (n + 1) τ / s, and none is subnormal.
   - In the runs, f32 differs at 5–9,303 derivatives per degree from p = 15 (the column "radial ′
-    differ"), every one so checked, and f64 at none.
+    differ", the same counts on both machines), every one so checked, and f64 at none.
 
 ## 3. Time per point
 
@@ -153,10 +157,47 @@ projection.
   - The sum is restated scalar code. In CH4.9b2's kernel it runs per target over terms, with no
     lane reduction (the roadmap's ISA question).
 
-### Kathleen (Cascade Lake, SSE2 baseline build)
+### Kathleen (Xeon Gold 6248, Cascade Lake; the workspace's SSE2 baseline build)
 
-Pending: job 673246 (`singlenode`, one core, slow nodes excluded; the same stages on f3d24bc).
-Submitted 2026-11-27 21:55; at 22:50 still waiting on a full partition (189 nodes allocated).
+Job 673246, node-c11a-016, `singlenode`, slow nodes excluded, 2026-11-27 23:53 – 2026-11-28 00:05.
+It waited 1 h 55 min on a full partition. The one-minute load was about 1 at a launch's start, the
+run itself, and every launch exited 0. Here the table keeps the two check columns.
+
+| precision | p | L2P ∇ | harmonics ′ | leaf ′ | ÷ | radial ′ | real ′ | ÷ | sum ∇, leaf values | projected | ÷ L2P ∇ | sum share | derivatives check | radial ′ differ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| f64 | 8 | 2.144 | 1.095 | 0.109 | 0.099 | 0.782 | 0.173 | 0.24 | 0.276 | 0.562 | 0.27 | 49 % | 0.64 | 0 |
+| f64 | 12 | 3.549 | 2.119 | 0.197 | 0.093 | 0.822 | 0.172 | 0.23 | 0.529 | 0.903 | 0.26 | 59 % | 0.64 | 0 |
+| f64 | 15 | 4.914 | 3.169 | 0.281 | 0.089 | 0.863 | 0.172 | 0.22 | 0.778 | 1.238 | 0.25 | 63 % | 0.51 | 0 |
+| f64 | 17 | 6.013 | 4.017 | 0.345 | 0.086 | 0.892 | 0.172 | 0.21 | 0.985 | 1.506 | 0.25 | 65 % | 0.53 | 0 |
+| f64 | 19 | 7.229 | 4.941 | 0.415 | 0.084 | 0.930 | 0.178 | 0.21 | 1.213 | 1.810 | 0.25 | 67 % | 0.64 | 0 |
+| f64 | 26 | 12.498 | 8.990 | 0.713 | 0.079 | 1.053 | 0.187 | 0.19 | 2.149 | 3.054 | 0.25 | 70 % | 0.64 | 0 |
+| f64 | 32 | 18.573 | 13.425 | 1.030 | 0.077 | 1.168 | 0.206 | 0.18 | 3.160 | 4.400 | 0.24 | 72 % | 0.59 | 0 |
+| f64 | 41 | 29.140 | 21.645 | 1.618 | 0.075 | 1.348 | 0.225 | 0.17 | 5.030 | 6.886 | 0.24 | 73 % | 0.66 | 0 |
+| f64 | 45 | 34.304 | 25.920 | 1.936 | 0.075 | 1.417 | 0.239 | 0.16 | 5.988 | 8.169 | 0.24 | 73 % | 0.63 | 0 |
+| f32 | 8 | 2.063 | 1.034 | 0.057 | 0.055 | 0.723 | 0.203 | 0.23 | 0.278 | 0.542 | 0.25 | 51 % | 0.51 | 0 |
+| f32 | 12 | 3.457 | 2.129 | 0.109 | 0.051 | 0.766 | 0.199 | 0.22 | 0.537 | 0.848 | 0.24 | 63 % | 0.51 | 0 |
+| f32 | 15 | 4.950 | 3.282 | 0.160 | 0.049 | 0.843 | 0.186 | 0.20 | 0.790 | 1.140 | 0.23 | 69 % | 0.51 | 5 |
+| f32 | 17 | 5.963 | 4.095 | 0.197 | 0.048 | 0.882 | 0.186 | 0.19 | 0.994 | 1.381 | 0.23 | 72 % | 0.59 | 55 |
+| f32 | 19 | 7.167 | 5.094 | 0.240 | 0.047 | 0.897 | 0.188 | 0.19 | 1.223 | 1.654 | 0.23 | 74 % | 0.59 | 205 |
+| f32 | 26 | 12.748 | 9.491 | 0.425 | 0.045 | 1.096 | 0.184 | 0.17 | 2.158 | 2.771 | 0.22 | 78 % | 0.64 | 2256 |
+| f32 | 32 | 18.755 | 13.903 | 0.618 | 0.044 | 1.259 | 0.190 | 0.15 | 3.164 | 3.979 | 0.21 | 79 % | 0.40 | 4383 |
+| f32 | 41 | 30.031 | 22.867 | 0.984 | 0.043 | 1.659 | 0.201 | 0.14 | 5.025 | 6.224 | 0.21 | 81 % | 0.51 | 7845 |
+| f32 | 45 | 36.755 | 27.491 | 1.174 | 0.043 | 2.147 | 0.202 | 0.13 | 5.983 | 7.372 | 0.21 | 81 % | 0.51 | 9303 |
+
+- Over every case the projection is 0.23–0.28× (f64) and 0.20–0.29× (f32) of the reference's L2P
+  with gradients; as medians over k̂, 0.24–0.27× and 0.21–0.25×.
+- The derivative columns take 0.075–0.100× the reference's harmonics with derivatives (f32
+  0.043–0.055×). That is 2.1–2.3× the plain columns (f32 2.5–2.7×), as on locust.
+- The real radial functions with derivatives take 0.16–0.24× the reference's (medians).
+- The sum is the larger part here: 49–73 % of the projection in f64 and 51–81 % in f32 (medians). It
+  costs 2.8–3.4 ns per term in **both** precisions, 2.2–2.5× locust's per degree, against 0.73–0.98 ns (f64) for
+  the batched P2M kernel's sum in the same launches.
+  - On the baseline build (two f64 lanes, no fma) the restated scalar sum gains nothing from f32.
+  - CH4.9b2's kernel sum, per target over terms on 16 lanes, is measured against its floor here
+    (the ISA question).
+- f32: the routines show no slowdown (the derivative columns 0.6× f64's at p = 45). The reference's
+  L2P with gradients is 1.07× slower in f32 than in f64 at p = 45, its harmonics with derivatives
+  1.06×: CH4.9a1's pattern, which the routines avoid.
 
 ## 4. The directions next to the z-axis, and P2M
 

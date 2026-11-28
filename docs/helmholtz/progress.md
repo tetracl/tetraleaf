@@ -5148,17 +5148,19 @@ request, using this template:
     gradients on their values, and the projected L2P with gradients.
   - `tools/helmholtz/ch4-9b1-runs.sh` and `ch4-9b1-tables.py` on `common.py`.
   - Report `tetraleaf-validate/results/helmholtz-ch4-9b1.md`; record `docs/helmholtz/tasks/CH4.9b1.md`.
-- Results (locust 1 core, 16 lanes, f3d24bc; Kathleen pending):
+- Results (one core, 16 lanes, f3d24bc; locust, and Kathleen job 673246 on node-c11a-016):
   - The derivatives are within 0.87 (∂θ) and 0.59 ((1/sin θ) ∂φ) (n + 1)³ u √((2n + 1)/(4π)) of
     `harmonics_derivatives` in f64 to p = 100, and 0.76 and 0.26 in f32 to p = 64. ∂θ's error is
     0.61–0.80 of that unit at every degree of p = 100. The radial derivatives are `bessel_j`'s bits
     in f64.
   - Per point, medians over k̂: the derivative columns take 0.064–0.100× the reference's harmonics
-    with derivatives in f64 (0.056–0.077× in f32), and the radial functions with derivatives
-    0.15–0.23×.
-  - L2P with gradients is projected at 0.17–0.24× (f64 and f32) with the reference's sum restated
-    on the routines' values. The sum is then 37–62 % (f64) and 43–70 % (f32) of the projection, at
-    1.12–1.57 ns per term in f64.
+    with derivatives in f64 on both machines (f32 0.043–0.077×), and the radial functions with
+    derivatives 0.15–0.24×.
+  - L2P with gradients is projected, with the reference's sum restated on the routines' values (f64,
+    medians):
+    - locust: 0.17–0.23×, the sum then 37–62 % of it at 1.12–1.57 ns per term;
+    - Kathleen: 0.24–0.27×, the sum then 49–73 % at 2.8–3.4 ns per term, with no gain from f32 on
+      the SSE2 baseline.
   - The rescale left P2M's kernel within 1 % (ABBA on locust: 1.000× f64, 1.008× f32). The kernel's
     1–4 % against CH4.9a2b's launches is the binary's placement.
 - Tests:
@@ -5183,7 +5185,7 @@ request, using this template:
   A self-review by a subagent found nothing blocking. Fixed: ρ through a subnormal in the rescale,
   the example's gradient sum checked bit for bit against `leaf::l2p`, the record, and the test nits.
   Not run: the rest of the MPI list (no change to exec, plan or octree), `cargo deny` (no manifest
-  change). Pending: Kathleen job 673246 (`parts` on f3d24bc).
+  change). Nothing pending (Kathleen job 673246 ran after 1 h 55 min in the queue).
 - Decisions: the split, by the skill's rule. No questions for sign-off.
 - Laplace: not touched. The additions are in `tetraleaf-math`'s Helmholtz modules (`orthonormal::leaf`,
   `radial`), plus an example, scripts and documents. `tetraleaf-simd` is unchanged, and nothing

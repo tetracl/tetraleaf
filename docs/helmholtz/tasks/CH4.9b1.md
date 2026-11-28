@@ -174,16 +174,28 @@ gradients is left to the sum, which CH4.9b2's kernel and its ISA question read. 
 - Risk: the m = 0 ladder needs order 1 first; a slip there shows in the pole tests.
 
 ## Pending runs
-- Kathleen job 673246 (`run.sbatch`, `singlenode`, 1 h 30, `--exclude=node-c11b-004,node-c11b-013`):
-  the release build of `helmholtz_leaf` on f3d24bc (synced while the job was pending), then
-  `tools/helmholtz/ch4-9b1-runs.sh /scratch/scratch/ucahtbe/fmm/logs/ch4-9b1 smoke parts`.
-  - Submitted 2026-11-27 21:55; at 23:00 still pending (the partition full: 189 nodes allocated).
-  - It decides Kathleen's row of the report §3: the routines and the projection on x86's SSE2
-    baseline build, which CH4.9b2's ISA question reads.
-- Done: locust 22:28–22:41 on f3d24bc (`parts`, every launch exit 0; one-minute load at most 1.21 at
-  a launch's start, from the build) and the rescale's ABBA on locust 22:47–22:58. Superseded: locust
-  21:57–22:10 on ae26e8f (`ch4-9b1-v1`, before the self-review's fix; within about 1 % per row).
-  Outputs in `~/projects/fmm-archive/locust/runs/ch4-9b1{,-v1,-ab}/`.
+None.
+- **Kathleen:** job 673246 (`run.sbatch`, `singlenode`, `--exclude=node-c11b-004,node-c11b-013`) ran on
+  node-c11a-016, 2026-11-27 23:51 – 2026-11-28 00:05, after 1 h 55 min in the queue.
+  - Step 1 was the release build of f3d24bc, synced while the job was pending.
+  - Step 2 was `ch4-9b1-runs.sh smoke parts`; every launch exited 0.
+- **locust:** on f3d24bc 22:28–22:41 (`parts`, every launch exit 0; the one-minute load at most 1.21
+  at a launch's start, from the build), and the rescale's ABBA 22:47–22:58.
+- **Superseded:** locust 21:57–22:10 on ae26e8f (`ch4-9b1-v1`, before the self-review's fix; within
+  about 1 % per row).
+- Outputs in `~/projects/fmm-archive/{kathleen,locust}/runs/ch4-9b1` (locust also `-v1` and `-ab`).
+
+## Results (the report `tetraleaf-validate/results/helmholtz-ch4-9b1.md`)
+- **Accuracy:** the derivatives are within 0.87 and 0.59 (n + 1)³ u √((2n + 1)/(4π)) in f64, 0.76 and
+  0.26 in f32; the radial derivatives are `bessel_j`'s bits in f64.
+- **L2P with gradients projected per point** (medians over k̂):
+  - locust: 0.17–0.23× (f64), 0.18–0.22× (f32);
+  - Kathleen: 0.24–0.27× (f64), 0.21–0.25× (f32).
+- **The derivative columns:** 0.064–0.100× the reference's harmonics with derivatives (f64, both
+  machines).
+- **The sum's share of the projection:** 37–62 % on locust, 49–73 % on Kathleen. It costs 1.12–1.57
+  ns per term on locust and 2.8–3.4 on Kathleen, in either precision there.
+- **The rescale:** P2M's kernel within 1 % (ABBA, locust).
 
 ## Checks run (the M6)
 `/verify` on f3d24bc:
