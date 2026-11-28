@@ -5573,7 +5573,8 @@ request, using this template:
     `HelmholtzFmmBuilder::m2l_tables_everywhere`: the tables before, the tests' trusted path.
   - `tools/helmholtz/ch2-2b1-runs.sh` (`smoke`, `w1`, `w3`; `main`'s binary from `MAIN`, each case
     main, branch, branch, main) and `ch2-2b1-tables.py` (on `common.py`).
-  - Report `tetraleaf-validate/results/helmholtz-ch2-2b1.md`; record `docs/helmholtz/tasks/CH2.2b1.md`.
+  - Report `tetraleaf-validate/results/helmholtz-ch2-2b1.md`; record `docs/helmholtz/tasks/CH2.2b1.md`;
+    PR #278.
 - Results (Kathleen jobs 673308 on node-c11a-058 and 673310 on node-c11b-037, 1 × 40):
   - Bit for bit: every case's four checksums agree (`main` 63a7a4f and the branch).
   - W1 at 10⁶ points under the defaults: every level from 2 takes all 34 classes at kD ≥ 500, so no
