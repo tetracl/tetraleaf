@@ -5491,3 +5491,71 @@ request, using this template:
 - Laplace: not touched (`tetraleaf-tables`' Helmholtz `leaf` module, `tetraleaf-exec`'s Helmholtz
   densities, operator docs and tests, one literal in `helmholtz_leaf`).
 - Follow-ups: none new. Next on the list: CH2.2 (per-level tables with per-level cache keys).
+
+## 2026-11-28: CH2.2a The RCR tables per level in a store
+- Done:
+  - CH2.2 split into CH2.2a (this) and CH2.2b (the M2L families in the store) by the size rule.
+  - `tetraleaf_tables::helmholtz::store`: `TableStore` (a byte cap, LRU by build, ties in key order),
+    each part of a `HelmholtzTables` build keyed by its inputs (translations by the child's k̂ as bits
+    and the two degrees, M2L coaxial tables by k̂_l, q_l and |d|², y-blocks by degree and polar key);
+    `HelmholtzTables::{build_in, set_m2l_blocks_in, build_report, level_bytes}`, `TableBuild` and
+    `LevelBuild` (per level parts built and reused, thread-seconds, bytes); the levels hold parts by
+    `Arc`.
+  - `HelmholtzOperator::{with_table_store, with_table_store_option, table_store, table_build}`,
+    `HelmholtzFmmBuilder::table_store(TableStores)` (one store per precision), `HelmholtzFmm::table_build`.
+  - Harness: `Case::table_store`, `Row::{table_levels, table_store_bytes}`, `--table-store MB`, `--kim`
+    as a list, the table "RCR tables by level".
+  - `tools/helmholtz/ch2-2a-runs.sh` (`smoke`, `real`, `rotation`, `yukawa`, `repeat`) and
+    `ch2-2a-tables.py` (on `common.py`).
+  - Report `tetraleaf-validate/results/helmholtz-ch2-2a.md`; record `docs/helmholtz/tasks/CH2.2a.md`.
+- Results (Kathleen jobs 673293 and 673295 on node-c11b-046, 673294 on node-c11a-012, 1 × 40):
+  - Bit for bit: the 16 checksums with a store equal the storeless launches'.
+  - An octave on W1 at 10⁶ points reuses every RCR part of levels 3–6. Built per warm octave: 23 of
+    246–295 parts at kD 500 and 1000 under the defaults; for Yukawa, 21 of 344.
+  - The RCR tables' wall time of a warm octave is 0.88–0.94× the cold one at kD 500–1000 (defaults and
+    Rotation), the build 0.96–1.00×: the new level 2 holds 77–80 % of the RCR thread-seconds.
+  - The same k again (kD = 1000): the build 0.66× (4.17 s against 6.28 s), the RCR tables 0 s.
+  - Yukawa's RCR tables cost about 1 ms at 10⁻⁶ (p = 15 on every level): nothing to save.
+  - Memory: 1,842 MB of RCR tables at kD = 1000 (1,319 MB on level 2), the store 1.69 GB after the
+    sweep; Yukawa 6.6 MB per FMM.
+  - Finding: under the defaults at kD ≥ 500 every level takes all 34 classes on the diagonal form, yet
+    its RCR M2L tables are built, never read (most of 2.0 s of a 6.0 s build at kD = 1000).
+- Tests:
+  - `tetraleaf-tables/tests/helmholtz/store.rs` (10): cold and warm against `build_by` through every
+    application (`to_bits`; real, complex, Yukawa, f32; `Serial` and 3 threads), the octave, another
+    k and another degree at one store (raised M2L degrees too), blocks shared by degree,
+    `set_m2l_blocks_in`, the cap (0, LRU across builds, below one build, the same on every run), two
+    threads sharing a store. A key without k̂ fails 5 tests, one without the M2L degree fails 1.
+  - `tetraleaf-exec/tests/helmholtz/build.rs`: the operator with a store (Rotation, Auto at 10⁻⁶,
+    Yukawa; cold, warm, k doubled), pair bodies bit for bit; `TableStores` per precision.
+  - `tests/helmholtz_fmm.rs`, `check_table_store`: the sphere and Yukawa's clusters, the defaults and
+    Rotation cold and warm (2 threads) and Rotation at k doubled, each the storeless output bit for
+    bit, levels ≥ 3 reused on every rank.
+  - `tetraleaf-validate/tests/helmholtz_accuracy.rs`, `check_table_store`: W1 at 3,000 points, kD 15
+    then 30.
+- Checks: `/verify` on the M6.
+  - fmt; Clippy default, examples, workspace; docs.
+  - At opt-level 1, `cargo test` 1,487 and `--workspace` 1,534 passed (before the self-review's
+    commit, which adds tests only; those passed apart).
+  - The MPI list at 2 and 4 ranks passed (`helmholtz_fmm` 72.5 s and 108.5 s); `helmholtz_fmm` at one
+    rank 54 s (CH2.1e 58 s).
+
+  A self-review by a subagent found no blocking defect. Fixed after it: tests of the M2L key's degree
+  and raised M2L degrees, a cap below one build and `TableStores` with an f32 operator; a doc comment
+  moved back; the harness's store caveat; the tables script.
+
+  Not run:
+  - The opt-level 0 debug timings: the M6 was at load 21–25 with another project's tests. The tables'
+    `helmholtz` took 41.9 s before the last three store tests (CH2.1e 43 s).
+  - `cargo deny`: no manifest change.
+  - Laplace's benchmarks: no Laplace path.
+  - locust and the M6 timings.
+- Decisions: questions for sign-off (#PR):
+  1. The on-disk store of §6.3: recommended none for now, §6.3 amended to the in-memory store;
+     alternative a CH2.2c.
+  2. The RCR M2L tables the diagonal form never reads: recommended an Also on CH2.2b (written on the
+     branch); alternative a task in H4 off the list.
+- Laplace: not touched (`tetraleaf-tables`' Helmholtz module, the Helmholtz operator and builder,
+  the harness; Laplace's `TableCache` unchanged).
+- Follow-ups: CH2.2b (its line gains the Also of question 2); the §6.3 amendment or CH2.2c by
+  question 1.
