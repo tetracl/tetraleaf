@@ -26,7 +26,8 @@ and the build by ring); Helmholtz CH4.6a1
 (`Conversions::{s2f_modes, f2r_modes}`, the conversions' halves around the φ step); Helmholtz
 CH4.9a2b (`helmholtz::leaf`, the batched P2M of a leaf); Helmholtz CH4.9b2 (`helmholtz::leaf`'s
 `LeafL2p`, the batched L2P with gradients); Helmholtz CH2.1a (Yukawa's real RCR and dense M2L
-tables in `helmholtz` and `helmholtz::dense`); Helmholtz CH2.1c (`LeafP2m` on Yukawa).
+tables in `helmholtz` and `helmholtz::dense`); Helmholtz CH2.1c (`LeafP2m` on Yukawa); Helmholtz
+CH2.1e (`LeafL2p` on Yukawa).
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.
@@ -337,6 +338,18 @@ tables in `helmholtz` and `helmholtz::dense`); Helmholtz CH2.1c (`LeafP2m` on Yu
   C u e Σₙ wₙ Sₙ (|k| (((n + 1)² + 2n + 3)|ĵₙ′| + |x||ĵₙ|) + ((n + 1)³ + n(n + 1)) tₙ)) with C = 10
   (1.9 measured in f64 to p = 45, 1.3 in f32 against the f64 reference to p = 32, on the M6), and
   the bits above, accumulation, the refusals. No `mul_add`, no allocation in `l2p` (`L2pScratch`).
+  Since Helmholtz CH2.1e (docs/helmholtz/tasks/CH2.1e.md; the module docs, "L2P") `LeafL2p` also
+  restates `l2p_yukawa` (k = iκ): îₙ and îₙ′ by `modified_i` per lane at the reference's length, e =
+  e^{κr − β} per lane, the three flushed below τ as P2M's, the per-degree sums per real plane, the
+  reference's real degree loop with κ and the centre's limit κ/(3s); `LeafOutput::planes` (the output
+  columns per vector: 2, or 1 on Yukawa's real path, `LeafL2p::planes`), each real local into its own
+  column (complex charges: Re q's into 2v, Im q's into 2v + 1, each the one-plane kernel's bits). Real
+  and complex k's arithmetic unchanged (their outputs hashed bit for bit against `main` at the
+  change). `tests/helmholtz/l2p_yukawa.rs` holds each output to the module docs' Yukawa contract
+  (CH4.9b2's with ĵ → î, k → κ and e's condition x = κr added) with C = 10 (1.9 measured in f64 to
+  p = 45 and κ̂ to 250; 0.6 in f32 to p = 32 and κ̂ 60, beside the f32 level's rounding, held apart),
+  the bits (vectors, columns, positions, leaves of 1/16/40, with and without gradients),
+  accumulation, the refusals.
 - Matrices are column-major with output = A · input. Every application accumulates
   (+=), and none applies 1/(4π) (§3.1).
 - Builds are deterministic: the same inputs give bit-identical tables and cache files.

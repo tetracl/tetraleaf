@@ -978,6 +978,13 @@ CH4.9b2 (the batched P2M and L2P, below).
   Yukawa's kernel within 1e-13 like the others and its complex vectors as two real ones bit for bit
   under the kernel; `check_leaf_kernel` runs on Yukawa's three scenarios (1.0000×, outputs within
   4.1e-16 on the M6). `helmholtz_fmm` at one rank, opt-level 1: 52 s on the M6.
+  Since Helmholtz CH2.1e (docs/helmholtz/tasks/CH2.1e.md; tetraleaf-validate/results/helmholtz-ch2-1e.md)
+  Yukawa's L2P runs the kernel too (`LeafL2p` restates `l2p_yukawa`; `l2p_kernel`'s fall-back gone, a
+  kind check added, `LeafOutput::planes` the path's local planes), so `leaves_batched` covers both
+  leaf kernels on every kind. `tests/helmholtz/densities.rs` checks Yukawa's batched L2P within 1e-13
+  like the others and its complex vectors as two real ones bit for bit; `check_leaf_kernel` on
+  Yukawa's three scenarios covers L2P (1.0000×, outputs within 4.1e-16 on the M6). `helmholtz_fmm` at
+  one rank, opt-level 1: 58 s on the M6.
 - Yukawa (Helmholtz CH2.1b; the `helmholtz::operator` module docs, "Yukawa";
   docs/helmholtz/tasks/CH2.1b.md; tetraleaf-validate/results/helmholtz-ch2-1b.md): k = iκ on the same
   level calls with `tetraleaf_tables::helmholtz`'s one-plane real tables (CH2.1a). Each real charge
@@ -986,7 +993,7 @@ CH4.9b2 (the batched P2M and L2P, below).
   (`Kernel::{multipole_columns, local_columns}`; the real and complex paths pass their planes and m
   as before); P2L `leaf::p2l_yukawa` and M2P `leaf::m2p_yukawa` per column, P2P
   `P2pKernel::evaluate_yukawa` per column (`p2p::p2p_yukawa` under `Reference`), P2M and L2P
-  `Densities`' reference calls (P2M the batched kernel since CH2.1c, above). M2L: Rotation and Dense (`DenseM2l::select_for` with one local
+  `Densities`' reference calls (P2M the batched kernel since CH2.1c, L2P since CH2.1e, above). M2L: Rotation and Dense (`DenseM2l::select_for` with one local
   plane); `Auto` runs Rotation on every level (`max_degree` and `plane_wave_min_degree` `None`), no
   level takes the waves (`wave_levels` gives none for Re k = 0) or the diagonal form, whatever
   `HelmholtzDiagonal` says (proposal §5.5); Batched, Classes and PlaneWave panic in `with_m2l` and
