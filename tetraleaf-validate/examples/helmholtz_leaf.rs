@@ -61,7 +61,8 @@
 //!   L2P with gradients first ("L2P kernel check": the largest difference over the largest value,
 //!   of the potentials and of the gradients, the larger), its times over the reference's and the
 //!   projection's, and "∇ kernel sum": the kernel with gradients less the routines' parts (the
-//!   derivative columns, the radial functions with derivatives, the factor's `exp`), in ns per term
+//!   derivative columns, the radial functions with derivatives, and for complex k the factor's `exp`
+//!   per point; for real k the kernel forms it once per call), in ns per term
 //!   and in GFLOP/s by the sum's operation count, (p + 1) (12.5 p + 8) per target
 //!   (`l2p_sum_flops`), the ISA question's measure against the build's peak.
 //!
@@ -1022,9 +1023,11 @@ fn main() {
             let projected_gradient =
                 leaf.derivative_columns + radial_derivatives + t.exp + t.sum_gradient_leaf;
             // The L2P kernel with gradients less its routines' parts: its sum (with the
-            // directions, the degree loop and the output).
+            // directions, the degree loop and the output). The factor's `exp` per point only for
+            // complex k: for real k the kernel forms it once per call.
+            let exp = if arguments.kim == 0.0 { 0.0 } else { t.exp };
             let kernel_sum =
-                t.l2p_kernel_gradient - (leaf.derivative_columns + radial_derivatives + t.exp);
+                t.l2p_kernel_gradient - (leaf.derivative_columns + radial_derivatives + exp);
             println!(
                 "| {p} | {khat} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.2} | {:.1} | {} \
                  | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.1} | {:.3} | {:.3} | {} | {} \

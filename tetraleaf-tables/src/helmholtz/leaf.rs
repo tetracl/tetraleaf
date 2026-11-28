@@ -91,7 +91,7 @@
 //! potentials with gradients are the potentials without them bit for bit (the same columns, whose
 //! values are [`LeafHarmonics::columns`]' bits).
 //!
-//! Against the reference the values agree to a contract per target (`tests/helmholtz/leaf.rs`): with
+//! Against the reference the values agree to a contract per target (`tests/helmholtz/l2p.rs`): with
 //! wₙ = √((2n + 1)/(4π)), Sₙ = Σₘ |L̂ₙᵐ|, x = kr and tₙ = |ĵₙ(x)|/r (its limit at r = 0),
 //!
 //! ```text

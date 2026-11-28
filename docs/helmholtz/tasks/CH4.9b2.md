@@ -83,7 +83,7 @@ from its floor on x86), the f32 sum (CH4.9a2b §6), `reference_leaves` reused fo
 ## Tests that prove it
 - `tetraleaf-math/tests/orthonormal/leaf.rs`: `LeafDirections::of` on the poles, the centre and a
   rescaled direction (the values the harmonics use; existing contracts unchanged).
-- `tetraleaf-tables/tests/helmholtz/leaf.rs` (L2P), against `leaf::l2p` per target:
+- `tetraleaf-tables/tests/helmholtz/l2p.rs`, against `leaf::l2p` per target:
   - the contract (f64), with w_n = √((2n + 1)/(4π)), Sₙ = Σₘ |L̂ₙᵐ|, x = k r, tₙ = |ĵₙ|/r (the limit
     at r = 0):
     |Δφ| ≤ C u e Σₙ wₙ Sₙ (((n + 1)² + 2n + 1) |ĵₙ| + |x| |ĵₙ′|),

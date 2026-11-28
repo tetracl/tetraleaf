@@ -27,12 +27,14 @@ fn locals(p: usize, vectors: usize, seed: u64) -> Vec<f64> {
 }
 
 /// The targets of a leaf of n: `points`' (the centre, the poles, near-pole points, the axes and
-/// a corner for an even seed), with two points next to the z-axis (squares below the normal
-/// range) in place of the last two random ones when n ≥ 12.
+/// a corner for an even seed), with three points next to the z-axis in place of the last three
+/// random ones when n ≥ 12: x² + y² below the normal range in f64 for the first two, and in f32
+/// (where the first two round to the z-axis) for the third.
 fn targets(n: usize, seed: u64) -> Vec<[f64; 3]> {
     let mut x = points(n, seed);
     if n >= 12 {
-        x[n - 2] = [1e-160, 0.0, 1.0];
+        x[n - 3] = [1e-160, 0.0, 1.0];
+        x[n - 2] = [-1e-160, 1e-160, -0.5];
         x[n - 1] = [-1e-40, 1e-40, -0.5];
     }
     x
@@ -311,7 +313,8 @@ fn a_targets_bits_do_not_depend_on_the_leaf_or_the_vectors() {
         let full = kernel::<f64>(p, k, &x, l1, 1, true);
         let potentials = kernel::<f64>(p, k, &x, l1, 1, false);
         assert_eq!(bits(&full[..2 * n]), bits(&potentials), "k = {k}");
-        for i in [0, 5, 17, 39] {
+        // The centre, two random targets and the three next to the z-axis.
+        for i in [0, 5, 17, 37, 38, 39] {
             for size in [1, LANES, 40] {
                 // Target i at position `size − 1`, the others shifted.
                 let mut leaf: Vec<[f64; 3]> = x
@@ -333,6 +336,34 @@ fn a_targets_bits_do_not_depend_on_the_leaf_or_the_vectors() {
             }
         }
     }
+}
+
+/// Targets whose r² underflows to zero although they are not the centre: the kernel takes the
+/// centre's path (the tangential limit, ĵ at 0) where the reference's r > 0, which agree to
+/// rounding; and the centre itself alone and among others.
+#[test]
+fn targets_whose_squares_underflow() {
+    let u = f64::EPSILON / 2.0;
+    let x = [
+        [1e-170, 0.0, 0.0],
+        [0.0, -3e-170, 2e-170],
+        [4e-200, 1e-190, -2e-180],
+        [0.0; 3],
+        [0.3, -0.2, 0.5],
+    ];
+    let mut most: f64 = 0.0;
+    for p in [0, 1, 2, 8, 17] {
+        for &(re, im) in &KS {
+            let k = Complex::new(re, im);
+            let l = locals(p, 2, p as u64);
+            for gradients in [false, true] {
+                most = most.max(worst::<f64>(p, k, &x, &l, 2, gradients, u, 0.0));
+            }
+            let one = locals(p, 1, 7);
+            most = most.max(worst::<f64>(p, k, &x[3..4], &one, 1, true, u, 0.0));
+        }
+    }
+    println!("L2P where r² underflows: worst {most:.3} of the contract's u units (C = {C})");
 }
 
 #[test]
@@ -484,6 +515,47 @@ fn a_small_scratch_is_refused() {
         LeafOutput {
             values: &mut out,
             vectors: 1,
+            gradients: false,
+        },
+    );
+}
+
+#[test]
+#[should_panic(expected = "above the kernel's")]
+fn a_degree_above_the_kernels_is_refused() {
+    let p = 4;
+    let level = Level::new(Complex::new(2.0, 0.0), 1.0);
+    let l = vec![0.0; 2 * Layout::new(p).len()];
+    let mut out = vec![0.0; 2];
+    LeafL2p::<f64>::new(p - 1).l2p(
+        p,
+        &level,
+        &[[0.1, 0.2, 0.3]],
+        &l,
+        &mut L2pScratch::new(p, 1),
+        LeafOutput {
+            values: &mut out,
+            vectors: 1,
+            gradients: false,
+        },
+    );
+}
+
+#[test]
+#[should_panic(expected = "0 charge vectors")]
+fn no_vectors_are_refused() {
+    let p = 4;
+    let level = Level::new(Complex::new(2.0, 0.0), 1.0);
+    let mut out = vec![0.0; 0];
+    LeafL2p::<f64>::new(p).l2p(
+        p,
+        &level,
+        &[[0.1, 0.2, 0.3]],
+        &[],
+        &mut L2pScratch::new(p, 1),
+        LeafOutput {
+            values: &mut out,
+            vectors: 0,
             gradients: false,
         },
     );

@@ -145,6 +145,30 @@ def med(rows, key):
     return statistics.median(float(r[key]) for r in rows)
 
 
+def flops(p):
+    """The L2P kernel's sum with gradients per target, `helmholtz_leaf`'s `l2p_sum_flops`."""
+    return (p + 1) * (12.5 * p + 8)
+
+
+def kernel_sum(row, p):
+    """The L2P kernel with gradients less its routines' parts, µs per point, from the raw columns:
+    the derivative columns and the real radial functions with derivatives (the reference's radial
+    functions and the factor's `exp` per point for complex k, where "real radial ′ µs" is "–"). For
+    real k the kernel forms the factor once per call, so its `exp` is not subtracted; the example's
+    "∇ kernel sum" column subtracted it before the self-review's fix, so it is recomputed here."""
+    real = common.number(row["real radial ′ µs"])
+    parts = float(row["leaf columns ′ µs"])
+    parts += real if real is not None else float(row["radial ′ µs"]) + float(row["exp µs"])
+    return float(row["L2P ∇ kernel µs"]) - parts
+
+
+def sums(rows, p):
+    """Medians over the rows: the kernel sum µs, ns per term, GFLOP/s."""
+    s = [kernel_sum(r, p) for r in rows]
+    return (statistics.median(s), statistics.median(1e3 * x / (p + 1) ** 2 for x in s),
+            statistics.median(flops(p) / (1e3 * x) for x in s))
+
+
 def parts(out):
     print("| precision | p | L2P ∇ µs, reference | ∇ kernel µs | ÷ reference | ÷ projected "
           "| ∇ kernel sum µs | sum share | sum ns per term | sum GFLOP/s "
@@ -154,13 +178,14 @@ def parts(out):
           "| ---: |")
     for precision in ("f64", "f32"):
         for p, rows in launches_of(out, f"parts-{precision}").items():
-            ker, ks = med(rows, "L2P ∇ kernel µs"), med(rows, "∇ kernel sum µs")
+            ker = med(rows, "L2P ∇ kernel µs")
+            ks, ns, gf = sums(rows, p)
             ls = med(rows, "sum ∇, leaf values µs")
             check = max(float(r["L2P kernel check"]) for r in rows)
             print(f"| {precision} | {p} | {med(rows, 'L2P ∇ µs'):.3f} | {ker:.3f} | "
                   f"{med(rows, '∇ kernel ÷ L2P ∇'):.3f} | {med(rows, '∇ kernel ÷ projected'):.2f} | "
-                  f"{ks:.3f} | {ks / ker:.2f} | {med(rows, '∇ kernel sum ns per term'):.3f} | "
-                  f"{med(rows, '∇ kernel sum GFLOP/s'):.2f} | {ls:.3f} | {ks / ls:.2f} | "
+                  f"{ks:.3f} | {ks / ker:.2f} | {ns:.3f} | "
+                  f"{gf:.2f} | {ls:.3f} | {ks / ls:.2f} | "
                   f"{med(rows, 'L2P kernel ÷ L2P'):.3f} | {check:.1e} |")
     print()
     print("Medians over k̂ ∈ {0.5, 2, 4, 8, 16} (the ratios the medians of each k̂'s ratio); "
@@ -177,10 +202,10 @@ def native(out):
     for p in sorted(set(base) & set(nat)):
         b, n = base[p], nat[p]
         kb, kn = med(b, "L2P ∇ kernel µs"), med(n, "L2P ∇ kernel µs")
-        sb, sn = med(b, "∇ kernel sum ns per term"), med(n, "∇ kernel sum ns per term")
+        (_, sb, gb), (_, sn, gn) = sums(b, p), sums(n, p)
         pb, pn = med(b, "P2M kernel µs"), med(n, "P2M kernel µs")
         print(f"| {p} | {kb:.3f} | {kn:.3f} | {kn / kb:.2f} | {sb:.3f} | {sn:.3f} | {sn / sb:.2f} "
-              f"| {med(b, '∇ kernel sum GFLOP/s'):.2f} | {med(n, '∇ kernel sum GFLOP/s'):.2f} | "
+              f"| {gb:.2f} | {gn:.2f} | "
               f"{pb:.3f} | {pn:.3f} | {pn / pb:.2f} |")
     print()
     print("f64, medians over k̂; \"native\" the same source built with `-C target-cpu=native`.")
@@ -192,6 +217,11 @@ def selftest():
     assert total(levels, 0) == 2.0 and total(levels, 1) == 1.0
     assert mean([1.0, 3.0]) == 2.0
     assert med([{"x": "1"}, {"x": "3"}, {"x": "2"}], "x") == 2.0
+    row = {"L2P ∇ kernel µs": "1.0", "leaf columns ′ µs": "0.25", "real radial ′ µs": "0.25",
+           "radial ′ µs": "9", "exp µs": "9"}
+    assert kernel_sum(row, 1) == 0.5
+    assert kernel_sum({**row, "real radial ′ µs": "–", "radial ′ µs": "0.2", "exp µs": "0.05"}, 1) == 0.5
+    assert flops(0) == 8 and flops(2) == 99
     print("selftest passed")
 
 
