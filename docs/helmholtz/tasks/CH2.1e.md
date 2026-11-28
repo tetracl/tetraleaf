@@ -119,10 +119,26 @@ The M6 is not timed.
 - Risk: f32 îₙ′ subnormal near the centre at large n; flushed below τ as îₙ.
 
 ## Pending runs
-- Kathleen: one `run.sbatch` job (`singlenode`, `--exclude=node-c11b-004,node-c11b-013`, 2 h): the
-  release build of `helmholtz_accuracy`, then `tools/helmholtz/ch2-1e-runs.sh
-  /scratch/scratch/ucahtbe/fmm/logs/ch2-1e/acc smoke accuracy worst` and `… /time levels`. Decides
-  the 1.01× and ε on CH2.1b's 114 cases, the constant density, and L2P's time per level.
+None. Kathleen job 673289 (`run.sbatch`, `singlenode`, `--exclude=node-c11b-004,node-c11b-013`) on
+node-c11b-046, 2026-11-28 14:56–15:02, after 1 s in the queue: the release build of f5656e8, then
+`tools/helmholtz/ch2-1e-runs.sh … smoke accuracy worst` and `… levels`; all 114 launches exit 0.
+Outputs in `~/projects/fmm-archive/kathleen/runs/ch2-1e/` (`acc`, `time`, the job's log).
+
+## Results (the report `tetraleaf-validate/results/helmholtz-ch2-1e.md`)
+- The contract per target: 1.94 of C = 10 in f64 (p ≤ 45, κ̂ ≤ 250), 0.64 in f32 against the f64
+  reference beside the terms held apart; 0.22 where r² underflows, 0.18 next to the centre in f32.
+- The FMM: 114 of 114 of CH2.1b's cases within ε (at most 0.267 ε), the batched leaves' errors
+  1.0000× the reference leaves' in every case, with complex charges and on the constant density;
+  the tests 1.0000×, outputs within 4.1·10⁻¹⁶.
+- L2P per level 0.21–0.28× (Kathleen 1 × 40), from 14–22 % of an evaluation to 3.7–6.5 %; the
+  evaluation with both leaf kernels 0.77–0.89×.
+
+## Self-review
+A subagent (plan, proposal §2 and §10, the branch) found no blocking defect. Fixed after it: the
+stale doc comments of `SUMS` and `L2pScratch`, the flush's absolute bound in the module docs (it
+holds for the FMM's O(1) stored locals), an f32 case next to the centre (r² subnormal or zero), the
+hash comparison and the runs recorded here. Left as noted: the position and leaf bit tests run one
+plane and one vector (each column is the one-plane call's bits, checked apart); f32 runs one vector.
 
 ## Bits of real and complex k
 Real and complex k's L2P is `main`'s bit for bit: a scratch test (not committed) hashed `LeafL2p`'s
