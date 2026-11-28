@@ -123,8 +123,59 @@ None: tables against the reference on the M6, no timing.
 - The real and complex tables must keep their bits: the Yukawa branches are separate entries of
   the same closures; checked by hash.
 
+## Results (the M6, debug builds; `cargo test -p tetraleaf-tables --test helmholtz yukawa -- --nocapture`)
+
+All in the FMM-weighted measure per unit of conditioning max(1, |k̂| a), against `BOUND` = 2e-13:
+
+| Check | κ̂₀ = 0.01 | 2 | 40 |
+| --- | --- | --- | --- |
+| M2L, 316 offsets of levels 2–4, against `rcr::m2l_yukawa` | 6.7e-15 | 6.1e-15 | 1.7e-16 |
+| M2M and L2L, 8 octants, degrees [2, 6, 9, 4, 7] | 4.2e-16 | 3.4e-16 | 9.1e-17 |
+| the same within raised M2L degrees [2, 8, 12, 4, 10] | 4.0e-16 | 3.4e-16 | 9.1e-17 |
+| Dense against Rotation, levels 2–4 | 1.2e-15 | 1.0e-15 | 1.3e-16 |
+
+- Strong damping, level 2 at degree 10: κ̂₀ = 160 (κ̂ a ≈ 69) M2L 9.1e-16 relative to the output
+  (1.3e-32 relative to the input), M2M and L2L 1.6e-17; κ̂₀ = 400 (κ̂ a ≈ 173) 1.3e-15 (1.8e-56),
+  7.1e-18. The tables cancel as `rcr` does, so the test holds the output measure, stricter than the
+  plan's input measure.
+- Dense against `rcr` on a sample (κ̂₀ = 8, level 3, p = 9): 3.7e-15.
+- f32 tables against f64 (κ̂₀ = 5, M2L on 316 offsets, M2M and L2L on 8 octants): 8.3e-7 (14 u of
+  f32) against 100 u. The per-degree measure of `main.rs`'s `f32_tables` (1e-5 of a degree's largest
+  value) gave 1.2e-5 on one offset, where that degree's Yukawa output cancels, and at most 9.8e-7 on
+  the others, so the test takes the file's weighted measure.
+- Bit for bit: two vectors against one, stored blocks against per-call, the contribution and its add
+  against `m2l`, the build on the reversed three-thread map against the serial build (every
+  application), Dense's columns against Rotation's M2L of e_j, f32 Dense the f64 matrices rounded.
+- Real and complex k unchanged: `cargo test -p tetraleaf-tables --release --test helmholtz
+  print_the_hashes -- --ignored --nocapture` gave the same lines on `main` (72bcf40) and on the branch
+  (5d0ea4e, after the self-review's fixes):
+
+  ```
+  k̂₀ = 120 + 6i: d99e3221b99a61e3 (294592 values)
+  k̂₀ = 120 + 0i: 71223dfc2b0eba4f (260368 values)
+  k̂₀ = 6 + 0.5i: 1520f647ee9b88bd (161704 values)
+  matrices k̂₀ = 6 + 0.5i: e8f14c144df269a6 (13811472 values)
+  matrices k̂₀ = 120 + 0i: 9218603869fc1abd (45518112 values)
+  plane waves k̂₀ = 40 + 0i, ε = 1e-6: bc43acd5206e0682 (93546813 bytes)
+  plane waves k̂₀ = 40 + 0i, ε = 1e-8: 2b62dea0a7d6d982 (145218063 bytes)
+  plane waves k̂₀ = 20 + 2i, ε = 1e-6: 38d11660252af3c9 (60995968 bytes)
+  plane waves k̂₀ = 20 + 2i, ε = 1e-8: b9419e1bdc4071ca (104096315 bytes)
+  ```
+- `tests/helmholtz/main.rs`' `yukawa_is_refused`, which held the refusal this task removes, is
+  replaced by `yukawa.rs`' `other_wavenumbers_are_still_refused` (the remaining refusals, each by its
+  guard's message, in `HelmholtzTables` and `DenseM2l`).
+- The helmholtz test executable's debug run (opt-level 0): 41.4 s with 163 tests (the Yukawa module
+  about 4 s of it), under the crate's minute.
+
+## Self-review
+A subagent (plan, proposal §2 and §10, the branch) found no blocking defect in the code; its one
+blocking item was the hash check without recorded values (above). Fixed after it: Yukawa's M2M and
+L2L refuse two planes as its M2L does; `DenseM2l` checks k̂₀ with no dense level; the refusals by
+their guards' messages; f32 Yukawa tables tested; a debug assertion on Dense's one-plane matrix size;
+a stale doc line in `plane_wave::pair`.
+
 ## Pending runs
 None.
 
 ## Open questions
-None yet.
+None: no question for sign-off (D4 is CH2.1b's).

@@ -9,10 +9,10 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-28): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). Item 14, the leaf
-expansions: CH4.9a1–CH4.9b1 merged; CH4.9b2 (L2P by the batched kernel; the evaluation 0.77–0.94× of
-the one before CH4.9a–b on Kathleen and locust) is done in its PR, its ISA question signed off (no ISA
-kernel), and waits for the merge.
-Next H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and so does CH4.9c.
+expansions, is complete (CH4.9a1–CH4.9b2 merged). Item 15, Yukawa on the host: CH2.1 split into
+CH2.1a–c; CH2.1a (Yukawa's real RCR and dense M2L tables) is done in its PR and waits for the merge;
+CH2.1b (the operator and FMM, D4 for sign-off) next. Eight H4 tasks stay open off the list, and so
+does CH4.9c.
 The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0,
 CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in
 `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G
@@ -23,7 +23,8 @@ dc69cd4:docs/helmholtz/roadmap.md`; until CH4.6a1 in `git show 34e3caf:docs/helm
 until CH4.6a2 in `git show 7c8177d:docs/helmholtz/roadmap.md`; until CH4.9a1 in `git show
 9758028:docs/helmholtz/roadmap.md`; until CH4.9a2a in `git show a62c5b9:docs/helmholtz/roadmap.md`;
 until CH4.9a2b in `git show 9401720:docs/helmholtz/roadmap.md`; until CH4.9b1 in `git show
-c2ccf51:docs/helmholtz/roadmap.md`; until CH4.9b2 in `git show 2a65aa1:docs/helmholtz/roadmap.md`.
+c2ccf51:docs/helmholtz/roadmap.md`; until CH4.9b2 in `git show 2a65aa1:docs/helmholtz/roadmap.md`;
+until CH2.1a in `git show 72bcf40:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -345,22 +346,19 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   Split on 2026-11-28 into CH2.1a–c by `/next-task`'s size rule (tables in `tetraleaf-tables`, the
   operator and FMM in `tetraleaf-exec` with runs on three workloads, and the batched P2M);
   CH2.1 is done when all three are:
-- [ ] **CH2.1a Yukawa's RCR and dense M2L tables.** `tetraleaf_tables::helmholtz::HelmholtzTables`
-  for k̂₀ = iκ̂₀: one real plane per expansion, real M2M, L2L and M2L with `rcr`'s `_yukawa` stored
-  form folded in; `DenseM2l` as one real n × n matrix per offset; Batched and Classes refuse
-  Yukawa. *Done when:* M2M and L2L on the 8 octants and M2L on the 316 offsets against
-  `tetraleaf_ref::helmholtz::rcr`'s `_yukawa` forms within the real and complex tables' bound
-  (2e-13 max(1, |k̂| a) in the FMM-weighted measure) from κ̂ a ≈ 10⁻³ to the strongly damped
-  levels, rectangular and raised degrees included; Dense against Rotation pair by pair; vectors,
-  stored blocks, contributions and the build in parts bit for bit; real and complex k's tables
-  bit for bit as before (by hash). *Needs:* CH2.0, D12.
+- [x] **CH2.1a Yukawa's RCR and dense M2L tables.** Record: `docs/helmholtz/tasks/CH2.1a.md`.
+  `HelmholtzTables` and `DenseM2l` build Yukawa's real tables (one plane); against `rcr`'s `_yukawa`
+  forms within 6.7e-15 per unit of conditioning (bound 2e-13), κ̂ a 10⁻³ to 173; real and complex
+  tables `main`'s hashes. No sign-off.
 - [ ] **CH2.1b The Yukawa operator and FMM.** `HelmholtzOperator` and `HelmholtzFmmBuilder` accept
   Yukawa: Rotation and Dense M2L on CH2.1a's tables, P2L and M2P by `tetraleaf_ref`'s `_yukawa`
   forms, P2P by `P2pKernel::evaluate_yukawa`, the leaves per point. *Done when:* CH2.1's: the FMM
   against the direct sum on W1, W3 and W4 for κD from 10⁻² to 10³ (the errors reported; within
   target is CH2.3's); deterministic (threads, chunks, the one-rank FMM bit for bit); real and
   complex k's output bit for bit as before; D4 put for sign-off with the complex path's time before
-  and after. *Needs:* CH2.1a. *Sign-off:* D4.
+  and after. Also (from CH2.1a): `BatchedM2l` and `ClassM2l` refuse Yukawa, so `Auto` on Yukawa
+  chooses among Rotation and Dense unless this task adds their one-plane tables (say which).
+  *Needs:* CH2.1a. *Sign-off:* D4.
 - [ ] **CH2.1c Yukawa's batched P2M.** CH2.1's Also: `LeafP2m` for Yukawa as it restates `p2m`,
   `p2m_yukawa` restated, `Densities::p2m_kernel` on it. *Done when:* its contract as CH4.9a2b's, the
   FMM's errors within 1.01× the per-point path's. *Needs:* CH2.1b.

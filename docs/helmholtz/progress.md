@@ -5259,3 +5259,53 @@ request, using this template:
   rename and `pub` of a Helmholtz type in `tetraleaf-math`, and nothing Laplace runs calls it.
 - Follow-ups: none (question 1 took the recommendation, so no CH4.9d). Item 14 is complete; next
   CH2.1 (item 15).
+
+## 2026-11-28: CH2.1a Yukawa's RCR and dense M2L tables
+- Done:
+  - CH2.1 split into CH2.1a–c by the skill's size rule: the tables, then the operator and FMM with
+    the W1, W3 and W4 runs and D4, then the batched P2M. All three lines are in the roadmap, and D4's
+    "Prepared by" names CH2.1b.
+  - `tetraleaf_tables::helmholtz::HelmholtzTables` for k̂₀ = iκ̂₀ builds Yukawa's real tables
+    (`is_yukawa`, `local_planes` 1). M2M, L2L and M2L are the real parts of `rcr`'s `_yukawa`
+    coefficients (i^{n−n′} Ê; i^{n′−n} Ê ½; −i^{n+n′} Ê 4πκ e^{2β − κ|t|}), formed in f64 as `rcr`
+    forms them and rounded once. The existing real step applies them. Every Yukawa application
+    takes one plane, and two are refused.
+  - `DenseM2l`: one real n × n matrix per offset, with `local_planes`, `level_bytes_for` and
+    `select_for`; `level_bytes` and `select` are the two-plane case, unchanged. It checks k̂₀ even
+    with no dense level.
+  - `BatchedM2l` and `ClassM2l` refuse Yukawa.
+  - The module docs gain a "Yukawa" section; `tetraleaf-tables/CLAUDE.md` is updated. Record:
+    `docs/helmholtz/tasks/CH2.1a.md`.
+- Tests: `tetraleaf-tables/tests/helmholtz/yukawa.rs`, on the M6, in the FMM-weighted measure per
+  unit of conditioning (bound 2e-13):
+  - Against `rcr`'s `_yukawa` forms at κ̂₀ = 0.01, 2, 40 (κ̂ a 10⁻³–17): M2L on 316 offsets
+    ≤ 6.7e-15; M2M and L2L on 8 octants with rectangular and raised degrees ≤ 4.2e-16.
+  - Strong damping, κ̂ a 69 and 173, where outputs are 10⁻¹⁶ and 10⁻⁴¹ of their inputs:
+    ≤ 1.3e-15 relative to the output. The tables cancel as `rcr` does.
+  - Dense against Rotation ≤ 1.2e-15, and against `rcr` 3.7e-15.
+  - f32 against f64: 8.3e-7 (14 u).
+  - Bit for bit: vectors, stored blocks, contributions, the build in parts, Dense's columns.
+  - The refusals, each by its guard's message.
+  - `main.rs`' `yukawa_is_refused` (the refusal this task removes) is replaced by
+    `other_wavenumbers_are_still_refused`.
+- Checks: `/verify` on the M6.
+  - fmt; Clippy default, examples, workspace; docs.
+  - At opt-level 1, `cargo test` 1,458 and `--workspace` 1,502 passed.
+  - The MPI list passed at 2 and 4 ranks (`helmholtz_fmm` 49.5 s and 47.5 s).
+  - `print_the_hashes` gave `main`'s hashes for real and complex k on the branch (the record lists
+    them).
+  - The helmholtz executable's debug run is 41.4 s (the Yukawa module about 4 s of it).
+
+  A self-review by a subagent found no blocking defect in the code; it asked for the hashes on
+  record, and they are now there. Fixed after it: M2M and L2L refuse two planes for Yukawa,
+  `DenseM2l` checks k̂₀, the refusals are checked by message, f32 tests were added, and a stale doc
+  line was corrected.
+
+  Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path: only the
+  Helmholtz module of `tetraleaf-tables` changed, and Laplace's tables, layouts and cache are
+  untouched). Nothing pending.
+- Decisions: the split, by the skill's rule. No questions for sign-off.
+- Laplace: not touched (the change is confined to `tetraleaf-tables`' `helmholtz` module and its
+  tests).
+- Follow-ups: CH2.1b next, with an Also on its line: Batched and Classes refuse Yukawa, so `Auto` on
+  Yukawa chooses among Rotation and Dense unless CH2.1b adds their one-plane tables.
