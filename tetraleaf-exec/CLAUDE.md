@@ -947,7 +947,7 @@ CH4.9b2 (the batched P2M and L2P, below).
   docs/helmholtz/tasks/CH4.9a2b.md; tetraleaf-validate/results/helmholtz-ch4-9a2b.md): the P2P choice
   also chooses P2M: under every ISA (`Auto` included) a leaf's P2M is `Densities::p2m_kernel`, one
   call of `tetraleaf_tables::helmholtz::leaf::LeafP2m` (safe Rust without ISA dispatch, the same
-  bits on every ISA of a machine; Yukawa keeps the reference), under `P2pChoice::Reference` the
+  bits on every ISA of a machine; Yukawa kept the reference until CH2.1c), under `P2pChoice::Reference` the
   per-point `Densities::p2m`, the trusted path; `HelmholtzOperator::with_reference_leaves`
   (`reference_leaves`, `p2m_batched`) and `HelmholtzFmmBuilder::reference_leaves` (a measurement
   and test setting) give the reference's P2M whatever the P2P kernel. `LeafScratch::with_vectors`
@@ -971,6 +971,12 @@ CH4.9b2 (the batched P2M and L2P, below).
   second call bit for bit, Yukawa the reference's bits); `check_leaf_kernel` and `check_kernels`
   now cover both kernels (1.0000× the reference leaves' errors, outputs within 2.3e-16 on the M6).
   Its cost: `helmholtz_fmm` at one rank, opt-level 1, 55.8 s on the M6.
+  Since Helmholtz CH2.1c (docs/helmholtz/tasks/CH2.1c.md; tetraleaf-validate/results/helmholtz-ch2-1c.md)
+  Yukawa's P2M runs the kernel too (`LeafP2m` restates `p2m_yukawa`; `p2m_kernel`'s fall-back gone),
+  its L2P still the reference's (`leaves_batched` says so). `tests/helmholtz/densities.rs` checks
+  Yukawa's kernel within 1e-13 like the others and its complex vectors as two real ones bit for bit
+  under the kernel; `check_leaf_kernel` runs on Yukawa's three scenarios (1.0000×, outputs within
+  4.1e-16 on the M6). `helmholtz_fmm` at one rank, opt-level 1: 52 s on the M6.
 - Yukawa (Helmholtz CH2.1b; the `helmholtz::operator` module docs, "Yukawa";
   docs/helmholtz/tasks/CH2.1b.md; tetraleaf-validate/results/helmholtz-ch2-1b.md): k = iκ on the same
   level calls with `tetraleaf_tables::helmholtz`'s one-plane real tables (CH2.1a). Each real charge
@@ -979,7 +985,7 @@ CH4.9b2 (the batched P2M and L2P, below).
   (`Kernel::{multipole_columns, local_columns}`; the real and complex paths pass their planes and m
   as before); P2L `leaf::p2l_yukawa` and M2P `leaf::m2p_yukawa` per column, P2P
   `P2pKernel::evaluate_yukawa` per column (`p2p::p2p_yukawa` under `Reference`), P2M and L2P
-  `Densities`' reference calls. M2L: Rotation and Dense (`DenseM2l::select_for` with one local
+  `Densities`' reference calls (P2M the batched kernel since CH2.1c, above). M2L: Rotation and Dense (`DenseM2l::select_for` with one local
   plane); `Auto` runs Rotation on every level (`max_degree` and `plane_wave_min_degree` `None`), no
   level takes the waves (`wave_levels` gives none for Re k = 0) or the diagonal form, whatever
   `HelmholtzDiagonal` says (proposal §5.5); Batched, Classes and PlaneWave panic in `with_m2l` and
