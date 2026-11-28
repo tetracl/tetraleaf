@@ -134,7 +134,63 @@ from its floor on x86), the f32 sum (CH4.9a2b §6), `reference_leaves` reused fo
 - Risk: the contract's form is new (the gradient's terms); it may need a term, as P2M's did.
 
 ## Pending runs
-(filled at step 6)
+None.
+- **Kathleen:** job 673257 (`run.sbatch`, `singlenode`, `--exclude=node-c11b-004,node-c11b-013`) ran on
+  node-c11b-046, 2026-11-28 00:47–01:13, after 1 s in the queue.
+  - Its steps were the release build of cddcd8a, the `-C target-cpu=native` build, and
+    `ch4-9b2-runs.sh smoke levels worst parts native`. Every launch exited 0.
+- **locust:** the same commit, the same stages, 00:49–01:08, every launch exiting 0. The start was
+  gated on a one-minute load below 2.
+- The self-review's fixes (cb02854) came after both runs. They change no kernel arithmetic. The
+  tables script recomputes `helmholtz_leaf`'s "∇ kernel sum", which subtracted the per-point `exp`
+  for real k, from the raw columns.
+- Outputs are in `~/projects/fmm-archive/{kathleen,locust}/runs/ch4-9b2/`.
+
+## Results (the report `tetraleaf-validate/results/helmholtz-ch4-9b2.md`)
+- **Per target:** within the contract, with C = 10 in the tests. The worst measured is 1.9 (f64, to
+  p = 45) and 1.3 (f32, to p = 32), and 0.17 where r² underflows. The centre, the z-axis rescale,
+  and real, complex and tiny k are all covered.
+- **FMM:** errors are 0.993–1.000× the reference leaves' on CH4.6a2's cases and on W1's and W2's
+  constant density at kD = 500, on both machines. In the tests they are 1.0000×, with the outputs
+  within 2.3·10⁻¹⁶.
+- **L2P per run:** 0.19–0.23× the reference on Kathleen and 0.17–0.27× on locust, at every leaf level.
+- **The evaluation before and after CH4.9a–b:** 0.77–0.94× on Kathleen and 0.82–0.94× on locust.
+  P2M + L2P fall from 11–30 % of an evaluation to 2.9–7.7 % on Kathleen, and from 9–22 % to
+  2.0–4.4 % on locust.
+- **Per point** (f64, medians over k̂): the kernel with gradients is 0.15–0.24× the reference on
+  Kathleen and 0.14–0.22× on locust, which is 0.68–0.87× and 0.82–0.94× CH4.9b1's projection.
+- **The ISA question:** the baseline sum runs at 4.9–8.0 GFLOP/s on Kathleen and 9.1–15.5 on locust.
+  That is within about 2–3× of the baseline's peak, so not far from its floor.
+  - `-C target-cpu=native` halves the sum on Kathleen (L2P kernel 0.56–0.67×, P2M kernel
+    0.73–0.77×) and gains 5–10 % on locust.
+  - An ISA kernel would therefore save 0.9–2.9 % and 0.1–0.4 % of an evaluation. Recommended: no ISA
+    kernel (question 1).
+- **f32:** the L2P kernel is 0.55–0.78× its f64 time, with no slowdown. P2M's f32 kernel is
+  0.69–0.92×, as CH4.9a2b reported.
+
+## Checks run (the M6)
+`/verify`:
+- fmt; Clippy default, examples and `--workspace --all-targets`; `cargo doc` with `-D warnings`.
+- At opt-level 1, `cargo test` (1,441 passed) and `cargo test --workspace` (1,488 passed), on
+  7a5b8e0. The self-review's three new tests were run after it with
+  `cargo test -p tetraleaf-tables --test helmholtz l2p` (12 passed) and Clippy on both crates.
+- The MPI list at 2 and 4 ranks through `run-mpi-tests.sh`: every executable passed, `helmholtz_fmm`
+  in 55.3 s and 49.4 s.
+- `helmholtz_fmm` at one rank, opt-level 1: 55.8 s (CH4.9a2b 53 s).
+- The one-rank debug runs at opt-level 0, at load 5–7:
+  - `tetraleaf-math`'s `orthonormal`: 20.5 s (CH4.9b1 22.7 s);
+  - `tetraleaf-tables`' `helmholtz`: 44.7 s (CH4.9a2b 44 s);
+  - `tetraleaf-exec`'s `helmholtz`: 130.1 s (CH4.9a2b 129 s);
+  - `helmholtz_fmm`: see the PR.
+
+Not run:
+- `cargo deny` (no manifest change);
+- Laplace's benchmarks (no Laplace path: the new code is in Helmholtz modules, and `LeafDirections`
+  is a rename and `pub` of a Helmholtz type).
 
 ## Open questions
-(filled when they arise)
+For sign-off on the PR (the report §8):
+1. The ISA question.
+   - Recommended: no ISA kernel for the leaf sums; the question closes.
+   - Alternative: a follow-up CH4.9d off the list, the two sums as `tetraleaf-simd` kernels.
+   - Alternative: that kernel now.

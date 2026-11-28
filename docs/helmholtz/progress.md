@@ -5192,3 +5192,70 @@ request, using this template:
   Laplace runs calls `LeafHarmonics` or `bessel_j_real`.
 - Follow-ups: CH4.9b2, with an Also on its line: the restated sum's share and cost per term, the
   part its kernel vectorises.
+
+## 2026-11-28: CH4.9b2 L2P with gradients by the kernel
+- Done:
+  - `tetraleaf_tables::helmholtz::leaf::{LeafL2p, L2pScratch, LeafOutput}`: a leaf's L2P with and
+    without gradients for every vector in one call, 16 targets per batch.
+    - It runs on `LeafHarmonics::{columns, derivative_columns}`, `bessel_j_real(_derivatives)` for real
+      k and `bessel_j` per lane for complex k.
+    - The per-degree sums take the terms of ±m together (A = c⁺ cos mφ + c⁻ sin mφ,
+      B = c⁻ cos mφ − c⁺ sin mφ), then the reference's degree loop runs per lane, with the centre's
+      limit k/(3s) by a select.
+    - The Cartesian gradient uses `LeafDirections`: `tetraleaf-math`'s lane directions, made public,
+      with no value changed.
+    - No lane reduction, safe Rust, no `tetraleaf-simd` change; Yukawa refused.
+  - `tetraleaf-exec`: `Densities::l2p_kernel`; L2P follows the P2P choice as P2M does.
+    `p2m_batched` became `leaves_batched`, and `reference_leaves` gives the reference's P2M and L2P.
+  - The harness's `Row::leaves_batched` (`/ref-leaves`); `helmholtz_leaf` times the L2P kernel and its
+    sum (ns per term, GFLOP/s by (p + 1)(12.5 p + 8)).
+  - `tools/helmholtz/ch4-9b2-runs.sh` (`smoke`, `levels`, `worst`, `parts`, `native`) and
+    `ch4-9b2-tables.py` on `common.py`.
+  - Report `tetraleaf-validate/results/helmholtz-ch4-9b2.md`; record `docs/helmholtz/tasks/CH4.9b2.md`.
+- Results (Kathleen job 673257 on node-c11b-046, 1 × 40; locust 1 × 72; one leaf setting per launch,
+  ABBA):
+  - Per target: within C = 10 of the contract. The worst measured is 1.9 (f64 to p = 45) and 1.3
+    (f32 to p = 32).
+  - FMM: errors are 0.993–1.000× the reference leaves' on CH4.6a2's cases and on W1's and W2's
+    constant density at kD = 500. In the tests they are 1.0000×, with the outputs within 2.3·10⁻¹⁶.
+  - L2P per run: 0.19–0.23× (Kathleen) and 0.17–0.27× (locust).
+  - The evaluation before and after CH4.9a–b: 0.77–0.94× and 0.82–0.94×. P2M + L2P fall from 11–30 %
+    to 2.9–7.7 % of an evaluation (Kathleen) and from 9–22 % to 2.0–4.4 % (locust).
+  - Per point, f64: the kernel with gradients is 0.15–0.24× and 0.14–0.22× the reference, which is
+    0.68–0.87× and 0.82–0.94× CH4.9b1's projection.
+  - The ISA question:
+    - The baseline sum runs at 4.9–8.0 GFLOP/s (Kathleen) and 9.1–15.5 (locust), within 2–3× of the
+      baseline's peak.
+    - `-C target-cpu=native` halves it on Kathleen (L2P kernel 0.56–0.67×, P2M kernel 0.73–0.77×)
+      and gains 5–10 % on locust.
+    - An ISA kernel would save 0.9–2.9 % and 0.1–0.4 % of an evaluation.
+  - f32: the L2P kernel is 0.55–0.78× f64 with no slowdown; P2M's f32 is as CH4.9a2b reported.
+- Tests:
+  - `tetraleaf-tables/tests/helmholtz/l2p.rs`: the contract in f64 and f32, targets whose r²
+    underflows, and bits across positions, leaves of 1/16/40, vectors and with/without gradients.
+    Also accumulation, a larger scratch, and seven refusals.
+  - `tetraleaf-math/tests/orthonormal/leaf.rs`: `LeafDirections` within 4 u of the `hypot` angles
+    (2 u measured), and exact at the specials.
+  - `tetraleaf-exec/tests/helmholtz/densities.rs`: `the_batched_l2p_is_the_reference_to_rounding`.
+  - `check_leaf_kernel` and `check_kernels` in `helmholtz_fmm` now cover both kernels.
+- Checks: `/verify` on the M6.
+  - fmt; Clippy default, examples, workspace; docs.
+  - At opt-level 1, `cargo test` 1,441 and `--workspace` 1,488 passed.
+  - The MPI list at 2 and 4 ranks passed (`helmholtz_fmm` 55.3 s and 49.4 s).
+  - The debug runs at opt-level 0 were unchanged within noise (`orthonormal` 20.5 s, tables'
+    `helmholtz` 44.7 s, exec's `helmholtz` 130.1 s).
+
+  A self-review by a subagent found nothing blocking. Fixed after it:
+  - test gaps: f64-subnormal points next to the z-axis, rescaled lanes moved, r² underflow, two
+    refusals;
+  - the contract's test file in the docs;
+  - `helmholtz_leaf`'s sum subtracting `exp` for real k (recomputed by the tables script).
+
+  Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path).
+- Decisions: question 1 for sign-off, the ISA question. Recommended: no ISA kernel; the question
+  closes.
+- Laplace: not touched. The additions are a new kernel in `tetraleaf-tables`' Helmholtz module and
+  Helmholtz code in `tetraleaf-exec`, plus the harness, scripts and documents. `LeafDirections` is a
+  rename and `pub` of a Helmholtz type in `tetraleaf-math`, and nothing Laplace runs calls it.
+- Follow-ups: none unless question 1 takes the alternative (then CH4.9d off the list). Item 14 is
+  complete; next CH2.1 (item 15).
