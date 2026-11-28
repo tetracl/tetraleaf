@@ -5309,3 +5309,59 @@ request, using this template:
   tests).
 - Follow-ups: CH2.1b next, with an Also on its line: Batched and Classes refuse Yukawa, so `Auto` on
   Yukawa chooses among Rotation and Dense unless CH2.1b adds their one-plane tables.
+
+## 2026-11-28: CH2.1b The Yukawa operator and FMM
+- Done:
+  - `HelmholtzOperator` accepts Yukawa (k = iκ) on CH2.1a's one-plane tables; `OperatorError::Yukawa`
+    is gone.
+    - Each real charge column is one real vector of one plane (m with real charges, 2m with complex,
+      `Densities`' storage value for value): M2M, L2L, RCR's M2L (by boxes and by pairs) and Dense
+      take one plane and c m vectors (`Kernel::{multipole_columns, local_columns}`).
+    - P2L `leaf::p2l_yukawa` and M2P `leaf::m2p_yukawa` per column, P2P `P2pKernel::evaluate_yukawa`
+      per column (`p2p::p2p_yukawa` under `Reference`); P2M and L2P `Densities`' reference calls.
+    - M2L Rotation and Dense; Auto runs Rotation on every level (`max_degree`,
+      `plane_wave_min_degree` `None`), no waves (`wave_levels` none for Re k = 0) and no diagonal
+      form on any level; `with_m2l` panics under Batched, Classes and PlaneWave.
+  - `HelmholtzFmmBuilder` accepts Yukawa; Batched, Classes and PlaneWave named are
+    `HelmholtzFmmError::YukawaM2l`; the V rule prices Yukawa's Auto levels at Rotation's cost.
+  - `tetraleaf-validate`: `Workload::W1n` (W1's sphere at a fixed N, `w1:<n>`);
+    `tools/helmholtz/ch2-1b-runs.sh` and `ch2-1b-tables.py` on `common.py`.
+  - Report `tetraleaf-validate/results/helmholtz-ch2-1b.md`; record `docs/helmholtz/tasks/CH2.1b.md`.
+- Results (Kathleen jobs 673276–673280 on node-c11b-046, 1 × 40 unless named):
+  - The acceptance: within ε in all 114 cases (W1, W3, W4; κD = 10⁻²–10³; 10⁻³–10⁻⁸), at most 0.27 ε.
+    The degrees are the rule's plateau at every κ; CH2.3 calibrates.
+  - Deterministic: checksums equal at 1 × 1, 1 × 40 and 4 × 10.
+  - Real and complex k: `main`'s checksums in 12 of 12 pairs and in every timing launch.
+  - D4's time: evaluation branch/main 0.991–1.040 (gmean 1.015) on default builds, 0.947–1.035
+    (1.003) with `-align-loops=64`; ranges overlap in every case: no cost measured.
+- Tests:
+  - `tetraleaf-exec/tests/helmholtz/operator.rs`: the Yukawa chains against the direct sum at κD =
+    0.01–100 (the far chain at κD = 100 held to its round-off, 3e-6: the expansion's cancellation
+    under strong damping, CH2.3's G3), complex charges bit for bit two real vectors, Dense within
+    1e-14 of Rotation, the refusals, the reference's `_yukawa` chains within 2e-13, P2P bit for bit
+    `p2p_yukawa`; each vector the one-vector operator on Yukawa.
+  - `tests/helmholtz/p2p.rs`: Yukawa on every ISA, f64 and f32.
+  - `tests/helmholtz_fmm.rs`: `yukawa_scenarios` (cube at κD = 1 with rank 0 empty, clusters at κD = 30
+    with complex charges, cube at κD = 0.01 at degree 8) through `check`, `check_vectors` and
+    `check_yukawa` (Auto Rotation's bits, the library's defaults, complex charges as two real vectors),
+    `check_kernels`, `check_tables` (Dense), `check_rcr_split`; `check_errors` the refused M2L.
+  - `tetraleaf-validate`: `W1n`'s unit test; `tests/helmholtz_accuracy.rs` two Yukawa cases.
+- Checks: `/verify` on the M6.
+  - fmt; Clippy default, examples, workspace; docs.
+  - At opt-level 1, `cargo test` 1,464 and `--workspace` 1,508 passed.
+  - The MPI list at 2 and 4 ranks passed (`helmholtz_fmm` 51.5 s and 48.6 s).
+  - Opt-level 0: exec's `helmholtz` 119 s at load 4–6 (CH4.9b2 130.1 s); `helmholtz_fmm` 936 s at load 2–3.5 (CH4.9b2 967 s).
+
+  A self-review by a subagent found no blocking defect. Fixed after it: the V rule's prices on
+  Yukawa (the accuracy stages rerun), the far chain's explanation and bound, RCR by pairs on Yukawa, a
+  real-charge checksum case, doc fixes.
+
+  Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path); locust and the
+  M6 timings (one machine class; the change has no ISA-dependent part).
+- Decisions: questions 1 and 2 of #274 signed off 2026-11-28 (the user: "Q1 and Q2 as
+  recommended"): D4, one operator with the kind a field resolved at build (proposal §5.5, §6.3 and
+  §12 amended, Appendix A); CH2.1d on the priority list in item 15 after CH2.3.
+- Laplace: not touched (Helmholtz code of `tetraleaf-exec` and `tetraleaf-validate` only; `driver.rs`,
+  `pipeline.rs`, `tetraleaf-tables`, `tetraleaf-simd`, `tetraleaf-plan`, `tetraleaf-octree` unchanged).
+- Follow-ups: CH2.1d (Yukawa's Batched, Classes, exponential M2L and Auto; roadmap line added);
+  CH2.1c next (Yukawa's batched P2M).

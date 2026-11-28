@@ -1,6 +1,7 @@
 //! The Helmholtz FMM (Helmholtz CH3.1b; docs/design/helmholtz-fmm-proposal.md §6.1–§6.3;
 //! CONVENTIONS §3.15): [`HelmholtzFmmBuilder`] and [`HelmholtzFmm`], for real and complex
-//! k with real and complex charges, on any number of ranks, RCR on every level.
+//! k and Yukawa (Helmholtz CH2.1b) with real and complex charges, on any number of ranks, RCR
+//! on every level.
 //!
 //! # Build
 //!
@@ -9,7 +10,8 @@
 //! "Several ranks"), with the Helmholtz operator in place of Laplace's:
 //!
 //! 1. the settings, the thread pool, finite points and the supplied domain, agreed on
-//!    every rank; Yukawa (Re k = 0) is refused here, as its path is Helmholtz CH2.1's;
+//!    every rank; on Yukawa (Re k = 0, Helmholtz CH2.1b) an M2L without Yukawa tables
+//!    (Batched, Classes, PlaneWave) is refused here ([`HelmholtzFmmError::YukawaM2l`]);
 //! 2. whether any rank has a point;
 //! 3. the domain, the supplied one or the bounding box of every rank's points, with every
 //!    point strictly inside it;
@@ -137,7 +139,7 @@ use super::{
 };
 use crate::fmm::{FmmError, PointSet, SettingsError};
 use crate::geometry::{Domain, radius};
-use crate::helmholtz::operator::{WaveSettings, wave_levels};
+use crate::helmholtz::operator::{WaveSettings, wave_levels, yukawa_serves};
 use crate::operator::{Isa, MulAdd, P2pChoice, SimdScalar};
 use crate::pipeline::{
     self, Points, check_finite, gather_output, load_source_charges, pack_charges,
@@ -225,9 +227,13 @@ pub enum HelmholtzFmmError {
     /// The degrees could not be resolved.
     #[error("the degrees: {0}")]
     Degree(#[from] DegreeError),
-    /// The operator refused k (Yukawa) or its inputs.
+    /// The operator refused its inputs.
     #[error("the operator: {0}")]
     Operator(#[from] OperatorError),
+    /// The M2L named has no Yukawa tables (Helmholtz CH2.1b): Yukawa runs Rotation and Dense,
+    /// and Auto as Rotation (the operator module documentation, "Yukawa").
+    #[error("Yukawa runs Rotation and Dense M2L only (Auto as Rotation), not {0:?}")]
+    YukawaM2l(HelmholtzM2l),
     /// The charges of an evaluation do not fit the build.
     #[error("the charges: {0}")]
     Charges(#[from] DensityError),
@@ -1018,8 +1024,8 @@ impl HelmholtzFmmBuilder {
 
     /// The settings' own errors, checked on every rank before any collective.
     fn check_settings(&self) -> Result<(), HelmholtzFmmError> {
-        if self.k.kind() == WavenumberKind::Yukawa {
-            return Err(OperatorError::Yukawa.into());
+        if self.k.kind() == WavenumberKind::Yukawa && !yukawa_serves(self.m2l) {
+            return Err(HelmholtzFmmError::YukawaM2l(self.m2l));
         }
         let settings = if self.max_level > DEEPEST {
             Some(SettingsError::MaxLevelTooDeep {
@@ -1090,7 +1096,7 @@ impl HelmholtzFmmBuilder {
     ///
     /// # Errors
     ///
-    /// The settings' errors ([`HelmholtzFmmError::Operator`] for Yukawa,
+    /// The settings' errors ([`HelmholtzFmmError::YukawaM2l`],
     /// [`HelmholtzFmmError::LeafWidth`], [`HelmholtzFmmError::Degree`],
     /// [`HelmholtzFmmError::Build`] with a `SettingsError`), a point that is not finite or
     /// outside the supplied domain, no point on any rank, and the errors of the shared
@@ -1332,6 +1338,10 @@ impl HelmholtzFmmBuilder {
                         (HelmholtzM2l::PlaneWave, wave_degree(l))
                     } else {
                         let cheapest = match self.m2l {
+                            // Yukawa's Auto is Rotation (Helmholtz CH2.1b).
+                            HelmholtzM2l::Auto if self.k.kind() == WavenumberKind::Yukawa => {
+                                HelmholtzM2l::Rotation
+                            }
                             HelmholtzM2l::Auto if p <= max_degree as usize => HelmholtzM2l::Batched,
                             HelmholtzM2l::Auto | HelmholtzM2l::PlaneWave => HelmholtzM2l::Rotation,
                             m2l => m2l,
@@ -2540,8 +2550,9 @@ where
     }
 
     /// The agreed crossover degree under [`HelmholtzM2l::Auto`]
-    /// ([`HelmholtzFmmBuilder::m2l_max_degree`]), `None` under the other settings; the
-    /// operator's `m2l_on` gives each level's M2L.
+    /// ([`HelmholtzFmmBuilder::m2l_max_degree`]), `None` under the other settings and on
+    /// Yukawa, whose Auto is Rotation (Helmholtz CH2.1b); the operator's `m2l_on` gives each
+    /// level's M2L.
     pub fn m2l_max_degree(&self) -> Option<usize> {
         self.operator().max_degree()
     }

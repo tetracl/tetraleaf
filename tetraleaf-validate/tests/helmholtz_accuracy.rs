@@ -17,7 +17,8 @@
 //! exponential M2L (Helmholtz CH6.1e): under the precision rule within
 //! [`PLANE_WAVE_RATIO`] of Rotation's errors on small cases of CH3.1c's matrix, each level's
 //! precision in the row, within ε at 1 and 2 threads and on one rank, and Rotation's output
-//! below the rule's tolerance.
+//! below the rule's tolerance. Yukawa (Helmholtz CH2.1b) through `check_fmm` on W1's sphere at a
+//! fixed N and on W4's Plummer sphere.
 //!
 //! One test initialises MPI (at `Funneled`); it passes on any number of ranks, each check
 //! on every rank or on none.
@@ -681,6 +682,27 @@ fn helmholtz_accuracy_harness() {
     w4.charges = ChargeKind::Real;
     w4.gradients = false;
     check_fmm(&world, &w4);
+    // Yukawa (Helmholtz CH2.1b): W1's sphere at 2,000 points at κD = 10, two real vectors with
+    // gradients, under the library's Auto (Rotation on Yukawa); W4's Plummer sphere at κD = 0.1
+    // with complex charges.
+    let mut yukawa = case(
+        Workload::W1n { n: 2000 },
+        (0.0, 10.0),
+        Degrees::Tolerance(1e-6),
+    );
+    yukawa.charges = ChargeKind::Real;
+    yukawa.vectors = 2;
+    yukawa.m2l = HelmholtzM2l::Auto;
+    check_fmm(&world, &yukawa);
+    let plummer = case(
+        Workload::W4 {
+            distribution: Distribution::Plummer,
+            n: 2000,
+        },
+        (0.0, 0.1),
+        Degrees::Tolerance(1e-3),
+    );
+    check_fmm(&world, &plummer);
     check_auto(&world);
     check_plane_wave(&world);
     check_calibration_scan(&world);

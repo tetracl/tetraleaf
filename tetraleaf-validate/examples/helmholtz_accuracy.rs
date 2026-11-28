@@ -13,7 +13,8 @@
 //!
 //! Options (each value may be a comma-separated list where marked):
 //!
-//! - `--workload w`: `w1` (default), `w2`, `w3` (ten points per wavelength), `w3:<n>`,
+//! - `--workload w`: `w1` (default), `w1:<n>` (W1's sphere at n points, for Yukawa: Helmholtz
+//!   CH2.1b), `w2`, `w3` (ten points per wavelength), `w3:<n>`,
 //!   `w4-<cube|sphere|plummer|clusters>:<n>`;
 //! - `--kd x,…`: Re kD (default 10); `--kim y`: Im kD (default 0);
 //! - `--eps e,…`: the tolerances (default 1e-3); `--degree p` names p on every level
@@ -359,6 +360,7 @@ fn workload(name: &str, kd: f64) -> Option<Workload> {
             "w3" => Some(Workload::w3_resolved(kd)),
             _ => None,
         },
+        Some(("w1", n)) => Some(Workload::W1n { n: count(n)? }),
         Some(("w3", n)) => Some(Workload::W3 { n: count(n)? }),
         Some((w4, n)) => Some(Workload::W4 {
             distribution: Distribution::from_name(w4.strip_prefix("w4-")?)?,
@@ -394,7 +396,7 @@ fn arguments() -> Arguments {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || -> ! {
         eprintln!(
-            "usage: helmholtz_accuracy [--workload w1|w2|w3|w3:<n>|w4-<distribution>:<n>] \
+            "usage: helmholtz_accuracy [--workload w1|w1:<n>|w2|w3|w3:<n>|w4-<distribution>:<n>] \
              [--kd x,…] [--kim y] [--eps e,…|--degree p] [--charges real|complex] \
              [--density random|planewave|constant] [--vectors m] [--samples n] [--no-gradients] [--threads t,…] \
              [--oracle-threads t] [--rule calibrated|ch3-3|ch4-3c2|ch4-3c3|s7] [--p2p auto|reference|<isa>,…] [--leaves kernel|reference] \

@@ -14,7 +14,9 @@
 //! - ∇φ: Σ_j (66 + 12 |k̂| r_j + 2 n_s) u_T |q_j| (1 + |k̂| r_j) e^{−Im k̂ r_j} / r_j²,
 //!
 //! in the target leaf's units (k̂ = k r_t). `Isa::Scalar` is the reference bit for bit, and
-//! `Auto` is `Isa(Isa::detect())` bit for bit.
+//! `Auto` is `Isa(Isa::detect())` bit for bit. Yukawa (Helmholtz CH2.1b: k = iκ,
+//! `P2pKernel::evaluate_yukawa` against `p2p::p2p_yukawa` per real column) is held to the same
+//! bounds, which contain CH2.4b's (20 + 12 κ̂ r) u_T and (52 + 12 κ̂ r) u_T.
 
 use mpi::traits::Equivalence;
 use tetraleaf_exec::geometry::{self, Domain, radius};
@@ -249,10 +251,12 @@ fn every_isa<T: SimdScalar + Equivalence + Default>(pb: &Problem) {
             );
         }
         let mut worst = (0.0f64, 0.0f64);
+        // Two output parts per vector, one on Yukawa's real path.
+        let parts = d.output_columns() / pb.m;
         for v in 0..pb.m {
             for i in 0..n {
                 let (phi, grad) = pb.bounds(i, v);
-                for part in 0..2 {
+                for part in 0..parts {
                     let o = d.output_column(v, part);
                     let index = d.potential_index(n, o, i);
                     let diff = (output[index].to_f64() - reference[index].to_f64()).abs();
@@ -295,12 +299,21 @@ fn every_isa<T: SimdScalar + Equivalence + Default>(pb: &Problem) {
     );
 }
 
-/// Real k (Re k̂ r to about 53, beyond the leaf rule's 22 c_leaf at c_leaf = 1) and complex
-/// k, real and complex charges, f64 and f32; two vectors with gradients, one vector with
-/// and without.
+/// Real k (Re k̂ r to about 53, beyond the leaf rule's 22 c_leaf at c_leaf = 1), complex k and
+/// Yukawa (κ̂ r to about 53), real and complex charges, f64 and f32; two vectors with
+/// gradients, one vector with and without.
 #[test]
 fn every_isa_within_the_contract() {
-    for (re, im) in [(1.0, 0.0), (30.0, 3.0), (128.0, 0.0), (128.0, 16.0)] {
+    let ks = [
+        (1.0, 0.0),
+        (30.0, 3.0),
+        (128.0, 0.0),
+        (128.0, 16.0),
+        (0.0, 1.0),
+        (0.0, 30.0),
+        (0.0, 128.0),
+    ];
+    for (re, im) in ks {
         for kind in [ChargeKind::Real, ChargeKind::Complex] {
             for (m, gradients) in [(2, true), (1, true), (1, false)] {
                 let k = Wavenumber::new(re, im).unwrap();

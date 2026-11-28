@@ -232,7 +232,7 @@ CH4.9b2 (the batched P2M and L2P, below).
   `DegreeRule::CH4_3C3`, `DegreeRule::CH4_3C2` and `DegreeRule::CH3_3` the rules before, kept for
   the runs before and after)
   and `HelmholtzOperator` for real and complex k, real and complex charges and
-  m vectors (Yukawa is `OperatorError::Yukawa`, CH2.1's path). Level l works in its own
+  m vectors (Yukawa since CH2.1b, below). Level l works in its own
   units at k̂_l = k r_l; a box holds r_l φ̃ there as a chunk does, so P2L scales its
   charges by r̂(t|s) and the L2L tables carry ½ (`tetraleaf_tables::helmholtz`). M2M, L2L
   and M2L are `tetraleaf_tables::helmholtz::HelmholtzTables` (RCR, real shifts for real k,
@@ -971,6 +971,27 @@ CH4.9b2 (the batched P2M and L2P, below).
   second call bit for bit, Yukawa the reference's bits); `check_leaf_kernel` and `check_kernels`
   now cover both kernels (1.0000× the reference leaves' errors, outputs within 2.3e-16 on the M6).
   Its cost: `helmholtz_fmm` at one rank, opt-level 1, 55.8 s on the M6.
+- Yukawa (Helmholtz CH2.1b; the `helmholtz::operator` module docs, "Yukawa";
+  docs/helmholtz/tasks/CH2.1b.md; tetraleaf-validate/results/helmholtz-ch2-1b.md): k = iκ on the same
+  level calls with `tetraleaf_tables::helmholtz`'s one-plane real tables (CH2.1a). Each real charge
+  column is one real vector of one plane (m with real charges, 2m with complex ones, `Densities`'
+  storage value for value), so the tables take one plane and `columns()` vectors
+  (`Kernel::{multipole_columns, local_columns}`; the real and complex paths pass their planes and m
+  as before); P2L `leaf::p2l_yukawa` and M2P `leaf::m2p_yukawa` per column, P2P
+  `P2pKernel::evaluate_yukawa` per column (`p2p::p2p_yukawa` under `Reference`), P2M and L2P
+  `Densities`' reference calls. M2L: Rotation and Dense (`DenseM2l::select_for` with one local
+  plane); `Auto` runs Rotation on every level (`max_degree` and `plane_wave_min_degree` `None`), no
+  level takes the waves (`wave_levels` gives none for Re k = 0) or the diagonal form, whatever
+  `HelmholtzDiagonal` says (proposal §5.5); Batched, Classes and PlaneWave panic in `with_m2l` and
+  are `HelmholtzFmmError::YukawaM2l` from the builder (their one-plane tables are CH2.1d's).
+  The kind is read per level call or leaf body, never in an inner loop (D4). Tests:
+  `tests/helmholtz/operator.rs` (the chains against the direct sum at κD = 0.01–100, the far chain
+  at κD = 100 held to its round-off, `STRONG_DAMPING`, RCR's own loss under strong damping, CH2.3;
+  complex charges bit for bit two real vectors; Dense within 1e-14 of Rotation; the refusals; the
+  reference's `_yukawa` chains within 2e-13; P2P bit for bit `p2p_yukawa`), `tests/helmholtz/p2p.rs`
+  (every ISA within CH3.4b's bounds), `tests/helmholtz_fmm.rs` (`yukawa_scenarios`, `check_yukawa`:
+  `check` and `check_vectors` on three scenarios, Auto Rotation's bits, the library's defaults,
+  complex charges as two real vectors, the P2P kernels, Dense, the refused M2L).
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
   count. No `unsafe`, no atomics, no global pool; per-thread scratch created at

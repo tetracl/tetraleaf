@@ -1,7 +1,7 @@
 //! The Helmholtz family's operator of the plan (Helmholtz CH3.1a;
 //! docs/design/helmholtz-fmm-proposal.md §5.1–§5.3, §5.7, §6.2, §6.3; CONVENTIONS §3.15):
-//! [`HelmholtzOperator`], for real and complex k with real and complex charges, RCR on
-//! every level.
+//! [`HelmholtzOperator`], for real and complex k and Yukawa (Helmholtz CH2.1b, "Yukawa"
+//! below) with real and complex charges, RCR on every level.
 //!
 //! # Levels and units
 //!
@@ -384,7 +384,21 @@
 //! [`RCR_PAIR_MIN_DEGREE`], and of degree at least [`RCR_PAIR_FEW_DEGREE`] where its targets
 //! with a V row are fewer than [`RCR_PAIR_SHARE`] times them ([`rcr_by_pairs`]).
 //!
-//! Yukawa (Re k = 0) is not served: its real path is CH2.1's.
+//! # Yukawa
+//!
+//! Yukawa (k = iκ, Helmholtz CH2.1b; proposal §5.5) runs on the same level calls with real
+//! tables (`tetraleaf_tables::helmholtz`, Helmholtz CH2.1a): each real charge column is one
+//! real vector of one plane, so the tables take one plane and c m vectors (m with real charges;
+//! 2m with complex ones, Re q⁰, Im q⁰, …, the storage of [`Densities`]' two planes per vector),
+//! and so do P2L (`leaf::p2l_yukawa`), M2P (`leaf::m2p_yukawa`, output column j for charge
+//! column j) and P2P (`P2pKernel::evaluate_yukawa`, or `p2p::p2p_yukawa` under
+//! [`P2pChoice::Reference`]); P2M and L2P are [`Densities`]' (the reference's `_yukawa` forms).
+//! Its M2L is [`HelmholtzM2l::Rotation`] or [`HelmholtzM2l::Dense`] (one real matrix per offset);
+//! [`HelmholtzM2l::Auto`] runs Rotation on every level, and no level takes the diagonal form,
+//! since the high-frequency regime does not occur. Batched, Classes and the exponential M2L have
+//! no Yukawa tables: [`with_m2l`](HelmholtzOperator::with_m2l) panics on them. The kind is a
+//! field of the operator, read per level call or leaf body, never in an inner loop
+//! (decision D4).
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -533,9 +547,6 @@ impl M2lOverride {
 /// Why [`HelmholtzOperator::new`] refused its inputs.
 #[derive(Clone, Copy, Debug, Error, PartialEq)]
 pub enum OperatorError {
-    /// k is Yukawa's (Re k = 0), whose real path is Helmholtz CH2.1's.
-    #[error("Yukawa (Re k = 0) is not served by this operator")]
-    Yukawa,
     /// The densities are of another kind of k.
     #[error("the densities are for {densities:?} k, the wavenumber is {k:?}")]
     KindMismatch {
@@ -735,6 +746,10 @@ pub(crate) fn wave_levels<T>(
     k_root: Complex<f64>,
     base: &[usize],
 ) -> Option<Vec<Option<Precision>>> {
+    // Yukawa (Re k = 0) has no exponential M2L (module documentation, "Yukawa").
+    if k_root.re == 0.0 {
+        return None;
+    }
     // `HelmholtzTables`' k̂_l, doubled, as `PlaneWaveM2l` forms it.
     let kappa = |l: usize| k_root * (0.5f64).powi(l as i32) * 2.0;
     match settings.m2l {
@@ -763,6 +778,15 @@ pub(crate) fn wave_levels<T>(
         ),
         _ => None,
     }
+}
+
+/// Whether Yukawa runs the M2L `choice` (module documentation, "Yukawa"): Rotation, Dense and
+/// Auto (as Rotation).
+pub(crate) fn yukawa_serves(choice: HelmholtzM2l) -> bool {
+    matches!(
+        choice,
+        HelmholtzM2l::Rotation | HelmholtzM2l::Dense | HelmholtzM2l::Auto
+    )
 }
 
 /// Whether the setting is [`HelmholtzM2l::Auto`] with the exponential M2L, which runs in f64
@@ -1067,7 +1091,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
     ///
     /// # Errors
     ///
-    /// [`OperatorError`]: Yukawa, a kind mismatch, no degrees.
+    /// [`OperatorError`]: a kind mismatch, no degrees.
     pub fn new(
         k: Wavenumber,
         densities: Densities,
@@ -1136,9 +1160,6 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         max_leaf_points: usize,
         block_budget: usize,
     ) -> Result<Self, OperatorError> {
-        if k.kind() == WavenumberKind::Yukawa {
-            return Err(OperatorError::Yukawa);
-        }
         if densities.kind() != k.kind() {
             return Err(OperatorError::KindMismatch {
                 densities: densities.kind(),
@@ -1263,7 +1284,18 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
     /// O(p⁵) per offset and level (16 offsets a level for Classes, 316 for Dense), on the
     /// pool's threads if [`with_pool`](Self::with_pool) came first (module documentation,
     /// "The tables' build").
+    ///
+    /// # Panics
+    ///
+    /// On Yukawa under [`HelmholtzM2l::Batched`], [`HelmholtzM2l::Classes`] and
+    /// [`HelmholtzM2l::PlaneWave`], which have no Yukawa tables (module documentation,
+    /// "Yukawa").
     pub fn with_m2l(mut self, choice: HelmholtzM2l, dense_budget: usize) -> Self {
+        assert!(
+            !self.kernel.yukawa() || yukawa_serves(choice),
+            "Yukawa runs Rotation and Dense M2L only (Auto as Rotation), not {choice:?} \
+             (Helmholtz CH2.1b)"
+        );
         self.kernel.m2l = choice;
         self.kernel.dense_budget = dense_budget;
         let mul_add = self.kernel.mul_add_for(self.kernel.matrix.isa());
@@ -1287,9 +1319,11 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
     }
 
     /// The crossover degree under [`HelmholtzM2l::Auto`]: the named one, else the rule's for
-    /// the column kernel's ISA and the multipole planes; `None` under the other settings.
+    /// the column kernel's ISA and the multipole planes; `None` under the other settings and on
+    /// Yukawa, whose Auto is Rotation (module documentation, "Yukawa").
     pub fn max_degree(&self) -> Option<usize> {
-        (self.kernel.m2l == HelmholtzM2l::Auto).then(|| self.kernel.auto_max_degree())
+        (self.kernel.m2l == HelmholtzM2l::Auto && !self.kernel.yukawa())
+            .then(|| self.kernel.auto_max_degree())
     }
 
     /// Gives [`HelmholtzM2l::Auto`] the levels' V lists over the whole tree, one
@@ -1630,7 +1664,12 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         let parts = PoolParts(self.execution.pool.as_deref());
         let kernel = &mut self.kernel;
         let timings = &mut self.table_timings;
-        let choice = kernel.m2l;
+        // Yukawa's Auto is Rotation on every level (module documentation, "Yukawa").
+        let yukawa = kernel.yukawa();
+        let choice = match kernel.m2l {
+            HelmholtzM2l::Auto if yukawa => HelmholtzM2l::Rotation,
+            m2l => m2l,
+        };
         let dense_budget = kernel.dense_budget;
         // The degrees given, with an override's in their place (Helmholtz CH4.4b): every rule
         // below reads them as it reads the degrees given.
@@ -1779,7 +1818,12 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
             levels
         };
         kernel.dense = (choice == HelmholtzM2l::Dense).then(|| {
-            let levels = unforced(DenseM2l::<T>::select(&degrees, dense_budget));
+            let local_planes = if yukawa { 1 } else { 2 };
+            let levels = unforced(DenseM2l::<T>::select_for(
+                &degrees,
+                dense_budget,
+                local_planes,
+            ));
             DenseM2l::build_on(k_root, &degrees, &levels, &parts)
         });
         kernel.classes = (choice == HelmholtzM2l::Classes).then(|| {
@@ -1865,17 +1909,23 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         for (l, _) in forced_rcr.iter().enumerate().filter(|&(_, &f)| f) {
             classes_off[l] = Some(all.clone());
         }
-        kernel.diagonal = diagonal::select::<T>(
-            &kernel.diagonal_settings,
-            tolerance,
-            &rcr,
-            &classes_off,
-            &costs,
-            &degrees,
-            |l| kernel.tables.k_hat(l),
-            kernel.densities.vectors(),
-            &parts,
-        );
+        // No level of Yukawa takes the diagonal form: its high-frequency regime does not occur
+        // (proposal §5.5).
+        kernel.diagonal = if yukawa {
+            (0..degrees.len()).map(|_| None).collect()
+        } else {
+            diagonal::select::<T>(
+                &kernel.diagonal_settings,
+                tolerance,
+                &rcr,
+                &classes_off,
+                &costs,
+                &degrees,
+                |l| kernel.tables.k_hat(l),
+                kernel.densities.vectors(),
+                &parts,
+            )
+        };
         timings.diagonal += clock.elapsed();
         self.diagonal_buffer.size(
             &kernel.diagonal,
@@ -1922,7 +1972,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
             (Some(_), false) => self.execution.scratch.len(),
             _ => 1,
         };
-        let m = self.kernel.densities.vectors();
+        let m = self.kernel.local_columns().1;
         let rotation: Vec<bool> = (0..self.kernel.tables.nlevels())
             .map(|l| {
                 self.m2l_on(l) == HelmholtzM2l::Rotation && self.kernel.diagonal_level(l).is_none()
@@ -2506,6 +2556,31 @@ impl<T: SimdScalar> Scratch<T> {
 }
 
 impl<T: SimdScalar> Kernel<T> {
+    /// Whether k is Yukawa's (module documentation, "Yukawa").
+    fn yukawa(&self) -> bool {
+        self.k.kind() == WavenumberKind::Yukawa
+    }
+
+    /// The planes and vectors of the tables' multipoles: one plane per real charge column on
+    /// Yukawa, else the densities' planes and m (module documentation, "Yukawa").
+    fn multipole_columns(&self) -> (usize, usize) {
+        if self.yukawa() {
+            (1, self.densities.columns())
+        } else {
+            (self.densities.multipole_planes(), self.densities.vectors())
+        }
+    }
+
+    /// The planes and vectors of the tables' locals, as
+    /// [`multipole_columns`](Self::multipole_columns).
+    fn local_columns(&self) -> (usize, usize) {
+        if self.yukawa() {
+            (1, self.densities.columns())
+        } else {
+            (self.densities.local_planes(), self.densities.vectors())
+        }
+    }
+
     /// Whether P2M and L2P run the batched kernels (module documentation, "Leaf kernels").
     fn leaves_batched(&self) -> bool {
         self.p2p.is_some() && !self.reference_leaves
@@ -2556,9 +2631,9 @@ impl<T: SimdScalar> Kernel<T> {
     }
 
     /// Whether the setting is [`HelmholtzM2l::Auto`] with the exponential M2L, which runs in
-    /// f64 only (CONVENTIONS §3.15, "Precision and range").
+    /// f64 only (CONVENTIONS §3.15, "Precision and range"), and never on Yukawa.
     fn auto_takes_plane_waves(&self) -> bool {
-        auto_takes_plane_waves::<T>(self.m2l, self.auto_plane_wave)
+        !self.yukawa() && auto_takes_plane_waves::<T>(self.m2l, self.auto_plane_wave)
     }
 
     /// The degree of `level`'s expansions and M2L.
@@ -2705,15 +2780,13 @@ impl<T: SimdScalar> Kernel<T> {
     }
 
     fn m2m(&self, level: usize, o: usize, child: &[T], parent: &mut [T], s: &mut Scratch<T>) {
-        let planes = self.densities.multipole_planes();
-        let m = self.densities.vectors();
+        let (planes, m) = self.multipole_columns();
         self.tables
             .m2m(level, o, child, parent, planes, m, &mut s.tables);
     }
 
     fn l2l(&self, level: usize, o: usize, parent: &[T], child: &mut [T], s: &mut Scratch<T>) {
-        let planes = self.densities.local_planes();
-        let m = self.densities.vectors();
+        let (planes, m) = self.local_columns();
         self.tables
             .l2l(level, o, parent, child, planes, m, &mut s.tables);
     }
@@ -2725,8 +2798,7 @@ impl<T: SimdScalar> Kernel<T> {
         local: &mut [T],
         s: &mut Scratch<T>,
     ) {
-        let planes = self.densities.multipole_planes();
-        let m = self.densities.vectors();
+        let (planes, m) = self.multipole_columns();
         if let Some(merge) = self.plane_wave_level(level) {
             return self.plane_wave_pair(merge, (level, d, child), multipole, local, s);
         }
@@ -2773,6 +2845,9 @@ impl<T: SimdScalar> Kernel<T> {
         // r̂(t|s) = r_t / r_s = 2^(l_s − l_t).
         let source_level = Self::shifted(level, Self::levels_apart(frame));
         let units = Level::new(self.k_hat(source_level), frame.radius);
+        if self.yukawa() {
+            return self.p2l_yukawa((p, q), &units, frame, sources, local, s);
+        }
         let size = self.densities.local_size(q) / self.densities.vectors();
         for (v, local) in local.chunks_exact_mut(size).enumerate() {
             self.charges_of(sources, n, v, &mut s.charges);
@@ -2809,6 +2884,50 @@ impl<T: SimdScalar> Kernel<T> {
         }
     }
 
+    /// Yukawa's P2L (module documentation, "Yukawa"): per real charge column j its local's
+    /// plane j, at degree p into the first degrees of q.
+    fn p2l_yukawa(
+        &self,
+        (p, q): (usize, usize),
+        units: &Level<T>,
+        frame: &Frame<T>,
+        sources: &[T],
+        local: &mut [T],
+        s: &mut Scratch<T>,
+    ) {
+        let points = self.source_points(sources);
+        let n = points.len();
+        let c = self.densities.columns();
+        assert!(
+            n <= s.strengths.len(),
+            "a leaf has {n} source points, more than max_leaf_points = {}",
+            s.strengths.len() / 2
+        );
+        let Scratch {
+            workspace,
+            strengths,
+            first,
+            ..
+        } = s;
+        for (j, local) in local.chunks_exact_mut(Layout::new(q).len()).enumerate() {
+            // In the leaf's units the reference forms r_s φ̃; the box holds r_t φ̃: the charges
+            // times r̂(t|s), exactly (a power of two).
+            let charges = &mut strengths[..n];
+            for (i, w) in charges.iter_mut().enumerate() {
+                *w = sources[3 * n + i * c + j] * frame.radius;
+            }
+            if p == q {
+                leaf::p2l_yukawa(p, units, frame, points, charges, workspace, local);
+            } else {
+                // At p into zero, then added into the first degrees (PlaneWaveRaise::M2l).
+                let first = &mut first[..Layout::new(p).len()];
+                first.fill(T::zero());
+                leaf::p2l_yukawa(p, units, frame, points, charges, workspace, first);
+                add_to_first_degrees(first, p, local, q);
+            }
+        }
+    }
+
     /// M2P at the targets of a leaf of `level` from a box at `frame` = (ĉ(s|t), r̂(s|t)), in
     /// the leaf's units.
     fn m2p(
@@ -2828,6 +2947,9 @@ impl<T: SimdScalar> Kernel<T> {
         let source_level = Self::shifted(level, -Self::levels_apart(frame));
         let (p, q) = (self.leaf_degree(source_level), self.p(source_level));
         let units = Level::new(self.k_hat(level), frame.radius);
+        if self.yukawa() {
+            return self.m2p_yukawa((p, q), &units, frame, multipole, targets, output, s);
+        }
         let planes = self.densities.multipole_planes();
         let (len, stride) = (Layout::new(p).len(), Layout::new(q).len());
         let Scratch {
@@ -2865,6 +2987,46 @@ impl<T: SimdScalar> Kernel<T> {
                     grad,
                 );
             });
+        }
+    }
+
+    /// Yukawa's M2P (module documentation, "Yukawa"): per real charge column j its multipole's
+    /// plane j into output column j, whose potentials and gradient triples lie contiguous
+    /// (CONVENTIONS §3.13's layout with the output columns as the vectors).
+    #[allow(clippy::too_many_arguments)]
+    fn m2p_yukawa(
+        &self,
+        (p, q): (usize, usize),
+        units: &Level<T>,
+        frame: &Frame<T>,
+        multipole: &[T],
+        targets: &[[T; 3]],
+        output: &mut [T],
+        s: &mut Scratch<T>,
+    ) {
+        let nt = targets.len();
+        let d = &self.densities;
+        let (potentials, gradients) = output.split_at_mut(d.output_columns() * nt);
+        let (len, stride) = (Layout::new(p).len(), Layout::new(q).len());
+        let Scratch {
+            workspace, first, ..
+        } = s;
+        for (j, multipole) in multipole.chunks_exact(stride).enumerate() {
+            // The first degrees at p (PlaneWaveRaise::M2l).
+            let multipole = if p == q {
+                multipole
+            } else {
+                let first = &mut first[..len];
+                copy_first_degrees(multipole, q, first, p);
+                &*first
+            };
+            let potential = &mut potentials[j * nt..(j + 1) * nt];
+            let gradient = self
+                .gradients
+                .then(|| &mut gradients.as_chunks_mut::<3>().0[j * nt..(j + 1) * nt]);
+            leaf::m2p_yukawa(
+                p, units, frame, multipole, targets, workspace, potential, gradient,
+            );
         }
     }
 
@@ -2908,6 +3070,9 @@ impl<T: SimdScalar> Kernel<T> {
                 &*mapped
             }
         };
+        if self.yukawa() {
+            return self.p2p_yukawa(k.im, points, sources, targets, output, strengths);
+        }
         let Some(kernel) = &self.p2p else {
             for v in 0..self.densities.vectors() {
                 self.charges_of(sources, n, v, charges);
@@ -2950,6 +3115,49 @@ impl<T: SimdScalar> Kernel<T> {
                 .gradients
                 .then(|| &mut gradients.as_chunks_mut::<3>().0[re * nt..(re + 2) * nt]);
             kernel.evaluate_helmholtz(k, points, charges, targets, potential, gradient);
+        }
+    }
+
+    /// Yukawa's P2P at κ̂ = `kappa` (module documentation, "Yukawa"): per real charge column j
+    /// into output column j, by the kernel or the reference; `points` the sources in the
+    /// target's units.
+    fn p2p_yukawa(
+        &self,
+        kappa: T,
+        points: &[[T; 3]],
+        sources: &[T],
+        targets: &[[T; 3]],
+        output: &mut [T],
+        strengths: &mut [T],
+    ) {
+        let d = &self.densities;
+        let (n, nt, c) = (points.len(), targets.len(), d.columns());
+        let (potentials, gradients) = output.split_at_mut(d.output_columns() * nt);
+        for j in 0..c {
+            let charges = if c == 1 {
+                &sources[3 * n..4 * n]
+            } else {
+                assert!(
+                    n <= strengths.len(),
+                    "a leaf has {n} source points, more than max_leaf_points = {}",
+                    strengths.len() / 2
+                );
+                let w = &mut strengths[..n];
+                for (i, q) in w.iter_mut().enumerate() {
+                    *q = sources[3 * n + i * c + j];
+                }
+                &*w
+            };
+            let potential = &mut potentials[j * nt..(j + 1) * nt];
+            let gradient = self
+                .gradients
+                .then(|| &mut gradients.as_chunks_mut::<3>().0[j * nt..(j + 1) * nt]);
+            match &self.p2p {
+                Some(kernel) => {
+                    kernel.evaluate_yukawa(kappa, points, charges, targets, potential, gradient);
+                }
+                None => p2p::p2p_yukawa(kappa, points, charges, targets, potential, gradient),
+            }
         }
     }
 

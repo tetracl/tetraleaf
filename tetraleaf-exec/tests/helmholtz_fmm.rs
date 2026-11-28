@@ -127,6 +127,16 @@
 //! FMM (`Degrees::PerLevel`) bit for bit; 2 threads and the one-rank FMM bit for bit; a level
 //! below 2 refused on every rank.
 //!
+//! Yukawa (Helmholtz CH2.1b, `yukawa_scenarios`, `check_yukawa`): the cube at κD = 1 (real
+//! charges, gradients, rank 0 empty) and κD = 0.01 (degree 8, the Laplace limit) and the
+//! clusters at κD = 30 (complex charges, separate targets), each with `check`'s and
+//! `check_vectors`' checks; the library's Auto Rotation's bits, Rotation on every level; the
+//! library's defaults Rotation on every level with no diagonal class, within the bound and on P
+//! ranks the one-rank FMM; complex charges bit for bit the real path's two real vectors; the
+//! P2P kernels on the κD = 1 cube; Dense within `DENSE_TOLERANCE` of Rotation on the κD = 0.01
+//! cube; RCR by pairs (`check_rcr_split`) on the clusters with complex charges;
+//! `check_errors` the M2L without Yukawa tables refused.
+//!
 //! Every comparison is agreed by an all-reduce, so a failure fails every rank. Run by hand
 //! at several ranks under a timeout, e.g. on macOS
 //! `cargo test -p tetraleaf-exec --test helmholtz_fmm --no-run`, then
@@ -147,11 +157,11 @@ use tetraleaf_exec::helmholtz::{
     DEFAULT_DIAGONAL_BUILD, DEFAULT_PLANE_WAVE_NODE_BUDGET, DIAGONAL_COSTS_NEON, Degrees,
     DensityError, DiagonalCosts, DiagonalTimes, HelmholtzDiagonal, HelmholtzFmm,
     HelmholtzFmmBuilder, HelmholtzFmmError, HelmholtzM2l, LeafVShape, M2lOverride,
-    MIN_BUFFER_BOXES, OperatorError, Output, OverrideError, OverrideM2l, PlaneWaveCounts,
-    PlaneWavePrecision, PlaneWaveRaise, PlaneWaveSplit, PlaneWaveTimes, RCR_PAIR_FEW_DEGREE,
-    RcrSplit, TransferBuild, V_COSTS_NEON, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WxNear,
-    auto_batched_max_degree, auto_batched_min_columns, auto_m2l_mul_add,
-    auto_plane_wave_min_degree, default_max_points_per_leaf, raised_crossover,
+    MIN_BUFFER_BOXES, Output, OverrideError, OverrideM2l, PlaneWaveCounts, PlaneWavePrecision,
+    PlaneWaveRaise, PlaneWaveSplit, PlaneWaveTimes, RCR_PAIR_FEW_DEGREE, RcrSplit, TransferBuild,
+    V_COSTS_NEON, VAfterPlan, VNear, VRaisedPrice, Wavenumber, WxNear, auto_batched_max_degree,
+    auto_batched_min_columns, auto_m2l_mul_add, auto_plane_wave_min_degree,
+    default_max_points_per_leaf, raised_crossover,
 };
 use tetraleaf_exec::operator::{Isa, MulAdd, P2pChoice};
 use tetraleaf_math::Complex;
@@ -883,12 +893,14 @@ fn check_tables(
     let rank = comm.rank();
     let name = format!("{}: {m2l:?}", scenario.name);
     let tolerance = DENSE_TOLERANCE;
-    // The budget of the finest level's tables alone.
+    // The budget of the finest level's tables alone (Yukawa's Dense: one real matrix per
+    // offset, CH2.1a).
+    let local_planes = if scenario.k.0 == 0.0 { 1 } else { 2 };
     let finest_budget = |p: usize| match m2l {
         HelmholtzM2l::Classes => {
             ClassM2l::<f64>::level_bytes(p) + CubeTransforms::<f64>::bytes_for(p)
         }
-        _ => DenseM2l::<f64>::level_bytes(p),
+        _ => DenseM2l::<f64>::level_bytes_for(p, local_planes),
     };
     let inputs = Inputs::new(scenario, 1, comm);
     let kind = scenario.charges;
@@ -3919,18 +3931,23 @@ fn check_errors(comm: &SimpleCommunicator) {
     let ok = builder(scenario);
     let rank = comm.rank();
 
-    let yukawa =
-        HelmholtzFmmBuilder::new(Wavenumber::new(0.0, 5.0).unwrap(), Degrees::Tolerance(1e-3));
-    let error = yukawa
-        .build::<f64, _>(&inputs.sources, &inputs.targets, comm)
-        .err();
-    assert!(
-        matches!(
-            error,
-            Some(HelmholtzFmmError::Operator(OperatorError::Yukawa))
-        ),
-        "rank {rank}: Yukawa: {error:?}"
-    );
+    // Yukawa (CH2.1b) with an M2L that has no Yukawa tables.
+    for m2l in [
+        HelmholtzM2l::Batched,
+        HelmholtzM2l::Classes,
+        HelmholtzM2l::PlaneWave,
+    ] {
+        let yukawa =
+            HelmholtzFmmBuilder::new(Wavenumber::new(0.0, 5.0).unwrap(), Degrees::Tolerance(1e-3))
+                .m2l(m2l);
+        let error = yukawa
+            .build::<f64, _>(&inputs.sources, &inputs.targets, comm)
+            .err();
+        assert!(
+            matches!(error, Some(HelmholtzFmmError::YukawaM2l(named)) if named == m2l),
+            "rank {rank}: Yukawa under {m2l:?}: {error:?}"
+        );
+    }
 
     let k = Wavenumber::new(1.0, 0.0).unwrap();
     let error = HelmholtzFmmBuilder::new(k, Degrees::Tolerance(2.0))
@@ -4643,6 +4660,146 @@ fn sphere_scenario() -> Scenario {
     }
 }
 
+/// Yukawa's scenarios (Helmholtz CH2.1b): the Laplace limit at κD = 0.01 with degree 8, κD = 1
+/// with real charges and rank 0 empty, and κD = 30 on the clusters with complex charges and
+/// separate targets.
+fn yukawa_scenarios() -> Vec<Scenario> {
+    vec![
+        Scenario {
+            name: "Yukawa, cube, κD = 1, ε = 1e-3, real charges, gradients, rank 0 empty",
+            layout: Layout::Cube,
+            n: (1000, None),
+            k: (0.0, 1.0),
+            degrees: Degrees::Tolerance(1e-3),
+            bound: ERROR_FACTOR * 1e-3,
+            charges: ChargeKind::Real,
+            gradients: true,
+            debug: true,
+            empty_rank0: true,
+        },
+        Scenario {
+            name: "Yukawa, clusters, κD = 30, ε = 1e-6, complex charges, separate targets",
+            layout: Layout::Clusters,
+            n: (1000, Some(700)),
+            k: (0.0, 30.0),
+            degrees: Degrees::Tolerance(1e-6),
+            bound: ERROR_FACTOR * 1e-6,
+            charges: ChargeKind::Complex,
+            gradients: false,
+            debug: true,
+            empty_rank0: false,
+        },
+        Scenario {
+            name: "Yukawa, cube, κD = 0.01, p = 8, real charges, gradients",
+            layout: Layout::Cube,
+            // Leaves on level 3, so that Dense's finest level has V pairs.
+            n: (4000, None),
+            k: (0.0, 0.01),
+            degrees: Degrees::PerLevel(vec![8; 17]),
+            bound: P8_BOUND,
+            charges: ChargeKind::Real,
+            gradients: true,
+            debug: true,
+            empty_rank0: false,
+        },
+    ]
+}
+
+/// Yukawa's own checks (Helmholtz CH2.1b) beside `check` and `check_vectors`: the library's
+/// Auto (diagonal form off, as `default_builder` names it) Rotation's output bit for bit and
+/// Rotation on every level; the library's defaults (the leaf size, c_leaf, the near rules and
+/// the diagonal form's time rule) Rotation on every level with no diagonal class, within the
+/// scenario's bound of the direct sum, and on P ranks the one-rank FMM bit for bit; complex
+/// charges q the real path's FMM of the two real vectors Re q and Im q, bit for bit.
+fn check_yukawa(scenario: &Scenario, comm: &SimpleCommunicator) {
+    let rank = comm.rank();
+    let kind = scenario.charges;
+    let inputs = Inputs::new(scenario, 1, comm);
+    let (_, rotation) = run(&builder(scenario), &inputs, kind, comm);
+    let (fmm, auto) = run(&default_builder(scenario), &inputs, kind, comm);
+    assert_eq!(fmm.operator().m2l_choice(), HelmholtzM2l::Auto);
+    assert_eq!(fmm.m2l_max_degree(), None, "no Batched crossover on Yukawa");
+    assert_eq!(fmm.m2l_plane_wave_min_degree(), None, "no waves on Yukawa");
+    for level in 0..fmm.nlevels() {
+        assert_eq!(
+            fmm.operator().m2l_on(level),
+            HelmholtzM2l::Rotation,
+            "level {level}"
+        );
+    }
+    drop(fmm);
+    assert_same(
+        &format!("{}: Auto against Rotation", scenario.name),
+        &auto,
+        &rotation,
+        comm,
+    );
+
+    let k = Wavenumber::new(scenario.k.0, scenario.k.1).unwrap();
+    let defaults = HelmholtzFmmBuilder::new(k, scenario.degrees.clone())
+        .charges(kind)
+        .gradients(scenario.gradients)
+        .domain(PhysicalBox::new([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]));
+    let (fmm, output) = run(&defaults, &inputs, kind, comm);
+    assert_eq!(fmm.operator().diagonal(), HelmholtzDiagonal::Auto);
+    for level in 0..fmm.nlevels() {
+        let op = fmm.operator();
+        assert_eq!(op.m2l_on(level), HelmholtzM2l::Rotation, "level {level}");
+        assert!(op.diagonal_classes(level).is_none(), "level {level}");
+    }
+    drop(fmm);
+    let (phi, grad) = errors(scenario, &inputs, &output, 0, comm);
+    if rank == 0 {
+        println!(
+            "{}: the library's defaults: relative L2 φ {phi:.2e}, ∇φ {grad:.2e}",
+            scenario.name
+        );
+    }
+    assert!(
+        phi < scenario.bound && grad < scenario.bound,
+        "{}: the defaults: φ {phi:.2e}, ∇φ {grad:.2e} against the direct sum",
+        scenario.name
+    );
+    check_one_rank(
+        &format!("{}: defaults", scenario.name),
+        &defaults,
+        &inputs,
+        kind,
+        &output,
+        comm,
+    );
+
+    if kind == ChargeKind::Complex {
+        let (re, im) = &inputs.charges[0];
+        let split = Inputs {
+            sources: inputs.sources.clone(),
+            targets: inputs.targets.clone(),
+            charges: vec![
+                (re.clone(), vec![0.0; re.len()]),
+                (im.clone(), vec![0.0; im.len()]),
+            ],
+        };
+        let real = builder(&Scenario {
+            charges: ChargeKind::Real,
+            ..scenario.clone()
+        })
+        .vectors(2);
+        let (_, as_real) = run(&real, &split, ChargeKind::Real, comm);
+        assert_same(
+            &format!(
+                "{}: complex charges against two real vectors",
+                scenario.name
+            ),
+            &rotation,
+            &as_real,
+            comm,
+        );
+    }
+    if rank == 0 {
+        println!("{}: Yukawa's checks passed", scenario.name);
+    }
+}
+
 /// The scenarios, small trees (a few thousand points, at most 32 per leaf).
 fn scenarios() -> Vec<Scenario> {
     vec![
@@ -5038,6 +5195,16 @@ fn helmholtz_fmm() {
     check_v_after_plan(&sphere_scenario(), &comm);
     // The V rule's price per box on raised levels (CH4.3b2d): the sphere at 10⁻⁷.
     check_v_raised(&raised_v_scenario(), &comm);
+    // Yukawa (CH2.1b): every scenario's checks, two vectors and its own; the P2P kernels with
+    // real charges and gradients; Dense against Rotation in the Laplace limit at degree 8.
+    for scenario in yukawa_scenarios() {
+        check(&scenario, &comm);
+        check_vectors(&scenario, &comm);
+        check_yukawa(&scenario, &comm);
+    }
+    check_kernels(&yukawa_scenarios()[0], &comm);
+    check_tables(&yukawa_scenarios()[2], HelmholtzM2l::Dense, None, &comm);
+    check_rcr_split(&yukawa_scenarios()[1], &comm);
     check_errors(&comm);
     if comm.rank() == 0 {
         println!(
