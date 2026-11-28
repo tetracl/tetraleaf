@@ -24,7 +24,7 @@
 //! degree of each level: a rule at a tolerance (calibrated in the full FMM, Helmholtz
 //! CH3.3), or degrees named per level.
 //! [`HelmholtzOperator`] (CH3.1a, submodule [`operator`]) is the operator of the plan for
-//! real and complex k: RCR on every level with the per-level tables of
+//! real and complex k, and for Yukawa since CH2.1b: RCR on every level with the per-level tables of
 //! `tetraleaf_tables::helmholtz`, the leaf operators of [`Densities`] and `tetraleaf-ref`, and
 //! P2P by the vectorised kernel of `tetraleaf-simd` or the reference (CH3.4c).
 //!

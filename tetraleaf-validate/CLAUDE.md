@@ -841,6 +841,14 @@ projected L2P with gradients per point. `tools/helmholtz/ch4-9b1-runs.sh` runs i
 `ch4-9b1-tables.py` makes the report's tables (`summary`, `cases`). Its report is
 `results/helmholtz-ch4-9b1.md`.
 
+Helmholtz CH2.1b (the Yukawa operator and FMM; docs/helmholtz/tasks/CH2.1b.md) added
+`helmholtz_workloads::Workload::W1n` (W1's sphere at a fixed N, the example's `w1:<n>`: Yukawa has
+no wavelength to set W1's N; at N = `w1_count(kd)` W1's points); Yukawa runs through the harness
+as `--kd 0 --kim κ` with no other change (the oracle's `direct_sum` at k = iκ is Yukawa's).
+`tests/helmholtz_accuracy.rs` runs `check_fmm` on two Yukawa cases. `tools/helmholtz/ch2-1b-runs.sh`
+runs the task's stages (`smoke`, `accuracy`, `determinism`, `dense`, `complex`, `checksums`,
+`time`), `ch2-1b-tables.py` makes the report's tables. Its report is `results/helmholtz-ch2-1b.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

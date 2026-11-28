@@ -1,6 +1,7 @@
 //! The Helmholtz FMM (Helmholtz CH3.1b; docs/design/helmholtz-fmm-proposal.md §6.1–§6.3;
 //! CONVENTIONS §3.15): [`HelmholtzFmmBuilder`] and [`HelmholtzFmm`], for real and complex
-//! k with real and complex charges, on any number of ranks, RCR on every level.
+//! k and Yukawa (Helmholtz CH2.1b) with real and complex charges, on any number of ranks, RCR
+//! on every level.
 //!
 //! # Build
 //!

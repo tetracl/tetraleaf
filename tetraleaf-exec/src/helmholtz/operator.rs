@@ -1,7 +1,7 @@
 //! The Helmholtz family's operator of the plan (Helmholtz CH3.1a;
 //! docs/design/helmholtz-fmm-proposal.md §5.1–§5.3, §5.7, §6.2, §6.3; CONVENTIONS §3.15):
-//! [`HelmholtzOperator`], for real and complex k with real and complex charges, RCR on
-//! every level.
+//! [`HelmholtzOperator`], for real and complex k and Yukawa (Helmholtz CH2.1b, "Yukawa"
+//! below) with real and complex charges, RCR on every level.
 //!
 //! # Levels and units
 //!
