@@ -760,15 +760,17 @@ fn p2p_is_the_reference_bit_for_bit() {
 /// Yukawa (CH2.1b): the chains' errors within ε at S7's degrees (the P2P to rounding, 1e-13),
 /// at κD = 0.01, 1, 20 and 100 (κ a from about 2·10⁻⁴ to 22 on the chains' levels), real and
 /// complex charges, ε = 10⁻⁶ and 10⁻¹⁰, against the direct sum at k = iκ. One exception: the
-/// far chain at κD = 100, whose M2L on level 2 (κ a ≈ 22, |t| ≈ 1.17, the field e^{−117} of
-/// the undamped one) errs about 3·10⁻⁷ at every ε, round-off and not truncation: RCR's loss
-/// of relative accuracy under strong damping (roadmap CH2.3's Also, the H1 gate's G3; the
-/// tables cancel as `rcr` does, CH2.1a), which CH2.3's pruning removes. It is held to
-/// `STRONG_DAMPING` (printed).
+/// far chain at κD = 100 errs about 3·10⁻⁷ at every ε, round-off and not truncation. Its pair on
+/// level 2 lies |t| ≈ 1.17 apart and its points ρ_s ≈ 0.05 and ρ_t ≈ 0.13 from their boxes'
+/// centres, so the expansion's terms are about e^{−κ(|t| − ρ_s − ρ_t)} ≈ e^{−99} against a sum of
+/// about e^{−119}: a cancellation of e^{20} ≈ 5·10⁸ times u, 10⁻⁸–10⁻⁷, the expansion's own
+/// (any M2L of the pair shares it; `yukawa_low_degree_chains_are_the_reference_chains` shows the
+/// chain is `rcr`'s to 3e-14 at κ = 100), the loss under strong damping of the roadmap's CH2.3
+/// (the H1 gate's G3), which its pruning removes. It is held to `STRONG_DAMPING` (printed).
 #[test]
 fn yukawa_chains_against_the_direct_sum() {
-    // The far chain at κD = 100 (above): 3.0e-7 measured on the M6.
-    const STRONG_DAMPING: f64 = 1e-5;
+    // The far chain at κD = 100 (above): 3.0e-7 measured on the M6; ten times that.
+    const STRONG_DAMPING: f64 = 3e-6;
     for kappa in [0.01, 1.0, 20.0, 100.0] {
         for kind in [ChargeKind::Real, ChargeKind::Complex] {
             for epsilon in [1e-6, 1e-10] {

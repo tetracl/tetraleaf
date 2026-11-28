@@ -133,7 +133,8 @@
 //! `check_vectors`' checks; the library's Auto Rotation's bits, Rotation on every level; the
 //! library's defaults Rotation on every level with no diagonal class, within the bound and on P
 //! ranks the one-rank FMM; complex charges bit for bit the real path's two real vectors; the
-//! P2P kernels on the first; Dense within `DENSE_TOLERANCE` of Rotation on the third;
+//! P2P kernels on the κD = 1 cube; Dense within `DENSE_TOLERANCE` of Rotation on the κD = 0.01
+//! cube; RCR by pairs (`check_rcr_split`) on the clusters with complex charges;
 //! `check_errors` the M2L without Yukawa tables refused.
 //!
 //! Every comparison is agreed by an all-reduce, so a failure fails every rank. Run by hand
@@ -5203,6 +5204,7 @@ fn helmholtz_fmm() {
     }
     check_kernels(&yukawa_scenarios()[0], &comm);
     check_tables(&yukawa_scenarios()[2], HelmholtzM2l::Dense, None, &comm);
+    check_rcr_split(&yukawa_scenarios()[1], &comm);
     check_errors(&comm);
     if comm.rank() == 0 {
         println!(

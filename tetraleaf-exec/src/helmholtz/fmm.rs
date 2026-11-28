@@ -1338,6 +1338,10 @@ impl HelmholtzFmmBuilder {
                         (HelmholtzM2l::PlaneWave, wave_degree(l))
                     } else {
                         let cheapest = match self.m2l {
+                            // Yukawa's Auto is Rotation (Helmholtz CH2.1b).
+                            HelmholtzM2l::Auto if self.k.kind() == WavenumberKind::Yukawa => {
+                                HelmholtzM2l::Rotation
+                            }
                             HelmholtzM2l::Auto if p <= max_degree as usize => HelmholtzM2l::Batched,
                             HelmholtzM2l::Auto | HelmholtzM2l::PlaneWave => HelmholtzM2l::Rotation,
                             m2l => m2l,
@@ -2546,8 +2550,9 @@ where
     }
 
     /// The agreed crossover degree under [`HelmholtzM2l::Auto`]
-    /// ([`HelmholtzFmmBuilder::m2l_max_degree`]), `None` under the other settings; the
-    /// operator's `m2l_on` gives each level's M2L.
+    /// ([`HelmholtzFmmBuilder::m2l_max_degree`]), `None` under the other settings and on
+    /// Yukawa, whose Auto is Rotation (Helmholtz CH2.1b); the operator's `m2l_on` gives each
+    /// level's M2L.
     pub fn m2l_max_degree(&self) -> Option<usize> {
         self.operator().max_degree()
     }

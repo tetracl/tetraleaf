@@ -23,7 +23,8 @@
 #   complex      W1 at 10⁵ points, κD = 1 and 100, 10⁻⁶, complex charges
 #   checksums    real and complex k, `main` against the branch (one launch each): W1 at kD = 30
 #                and 100, W3 at 10⁵ at kD = 30, W4's Plummer sphere at 10⁵ at kD = 10, the cube
-#                at kD = 20 + 2i (W4 cube at 10⁵), at 10⁻⁶, under the defaults and under Rotation:
+#                at kD = 20 + 2i (W4 cube at 10⁵), complex charges, and W1 at kD = 100 with real
+#                charges (`sum-w1real-…`), at 10⁻⁶, under the defaults and under Rotation:
 #                every checksum must agree (`main`'s binary from MAIN, a directory holding its
 #                `helmholtz_accuracy`)
 #   time         D4's evidence: the complex path, `main` against the branch, one setting per
@@ -169,6 +170,15 @@ for stage in "$@"; do
                     launch "sum-$tag-$m2l-$who" "$bin" --workload "$w" --kd "$re" --kim "$im" \
                         --eps 1e-6 --threads "$cores" --m2l "$m2l"
                 done
+            done
+        done
+        # Real k with real charges: real multipoles, one plane, the other (planes, m) path.
+        for m2l in auto-pw rotation; do
+            for who in main branch; do
+                bin=$B
+                [ "$who" = main ] && bin=$A
+                launch "sum-w1real-100-0-$m2l-$who" "$bin" --workload w1 --kd 100 --kim 0 \
+                    --eps 1e-6 --threads "$cores" --m2l "$m2l" --charges real
             done
         done
         ;;
