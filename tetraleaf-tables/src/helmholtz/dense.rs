@@ -141,6 +141,12 @@ impl<T: RealScalar> DenseM2l<T> {
             levels.iter().take(2).all(|&on| !on),
             "no dense M2L on levels 0 and 1: they have no V list"
         );
+        assert!(
+            k_root.re.is_finite()
+                && k_root.im.is_finite()
+                && ((k_root.re > 0.0 && k_root.im >= 0.0) || (k_root.re == 0.0 && k_root.im > 0.0)),
+            "k̂₀ must be finite and nonzero with Re ≥ 0 and Im ≥ 0, got {k_root:?}"
+        );
         // As `HelmholtzTables`: Re k = 0 is Yukawa's real path, one local plane.
         let local_planes = if k_root.re == 0.0 { 1 } else { 2 };
         if !levels.contains(&true) {
@@ -315,6 +321,11 @@ pub(super) fn matrices<T: RealScalar>(
 #[inline]
 pub(super) fn apply<T: RealScalar>(a: &[T], n: usize, planes: usize, m: &[T], l: &mut [T]) {
     if planes == 1 {
+        debug_assert_eq!(
+            a.len(),
+            n * l.len(),
+            "a matrix of the local's rows by n columns"
+        );
         for (column, &x) in a.chunks_exact(l.len()).zip(m) {
             for (y, &e) in l.iter_mut().zip(column) {
                 *y = *y + e * x;

@@ -491,8 +491,19 @@ fn classes_refuse_yukawa() {
     let _ = ClassM2l::<f64>::build(yukawa(2.0), &[0, 0, 3], &[false, false, true]);
 }
 
+/// The wavenumbers `build` still refuses, each by its guard on k̂₀ (the payload's message), in
+/// `HelmholtzTables` and `DenseM2l` (which checks k̂₀ even with no dense level).
 #[test]
 fn other_wavenumbers_are_still_refused() {
+    let message = |payload: Box<dyn std::any::Any + Send>| {
+        payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+            .unwrap_or_default()
+    };
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
     for (re, im) in [
         (-1.0, 0.0),
         (0.0, -1.0),
@@ -502,10 +513,84 @@ fn other_wavenumbers_are_still_refused() {
         (0.0, f64::INFINITY),
     ] {
         let k = Complex::new(re, im);
-        let refused = std::panic::catch_unwind(|| {
+        let tables = std::panic::catch_unwind(|| {
             HelmholtzTables::<f64>::build(k, &[0, 0, 2], DEFAULT_BLOCK_BUDGET)
-        })
-        .is_err();
-        assert!(refused, "k̂₀ = {re} + {im}i was accepted");
+        });
+        let dense = std::panic::catch_unwind(|| DenseM2l::<f64>::build(k, &[0, 0, 2], &[false; 3]));
+        for (what, result) in [("tables", tables.map(|_| ())), ("dense", dense.map(|_| ()))] {
+            let text = result.err().map(message);
+            assert!(
+                text.as_deref().is_some_and(|t| t.contains("k̂₀ must")),
+                "{what}: k̂₀ = {re} + {im}i not refused by its guard: {text:?}"
+            );
+        }
     }
+    std::panic::set_hook(hook);
 }
+
+#[test]
+#[should_panic(expected = "Yukawa's expansions have one plane")]
+fn yukawa_m2m_of_two_planes_is_refused() {
+    let tables = HelmholtzTables::<f64>::build(yukawa(2.0), &[3, 3], DEFAULT_BLOCK_BUDGET);
+    let mut scratch = tables.scratch();
+    let n = Layout::new(3).len();
+    let mut parent = vec![0.0; 2 * n];
+    tables.m2m(0, 0, &vec![0.0; 2 * n], &mut parent, 2, 1, &mut scratch);
+}
+
+#[test]
+#[should_panic(expected = "Yukawa's expansions have one plane")]
+fn yukawa_l2l_of_two_planes_is_refused() {
+    let tables = HelmholtzTables::<f64>::build(yukawa(2.0), &[3, 3], DEFAULT_BLOCK_BUDGET);
+    let mut scratch = tables.scratch();
+    let n = Layout::new(3).len();
+    let mut child = vec![0.0; 2 * n];
+    tables.l2l(1, 0, &vec![0.0; 2 * n], &mut child, 2, 1, &mut scratch);
+}
+
+/// f32 Yukawa tables are the f64 tables rounded: M2L (one plane), and M2M and L2L of every
+/// octant, within [`F32_BOUND`] of the f64 tables' output in the FMM-weighted measure (the
+/// per-degree measure of `main.rs`'s `f32_tables` reads a degree whose Yukawa output cancels:
+/// 1.2e-5 at one offset, 9.8e-7 at the others, on the M6).
+#[test]
+fn yukawa_f32_tables() {
+    let k = yukawa(5.0);
+    let degrees = [0, 6, 6];
+    let t64 = HelmholtzTables::<f64>::build(k, &degrees, DEFAULT_BLOCK_BUDGET);
+    let t32 = HelmholtzTables::<f32>::build(k, &degrees, DEFAULT_BLOCK_BUDGET);
+    assert!(t32.is_yukawa());
+    let (mut s64, mut s32) = (t64.scratch(), t32.scratch());
+    let len = Layout::new(6).len();
+    let level = |l: usize| Level::new(t64.k_hat(l), 1.0);
+    let (w_multipole, w_local) = (weights(&level(1), true, 6), weights(&level(2), false, 6));
+    let mut worst = 0.0f64;
+    let mut check = |y64: &[f64], y32: &[f32], w: &[f64]| {
+        let y32: Vec<f64> = y32.iter().map(|&v| v as f64).collect();
+        worst = worst.max(compare(&widened(&y32), &widened(y64), 0.0, w));
+    };
+    for d in 0..M2L_OFFSET_COUNT {
+        let x = input(6, 1, d as u64);
+        let x32: Vec<f32> = x.iter().map(|&v| v as f32).collect();
+        let (mut y64, mut y32) = (vec![0.0; len], vec![0.0f32; len]);
+        t64.m2l(2, d, &x, 1, &mut y64, 1, &mut s64);
+        t32.m2l(2, d, &x32, 1, &mut y32, 1, &mut s32);
+        check(&y64, &y32, &w_local);
+    }
+    for o in 0..OCTANT_COUNT {
+        let x = input(6, 1, o as u64);
+        let x32: Vec<f32> = x.iter().map(|&v| v as f32).collect();
+        let (mut y64, mut y32) = (vec![0.0; len], vec![0.0f32; len]);
+        t64.m2m(1, o, &x, &mut y64, 1, 1, &mut s64);
+        t32.m2m(1, o, &x32, &mut y32, 1, 1, &mut s32);
+        check(&y64, &y32, &w_multipole);
+        let (mut y64, mut y32) = (vec![0.0; len], vec![0.0f32; len]);
+        t64.l2l(2, o, &x, &mut y64, 1, 1, &mut s64);
+        t32.l2l(2, o, &x32, &mut y32, 1, 1, &mut s32);
+        check(&y64, &y32, &w_local);
+    }
+    println!("Yukawa f32 tables against f64, worst {worst:.2e}");
+    assert!(worst <= F32_BOUND, "{worst:e}");
+}
+
+/// The f32 bound of [`yukawa_f32_tables`]: 100 u of f32 (u = 2⁻²⁴).
+const F32_BOUND: f64 = 100.0 / (1u64 << 24) as f64;

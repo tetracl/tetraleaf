@@ -135,8 +135,8 @@
 //! [`HelmholtzTables::m2m`], [`l2l`](HelmholtzTables::l2l) and
 //! [`m2l`](HelmholtzTables::m2l) translate m expansions per box, one after the other, each
 //! of one or two planes of (q_l + 1)² values (real part, then imaginary part) in the layout
-//! of CONVENTIONS §3.6 (Yukawa's one plane), and add (+=) into the output. The steps restate `rcr`'s private
-//! `translate`, in its order of operations: per plane the 2 × 2 rotations by −φ and the
+//! of CONVENTIONS §3.6 (Yukawa's one plane), and add (+=) into the output. The steps
+//! restate `rcr`'s private `translate`, in its order of operations: per plane the 2 × 2 rotations by −φ and the
 //! transposed y-block; per output slot the coaxial sum over the input degrees, a complex
 //! product per term (an input of one plane as Im = 0) or, for the real shifts, a real
 //! product per plane; per plane the y-block and the rotations by φ, then the addition.
@@ -862,7 +862,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
     /// # Panics
     ///
     /// If `level` has no child level, o ≥ 8, `planes` is not 1 or 2 (1 only with real
-    /// shifts), or a slice is not `vectors` expansions of `planes` planes at its level's
+    /// shifts; only 1 for Yukawa), or a slice is not `vectors` expansions of `planes` planes at its level's
     /// [`m2l_degree`](Self::m2l_degree).
     #[allow(clippy::too_many_arguments)]
     pub fn m2m(
@@ -885,7 +885,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
             shift,
             Blocks::Stored(&tables.pair_blocks[key]),
             azimuth,
-            (child, planes, self.levels[level + 1].q),
+            (child, self.yukawa_planes(planes), self.levels[level + 1].q),
             (parent, planes, tables.q),
             vectors,
             Step3::Add,
@@ -928,7 +928,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
             shift,
             Blocks::Stored(&tables.pair_blocks[1 - key]),
             azimuth,
-            (parent, planes, tables.q),
+            (parent, self.yukawa_planes(planes), tables.q),
             (child, planes, self.levels[level].q),
             vectors,
             Step3::Add,
@@ -995,6 +995,16 @@ impl<T: RealScalar> HelmholtzTables<T> {
             "Yukawa's M2L takes one multipole plane, got {multipole_planes}"
         );
         multipole_planes
+    }
+
+    /// `planes` of an M2M or L2L, checked: Yukawa's expansions have one plane (a
+    /// complex-charge vector is two real vectors, module documentation, "Yukawa").
+    fn yukawa_planes(&self, planes: usize) -> usize {
+        assert!(
+            !self.yukawa || planes == 1,
+            "Yukawa's expansions have one plane, got {planes}"
+        );
+        planes
     }
 
     /// [`m2l`](Self::m2l) without its add (Helmholtz CH4.0i): writes the pair's contribution,
