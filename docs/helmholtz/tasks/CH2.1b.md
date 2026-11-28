@@ -124,13 +124,51 @@ Kathleen, `singlenode`, 1 × 40, `--exclude=node-c11b-004,node-c11b-013`, releas
   large κ (strong damping) or near it at small κ (the Laplace limit). Reported; CH2.3 calibrates.
 
 ## Pending runs
-(filled in step 6)
+None. Kathleen, `singlenode`, `--exclude=node-c11b-004,node-c11b-013`, all on node-c11b-046,
+2026-11-28: job 673276 (`main`'s release build at 2413c5b, `src/main`), 673277 (`smoke accuracy
+determinism dense complex checksums` on e0f648b; superseded by 673280 after the self-review's fix of
+the V rule's prices), 673278 (`time` on e0f648b), 673279 (the `-align-loops=64` builds of both trees,
+then `time time-aligned` with `LEVELS=1 EVALS=3`, four cases), 673280 (`smoke accuracy determinism
+dense complex checksums` on 503ad58, with the real-charge checksum case). Every launch exited 0.
+Outputs in `~/projects/fmm-archive/kathleen/runs/ch2-1b/` (`acc`, `acc2`, `time`, `time2`).
+
+## Results (the report `tetraleaf-validate/results/helmholtz-ch2-1b.md`)
+- **The acceptance:** within ε in all 114 cases (W1 at 10⁵ points, W3 at 10⁵ and 10⁶, W4's four
+  distributions at 10⁵; κD = 10⁻² to 10³; ε = 10⁻³, 10⁻⁶, 10⁻⁸), at most 0.27 ε (W4 Plummer, 10⁻⁸).
+  The degrees are the rule's plateau at every κ (7, 15, 24); at κD = 1000 on the uniform and sphere
+  trees the errors are the P2P's round-off.
+- **Deterministic:** checksums equal at 1 × 1, 1 × 40 and 4 × 10 on four cases; the tests' threads,
+  pair calls, RCR by pairs and the one-rank FMM at 2 and 4 ranks.
+- **Real and complex k:** `main`'s and the branch's checksums equal in 12 of 12 pairs (six cases,
+  real charges included, defaults and Rotation), and in every timing launch.
+- **D4's time:** evaluation branch/main 0.991–1.040 (geometric mean 1.015) on default builds,
+  0.947–1.035 (1.003) on aligned builds, the ranges overlapping in every case and the signs changing
+  between the builds: no cost measured (job 673278's first, lighter set gave 1.036).
+- **Tests (the M6):** the Yukawa chains within ε at κD = 0.01–100 but the far chain at κD = 100
+  (3.0e-7 at every ε: the expansion's cancellation e^{20} u, held to 3e-6), our chains `rcr`'s
+  `_yukawa` chains to 3e-14 even at κ = 100, Dense 1e-16–1.6e-15 from Rotation, complex charges two
+  real vectors bit for bit, P2P on NEON within 0.009 of CH3.4b's bound; the FMM's Yukawa scenarios
+  1e-5–1e-7 against bounds 1e-2–1e-5.
+
+## Self-review
+A subagent (plan, proposal §2 and §10, the branch) found no blocking defect. Fixed after it: the V
+rule priced Yukawa's Auto levels at Batched's cost (now Rotation's; the accuracy stages rerun as job
+673280, errors lower by up to 13 %); the far chain's exception explained by the expansion's own
+cancellation and held to 3e-6 (was 1e-5); `check_rcr_split` on a Yukawa scenario; a real-charge real-k
+checksum case; doc fixes. Left as noted: no f32 Yukawa FMM test (the plan names none; the P2P test
+covers f32); Yukawa's P2P forms each pair's distance once per real column (c m calls, where the
+complex path shares it over vectors), a performance note for CH2.1d; the `PlaneWaveRaise::M2l` branches
+of Yukawa's P2L and M2P are unreachable today (no waves on Yukawa) and kept so the bodies follow the
+others.
 
 ## Open questions
-- D4 (for sign-off): the proposal recommends one operator `HelmholtzOperator<T, K>` with K a type
-  parameter "if CH2.1 shows no cost to the complex path". The operator has carried the kind as a
-  runtime field since CH3.1a (real and complex k), dispatched per level call or per leaf body, never
-  in an inner loop; this task adds Yukawa the same way. The question is which form D4 takes.
-- Follow-up: Yukawa's Batched, Classes and exponential M2L (proposal §5.5: every strategy of §5.3
-  applies in real arithmetic), and Auto's choice among them; a new task in H2 with *Done when* and
-  *Needs*, on or off the priority list by the user's answer.
+1. **D4.** The proposal recommends one operator `HelmholtzOperator<T, K>`, K a type parameter, "if
+   CH2.1 shows no cost to the complex path". Built: one operator `HelmholtzOperator<T>` with the kind
+   a runtime field resolved at build (as real and complex k since CH3.1a), read per level call or leaf
+   body, never in an inner loop; no cost measured (report §5). Recommended: sign off one operator with
+   the kind resolved at build as a field, and amend §5.5, §6.3 and §12 to say so. Alternatives: the
+   type parameter K as the proposal sketches it (a refactor of the operator, no measured gain to
+   expect); Yukawa its own operator type (copies of the operator's bodies and settings).
+2. **CH2.1d's priority.** Recommended: on the priority list in item 15 after CH2.3 (its rules read the
+   calibrated degrees), before CH2.5. Alternative: off the list until H2.G or later (Yukawa's FMM then
+   runs Rotation on every level, correct and slower at low degrees).
