@@ -67,6 +67,9 @@ fn kernel<T: RealScalar>(
     out.iter().map(|&v| v.to_f64()).collect()
 }
 
+/// A target's φ̃ and gradient.
+type Evaluation = (Complex<f64>, [Complex<f64>; 3]);
+
 /// The reference's outputs per vector and target: φ̃ and the gradient.
 fn reference(
     p: usize,
@@ -74,7 +77,7 @@ fn reference(
     targets: &[[f64; 3]],
     locals: &[f64],
     vectors: usize,
-) -> Vec<Vec<(Complex<f64>, [Complex<f64>; 3])>> {
+) -> Vec<Vec<Evaluation>> {
     let level = Level::new(k, 1.0);
     let frame = Frame::new([0.0; 3], 1.0);
     let mut ws = Workspace::new(p);
