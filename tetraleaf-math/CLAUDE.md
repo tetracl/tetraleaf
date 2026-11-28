@@ -31,6 +31,11 @@ the same recurrence, no division by sin θ; `harmonics_derivatives`' outputs wit
 f64; `bessel_j_real` keeps its code path and bits). `LeafHarmonics`' directions now scale x, y (and
 z) by a power of two where ρ² (or r²) is below the normal range, so cos φ keeps its precision next
 to the z-axis; every other point's bits unchanged (a select by 1).
+Helmholtz CH4.9b2 made those directions public as `orthonormal::LeafDirections` (cos θ, sin θ, cos φ,
+sin φ per lane, `of(points)`; the private `Lanes` renamed, no value changed), so that the batched
+L2P's Cartesian gradient takes the harmonics' own frame; `tests/orthonormal/leaf.rs` holds them to
+the reference's `hypot` angles within 4 u (2 u measured) and exactly at the centre, the poles, the
+axes and next to the z-axis.
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.

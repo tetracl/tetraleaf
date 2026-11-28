@@ -15,13 +15,14 @@
 //!   in rank order (`SimpleCommunicator::self_comm()`, on every rank) bit for bit.
 //!
 //! Every scenario runs the default P2P kernel (`P2pChoice::Auto`, the vectorised kernel of
-//! `tetraleaf-simd` on the default ISA), and with it the batched P2M (Helmholtz CH4.9a2b). On two
-//! scenarios the P2P kernels (Helmholtz CH3.4c): `Reference` and every ISA this machine offers,
-//! `Isa::Scalar` with the reference's P2M (`reference_leaves`) bit for bit `Reference`, `Auto`
+//! `tetraleaf-simd` on the default ISA), and with it the batched P2M and L2P (Helmholtz CH4.9a2b
+//! and CH4.9b2). On two scenarios the P2P kernels (Helmholtz CH3.4c): `Reference` and every ISA
+//! this machine offers, `Isa::Scalar` with the reference's P2M and L2P (`reference_leaves`) bit for
+//! bit `Reference`, `Auto`
 //! bit for bit `Isa(Isa::detect())`, and every ISA within `KERNEL_TOLERANCE` of `Reference`
 //! (relative L2 over every rank's targets) and within the scenario's bound of the direct sum.
-//! On every scenario and a cube of complex k with real charges the batched P2M
-//! (`check_leaf_kernel`): against the reference's P2M on the same ISA within
+//! On every scenario and a cube of complex k with real charges the batched P2M and L2P
+//! (`check_leaf_kernel`): against the reference's on the same ISA within
 //! `LEAF_TOLERANCE`, the errors against the direct sum within `LEAF_RATIO` (1.01) of the
 //! reference's, and on P ranks the one-rank FMM bit for bit under both.
 //!
@@ -181,13 +182,15 @@ const P8_BOUND: f64 = 1e-3;
 /// (NEON). As Laplace's tolerance for its kernels in f64 (`tests/mpi_exec.rs`).
 const KERNEL_TOLERANCE: f64 = 1e-13;
 
-/// The batched P2M's FMM output may differ from the reference P2M's by this much (relative L2
-/// of φ and of ∇φ over every rank's targets): the kernel's contract per coefficient is a few
-/// u times the terms' sizes (`tetraleaf-tables`' `tests/helmholtz/leaf.rs`).
+/// The batched P2M's and L2P's FMM output may differ from the reference's by this much (relative
+/// L2 of φ and of ∇φ over every rank's targets): the kernels' contracts per coefficient and per
+/// target are a few u times the terms' sizes (`tetraleaf-tables`' `tests/helmholtz/leaf.rs` and
+/// `l2p.rs`).
 const LEAF_TOLERANCE: f64 = 1e-13;
 
-/// The batched P2M's errors against the direct sum within this factor of the reference P2M's,
-/// φ and ∇φ: the acceptance of Helmholtz CH4.9a2b (docs/helmholtz/roadmap.md).
+/// The batched P2M's and L2P's errors against the direct sum within this factor of the
+/// reference's, φ and ∇φ: the acceptance of Helmholtz CH4.9a2b and CH4.9b2
+/// (docs/helmholtz/roadmap.md).
 const LEAF_RATIO: f64 = 1.01;
 
 /// The Dense or Classes M2L's output may differ from Rotation's by this much (relative L2
@@ -751,8 +754,8 @@ fn check_kernels(scenario: &Scenario, comm: &SimpleCommunicator) {
         assert_eq!(fmm.p2p_kernel(), P2pChoice::Isa(isa));
         drop(fmm);
         if isa == Isa::Scalar {
-            // P2P's scalar kernel is the reference's bits; P2M's batched kernel is not, so the
-            // identity holds with the reference's P2M (Helmholtz CH4.9a2b).
+            // P2P's scalar kernel is the reference's bits; the batched P2M and L2P are not, so the
+            // identity holds with the reference's leaves (Helmholtz CH4.9a2b, CH4.9b2).
             let (fmm, scalar) = run(
                 &builder
                     .clone()
@@ -762,11 +765,11 @@ fn check_kernels(scenario: &Scenario, comm: &SimpleCommunicator) {
                 kind,
                 comm,
             );
-            assert!(!fmm.operator().p2m_batched());
+            assert!(!fmm.operator().leaves_batched());
             drop(fmm);
             assert_same(
                 &format!(
-                    "{}: Isa::Scalar with the reference's P2M against Reference",
+                    "{}: Isa::Scalar with the reference's leaves against Reference",
                     scenario.name
                 ),
                 &scalar,
@@ -809,10 +812,11 @@ fn check_kernels(scenario: &Scenario, comm: &SimpleCommunicator) {
     }
 }
 
-/// The batched P2M (Helmholtz CH4.9a2b; module documentation): the default (the kernel under
-/// `Auto`) against the reference's P2M on the same P2P kernel, within `LEAF_TOLERANCE`, the
-/// errors against the direct sum within `LEAF_RATIO` of the reference's, and on P ranks the
-/// one-rank FMM bit for bit with the reference's P2M (the default's is in [`check`]).
+/// The batched P2M and L2P (Helmholtz CH4.9a2b, CH4.9b2; module documentation): the default (the
+/// kernels under `Auto`) against the reference's P2M and L2P on the same P2P kernel, within
+/// `LEAF_TOLERANCE`, the errors against the direct sum within `LEAF_RATIO` of the reference's, and
+/// on P ranks the one-rank FMM bit for bit with the reference's leaves (the default's is in
+/// [`check`]).
 fn check_leaf_kernel(scenario: &Scenario, comm: &SimpleCommunicator) {
     let name = scenario.name;
     let kind = scenario.charges;
@@ -820,13 +824,13 @@ fn check_leaf_kernel(scenario: &Scenario, comm: &SimpleCommunicator) {
     let builder = builder(scenario);
     let (fmm, batched) = run(&builder, &inputs, kind, comm);
     assert!(
-        fmm.operator().p2m_batched(),
-        "{name}: the default runs the batched P2M"
+        fmm.operator().leaves_batched(),
+        "{name}: the default runs the batched P2M and L2P"
     );
     drop(fmm);
     let reference_builder = builder.clone().reference_leaves(true);
     let (fmm, reference) = run(&reference_builder, &inputs, kind, comm);
-    assert!(!fmm.operator().p2m_batched());
+    assert!(!fmm.operator().leaves_batched());
     assert!(fmm.operator().reference_leaves());
     drop(fmm);
     let (phi, grad) = difference(&batched, &reference, comm);
@@ -834,7 +838,7 @@ fn check_leaf_kernel(scenario: &Scenario, comm: &SimpleCommunicator) {
     let theirs = errors(scenario, &inputs, &reference, 0, comm);
     if comm.rank() == 0 {
         println!(
-            "{name}: batched P2M against the reference's: relative L2 φ {phi:.2e}, ∇φ \
+            "{name}: batched P2M and L2P against the reference's: relative L2 φ {phi:.2e}, ∇φ \
              {grad:.2e}; errors φ {:.4e} against {:.4e} ({:.4}×), ∇φ {:.4e} against {:.4e}",
             ours.0,
             theirs.0,
@@ -845,14 +849,14 @@ fn check_leaf_kernel(scenario: &Scenario, comm: &SimpleCommunicator) {
     }
     assert!(
         phi <= LEAF_TOLERANCE && grad <= LEAF_TOLERANCE,
-        "{name}: batched P2M against the reference's: φ {phi:e}, ∇φ {grad:e}"
+        "{name}: batched P2M and L2P against the reference's: φ {phi:e}, ∇φ {grad:e}"
     );
     assert!(
         ours.0 <= LEAF_RATIO * theirs.0 && ours.1 <= LEAF_RATIO * theirs.1,
-        "{name}: errors {ours:?} against the reference P2M's {theirs:?}"
+        "{name}: errors {ours:?} against the reference leaves' {theirs:?}"
     );
     check_one_rank(
-        &format!("{name}, the reference's P2M"),
+        &format!("{name}, the reference's P2M and L2P"),
         &reference_builder,
         &inputs,
         kind,
@@ -4900,7 +4904,7 @@ fn helmholtz_fmm() {
     // charges and separate targets.
     check_kernels(&scenarios()[0], &comm);
     check_kernels(&scenarios()[2], &comm);
-    // The batched P2M (CH4.9a2b): every scenario (complex k with complex charges, real k with
+    // The batched P2M and L2P (CH4.9a2b, CH4.9b2): every scenario (complex k with complex charges, real k with
     // complex and with real charges), and complex k with real charges.
     for scenario in scenarios()
         .iter()

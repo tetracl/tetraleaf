@@ -118,7 +118,7 @@ pub(crate) fn under_range<T: RealScalar>() -> T {
     }
 }
 
-/// The power of two by which [`Lanes::of`] scales coordinates whose ρ² or r² falls below the
+/// The power of two by which [`LeafDirections::of`] scales coordinates whose ρ² or r² falls below the
 /// normal range: 2⁶⁰⁰ for a type with f64's range, 2¹⁰⁰ for f32's, so that the squares of the
 /// smallest subnormal coordinate are normal and those of the largest scaled one finite.
 #[inline]
@@ -244,7 +244,7 @@ impl<T: RealScalar> LeafHarmonics<T> {
             "degree {p} above the scratch's {}",
             scratch.p
         );
-        let lanes = Lanes::of(points);
+        let lanes = LeafDirections::of(points);
         let tau = under_range::<T>();
         let q = &mut scratch.column[..=p];
         let mut diag = [self.y00; B];
@@ -355,7 +355,7 @@ impl<T: RealScalar> LeafHarmonics<T> {
             "degree {p} above the scratch's {}",
             scratch.p
         );
-        let lanes = Lanes::of(points);
+        let lanes = LeafDirections::of(points);
         let cos_theta = &lanes.cos_theta;
         let tau = under_range::<T>();
         let LeafScratch {
@@ -523,17 +523,36 @@ impl<T: RealScalar, const B: usize> LeafScratch<T, B> {
 }
 
 /// cos θ, sin θ, cos φ and sin φ of each lane, from its coordinates, with
-/// [`harmonics`](super::harmonics)' conventions at the centre and on the z-axis.
-struct Lanes<T, const B: usize> {
-    cos_theta: [T; B],
-    sin_theta: [T; B],
-    cos_phi: [T; B],
-    sin_phi: [T; B],
+/// [`harmonics`](super::harmonics)' conventions at the centre (θ = 0, φ = 0) and on the z-axis
+/// (φ = 0): the directions of [`LeafHarmonics::columns`] and
+/// [`LeafHarmonics::derivative_columns`], the rescale next to the z-axis and the centre included
+/// (the [module documentation](self)). A caller that turns the angular derivatives into Cartesian
+/// components (the gradient of L2P, Helmholtz CH4.9b2) takes the unit vectors r̂, θ̂ and φ̂ from these,
+/// so that they are the harmonics' own frame. A lane's values depend on its point alone.
+///
+/// ```
+/// use tetraleaf_math::orthonormal::LeafDirections;
+///
+/// let d = LeafDirections::<f64, 2>::of(&[[0.0, 3.0, 4.0], [0.0; 3]]);
+/// assert_eq!([d.cos_theta[0], d.sin_theta[0], d.cos_phi[0], d.sin_phi[0]], [0.8, 0.6, 0.0, 1.0]);
+/// assert_eq!([d.cos_theta[1], d.sin_theta[1], d.cos_phi[1], d.sin_phi[1]], [1.0, 0.0, 1.0, 0.0]);
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct LeafDirections<T, const B: usize> {
+    /// cos θ per lane.
+    pub cos_theta: [T; B],
+    /// sin θ per lane.
+    pub sin_theta: [T; B],
+    /// cos φ per lane.
+    pub cos_phi: [T; B],
+    /// sin φ per lane.
+    pub sin_phi: [T; B],
 }
 
-impl<T: RealScalar, const B: usize> Lanes<T, B> {
+impl<T: RealScalar, const B: usize> LeafDirections<T, B> {
+    /// The directions of the B points `points` (offsets from the expansion's centre).
     #[inline]
-    fn of(points: &[[T; 3]; B]) -> Self {
+    pub fn of(points: &[[T; 3]; B]) -> Self {
         let mut lanes = Self {
             cos_theta: [T::one(); B],
             sin_theta: [T::zero(); B],

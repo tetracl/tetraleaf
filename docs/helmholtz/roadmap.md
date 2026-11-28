@@ -7,14 +7,14 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/tasks/<ID>.md`; each milestone's gate report is
 `docs/helmholtz/gates/<milestone>.md`.
 
-Status (2026-11-27): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
+Status (2026-11-28): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). Item 14, the leaf
-expansions: CH4.9a1–CH4.9a2b merged (P2M by the batched kernel); CH4.9b split into CH4.9b1 and CH4.9b2,
-CH4.9b1 (the derivative routines for L2P's gradient, L2P projected at 0.17–0.27× per point on locust
-and Kathleen) done in its PR. Next CH4.9b2 (the L2P kernel and the ISA question), then H2
-and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and CH4.9c. The project was
-renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0, CH0.4, CH0.6 and
-CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in
+expansions: CH4.9a1–CH4.9b1 merged; CH4.9b2 (L2P by the batched kernel; the evaluation 0.77–0.94× of
+the one before CH4.9a–b on Kathleen and locust) is done in its PR, its ISA question signed off (no ISA
+kernel), and waits for the merge.
+Next H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and so does CH4.9c.
+The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0,
+CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in
 `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G
 in `git show 8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show
 4d28d41:docs/helmholtz/roadmap.md`; until its second run in `git show 03bc2bd:docs/helmholtz/roadmap.md`;
@@ -23,7 +23,7 @@ dc69cd4:docs/helmholtz/roadmap.md`; until CH4.6a1 in `git show 34e3caf:docs/helm
 until CH4.6a2 in `git show 7c8177d:docs/helmholtz/roadmap.md`; until CH4.9a1 in `git show
 9758028:docs/helmholtz/roadmap.md`; until CH4.9a2a in `git show a62c5b9:docs/helmholtz/roadmap.md`;
 until CH4.9a2b in `git show 9401720:docs/helmholtz/roadmap.md`; until CH4.9b1 in `git show
-c2ccf51:docs/helmholtz/roadmap.md`.
+c2ccf51:docs/helmholtz/roadmap.md`; until CH4.9b2 in `git show 2a65aa1:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -793,20 +793,15 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   Kathleen (f64, medians), the sum then 37–62 % and 49–73 % of it; `LeafHarmonics`' directions
   rescaled next to the z-axis. Report
   `tetraleaf-validate/results/helmholtz-ch4-9b1.md`, record `docs/helmholtz/tasks/CH4.9b1.md`.
-- [ ] **CH4.9b2 L2P with gradients by the kernel.** *Done when:* CH4.9a's *Done when* for L2P,
-  potentials and gradients, on CH4.9b1's routines: the kernel in `tetraleaf-tables::helmholtz::leaf`
-  against `tetraleaf_ref::helmholtz::leaf::l2p` within a contract per target in f64 and f32 (real
-  and complex k, the centre's tangential limit), run by the operator's `P2pChoice` with
-  `reference_leaves` (`Reference` the per-point calls), m vectors, a leaf's bits the same at every
-  thread count and on P ranks the one-rank FMM's, the FMM's errors within 1.01× the reference
-  path's (W1's and W2's constant density included), L2P per level and the evaluation under the
-  defaults before and after CH4.9a–b on CH4.6a2's cases on Kathleen and locust; the ISA question
-  (the sum against its floor on both machines) and the f32 sum as above; constraint 1. Also (from
-  CH4.9b1, its report §3): with the routines the restated L2P sum with gradients is 37–62 % of a point
-  on locust and 49–73 % on Kathleen. It costs 1.12–1.57 ns per term in f64 on locust and 2.8–3.4 on
-  Kathleen in either precision, against the P2M kernel's sum at 0.27–0.40 and 0.73–0.98. The
-  kernel's sum is the part to vectorise, per target over terms, its three products (the value and
-  two derivatives) on each plane. *Needs:* CH4.9b1. *Machines:* Kathleen, locust.
+- [x] **CH4.9b2 L2P with gradients by the kernel.** `tetraleaf_tables::helmholtz::leaf::LeafL2p` (16 targets
+  per batch on CH4.9b1's routines, safe Rust, no lane reduction) under every ISA, the reference under
+  `Reference` or `reference_leaves`. It stays within C = 10 of its contract per target (1.9 measured),
+  and the FMM's errors are 0.993–1.000× the reference's, W1's and W2's constant density included.
+  L2P per run takes 0.19–0.23× (Kathleen) and 0.17–0.27× (locust); the evaluation is 0.77–0.94× and
+  0.82–0.94× of the one before CH4.9a–b. The ISA question: the sum is within 2–3× of the baseline's
+  peak, and an AVX-512 kernel would save at most 2.9 % of an evaluation; no ISA kernel, the question
+  closed (question 1, signed off 2026-11-28, the user on #272: "Q1 as recommended"). Report
+  `tetraleaf-validate/results/helmholtz-ch4-9b2.md`, record `docs/helmholtz/tasks/CH4.9b2.md`.
 - [ ] **CH4.9c Laplace's P2M and L2P by SIMD kernels.** Added on 2026-11-26 (the user: "Please add it
   to the roadmap"); off the priority list. A Laplace task: constraint 1 binds in full. Measured on
   Kathleen (job 673084, the cube at N = 10⁷, f64, the library's defaults, gradients, `scaling --kinds`

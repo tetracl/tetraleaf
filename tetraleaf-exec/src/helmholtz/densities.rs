@@ -73,10 +73,10 @@
 //! `tetraleaf_ref::helmholtz::leaf` (the complex path, or the `_yukawa` forms on the Yukawa
 //! path, column by column for complex vectors), in point order, accumulated (+=), so each
 //! vector gets exactly the one-vector operator. [`Densities::p2m_kernel`] (Helmholtz CH4.9a2b)
-//! forms the same multipoles by the batched kernel of
-//! `tetraleaf_tables::helmholtz::leaf` (all the leaf's points and vectors in one call, 16 points
-//! at a time; the reference's values to the kernel's contract, not its bits); the Yukawa path
-//! keeps the reference calls. Their scratch is a [`LeafScratch`], sized at construction. The
+//! and [`Densities::l2p_kernel`] (Helmholtz CH4.9b2) form the same multipoles and outputs by the
+//! batched kernels of `tetraleaf_tables::helmholtz::leaf` (all the leaf's points and vectors in one
+//! call, 16 points at a time; the reference's values to the kernels' contracts, not their bits);
+//! the Yukawa path keeps the reference calls. Their scratch is a [`LeafScratch`], sized at construction. The
 //! operators that need a second box's frame (P2L, M2P, P2P) belong to the Helmholtz operator
 //! (CH3.1), which chooses between the two P2Ms.
 
@@ -85,7 +85,9 @@ use core::f64::consts::PI;
 use tetraleaf_math::{Complex, Layout, RealScalar};
 use tetraleaf_ref::Frame;
 use tetraleaf_ref::helmholtz::{Level, Workspace, leaf};
-use tetraleaf_tables::helmholtz::leaf::{LeafCharges, LeafP2m, P2mScratch};
+use tetraleaf_tables::helmholtz::leaf::{
+    L2pScratch, LeafCharges, LeafL2p, LeafOutput, LeafP2m, P2mScratch,
+};
 use thiserror::Error;
 
 use super::{Wavenumber, WavenumberKind};
@@ -587,6 +589,59 @@ impl Densities {
         }
     }
 
+    /// L2P in a leaf's own frame by the batched kernel (Helmholtz CH4.9b2): adds what
+    /// [`l2p`](Self::l2p) adds, the potentials of the m locals of degree p and with `gradients` their
+    /// gradients at the leaf's targets, by one call of
+    /// `tetraleaf_tables::helmholtz::leaf::LeafL2p::l2p` on the leaf's targets, every vector's local
+    /// and the target output chunk as it lies. Within the kernel's contract of the reference's
+    /// values, not its bits; a target's outputs depend on its offset and the locals alone, and
+    /// vector v is the one-vector call's bits. On the Yukawa path it is [`l2p`](Self::l2p) (H2's
+    /// path).
+    ///
+    /// # Panics
+    ///
+    /// As [`l2p`](Self::l2p), and if `scratch` holds fewer vectors than the path.
+    #[allow(clippy::too_many_arguments)]
+    pub fn l2p_kernel<T: SimdScalar>(
+        &self,
+        k: &Wavenumber,
+        radius: f64,
+        p: usize,
+        locals: &[T],
+        targets: &[T],
+        scratch: &mut LeafScratch<T>,
+        output: &mut [T],
+        gradients: bool,
+    ) {
+        if self.kind == WavenumberKind::Yukawa {
+            self.l2p(k, radius, p, locals, targets, scratch, output, gradients);
+            return;
+        }
+        let (level, _) = self.leaf_level::<T>(k, radius);
+        assert!(scratch.p >= p, "scratch for degree {}, not {p}", scratch.p);
+        assert_eq!(locals.len(), self.local_size(p), "locals");
+        assert_eq!(targets.len() % 3, 0, "target triples");
+        let n = targets.len() / 3;
+        assert_eq!(
+            output.len(),
+            n * self.target_output_point_size(gradients),
+            "target output"
+        );
+        let output = LeafOutput {
+            values: output,
+            vectors: self.vectors,
+            gradients,
+        };
+        scratch.l2p.l2p(
+            p,
+            &level,
+            targets.as_chunks::<3>().0,
+            locals,
+            &mut scratch.l2p_batch,
+            output,
+        );
+    }
+
     /// The level and frame of a leaf of half-width `radius` in its own units: k̂ = k r in
     /// f64, rounded to T; centre 0, radius 1.
     fn leaf_level<T: SimdScalar>(&self, k: &Wavenumber, radius: f64) -> (Level<T>, Frame<T>) {
@@ -664,9 +719,9 @@ impl Densities {
     }
 }
 
-/// The scratch of [`Densities::p2m`], [`Densities::p2m_kernel`] and [`Densities::l2p`] up to a
-/// degree, allocated once: the reference's workspace, and the batched P2M's table and scratch
-/// for a number of charge vectors.
+/// The scratch of [`Densities::p2m`], [`Densities::p2m_kernel`], [`Densities::l2p`] and
+/// [`Densities::l2p_kernel`] up to a degree, allocated once: the reference's workspace, and the
+/// batched P2M's and L2P's tables and scratch for a number of charge vectors.
 pub struct LeafScratch<T: SimdScalar> {
     p: usize,
     workspace: Workspace<T>,
@@ -676,6 +731,10 @@ pub struct LeafScratch<T: SimdScalar> {
     kernel: LeafP2m<T>,
     /// The batched P2M's scratch.
     batch: P2mScratch<T>,
+    /// The batched L2P's table (Helmholtz CH4.9b2).
+    l2p: LeafL2p<T>,
+    /// The batched L2P's scratch.
+    l2p_batch: L2pScratch<T>,
 }
 
 impl<T: SimdScalar> LeafScratch<T> {
@@ -692,6 +751,8 @@ impl<T: SimdScalar> LeafScratch<T> {
             complex: vec![T::zero(); 2 * Layout::new(p).len()],
             kernel: LeafP2m::new(p),
             batch: P2mScratch::new(p, vectors),
+            l2p: LeafL2p::new(p),
+            l2p_batch: L2pScratch::new(p, vectors),
         }
     }
 }

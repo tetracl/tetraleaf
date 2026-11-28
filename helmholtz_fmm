@@ -1,0 +1,12 @@
+test	mpi_regressions	/Volumes/data/agentt/projects/fmm/target/opt1/debug/deps/mpi_regressions-356fac2cb7566153
+test	mpi_exec	/Volumes/data/agentt/projects/fmm/target/opt1/debug/deps/mpi_exec-dfb7415dd35256a7
+test	mpi_threading	/Volumes/data/agentt/projects/fmm/target/opt1/debug/deps/mpi_threading-b441cada4fe06029
+test	invariance	/Volumes/data/agentt/projects/fmm/target/opt1/debug/deps/invariance-ffe73ceaec0bd10c
+test	helmholtz_fmm	/Volumes/data/agentt/projects/fmm/target/opt1/debug/deps/helmholtz_fmm-cbb61b611b5fc144
+example	test_mpi_complete_tree	/Volumes/data/agentt/projects/fmm/target/opt1/debug/examples/test_mpi_complete_tree
+example	test_mpi_global_bounding_box	/Volumes/data/agentt/projects/fmm/target/opt1/debug/examples/test_mpi_global_bounding_box
+example	test_mpi_leaf_lookup	/Volumes/data/agentt/projects/fmm/target/opt1/debug/examples/test_mpi_leaf_lookup
+example	test_mpi_vtk	/Volumes/data/agentt/projects/fmm/target/opt1/debug/examples/test_mpi_vtk
+example	test_mpi_construction_edge_cases	/Volumes/data/agentt/projects/fmm/target/opt1/debug/examples/test_mpi_construction_edge_cases
+example	test_mpi_weighted_partition	/Volumes/data/agentt/projects/fmm/target/opt1/debug/examples/test_mpi_weighted_partition
+example	test_mpi_locally_essential	/Volumes/data/agentt/projects/fmm/target/opt1/debug/examples/test_mpi_locally_essential

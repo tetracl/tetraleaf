@@ -821,6 +821,17 @@ its sum's part). `tools/helmholtz/ch4-9a2b-runs.sh` runs the task's stages (`smo
 `worst`, `parts`), `ch4-9a2b-tables.py` makes the report's tables (`runs`, `levels`, `worst`,
 `parts`). Its report is `results/helmholtz-ch4-9a2b.md`.
 
+Helmholtz CH4.9b2 (L2P with gradients by the batched kernel; docs/helmholtz/tasks/CH4.9b2.md) renamed
+`Row::p2m_batched` to `Row::leaves_batched` (`reference_leaves` now gives the reference's P2M and L2P;
+the column "P2P" ends `/ref-leaves`, `/ref-p2m` before) and added to `helmholtz_leaf` the L2P kernel
+per point without and with gradients over the batch as one leaf (`LeafL2p`, checked against the
+reference first, "L2P kernel check"), its ratios to the reference and the projection, and "∇ kernel
+sum" (the kernel with gradients less its routines' parts) in ns per term and GFLOP/s by the sum's
+(p + 1) (12.5 p + 8) operations (`l2p_sum_flops`). `tools/helmholtz/ch4-9b2-runs.sh` runs the task's
+stages (`smoke`, `levels`, `worst`, `parts`, `native`: `parts` from a `-C target-cpu=native` build),
+`ch4-9b2-tables.py` makes the report's tables (`runs`, `levels`, `worst`, `parts`, `native`). Its
+report is `results/helmholtz-ch4-9b2.md`.
+
 Helmholtz CH4.9b1 (the leaf harmonics' and the real radial functions' derivatives;
 docs/helmholtz/tasks/CH4.9b1.md) added to `helmholtz_leaf`, per case, `LeafHarmonics::derivative_columns`
 and `radial::bessel_j_real_derivatives` over the batch, checked first (the derivatives against
