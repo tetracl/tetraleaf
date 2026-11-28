@@ -375,7 +375,7 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   Yukawa's real path. *Done when:* its contract as CH4.9b2's, a target's bits independent of its
   leaf, batch and position, the FMM's errors within 1.01× the per-point path's on CH2.1b's cases,
   L2P's time per level on Kathleen. *Needs:* CH2.1c. Added at CH2.1c (Yukawa's reference L2P 15–25 %
-  of an evaluation after it, report §4); its place on the priority list is #<PR>'s question 1.
+  of an evaluation after it, report §4); its place on the priority list is #275's question 1.
 - [ ] **CH2.2 Per-level tables with per-level cache keys.** *Done when:* build cost and
   memory reported; levels reused across an octave sweep. *Needs:* CH2.1, D4.
 - [ ] **CH2.3 Pruning and the calibration of p_l.** *Done when:* the relative error within
