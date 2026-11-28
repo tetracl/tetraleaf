@@ -791,8 +791,8 @@ impl<T: RealScalar> LeafL2p<T> {
                         let row = |which: usize, n: usize| &acc[(2 * which + plane) * degrees + n];
                         let column = planes * v + plane;
                         let mut phi = zero;
-                        for n in 0..degrees {
-                            let (a, jr) = (row(0, n), &radial[n]);
+                        for (n, jr) in radial.iter().enumerate() {
+                            let a = row(0, n);
                             for j in 0..B {
                                 phi[j] = phi[j] + jr[j] * a[j];
                             }

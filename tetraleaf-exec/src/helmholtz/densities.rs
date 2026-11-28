@@ -76,8 +76,8 @@
 //! and [`Densities::l2p_kernel`] (Helmholtz CH4.9b2) form the same multipoles and outputs by the
 //! batched kernels of `tetraleaf_tables::helmholtz::leaf` (all the leaf's points and vectors in one
 //! call, 16 points at a time; the reference's values to the kernels' contracts, not their bits);
-//! on the Yukawa path P2M runs its kernel too (Helmholtz CH2.1c) and L2P keeps the reference
-//! calls. Their scratch is a [`LeafScratch`], sized at construction. The
+//! on the Yukawa path P2M runs its kernel too (Helmholtz CH2.1c), and so does L2P (Helmholtz
+//! CH2.1e). Their scratch is a [`LeafScratch`], sized at construction. The
 //! operators that need a second box's frame (P2L, M2P, P2P) belong to the Helmholtz operator
 //! (CH3.1), which chooses between the two P2Ms.
 
@@ -599,8 +599,9 @@ impl Densities {
     /// `tetraleaf_tables::helmholtz::leaf::LeafL2p::l2p` on the leaf's targets, every vector's local
     /// and the target output chunk as it lies. Within the kernel's contract of the reference's
     /// values, not its bits; a target's outputs depend on its offset and the locals alone, and
-    /// vector v is the one-vector call's bits. On the Yukawa path it is [`l2p`](Self::l2p) (H2's
-    /// path).
+    /// vector v is the one-vector call's bits. On the Yukawa path (Helmholtz CH2.1e) the kernel
+    /// restates `l2p_yukawa` per real local, a complex vector's two output columns those of Re q's
+    /// and Im q's locals.
     ///
     /// # Panics
     ///
@@ -617,10 +618,6 @@ impl Densities {
         output: &mut [T],
         gradients: bool,
     ) {
-        if self.kind == WavenumberKind::Yukawa {
-            self.l2p(k, radius, p, locals, targets, scratch, output, gradients);
-            return;
-        }
         let (level, _) = self.leaf_level::<T>(k, radius);
         assert!(scratch.p >= p, "scratch for degree {}, not {p}", scratch.p);
         assert_eq!(locals.len(), self.local_size(p), "locals");
@@ -631,9 +628,21 @@ impl Densities {
             n * self.target_output_point_size(gradients),
             "target output"
         );
+        // The kernel reads Yukawa from k̂ rounded to T; the path's kind decides the storage.
+        assert_eq!(
+            level.is_yukawa(),
+            self.kind == WavenumberKind::Yukawa,
+            "k̂ = k r rounded to T changed the kind of k"
+        );
+        assert_eq!(
+            LeafL2p::planes(&level, self.charges == ChargeKind::Complex),
+            self.local_planes(),
+            "k̂ = k r rounded to T changed the kind of k"
+        );
         let output = LeafOutput {
             values: output,
             vectors: self.vectors,
+            planes: self.local_planes(),
             gradients,
         };
         scratch.l2p.l2p(

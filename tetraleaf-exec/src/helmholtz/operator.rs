@@ -75,8 +75,8 @@
 //! measurement and test setting: the reference's P2M and L2P whatever the P2P kernel). A leaf's
 //! multipole depends on its chunk alone and a target's output on its offset and the local alone,
 //! so the output stays the same at every thread count and on P ranks the one-rank FMM's, and each
-//! vector the one-vector FMM's. On Yukawa (Helmholtz CH2.1c) P2M follows the same choice, and L2P
-//! runs the reference's per-target calls whatever the choice.
+//! vector the one-vector FMM's. On Yukawa P2M (Helmholtz CH2.1c) and L2P (Helmholtz CH2.1e) follow
+//! the same choice.
 //!
 //! # M2L
 //!
@@ -394,8 +394,8 @@
 //! and so do P2L (`leaf::p2l_yukawa`), M2P (`leaf::m2p_yukawa`, output column j for charge
 //! column j) and P2P (`P2pKernel::evaluate_yukawa`, or `p2p::p2p_yukawa` under
 //! [`P2pChoice::Reference`]); P2M is the batched kernel as for real and complex k (Helmholtz
-//! CH2.1c: `LeafP2m` restates `p2m_yukawa` per real column), L2P [`Densities`]' reference calls
-//! (`l2p_yukawa`) under every P2P choice.
+//! CH2.1c: `LeafP2m` restates `p2m_yukawa` per real column), and so is L2P (Helmholtz CH2.1e:
+//! `LeafL2p` restates `l2p_yukawa` per real local).
 //! Its M2L is [`HelmholtzM2l::Rotation`] or [`HelmholtzM2l::Dense`] (one real matrix per offset);
 //! [`HelmholtzM2l::Auto`] runs Rotation on every level, and no level takes the diagonal form,
 //! since the high-frequency regime does not occur. Batched, Classes and the exponential M2L have
@@ -2449,8 +2449,8 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
     }
 
     /// Whether P2M and L2P run the batched kernels: a P2P kernel of `tetraleaf-simd` and no
-    /// [`with_reference_leaves`](Self::with_reference_leaves). On Yukawa only P2M has a kernel
-    /// (Helmholtz CH2.1c); its L2P runs the reference's calls either way.
+    /// [`with_reference_leaves`](Self::with_reference_leaves); on Yukawa too, since Helmholtz
+    /// CH2.1c (P2M) and CH2.1e (L2P).
     pub fn leaves_batched(&self) -> bool {
         self.kernel.leaves_batched()
     }
