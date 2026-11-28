@@ -1319,9 +1319,11 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
     }
 
     /// The crossover degree under [`HelmholtzM2l::Auto`]: the named one, else the rule's for
-    /// the column kernel's ISA and the multipole planes; `None` under the other settings.
+    /// the column kernel's ISA and the multipole planes; `None` under the other settings and on
+    /// Yukawa, whose Auto is Rotation (module documentation, "Yukawa").
     pub fn max_degree(&self) -> Option<usize> {
-        (self.kernel.m2l == HelmholtzM2l::Auto).then(|| self.kernel.auto_max_degree())
+        (self.kernel.m2l == HelmholtzM2l::Auto && !self.kernel.yukawa())
+            .then(|| self.kernel.auto_max_degree())
     }
 
     /// Gives [`HelmholtzM2l::Auto`] the levels' V lists over the whole tree, one
@@ -2629,9 +2631,9 @@ impl<T: SimdScalar> Kernel<T> {
     }
 
     /// Whether the setting is [`HelmholtzM2l::Auto`] with the exponential M2L, which runs in
-    /// f64 only (CONVENTIONS §3.15, "Precision and range").
+    /// f64 only (CONVENTIONS §3.15, "Precision and range"), and never on Yukawa.
     fn auto_takes_plane_waves(&self) -> bool {
-        auto_takes_plane_waves::<T>(self.m2l, self.auto_plane_wave)
+        !self.yukawa() && auto_takes_plane_waves::<T>(self.m2l, self.auto_plane_wave)
     }
 
     /// The degree of `level`'s expansions and M2L.

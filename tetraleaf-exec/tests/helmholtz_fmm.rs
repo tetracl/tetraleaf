@@ -4717,6 +4717,8 @@ fn check_yukawa(scenario: &Scenario, comm: &SimpleCommunicator) {
     let (_, rotation) = run(&builder(scenario), &inputs, kind, comm);
     let (fmm, auto) = run(&default_builder(scenario), &inputs, kind, comm);
     assert_eq!(fmm.operator().m2l_choice(), HelmholtzM2l::Auto);
+    assert_eq!(fmm.m2l_max_degree(), None, "no Batched crossover on Yukawa");
+    assert_eq!(fmm.m2l_plane_wave_min_degree(), None, "no waves on Yukawa");
     for level in 0..fmm.nlevels() {
         assert_eq!(
             fmm.operator().m2l_on(level),

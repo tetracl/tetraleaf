@@ -8,6 +8,7 @@
 //! | ID | Points | N |
 //! | --- | --- | --- |
 //! | W1 | a sphere surface of diameter D, quasi-uniform (Fibonacci), ten per wavelength | ⌈100 (kD)²/(4π)⌉ ≈ 7.96 (kD)² |
+//! | W1 at n | W1's sphere at a fixed N ([`Workload::W1n`]; Yukawa, Helmholtz CH2.1b) | `n` |
 //! | W2 | W1 with the polar cap of half-angle 30° about +z at ten times the density | about 1.6 N(W1) |
 //! | W3 | uniform random points in the cube | `n`; [`Workload::w3_resolved`] at ten per wavelength |
 //! | W4 | a distribution of the Laplace gates ([`Distribution`]) | `n` |
@@ -46,6 +47,12 @@ pub enum Workload {
     /// W1: a sphere surface of diameter D, quasi-uniform (Fibonacci) at ten points per
     /// wavelength, N = ⌈100 (kD)²/(4π)⌉ ≈ 7.96 (kD)².
     W1,
+    /// W1's sphere at `n` points, independent of kD (Helmholtz CH2.1b: Yukawa has no
+    /// wavelength to set W1's N); at `n` = [`w1_count`]`(kd)` it is W1's points at kd.
+    W1n {
+        /// The number of points.
+        n: usize,
+    },
     /// W2: W1 with the polar cap of half-angle 30° at ten times the density.
     W2,
     /// W3: uniform random points in the cube, `n` of them.
@@ -75,20 +82,19 @@ impl Workload {
     pub fn name(&self) -> String {
         match self {
             Workload::W1 => "W1".into(),
+            Workload::W1n { n } => format!("W1 (N = {n})"),
             Workload::W2 => "W2".into(),
             Workload::W3 { n } => format!("W3 (N = {n})"),
             Workload::W4 { distribution, n } => format!("W4 {} (N = {n})", distribution.name()),
         }
     }
 
-    /// The points at wavenumber `kd` (W1 and W2 depend on it; W3 and W4 do not), each
+    /// The points at wavenumber `kd` (W1 and W2 depend on it; W1n, W3 and W4 do not), each
     /// strictly inside [`DOMAIN`].
     pub fn points(&self, kd: f64) -> Vec<[f64; 3]> {
         match *self {
-            Workload::W1 => {
-                let n = w1_count(kd);
-                fibonacci(n).into_iter().map(on_sphere).collect()
-            }
+            Workload::W1 => Workload::W1n { n: w1_count(kd) }.points(kd),
+            Workload::W1n { n } => fibonacci(n).into_iter().map(on_sphere).collect(),
             Workload::W2 => {
                 let n = w1_count(kd);
                 let cos_cap = CAP_HALF_ANGLE.cos();
@@ -168,6 +174,19 @@ mod tests {
         assert_eq!(w1_count(500.0), 1_989_437);
     }
 
+    /// W1n (CH2.1b) at W1's count is W1's points, and at any n does not depend on kD.
+    #[test]
+    fn w1n_is_w1s_sphere_at_a_fixed_count() {
+        for kd in [1.0, 30.0] {
+            let n = w1_count(kd);
+            assert_eq!(Workload::W1n { n }.points(0.0), Workload::W1.points(kd));
+        }
+        let a = Workload::W1n { n: 5_000 }.points(0.0);
+        assert_eq!(a.len(), 5_000);
+        assert_eq!(a, Workload::W1n { n: 5_000 }.points(500.0));
+        assert!(inside(&a));
+    }
+
     #[test]
     fn w2_has_the_dense_cap() {
         let kd = 30.0;
@@ -226,6 +245,7 @@ mod tests {
     #[test]
     fn names() {
         assert_eq!(Workload::W1.name(), "W1");
+        assert_eq!(Workload::W1n { n: 9 }.name(), "W1 (N = 9)");
         assert_eq!(Workload::W3 { n: 7 }.name(), "W3 (N = 7)");
         let w4 = Workload::W4 {
             distribution: Distribution::Plummer,
