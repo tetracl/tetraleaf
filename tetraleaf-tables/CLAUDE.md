@@ -27,7 +27,8 @@ and the build by ring); Helmholtz CH4.6a1
 CH4.9a2b (`helmholtz::leaf`, the batched P2M of a leaf); Helmholtz CH4.9b2 (`helmholtz::leaf`'s
 `LeafL2p`, the batched L2P with gradients); Helmholtz CH2.1a (Yukawa's real RCR and dense M2L
 tables in `helmholtz` and `helmholtz::dense`); Helmholtz CH2.1c (`LeafP2m` on Yukawa); Helmholtz
-CH2.1e (`LeafL2p` on Yukawa).
+CH2.1e (`LeafL2p` on Yukawa); Helmholtz CH2.2a (`helmholtz::store`, the RCR tables' parts keyed
+per level in a store shared by builds).
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.
@@ -64,7 +65,22 @@ CH2.1e (`LeafL2p` on Yukawa).
   compares them in the FMM-weighted measure within 2e-13 times max(1, |k̂| a) (1.7e-14
   measured on the M6). Its y-blocks are built in T, as `rcr`
   builds them per call, so that stored and per-call blocks agree; the M2L blocks are
-  stored from the finest level up within a byte budget. Not cached (CH2.2).
+  stored from the finest level up within a byte budget. Not in the on-disk `TableCache`: since
+  Helmholtz CH2.2a (docs/helmholtz/tasks/CH2.2a.md; `helmholtz::store`'s module docs) a
+  `HelmholtzTables::build_in` (and `set_m2l_blocks_in`) takes each part from an in-memory
+  `TableStore` where it is there and puts it there where it is built, keyed by the part's inputs
+  alone (the translations by the child's k̂ as bits and the two degrees, an M2L coaxial table by
+  k̂_l, q_l and |d|², a y-block set by degree and polar key, no k̂), with a byte cap and
+  least-recently-used eviction by build (ties in key order); the levels hold their parts by `Arc`.
+  A part's value is the same function of its key wherever it is built, so a build with a store is
+  `build_by`'s bit for bit; keep every key holding every input of its part (a new input of a part
+  goes into its key). `build_report` (`TableBuild`, per level the parts built and reused, their
+  thread-seconds, the level's bytes, with or without a store). `tests/helmholtz/store.rs` checks
+  cold and warm builds against `build_by` through every application (`to_bits`, real, complex,
+  Yukawa, f32, on `Serial` and `Threads`), the octave shift (k̂₀ then 2k̂₀ with the degrees one level
+  down: every part of the levels from 3 reused), another k at the same degrees, blocks shared by
+  degree, `set_m2l_blocks_in`, the cap (0 keeps nothing; LRU keeps the last build's parts, the
+  same on every run) and two threads sharing a store; a key without k̂ fails five of them.
   Since Helmholtz CH4.0i `HelmholtzTables::m2l_contribution` writes the terms `m2l` adds
   (step 3 stores instead of adding) and `add_m2l_contribution` adds them, the two in turn
   `m2l` bit for bit (`to_bits`), so a caller may compute a level's pairs in any order and

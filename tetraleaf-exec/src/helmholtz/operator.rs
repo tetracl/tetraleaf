@@ -358,6 +358,21 @@
 //! M2L's rule raised a level, and Batched built a second set of every level's tables in
 //! f64). [`HelmholtzOperator::table_timings`] reports the build by part.
 //!
+//! # The table store
+//!
+//! With [`with_table_store`](HelmholtzOperator::with_table_store) (Helmholtz CH2.2a;
+//! `HelmholtzFmmBuilder::table_store`) the RCR tables are built in a
+//! `tetraleaf_tables::helmholtz::store::TableStore` that other operators of the process share:
+//! each part (a translation, an M2L coaxial table, a y-block set) is keyed by its own inputs (k̂
+//! of its level, its degrees, the integer class of its shift), taken from the store where it is
+//! there and put into it where it is built. An operator at the same k on the same domain, or at
+//! k doubled (k̂_{l+1}(2k) = k̂_l(k) exactly), takes the levels it shares with an earlier one;
+//! the tables, and so every output, are those built without a store, bit for bit.
+//! [`table_build`](HelmholtzOperator::table_build) reports the build per level: the parts built
+//! and reused, their thread-seconds and the level's bytes. The M2L tables of Dense, Classes,
+//! Batched, the exponential M2L and the diagonal form are built for each operator alone
+//! (CH2.2b keys them). The store is per process: each rank has its own.
+//!
 //! # Execution
 //!
 //! The level calls run on the shared drivers of `tetraleaf-exec` (Helmholtz CH2.0, CH3.5),
