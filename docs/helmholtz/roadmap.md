@@ -117,7 +117,7 @@ on the diagonal levels).
 14. CH4.9a (CH4.9a1, CH4.9a2a, CH4.9a2b; split on 2026-11-26 and 2026-11-27), CH4.9b (CH4.9b1, CH4.9b2; split on 2026-11-27) The Helmholtz leaf expansions P2M and
     L2P by SIMD kernels (added on 2026-11-26 after CH4.6a2, the user: "Yes. Add P2M and L2P to the
     priority list as tasks")
-15. CH2.1 (CH2.1a–c; split on 2026-11-28), CH2.1e, CH2.2, CH2.3, CH2.1d, CH2.5 and H2.G Yukawa on the
+15. CH2.1 (CH2.1a–c; split on 2026-11-28), CH2.1e, CH2.2 (CH2.2a, CH2.2b; split on 2026-11-28), CH2.3, CH2.1d, CH2.5 and H2.G Yukawa on the
     host (added on 2026-11-24 at the H4 gate; D4 signed off at CH2.1b; CH2.1d added at CH2.1b, after
     CH2.3, the user on #274, 2026-11-28: "Q1 and Q2 as recommended"; CH2.1e added at CH2.1c, after
     it, the user on #275, 2026-11-28: "Q1 and Q2 as recommended")
@@ -376,7 +376,24 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   (1.94 of C = 10 in f64, 0.64 in f32); the FMM's errors 1.0000× the reference leaves' on CH2.1b's 114
   cases, within ε; L2P 0.21–0.28× per level on Kathleen. No sign-off.
 - [ ] **CH2.2 Per-level tables with per-level cache keys.** *Done when:* build cost and
-  memory reported; levels reused across an octave sweep. *Needs:* CH2.1, D4.
+  memory reported; levels reused across an octave sweep. *Needs:* CH2.1, D4. Split on 2026-11-28
+  into CH2.2a and CH2.2b by `/next-task`'s size rule (five table families: the RCR tables of every
+  path first, then the M2L families); CH2.2 is done when both are:
+- [ ] **CH2.2a The RCR tables per level in a store.** `tetraleaf_tables::helmholtz::store`: each
+  part of `HelmholtzTables`' build keyed by what it depends on (the translations by the child's k̂
+  and the two degrees, M2L's coaxial tables by k̂_l, q_l and |d|², the y-blocks by degree and angle),
+  in a `TableStore` with a byte cap and LRU eviction that operators share
+  (`HelmholtzFmmBuilder::table_store`); the build reported per level (parts built and reused,
+  thread-seconds, bytes). *Done when:* tables and the FMM's output with a store, cold and warm, bit
+  for bit without one; an octave sweep (k, 2k, … on one domain) reuses every level's parts but the
+  new coarse level's, shown in tests and on Kathleen (real k under the defaults and Rotation,
+  Yukawa) with each level's build time and bytes, cold against warm. *Needs:* CH2.1, D4.
+  *Machines:* Kathleen. *Sign-off:* whether CH2.2 needs §6.3's on-disk store.
+- [ ] **CH2.2b The M2L tables per level in the store.** Dense, Classes, Batched, the exponential
+  M2L's and the diagonal form's tables keyed per level (k̂_l, the degree, the per-class choices,
+  N_φ, the transfer build, the quadrature's precision and reach) in CH2.2a's store. *Done when:*
+  each family with the store bit for bit without it; the sweep under the library's defaults with
+  each level's build cold and warm, on Kathleen. *Needs:* CH2.2a. *Machines:* Kathleen.
 - [ ] **CH2.3 Pruning and the calibration of p_l.** *Done when:* the relative error within
   target for κD from 10⁻² to 10³; on pruned levels the V, W and X lists empty and the buffers
   zeroed; the same levels pruned on both ranks of a two-rank run; θ_D set. Also (CH1.3c, the
