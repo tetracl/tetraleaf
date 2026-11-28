@@ -1,5 +1,5 @@
-//! P2M of a whole leaf by a batched kernel (Helmholtz CH4.9a2b; CONVENTIONS §3.15, "Radial
-//! functions and scaling" and "Storage").
+//! P2M and L2P of a whole leaf by batched kernels (Helmholtz CH4.9a2b and CH4.9b2; CONVENTIONS
+//! §3.15, "Radial functions and scaling" and "Storage").
 //!
 //! [`tetraleaf_ref::helmholtz::leaf::p2m`] forms a box's stored multipole point by point:
 //! per point the radial functions ĵₙ (`bessel_j`), the harmonics (`harmonics`), the factor
@@ -56,6 +56,53 @@
 //! 2⁻¹⁰⁰ beyond the turning point; [`tetraleaf_math::orthonormal::leaf`], "Under-range
 //! values"), which moves a term by at most about 2⁻⁵⁷ |wₙⱼ|, far below u.
 //!
+//! # L2P
+//!
+//! [`tetraleaf_ref::helmholtz::leaf::l2p`] evaluates a box's stored local point by point:
+//! φ̃ += Σ L̂ₙᵐ ĵₙ(k|v|) e^{Im(k)|v| − β} Yₙᵐ(v̂), and with gradients ∇φ̃ (its module documentation:
+//! per degree the sums Σₘ L̂ₙᵐ Yₙᵐ, Σₘ L̂ₙᵐ ∂θ Yₙᵐ and Σₘ L̂ₙᵐ (1/sin θ) ∂φ Yₙᵐ, then the radial
+//! functions, their derivatives and the tangential factor tₙ = ĵₙ/|v|, whose limit at the centre is
+//! k/(3s) for n = 1 and 0 otherwise). [`LeafL2p`] evaluates all the targets of a leaf, [`LANES`] at
+//! a time as lanes (Helmholtz CH4.9b2), on the same routines: the harmonics by
+//! [`LeafHarmonics::columns`], or with gradients by [`LeafHarmonics::derivative_columns`] (Q̄ₙᵐ,
+//! ∂θ Q̄ₙᵐ and Uₙᵐ = Q̄ₙᵐ / sin θ, CH4.9b1), the radial functions by [`bessel_j_real`] (with
+//! derivatives [`bessel_j_real_derivatives`]) for real k and [`bessel_j`] per lane for complex k. Per
+//! batch:
+//!
+//! 1. r = √(x² + y² + z²) per lane, ĵₙ(kr) (and ĵₙ′), e = e^{Im(k)r − β};
+//! 2. per order m, degree n, charge vector and plane, from the coefficients c⁺ = L̂ₙᵐ and
+//!    c⁻ = L̂ₙ⁻ᵐ per lane A = c⁺ cos mφ + c⁻ sin mφ and B = c⁻ cos mφ − c⁺ sin mφ, and the per-degree
+//!    sums valueₙ += Q̄ₙᵐ A, θₙ += ∂θ Q̄ₙᵐ A, φₙ += m Uₙᵐ B (for m = 0: Q̄ₙ⁰ c and ∂θ Q̄ₙ⁰ c), which
+//!    are the reference's three sums of degree n with the terms of ±m taken together;
+//! 3. per lane the reference's degree loop in its order: φ̃ = Σₙ ĵₙ valueₙ, the radial part
+//!    Σₙ ĵₙ′ valueₙ, the polar and azimuthal parts Σₙ tₙ θₙ and Σₙ tₙ φₙ (tₙ = ĵₙ (1/r), or the
+//!    centre's limit by a select), the gradient k (radial) r̂ + (polar) θ̂ + (azimuthal) φ̂ in
+//!    Cartesian components from the harmonics' own directions ([`LeafDirections`]), all times e,
+//!    added (+=) into the target's outputs.
+//!
+//! The sum of step 2 is the kernel's inner loop: with gradients, per pair of terms ±m and plane
+//! seven products and five sums per lane (A, B and the three sums), six operations per term, over
+//! the lanes of fixed-size arrays with no reduction across lanes, which the compiler vectorises
+//! without `unsafe`. The last batch is padded with the centre,
+//! whose outputs are not written. No lane reads another: a target's outputs depend on its offset and
+//! the locals alone, so they are the same bits in any leaf, position and batch, at every thread
+//! count and on any number of ranks. Each charge vector gets the one-vector call's arithmetic (the
+//! vectors share the routines' values), so vector v of m is the one-vector kernel's bits; the
+//! potentials with gradients are the potentials without them bit for bit (the same columns, whose
+//! values are [`LeafHarmonics::columns`]' bits).
+//!
+//! Against the reference the values agree to a contract per target (`tests/helmholtz/leaf.rs`): with
+//! wₙ = √((2n + 1)/(4π)), Sₙ = Σₘ |L̂ₙᵐ|, x = kr and tₙ = |ĵₙ(x)|/r (its limit at r = 0),
+//!
+//! ```text
+//! |φ̃ − φ̃_ref|  ≤ C u e Σₙ wₙ Sₙ (((n + 1)² + 2n + 1) |ĵₙ| + |x| |ĵₙ′|)
+//! |gₐ − gₐ_ref| ≤ C u e Σₙ wₙ Sₙ (|k| (((n + 1)² + 2n + 3) |ĵₙ′| + |x| |ĵₙ|) + ((n + 1)³ + n(n + 1)) tₙ)
+//! ```
+//!
+//! per component a of the gradient: the harmonics' (n + 1)² u and their derivatives' (n + 1)³ u
+//! (CH4.9a2a, CH4.9b1), 2n + 1 terms per degree summed in another order, and r by `sqrt` against the
+//! reference's `hypot` through ĵₙ′ and ĵₙ″ (bounded by the radial equation). The tests hold C = 10.
+//!
 //! # Example
 //!
 //! ```
@@ -87,8 +134,8 @@
 
 use core::array;
 
-use tetraleaf_math::orthonormal::{LeafHarmonics, LeafScratch};
-use tetraleaf_math::radial::{bessel_j, bessel_j_real};
+use tetraleaf_math::orthonormal::{LeafDirections, LeafHarmonics, LeafScratch};
+use tetraleaf_math::radial::{bessel_j, bessel_j_real, bessel_j_real_derivatives};
 use tetraleaf_math::{Complex, Layout, RealScalar};
 use tetraleaf_ref::helmholtz::Level;
 
@@ -355,6 +402,409 @@ impl<T: RealScalar> P2mScratch<T> {
             radial_im: vec![[T::zero(); B]; degrees],
             one: vec![Complex::new(T::zero(), T::zero()); degrees],
             weights: vec![[T::zero(); B]; 2 * vectors * degrees],
+        }
+    }
+
+    /// The largest degree.
+    pub fn p(&self) -> usize {
+        self.p
+    }
+
+    /// The most charge vectors.
+    pub fn vectors(&self) -> usize {
+        self.vectors
+    }
+}
+
+/// A leaf's target output for [`LeafL2p::l2p`]: two columns per charge vector (Re, then Im), as
+/// `tetraleaf-exec`'s Helmholtz densities lay out a target output chunk of n targets (CONVENTIONS
+/// §3.13's chunk of 2m output vectors): column o's potential of target i at o n + i, and with
+/// gradients its gradient's component a at 2m n + 3 (o n + i) + a, column o = 2v + part for vector
+/// v. The kernel adds (+=) into it.
+#[derive(Debug)]
+pub struct LeafOutput<'a, T> {
+    /// The values, 2m n, or 8m n with gradients.
+    pub values: &'a mut [T],
+    /// The number m ≥ 1 of charge vectors.
+    pub vectors: usize,
+    /// Whether the chunk holds gradients after the potentials.
+    pub gradients: bool,
+}
+
+impl<T> LeafOutput<'_, T> {
+    /// The values per target: 2m, or 8m with gradients.
+    pub fn per_target(&self) -> usize {
+        2 * self.vectors * if self.gradients { 4 } else { 1 }
+    }
+}
+
+/// The batched L2P of a leaf up to a degree (the [module documentation](self), "L2P"): the leaf
+/// harmonics' table. It allocates once, in [`LeafL2p::new`], and is read-only after, so one can
+/// serve every thread.
+#[derive(Clone, Debug)]
+pub struct LeafL2p<T> {
+    harmonics: LeafHarmonics<T>,
+}
+
+/// The per-degree sums of [`LeafL2p::l2p`], each `p + 1` rows of lanes per charge vector: the
+/// value's real and imaginary planes, then ∂θ's and (1/sin θ) ∂φ's.
+const SUMS: usize = 6;
+
+impl<T: RealScalar> LeafL2p<T> {
+    /// The kernel for degrees up to `p`.
+    pub fn new(p: usize) -> Self {
+        Self {
+            harmonics: LeafHarmonics::new(p),
+        }
+    }
+
+    /// The largest degree.
+    pub fn p(&self) -> usize {
+        self.harmonics.p()
+    }
+
+    /// L2P of a leaf: adds the potentials of the stored locals `locals` of degree `p` of `level`
+    /// (whose half-width is the leaf's) at the targets `targets` (offsets from the leaf's centre in
+    /// the level's units), and with `output.gradients` their gradients, into `output`, for every
+    /// charge vector: φ̃ += Σ L̂ₙᵐ ĵₙ(k|v|) e^{Im(k)|v| − β} Yₙᵐ(v̂). `locals` holds per vector one
+    /// complex local, 2 (p + 1)² values in the layout of §3.6, the real plane then the imaginary
+    /// plane, the vectors one after the other. The sum of
+    /// [`tetraleaf_ref::helmholtz::leaf::l2p`] per target, to the contract of the [module
+    /// documentation](self), "L2P".
+    ///
+    /// # Panics
+    ///
+    /// If `p` exceeds the kernel's or the scratch's degree, the output has more vectors than the
+    /// scratch or none, the level is Yukawa's (k = iκ: H2's path), `locals` does not hold
+    /// 2m (p + 1)² values, or `output.values` does not hold
+    /// [`per_target`](LeafOutput::per_target) values per target.
+    pub fn l2p(
+        &self,
+        p: usize,
+        level: &Level<T>,
+        targets: &[[T; 3]],
+        locals: &[T],
+        scratch: &mut L2pScratch<T>,
+        output: LeafOutput<'_, T>,
+    ) {
+        assert!(p <= self.p(), "degree {p} above the kernel's {}", self.p());
+        assert!(
+            p <= scratch.p,
+            "degree {p} above the scratch's {}",
+            scratch.p
+        );
+        let vectors = output.vectors;
+        assert!(
+            vectors >= 1 && vectors <= scratch.vectors,
+            "{vectors} charge vectors, the scratch holds 1 to {}",
+            scratch.vectors
+        );
+        assert!(
+            !level.is_yukawa(),
+            "the batched L2P takes Helmholtz's complex path, not Yukawa's"
+        );
+        let len = Layout::new(p).len();
+        assert_eq!(
+            locals.len(),
+            2 * vectors * len,
+            "the locals must hold {} values",
+            2 * vectors * len
+        );
+        let n = targets.len();
+        assert_eq!(
+            output.values.len(),
+            output.per_target() * n,
+            "the output must hold {} values per target",
+            output.per_target()
+        );
+        let gradients = output.gradients;
+        let k = level.k();
+        let real_k = k.im == T::zero();
+        let (s, beta) = (level.scale(), level.damping());
+        let e_real = (T::zero() - beta).exp();
+        // The tangential factor's limit at the centre, k ĵ₁(z)/z → k/(3s).
+        let at_centre = k * (T::one() / (T::from_f64(3.0) * s));
+        let degrees = p + 1;
+        let L2pScratch {
+            harmonics: harmonic_scratch,
+            radial,
+            radial_im,
+            derivative,
+            derivative_im,
+            one,
+            one_derivative,
+            sums,
+            ..
+        } = scratch;
+        let (radial, radial_im) = (&mut radial[..degrees], &mut radial_im[..degrees]);
+        let (derivative, derivative_im) =
+            (&mut derivative[..degrees], &mut derivative_im[..degrees]);
+        if real_k {
+            radial_im.fill([T::zero(); B]);
+            derivative_im.fill([T::zero(); B]);
+        }
+        let sums = &mut sums[..vectors * SUMS * degrees];
+        let columns = 2 * vectors;
+        for start in (0..n).step_by(B) {
+            let count = B.min(n - start);
+            let lanes: [[T; 3]; B] = array::from_fn(|j| {
+                if j < count {
+                    targets[start + j]
+                } else {
+                    [T::zero(); 3]
+                }
+            });
+            let r: [T; B] = array::from_fn(|j| {
+                (lanes[j][0] * lanes[j][0] + lanes[j][1] * lanes[j][1] + lanes[j][2] * lanes[j][2])
+                    .sqrt()
+            });
+            // The radial functions (and derivatives) and the factor.
+            let e: [T; B] = if real_k {
+                let x: [T; B] = array::from_fn(|j| k.re * r[j]);
+                if gradients {
+                    bessel_j_real_derivatives(&x, s, radial, derivative);
+                } else {
+                    bessel_j_real(&x, s, radial);
+                }
+                [e_real; B]
+            } else {
+                for j in 0..B {
+                    let d = gradients.then_some(&mut one_derivative[..degrees]);
+                    bessel_j(k * r[j], s, &mut one[..degrees], d);
+                    for n in 0..degrees {
+                        radial[n][j] = one[n].re;
+                        radial_im[n][j] = one[n].im;
+                        if gradients {
+                            derivative[n][j] = one_derivative[n].re;
+                            derivative_im[n][j] = one_derivative[n].im;
+                        }
+                    }
+                }
+                array::from_fn(|j| (k.im * r[j] - beta).exp())
+            };
+            // The per-degree sums of every vector.
+            sums.fill([T::zero(); B]);
+            if gradients {
+                self.harmonics.derivative_columns(
+                    p,
+                    &lanes,
+                    harmonic_scratch,
+                    |m, q, d, u, cos, sin| {
+                        let mt = T::from_f64(m as f64);
+                        for (row, n) in (m..=p).enumerate() {
+                            let centre = n * n + n;
+                            let (q, d) = (&q[row], &d[row]);
+                            let mu: [T; B] = array::from_fn(|j| mt * u[row][j]);
+                            for v in 0..vectors {
+                                let local = &locals[2 * v * len..2 * (v + 1) * len];
+                                let acc = &mut sums[v * SUMS * degrees..(v + 1) * SUMS * degrees];
+                                for plane in 0..2 {
+                                    let c = &local[plane * len..(plane + 1) * len];
+                                    let (value, rest) = acc.split_at_mut(2 * degrees);
+                                    let (theta, phi) = rest.split_at_mut(2 * degrees);
+                                    let at = plane * degrees + n;
+                                    if m == 0 {
+                                        let c0 = c[centre];
+                                        add_product(&mut value[at], q, c0);
+                                        add_product(&mut theta[at], d, c0);
+                                    } else {
+                                        let (plus, minus) = (c[centre + m], c[centre - m]);
+                                        let a: [T; B] =
+                                            array::from_fn(|j| plus * cos[j] + minus * sin[j]);
+                                        let b: [T; B] =
+                                            array::from_fn(|j| minus * cos[j] - plus * sin[j]);
+                                        add_lanes(&mut value[at], q, &a);
+                                        add_lanes(&mut theta[at], d, &a);
+                                        add_lanes(&mut phi[at], &mu, &b);
+                                    }
+                                }
+                            }
+                        }
+                    },
+                );
+            } else {
+                self.harmonics
+                    .columns(p, &lanes, harmonic_scratch, |m, q, cos, sin| {
+                        for (row, n) in (m..=p).enumerate() {
+                            let centre = n * n + n;
+                            let q = &q[row];
+                            for v in 0..vectors {
+                                let local = &locals[2 * v * len..2 * (v + 1) * len];
+                                let acc = &mut sums[v * SUMS * degrees..(v + 1) * SUMS * degrees];
+                                for plane in 0..2 {
+                                    let c = &local[plane * len..(plane + 1) * len];
+                                    let at = plane * degrees + n;
+                                    if m == 0 {
+                                        add_product(&mut acc[at], q, c[centre]);
+                                    } else {
+                                        let (plus, minus) = (c[centre + m], c[centre - m]);
+                                        let a: [T; B] =
+                                            array::from_fn(|j| plus * cos[j] + minus * sin[j]);
+                                        add_lanes(&mut acc[at], q, &a);
+                                    }
+                                }
+                            }
+                        }
+                    });
+            }
+            // Per lane the reference's degree loop, then the output.
+            let directions = gradients.then(|| LeafDirections::of(&lanes));
+            let inverse: [T; B] = array::from_fn(|j| {
+                if r[j] > T::zero() {
+                    T::one() / r[j]
+                } else {
+                    T::zero()
+                }
+            });
+            for v in 0..vectors {
+                let acc = &sums[v * SUMS * degrees..(v + 1) * SUMS * degrees];
+                let row =
+                    |which: usize, plane: usize, n: usize| &acc[(2 * which + plane) * degrees + n];
+                let zero = [T::zero(); B];
+                let (mut phi_re, mut phi_im) = (zero, zero);
+                for n in 0..degrees {
+                    let (a, b) = (row(0, 0, n), row(0, 1, n));
+                    let (jr, ji) = (&radial[n], &radial_im[n]);
+                    for j in 0..B {
+                        phi_re[j] = phi_re[j] + (jr[j] * a[j] - ji[j] * b[j]);
+                        phi_im[j] = phi_im[j] + (jr[j] * b[j] + ji[j] * a[j]);
+                    }
+                }
+                let (re, im) = (2 * v, 2 * v + 1);
+                for j in 0..count {
+                    let i = start + j;
+                    output.values[re * n + i] = output.values[re * n + i] + phi_re[j] * e[j];
+                    output.values[im * n + i] = output.values[im * n + i] + phi_im[j] * e[j];
+                }
+                let Some(directions) = &directions else {
+                    continue;
+                };
+                // The radial, polar and azimuthal parts, each complex per lane.
+                let mut parts = [[zero; 2]; 3];
+                for n in 0..degrees {
+                    let (dr, di) = (&derivative[n], &derivative_im[n]);
+                    let (jr, ji) = (&radial[n], &radial_im[n]);
+                    let value = (row(0, 0, n), row(0, 1, n));
+                    let theta = (row(1, 0, n), row(1, 1, n));
+                    let phi = (row(2, 0, n), row(2, 1, n));
+                    // tₙ = ĵₙ (1/r), or the centre's limit (n = 1) or zero.
+                    let (limit_re, limit_im) = if n == 1 {
+                        (at_centre.re, at_centre.im)
+                    } else {
+                        (T::zero(), T::zero())
+                    };
+                    let t_re: [T; B] = array::from_fn(|j| {
+                        if r[j] > T::zero() {
+                            jr[j] * inverse[j]
+                        } else {
+                            limit_re
+                        }
+                    });
+                    let t_im: [T; B] = array::from_fn(|j| {
+                        if r[j] > T::zero() {
+                            ji[j] * inverse[j]
+                        } else {
+                            limit_im
+                        }
+                    });
+                    let terms = [
+                        ((dr, di), value),
+                        ((&t_re, &t_im), theta),
+                        ((&t_re, &t_im), phi),
+                    ];
+                    for (part, ((fr, fi), (a, b))) in parts.iter_mut().zip(terms) {
+                        for j in 0..B {
+                            part[0][j] = part[0][j] + (fr[j] * a[j] - fi[j] * b[j]);
+                            part[1][j] = part[1][j] + (fr[j] * b[j] + fi[j] * a[j]);
+                        }
+                    }
+                }
+                let [radial_part, polar, azimuthal] = parts;
+                // k times the radial part.
+                let kr: [[T; B]; 2] = [
+                    array::from_fn(|j| k.re * radial_part[0][j] - k.im * radial_part[1][j]),
+                    array::from_fn(|j| k.re * radial_part[1][j] + k.im * radial_part[0][j]),
+                ];
+                let LeafDirections {
+                    cos_theta: ct,
+                    sin_theta: st,
+                    cos_phi: cp,
+                    sin_phi: sp,
+                } = *directions;
+                let base = columns * n;
+                for (column, plane) in [(re, 0), (im, 1)] {
+                    let (kr, pol, az) = (&kr[plane], &polar[plane], &azimuthal[plane]);
+                    for j in 0..count {
+                        let g = [
+                            kr[j] * (st[j] * cp[j]) + pol[j] * (ct[j] * cp[j]) + az[j] * (-sp[j]),
+                            kr[j] * (st[j] * sp[j]) + pol[j] * (ct[j] * sp[j]) + az[j] * cp[j],
+                            kr[j] * ct[j] + pol[j] * (-st[j]),
+                        ];
+                        let at = base + 3 * (column * n + start + j);
+                        for (axis, g) in g.into_iter().enumerate() {
+                            output.values[at + axis] = output.values[at + axis] + g * e[j];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// acc += a c per lane.
+#[inline(always)]
+fn add_product<T: RealScalar>(acc: &mut [T; B], a: &[T; B], c: T) {
+    for j in 0..B {
+        acc[j] = acc[j] + a[j] * c;
+    }
+}
+
+/// acc += a b per lane.
+#[inline(always)]
+fn add_lanes<T: RealScalar>(acc: &mut [T; B], a: &[T; B], b: &[T; B]) {
+    for j in 0..B {
+        acc[j] = acc[j] + a[j] * b[j];
+    }
+}
+
+/// The work space of [`LeafL2p::l2p`] up to a degree and a number of charge vectors: the harmonics'
+/// columns, the radial functions and derivatives and the per-degree sums of one batch. It allocates
+/// once, in [`L2pScratch::new`]; its size grows with p and m, not with the leaf's targets.
+#[derive(Clone, Debug)]
+pub struct L2pScratch<T> {
+    p: usize,
+    vectors: usize,
+    harmonics: LeafScratch<T, B>,
+    /// ĵₙ per lane, its real and imaginary parts (zero for real k), n ≤ p.
+    radial: Vec<[T; B]>,
+    radial_im: Vec<[T; B]>,
+    /// ĵₙ′ per lane, its real and imaginary parts.
+    derivative: Vec<[T; B]>,
+    derivative_im: Vec<[T; B]>,
+    /// One lane's ĵₙ and ĵₙ′ for complex k.
+    one: Vec<Complex<T>>,
+    one_derivative: Vec<Complex<T>>,
+    /// Per vector the [`SUMS`] per-degree sums, p + 1 rows each.
+    sums: Vec<[T; B]>,
+}
+
+impl<T: RealScalar> L2pScratch<T> {
+    /// Work space for degrees up to `p` and up to `vectors` charge vectors.
+    pub fn new(p: usize, vectors: usize) -> Self {
+        let degrees = p + 1;
+        let rows = vec![[T::zero(); B]; degrees];
+        let zero = Complex::new(T::zero(), T::zero());
+        Self {
+            p,
+            vectors,
+            harmonics: LeafScratch::new(p),
+            radial: rows.clone(),
+            radial_im: rows.clone(),
+            derivative: rows.clone(),
+            derivative_im: rows,
+            one: vec![zero; degrees],
+            one_derivative: vec![zero; degrees],
+            sums: vec![[T::zero(); B]; SUMS * vectors * degrees],
         }
     }
 

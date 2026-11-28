@@ -2,7 +2,7 @@
 //! it") against `harmonics` per point and term, over the leaf frame's directions.
 
 use tetraleaf_math::orthonormal::{
-    DerivativeScratch, LeafHarmonics, LeafScratch, harmonics, harmonics_derivatives,
+    DerivativeScratch, LeafDirections, LeafHarmonics, LeafScratch, harmonics, harmonics_derivatives,
 };
 use tetraleaf_math::{Layout, RealScalar};
 
@@ -445,4 +445,61 @@ fn degree_one_at_the_poles_and_the_centre() {
         );
         assert_eq!(f[layout.idx(1, 0)][j], 0.0, "∂φ Y₁⁰ / sin θ, point {j}");
     }
+}
+
+/// `LeafDirections` (Helmholtz CH4.9b2): the directions the harmonics use, against the reference's
+/// polar angles by `hypot` (`tetraleaf_ref`'s `Polar::of`) within 4 u on the plan's directions, and
+/// exactly at the centre, the poles and the axes, and next to the z-axis (the rescale), where the
+/// squares of the coordinates are subnormal or zero.
+#[test]
+fn the_directions_are_the_reference_angles() {
+    let polar = |[x, y, z]: [f64; 3]| -> [f64; 4] {
+        let rho = x.hypot(y);
+        let r = rho.hypot(z);
+        if r == 0.0 {
+            return [1.0, 0.0, 1.0, 0.0];
+        }
+        let (c, s) = if rho > 0.0 {
+            (x / rho, y / rho)
+        } else {
+            (1.0, 0.0)
+        };
+        [z / r, rho / r, c, s]
+    };
+    let mut points = directions();
+    points.extend([
+        [1e-160, 0.0, 1.0],
+        [-1e-160, 1e-160, -0.5],
+        [3e-200, -4e-200, 0.0],
+    ]);
+    let u = f64::EPSILON / 2.0;
+    let mut worst = 0.0_f64;
+    for chunk in points.chunks(4) {
+        let mut lanes = [[0.0; 3]; 4];
+        lanes[..chunk.len()].copy_from_slice(chunk);
+        let d = LeafDirections::<f64, 4>::of(&lanes);
+        for (j, &x) in chunk.iter().enumerate() {
+            let want = polar(x);
+            let got = [d.cos_theta[j], d.sin_theta[j], d.cos_phi[j], d.sin_phi[j]];
+            for (g, w) in got.iter().zip(want) {
+                worst = worst.max((g - w).abs() / u);
+            }
+        }
+    }
+    println!("LeafDirections against the reference's angles: at most {worst:.2} u");
+    assert!(worst <= 4.0, "{worst} u");
+    let exact = |x: [f64; 3], want: [f64; 4]| {
+        let d = LeafDirections::<f64, 1>::of(&[x]);
+        assert_eq!(
+            [d.cos_theta[0], d.sin_theta[0], d.cos_phi[0], d.sin_phi[0]],
+            want,
+            "{x:?}"
+        );
+    };
+    exact([0.0; 3], [1.0, 0.0, 1.0, 0.0]);
+    exact([0.0, 0.0, 0.5], [1.0, 0.0, 1.0, 0.0]);
+    exact([0.0, 0.0, -1.0], [-1.0, 0.0, 1.0, 0.0]);
+    exact([0.0, -0.7, 0.0], [0.0, 1.0, 0.0, -1.0]);
+    exact([1e-160, 0.0, 1.0], [1.0, 1e-160, 1.0, 0.0]);
+    exact([3e-200, -4e-200, 0.0], [0.0, 1.0, 0.6, -0.8]);
 }

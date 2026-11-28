@@ -28,4 +28,4 @@ pub mod rotation;
 
 pub use harmonics::{DerivativeScratch, harmonics, harmonics_derivatives};
 pub(crate) use leaf::under_range;
-pub use leaf::{LeafHarmonics, LeafScratch};
+pub use leaf::{LeafDirections, LeafHarmonics, LeafScratch};

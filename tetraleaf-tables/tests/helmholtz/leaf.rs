@@ -15,13 +15,13 @@ use tetraleaf_tables::helmholtz::leaf::{LANES, LeafCharges, LeafP2m, P2mScratch}
 
 /// The contract's constant, about ten times the measured worst (root `CLAUDE.md`'s glibc
 /// lesson).
-const C: f64 = 10.0;
+pub(crate) const C: f64 = 10.0;
 
 /// A deterministic generator of uniform values in [−1, 1).
-struct Lcg(u64);
+pub(crate) struct Lcg(pub(crate) u64);
 
 impl Lcg {
-    fn next(&mut self) -> f64 {
+    pub(crate) fn next(&mut self) -> f64 {
         self.0 = self
             .0
             .wrapping_mul(6364136223846793005)
@@ -32,7 +32,7 @@ impl Lcg {
 
 /// A leaf of `n` points: the special points of the leaf frame first (the centre, the poles,
 /// near-pole points, the axes, a corner), then uniform random points of [−1, 1)³.
-fn points(n: usize, seed: u64) -> Vec<[f64; 3]> {
+pub(crate) fn points(n: usize, seed: u64) -> Vec<[f64; 3]> {
     let special = [
         [0.0, 0.0, 0.0],
         [0.0, 0.0, 1.0],
@@ -226,7 +226,7 @@ fn worst<T: RealScalar>(
     ratio
 }
 
-const KS: [(f64, f64); 6] = [
+pub(crate) const KS: [(f64, f64); 6] = [
     (0.3, 0.0),
     (4.0, 0.0),
     (16.0, 0.0),
