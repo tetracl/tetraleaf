@@ -27,9 +27,14 @@
 #                every checksum must agree (`main`'s binary from MAIN, a directory holding its
 #                `helmholtz_accuracy`)
 #   time         D4's evidence: the complex path, `main` against the branch, one setting per
-#                launch, in the order main, branch, branch, main, twice: W1 at kD = 100 and 250
-#                (real k), W3 at 10⁶ at kD = 50 + 5i (complex k), 10⁻⁶, two evaluations (the row
-#                the second's); build and evaluation of the slowest rank
+#                launch, in the order main, branch, branch, main, TIME_REPEATS times (default 2):
+#                TIME_CASES (default W1 at kD = 100 and 250, real k, and W3 at 10⁶ at
+#                kD = 50 + 5i, complex k), 10⁻⁶, EVALS evaluations (default 2; the row the
+#                last's), with `--levels` where LEVELS=1; build and evaluation of the slowest rank
+#   time-aligned the same with the binaries built with `-C llvm-args=-align-loops=64`
+#                (MAIN_ALIGNED and BRANCH_ALIGNED, directories holding them; launches
+#                `aligned-…`): equal times there and unequal ones in `time` are code placement,
+#                not work (docs/helmholtz/tasks/CH2.0.md)
 # TIMEOUT per launch (default 3600 s), ONLY (a regular expression on the launch names), DRY_RUN
 # (print the launches only). Each launch writes <out-dir>/<name>.md and .err and a line in
 # <out-dir>/runs.log. Times are read on Kathleen's exclusive nodes only, never asserted; no run
@@ -167,18 +172,32 @@ for stage in "$@"; do
             done
         done
         ;;
-    time)
+    time | time-aligned)
+        prefix="time"
+        if [ "$stage" = time-aligned ]; then
+            if [ -z "${MAIN_ALIGNED:-}" ] || [ -z "${BRANCH_ALIGNED:-}" ]; then
+                echo "ch2-1b-runs.sh: time-aligned needs MAIN_ALIGNED and BRANCH_ALIGNED" >&2
+                exit 2
+            fi
+            A=$MAIN_ALIGNED/helmholtz_accuracy B=$BRANCH_ALIGNED/helmholtz_accuracy
+            prefix=aligned
+        fi
         need_main time
-        for c in w1@100 w1@250 w3:1000000@50+5; do
+        extra=()
+        [ "${LEVELS:-0}" = 1 ] && extra=(--levels)
+        # Word splitting of TIME_CASES is intended.
+        # shellcheck disable=SC2086
+        for c in ${TIME_CASES:-w1@100 w1@250 w3:1000000@50+5}; do
             w=${c%@*} k=${c#*@}
             re=${k%+*} im=0
             [ "$re" != "$k" ] && im=${k#*+}
             tag=$(echo "${w%%:*}-$re-$im" | tr -d '.')
-            for i in 1 2; do
+            for i in $(seq "${TIME_REPEATS:-2}"); do
                 for o in "main:$A:a" "branch:$B:a" "branch:$B:b" "main:$A:b"; do
                     IFS=: read -r who bin j <<< "$o"
-                    launch "time-$tag-$who-$i$j" "$bin" --workload "$w" --kd "$re" --kim "$im" \
-                        --eps 1e-6 --threads "$cores" --evaluations 2
+                    launch "$prefix-$tag-$who-$i$j" "$bin" --workload "$w" --kd "$re" \
+                        --kim "$im" --eps 1e-6 --threads "$cores" --evaluations "${EVALS:-2}" \
+                        ${extra[@]+"${extra[@]}"}
                 done
             done
         done
