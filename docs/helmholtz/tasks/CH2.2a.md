@@ -141,8 +141,30 @@ the reuse and reports the build per level. Times in one launch are not compared 
   time saved may be a small part of the RCR build; reported as measured.
 
 ## Pending runs
+None. Kathleen, `run.sbatch`, `singlenode`, `--exclude=node-c11b-004,node-c11b-013`, each the release
+build of `helmholtz_accuracy` then the stages; every launch exit 0:
+- job 673293 on node-c11b-046, 2026-11-28 16:55–16:59 (build of 8cd5834): `smoke`, `real`, `yukawa`;
+- job 673294 on node-c11a-012, 16:55–16:59 (8cd5834): `rotation`;
+- job 673295 on node-c11b-046, 17:03–17:04 (4feef81): `repeat` (added after the sweeps: the same k
+  twice, the bound of an on-disk store's gain).
+Outputs in `~/projects/fmm-archive/kathleen/runs/ch2-2a/` (`rotation/`, `repeat/`, the jobs' logs).
+
+## Results (the report `tetraleaf-validate/results/helmholtz-ch2-2a.md`)
+- Bit for bit: the tests (tables through every application, cold, warm, octave, f32, threads; the
+  operator's pair bodies; the FMM at 1 rank and in CI's list) and all 16 Kathleen checksums against
+  the storeless launches.
+- An octave on W1 at 10⁶ points reuses every RCR part of levels 3–6 (23 of 246–295 parts built at
+  kD 500 and 1000 under the defaults; Yukawa 21 of 344): the RCR tables' wall time 0.88–0.94× cold at
+  kD 500–1000 (the new level 2 holds 77–80 % of the thread-seconds), the build 0.96–1.00×.
+- The same k again: the build 0.66× (4.17 s against 6.28 s at kD = 1000), the RCR tables 0 s.
+- Memory: 1,842 MB of RCR tables at kD = 1000 (1,319 MB on level 2); the store 1.69 GB after the
+  sweep; Yukawa 6.6 MB per FMM.
+- Finding: under the defaults at kD ≥ 500 the RCR M2L tables of levels that run every class on the
+  diagonal form are built and never read (most of 2.0 s of a 6.0 s build at kD = 1000).
 
 ## Open questions
-- (for the PR) The proposal's §6.3 names an on-disk cache with a byte cap and LRU eviction; this
-  task's store is in memory (one process). Whether CH2.2 needs the on-disk store (a CH2.2c) or §6.3
-  is amended to the in-memory store, on CH2.2a's measured gains.
+For sign-off (the PR's questions; the report §5):
+1. The on-disk store of §6.3: recommended none for now, §6.3 amended to the in-memory store with
+   the measured gains; or a CH2.2c after CH2.2b.
+2. The RCR M2L tables the diagonal form never reads: recommended an Also on CH2.2b (written on the
+   branch); or a task of its own in H4, off the list.
