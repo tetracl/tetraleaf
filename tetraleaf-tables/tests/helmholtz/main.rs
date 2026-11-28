@@ -37,6 +37,7 @@ mod parts;
 mod plane_wave_merge;
 mod plane_wave_pair;
 mod plane_wave_quadrature;
+mod store;
 mod yukawa;
 
 /// A deterministic input of `planes` planes at degree p whose degree-n coefficients are of
