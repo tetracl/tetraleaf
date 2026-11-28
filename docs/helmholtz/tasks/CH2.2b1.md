@@ -94,7 +94,27 @@ shows the RCR tables' time and bytes saved, and the checksums `main`'s.
   them; the tests run every M2L path, and the hook's operator compares bit for bit.
 
 ## Pending runs
-(filled in step 6)
+None. Kathleen, `run.sbatch`, `singlenode`, `--exclude=node-c11b-004,node-c11b-013`, every launch exit 0:
+- job 673308 on node-c11a-058, 2026-11-28 19:13–19:54: `main`'s `helmholtz_accuracy` (63a7a4f, built
+  in `src/main`) and the branch's (b20d0a6; the library as c423598, later commits change tests and
+  docs), then `smoke` and `w1`; W3 at its default N (5·10⁸ points at kD = 500) failed in the
+  redistribution (MPI's i32 counts) after a 1,010 s oracle, and the job was cancelled;
+- job 673310 on node-c11b-037, 19:55–19:56 (a49e577: `w3:1000000`): `w3` on 673308's binaries.
+Outputs in `~/projects/fmm-archive/kathleen/runs/ch2-2b1/` (`failed-w3-5e8/`, the jobs' logs).
+
+## Results (the report `tetraleaf-validate/results/helmholtz-ch2-2b1.md`)
+- Bit for bit: the tests (pair bodies under every M2L setting against the hook; the FMM at 1, 2 and 4
+  ranks, 2 threads and the one-rank FMM) and every Kathleen case's four checksums (`main`, branch).
+- W1 at 10⁶ points under the defaults: every level from 2 takes all 34 classes at kD ≥ 500, so no
+  level builds RCR M2L tables; the RCR tables 0.24–0.26× at kD 250–1000 (1.933 → 0.455 s at
+  kD = 1000), the build 0.98×, 0.91×, 0.76×; the RCR tables 1,842 → 363 MB at kD = 1000.
+- W3 at 10⁶ points, kD = 500: the RCR tables 0.27×, the build 0.95×, 395 → 64 MB; its level 5 (RCR)
+  keeps its M2L tables.
+- What remains: the translations (the coarse pair at kD = 1000: 151 MB), and the diagonal tables
+  (1.7–1.8 s at kD = 1000), now the largest table part: CH2.2b2.
+- The self-review (a subagent) found no blocking defect; fixed after it: the whole-level FMM run at 2
+  threads and against the one-rank FMM, the plan's settings of `check_m2l_tables`, the three M2L
+  dispatches named in the docs, doc pointers, the tables script on a failed launch.
 
 ## Open questions
-None yet.
+None.

@@ -5559,3 +5559,54 @@ request, using this template:
 - Laplace: not touched (`tetraleaf-tables`' Helmholtz module, the Helmholtz operator and builder,
   the harness; Laplace's `TableCache` unchanged).
 - Follow-ups: CH2.2b (its line gains the Also of question 2); no CH2.2c (question 1).
+
+## 2026-11-28: CH2.2b1 The RCR M2L tables only where an RCR pair reads them
+- Done:
+  - CH2.2b split into CH2.2b1 (this), CH2.2b2 (the diagonal form's tables in the store) and CH2.2b3
+    (Dense, Classes, Batched and the exponential M2L in the store, and the sweep) by the size rule.
+  - `HelmholtzOperator::select_tables` chooses every level's M2L, the diagonal form's classes
+    included, before the RCR tables, and builds RCR's M2L coaxial tables and stored M2L y-blocks only
+    on the levels with an RCR pair (`TableChoice::{m2l_levels, block_levels}`): never on a level of
+    the waves, Batched, Dense or Classes, nor on one the diagonal form takes whole (the Also of
+    #277's question 2).
+  - The doc-hidden hooks `HelmholtzOperator::with_m2l_tables_everywhere` and
+    `HelmholtzFmmBuilder::m2l_tables_everywhere`: the tables before, the tests' trusted path.
+  - `tools/helmholtz/ch2-2b1-runs.sh` (`smoke`, `w1`, `w3`; `main`'s binary from `MAIN`, each case
+    main, branch, branch, main) and `ch2-2b1-tables.py` (on `common.py`).
+  - Report `tetraleaf-validate/results/helmholtz-ch2-2b1.md`; record `docs/helmholtz/tasks/CH2.2b1.md`.
+- Results (Kathleen jobs 673308 on node-c11a-058 and 673310 on node-c11b-037, 1 × 40):
+  - Bit for bit: every case's four checksums agree (`main` 63a7a4f and the branch).
+  - W1 at 10⁶ points under the defaults: every level from 2 takes all 34 classes at kD ≥ 500, so no
+    level builds RCR M2L tables; the RCR tables 0.24–0.26× at kD 250–1000 (1.933 → 0.455 s at
+    kD = 1000), the build 0.98×, 0.91× and 0.76× (5.61 → 4.25 s at kD = 1000); the RCR tables'
+    memory 1,842 → 363 MB at kD = 1000.
+  - W3 at 10⁶ points, kD = 500: the RCR tables 0.27×, the build 0.95×, 395 → 64 MB.
+  - What remains of the RCR tables is the translations; the diagonal form's tables (1.7–1.8 s at
+    kD = 1000) are now the build's largest table part.
+  - W3 at its default N (5·10⁸ points at kD = 500) overflows the redistribution's i32 counts after a
+    1,010 s oracle (exit 0); the runs use CH4.3b2c's 10⁶ points.
+- Tests:
+  - `tetraleaf-exec/tests/helmholtz/build.rs`, `the_rcr_m2l_tables_are_built_where_read`: Rotation,
+    Auto at 10⁻⁶ and 5·10⁻⁸, PlaneWave, Batched, Dense, Classes and the form at 10⁻¹⁰ (levels taken
+    whole and in part): M2L tables and blocks exactly on the levels with an RCR pair, every level from
+    2 with the hook, every pair body bit for bit the hook's, fewer bytes. The old choice fails it.
+  - `tests/helmholtz_fmm.rs`, `check_m2l_tables` (in `check_diagonal`: the rule under Rotation and
+    Auto, the form at 0.1 under Rotation with levels taken whole): the levels on every rank, the
+    output bit for bit the hook's; the whole-level run at 2 threads and against the one-rank FMM.
+- Checks: `/verify` on the M6.
+  - fmt; Clippy default, examples, workspace (also on stable); docs.
+  - At opt-level 1, `cargo test` 1,491 and `--workspace` 1,535 passed.
+  - The MPI list at 2 and 4 ranks passed (`helmholtz_fmm` 54.2 s and 51.1 s); after the
+    self-review's commit `helmholtz_fmm` at 1, 2 and 4 ranks 56.9, 54.3 and 51.5 s.
+  - Opt-level 0 debug runs: exec's `helmholtz` 122 s at load 4–6 (CH2.1e 122 s); `helmholtz_fmm`
+    985 s at load 3–6 (CH2.1e 1,044 s).
+
+  A self-review by a subagent found no blocking defect. Fixed after it: the whole-level FMM run at 2
+  threads and against the one-rank FMM, the plan's settings of `check_m2l_tables`, the three M2L
+  dispatches named in the docs, doc pointers, the tables script on a failed launch.
+
+  Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path); locust and the
+  M6 timings.
+- Decisions: none; no questions for sign-off.
+- Laplace: not touched (the Helmholtz operator's table choice, its builder hook, Helmholtz tests).
+- Follow-ups: CH2.2b2 and CH2.2b3 (their roadmap lines, from the split).
