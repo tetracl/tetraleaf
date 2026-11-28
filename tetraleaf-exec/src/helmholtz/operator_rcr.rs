@@ -197,10 +197,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
             mut locals,
         } = batch;
         let kernel = &self.kernel;
-        let (planes, m) = (
-            kernel.densities.multipole_planes(),
-            kernel.densities.vectors(),
-        );
+        let (planes, m) = kernel.multipole_columns();
         let size = kernel.tables.m2l_contribution_len(level, m);
         assert_eq!(size, locals.size(), "a contribution is a local");
         let buffer = &mut self.rcr_buffer;

@@ -6,6 +6,9 @@
 //! dominates, the same chains of `tetraleaf_ref::helmholtz` in absolute units; several
 //! vectors bit for bit the one-vector operator; real charges against complex ones with
 //! Im q = 0. The level calls through the drivers need a plan (MPI) and are CH3.1b's.
+//! Yukawa (Helmholtz CH2.1b): the same chains against the direct sum at k = iκ, its complex
+//! charges bit for bit the real path's two real vectors, Dense against Rotation, the M2L it
+//! refuses, and the reference chains of `tetraleaf_ref`'s `_yukawa` forms.
 //!
 //! The geometry is the unit cube (dyadic, so every frame and leaf coordinate is exact),
 //! with boxes on levels 2–4 of a five-level tree. The chains:
@@ -182,11 +185,15 @@ fn errors(
 /// How a chain draws its charges: `m` vectors of `kind`, of which it keeps all, or only
 /// vector `pick`, and writes them as the problem's charge kind (real draws as complex
 /// charges have Im q = 0).
+///
+/// With `split`, each drawn vector becomes two real ones, Re q then Im q (Yukawa's complex
+/// charges as the real path's 2m vectors, CH2.1b).
 #[derive(Clone, Copy)]
 struct Draw {
     kind: ChargeKind,
     m: usize,
     pick: Option<usize>,
+    split: bool,
 }
 
 impl Draw {
@@ -195,15 +202,22 @@ impl Draw {
             kind,
             m,
             pick: None,
+            split: false,
         }
     }
 
     fn charges(self, n: usize, rng: &mut Rng) -> Vec<[Vec<f64>; 2]> {
         let q = charges(self.kind, self.m, n, rng);
-        match self.pick {
+        let q = match self.pick {
             None => q,
             Some(v) => vec![q[v].clone()],
+        };
+        if !self.split {
+            return q;
         }
+        q.into_iter()
+            .flat_map(|[re, im]| [[re, vec![0.0; n]], [im, vec![0.0; n]]])
+            .collect()
     }
 }
 
@@ -374,7 +388,7 @@ fn chains_against_the_direct_sum() {
 /// for bit, in every chain (the physical output, whose scaling is exact for equal input).
 #[test]
 fn each_vector_is_the_one_vector_operator() {
-    for (re, im) in [(20.0, 0.0), (20.0, 2.0)] {
+    for (re, im) in [(20.0, 0.0), (20.0, 2.0), (0.0, 20.0)] {
         for kind in [ChargeKind::Real, ChargeKind::Complex] {
             let k = Wavenumber::new(re, im).unwrap();
             let mut three = Problem::new(k, kind, 3, 1e-6);
@@ -385,6 +399,7 @@ fn each_vector_is_the_one_vector_operator() {
                     kind,
                     m: 3,
                     pick: Some(v),
+                    split: false,
                 };
                 for (a, b) in many.iter().zip(chains(&mut one, 11, pick)) {
                     let x = three.physical(a.target, &a.output, a.n, v);
@@ -443,12 +458,19 @@ fn sizes_and_errors() {
         );
         assert_eq!(op.nlevels(), 4);
     }
+    // Yukawa (CH2.1b): (p + 1)² reals per expansion with real charges, two real ones per
+    // complex vector.
     let yukawa = Wavenumber::new(0.0, 10.0).unwrap();
-    let d = Densities::new(WavenumberKind::Yukawa, ChargeKind::Real, 1);
-    assert_eq!(
-        HelmholtzOperator::<f64>::new(yukawa, d, &domain, &[0, 0, 4], false, 8).err(),
-        Some(OperatorError::Yukawa)
-    );
+    for (charges, m) in [(ChargeKind::Real, 1), (ChargeKind::Complex, 3)] {
+        let d = Densities::new(WavenumberKind::Yukawa, charges, m);
+        let op = HelmholtzOperator::<f64>::new(yukawa, d, &domain, &[0, 0, 4], true, 8).unwrap();
+        assert_eq!(op.multipole_size(2), d.multipole_size(4));
+        assert_eq!(op.local_size(2), d.local_size(4));
+        assert_eq!(
+            op.target_output_point_size(),
+            d.target_output_point_size(true)
+        );
+    }
     let d = Densities::new(WavenumberKind::Complex, ChargeKind::Real, 1);
     assert_eq!(
         HelmholtzOperator::<f64>::new(k, d, &domain, &[0, 0, 4], false, 8).err(),
@@ -730,6 +752,402 @@ fn p2p_is_the_reference_bit_for_bit() {
             for axis in 0..3 {
                 assert_eq!(output[d.gradient_index(n, 0, i, axis)], grad[0][axis].re);
                 assert_eq!(output[d.gradient_index(n, 1, i, axis)], grad[0][axis].im);
+            }
+        }
+    }
+}
+
+/// Yukawa (CH2.1b): the chains' errors within ε at S7's degrees (the P2P to rounding, 1e-13),
+/// at κD = 0.01, 1, 20 and 100 (κ a from about 2·10⁻⁴ to 22 on the chains' levels), real and
+/// complex charges, ε = 10⁻⁶ and 10⁻¹⁰, against the direct sum at k = iκ. One exception: the
+/// far chain at κD = 100, whose M2L on level 2 (κ a ≈ 22, |t| ≈ 1.17, the field e^{−117} of
+/// the undamped one) errs about 3·10⁻⁷ at every ε, round-off and not truncation: RCR's loss
+/// of relative accuracy under strong damping (roadmap CH2.3's Also, the H1 gate's G3; the
+/// tables cancel as `rcr` does, CH2.1a), which CH2.3's pruning removes. It is held to
+/// `STRONG_DAMPING` (printed).
+#[test]
+fn yukawa_chains_against_the_direct_sum() {
+    // The far chain at κD = 100 (above): 3.0e-7 measured on the M6.
+    const STRONG_DAMPING: f64 = 1e-5;
+    for kappa in [0.01, 1.0, 20.0, 100.0] {
+        for kind in [ChargeKind::Real, ChargeKind::Complex] {
+            for epsilon in [1e-6, 1e-10] {
+                let k = Wavenumber::new(0.0, kappa).unwrap();
+                let mut pb = Problem::new(k, kind, 1, epsilon);
+                for chain in chains(&mut pb, 7, Draw::all(kind, 1)) {
+                    let (name, (phi, grad)) = (chain.name, chain.errors);
+                    println!(
+                        "Yukawa κ = {kappa}, {kind:?} charges, ε = {epsilon:e}, {name}: φ {phi:.1e}, ∇φ {grad:.1e}"
+                    );
+                    let bound = match name {
+                        "near" => 1e-13,
+                        "far" if kappa >= 100.0 => STRONG_DAMPING.max(epsilon),
+                        _ => epsilon,
+                    };
+                    assert!(
+                        phi <= bound && grad <= bound,
+                        "Yukawa κ = {kappa}, {kind:?}, ε = {epsilon:e}, {name}: φ {phi:e}, ∇φ {grad:e}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Yukawa's complex charges are its real path's two real vectors value for value
+/// (`Densities`' chunks, CH2.1b): every chain's target output chunk with one complex vector
+/// q is bit for bit that of the real path with the two vectors Re q and Im q, under both P2P
+/// kernels.
+#[test]
+fn yukawa_complex_charges_are_two_real_vectors() {
+    use tetraleaf_exec::operator::P2pChoice;
+
+    for kappa in [1.0, 20.0] {
+        for choice in [P2pChoice::Auto, P2pChoice::Reference] {
+            let k = Wavenumber::new(0.0, kappa).unwrap();
+            let mut complex = Problem::new(k, ChargeKind::Complex, 1, 1e-8);
+            complex.op = complex.op.with_p2p(choice).unwrap();
+            let mut real = Problem::new(k, ChargeKind::Real, 2, 1e-8);
+            real.op = real.op.with_p2p(choice).unwrap();
+            let a = chains(&mut complex, 13, Draw::all(ChargeKind::Complex, 1));
+            let split = Draw {
+                split: true,
+                ..Draw::all(ChargeKind::Complex, 1)
+            };
+            let b = chains(&mut real, 13, split);
+            for (x, y) in a.iter().zip(&b) {
+                assert!(
+                    x.output == y.output,
+                    "κ = {kappa}, {choice}, {}: the chunks differ",
+                    x.name
+                );
+            }
+        }
+    }
+}
+
+/// Yukawa's Dense M2L (CH2.1a's one-plane matrices) against Rotation in the far and v4
+/// chains, at the named degrees [0, 0, 8, 6, 5] (so every level fits the dense budget): the
+/// target outputs within 1e-14 relative L2 of each other; and the M2L the operator refuses on
+/// Yukawa.
+#[test]
+fn yukawa_dense_against_rotation() {
+    use tetraleaf_exec::helmholtz::{DEFAULT_DENSE_BUDGET, HelmholtzM2l};
+
+    for kappa in [0.01, 1.0, 20.0] {
+        for kind in [ChargeKind::Real, ChargeKind::Complex] {
+            let k = Wavenumber::new(0.0, kappa).unwrap();
+            let problem = || {
+                let densities = Densities::new(k.kind(), kind, 2);
+                let degrees = [0, 0, 8, 6, 5];
+                let op =
+                    HelmholtzOperator::new(k, densities, &domain(), &degrees, true, 64).unwrap();
+                Problem {
+                    k,
+                    kind,
+                    densities,
+                    op,
+                }
+            };
+            let (mut rotation, mut dense) = (problem(), problem());
+            dense.op = dense.op.with_m2l(HelmholtzM2l::Dense, DEFAULT_DENSE_BUDGET);
+            assert!(dense.op.dense_bytes() > 0, "κ = {kappa}: no dense level");
+            let a = chains(&mut rotation, 17, Draw::all(kind, 2));
+            let b = chains(&mut dense, 17, Draw::all(kind, 2));
+            for (x, y) in a
+                .iter()
+                .zip(&b)
+                .filter(|(x, _)| matches!(x.name, "far" | "v4"))
+            {
+                let diff: f64 = x
+                    .output
+                    .iter()
+                    .zip(&y.output)
+                    .map(|(u, w)| (u - w) * (u - w))
+                    .sum();
+                let norm: f64 = x.output.iter().map(|u| u * u).sum();
+                let e = (diff / norm).sqrt();
+                println!(
+                    "Yukawa κ = {kappa}, {kind:?}, {}: Dense against Rotation {e:.1e}",
+                    x.name
+                );
+                assert!(e <= 1e-14, "κ = {kappa}, {kind:?}, {}: {e:e}", x.name);
+            }
+        }
+    }
+    for m2l in [
+        HelmholtzM2l::Batched,
+        HelmholtzM2l::Classes,
+        HelmholtzM2l::PlaneWave,
+    ] {
+        let refused = std::panic::catch_unwind(|| {
+            let k = Wavenumber::new(0.0, 5.0).unwrap();
+            Problem::new(k, ChargeKind::Real, 1, 1e-6)
+                .op
+                .with_m2l(m2l, DEFAULT_DENSE_BUDGET)
+        });
+        let message = refused.err().map(|e| {
+            e.downcast_ref::<String>()
+                .cloned()
+                .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_default()
+        });
+        assert!(
+            message
+                .as_deref()
+                .is_some_and(|m| m.contains("Yukawa") && m.contains("Rotation and Dense")),
+            "{m2l:?}: {message:?}"
+        );
+    }
+}
+
+/// Yukawa's operator at named low degrees against the same chains of `tetraleaf_ref`'s
+/// `_yukawa` forms in absolute units (as `low_degree_chains_are_the_reference_chains`; real
+/// charges, one plane): far, v4, x and w within 2e-13 of each other, both 10⁻⁹ or more from
+/// the direct sum.
+#[test]
+fn yukawa_low_degree_chains_are_the_reference_chains() {
+    use tetraleaf_ref::Frame;
+    use tetraleaf_ref::helmholtz::{Level, Workspace, leaf, rcr};
+
+    let domain = domain();
+    let frame = |key: MortonKey| {
+        let level = morton::level(key) as usize;
+        Frame::new(geometry::centre(key, &domain), radius(level, &domain))
+    };
+    let kind = ChargeKind::Real;
+    for kappa in [0.5, 20.0, 60.0, 100.0] {
+        let k = Wavenumber::new(0.0, kappa).unwrap();
+        let kc = C::new(0.0, kappa);
+        let level = |l: usize| Level::new(kc, radius(l, &domain));
+        let degrees = [0, 0, 8, 6, 5];
+        let len = |l: usize| (degrees[l] + 1) * (degrees[l] + 1);
+        let densities = Densities::new(k.kind(), kind, 1);
+        let op = HelmholtzOperator::new(k, densities, &domain, &degrees, true, 64).unwrap();
+        let mut pb = Problem {
+            k,
+            kind,
+            densities,
+            op,
+        };
+        let ours = chains(&mut pb, 5, Draw::all(kind, 1));
+        let mut rng = Rng(5);
+        let mut ws = Workspace::new(8);
+        for chain in ours.iter().filter(|c| c.name != "near") {
+            let (s, t) = match chain.name {
+                "far" => (key([1, 1, 1], 4), key([12, 13, 11], 4)),
+                "v4" => (key([1, 1, 1], 4), key([3, 1, 1], 4)),
+                "x" => (key([0, 0, 0], 3), key([3, 0, 0], 4)),
+                _ => (key([3, 0, 0], 4), key([0, 0, 0], 3)),
+            };
+            let sources = points_in(s, 20, &mut rng);
+            let targets = points_in(t, 15, &mut rng);
+            let q = Draw::all(kind, 1).charges(sources.len(), &mut rng)[0][0].clone();
+            let (lt, ls) = (morton::level(t) as usize, morton::level(s) as usize);
+            let (mut phi, mut grad) = (vec![0.0; targets.len()], vec![[0.0; 3]; targets.len()]);
+            let local_of = |ws: &mut Workspace<f64>| -> Vec<f64> {
+                match chain.name {
+                    "far" => {
+                        let up = [s, morton::parent(s).unwrap(), key([0, 0, 0], 2)];
+                        let down = [key([3, 3, 2], 2), morton::parent(t).unwrap(), t];
+                        let mut m = vec![0.0; len(4)];
+                        leaf::p2m_yukawa(5, &level(4), &frame(s), &sources, &q, ws, &mut m);
+                        for i in 0..2 {
+                            let (lc, lp) = (4 - i, 3 - i);
+                            let table = rcr::m2m_table(degrees[lc], degrees[lp], &level(lc));
+                            let mut parent = vec![0.0; len(lp)];
+                            rcr::m2m_yukawa(
+                                degrees[lc],
+                                degrees[lp],
+                                &level(lc),
+                                &level(lp),
+                                &frame(up[i]),
+                                &frame(up[i + 1]),
+                                &table,
+                                ws,
+                                &m,
+                                &mut parent,
+                            );
+                            m = parent;
+                        }
+                        let table = rcr::m2l_table(8, 8, &level(2), &frame(up[2]), &frame(down[0]));
+                        let mut l = vec![0.0; len(2)];
+                        rcr::m2l_yukawa(
+                            8,
+                            8,
+                            &level(2),
+                            &frame(up[2]),
+                            &frame(down[0]),
+                            &table,
+                            ws,
+                            &m,
+                            &mut l,
+                        );
+                        for i in 0..2 {
+                            let (lp, lc) = (2 + i, 3 + i);
+                            let table = rcr::l2l_table(degrees[lp], degrees[lc], &level(lc));
+                            let mut child = vec![0.0; len(lc)];
+                            rcr::l2l_yukawa(
+                                degrees[lp],
+                                degrees[lc],
+                                &level(lp),
+                                &level(lc),
+                                &frame(down[i]),
+                                &frame(down[i + 1]),
+                                &table,
+                                ws,
+                                &l,
+                                &mut child,
+                            );
+                            l = child;
+                        }
+                        l
+                    }
+                    "v4" => {
+                        let mut m = vec![0.0; 36];
+                        leaf::p2m_yukawa(5, &level(4), &frame(s), &sources, &q, ws, &mut m);
+                        let table = rcr::m2l_table(5, 5, &level(4), &frame(s), &frame(t));
+                        let mut l = vec![0.0; 36];
+                        rcr::m2l_yukawa(
+                            5,
+                            5,
+                            &level(4),
+                            &frame(s),
+                            &frame(t),
+                            &table,
+                            ws,
+                            &m,
+                            &mut l,
+                        );
+                        l
+                    }
+                    _ => {
+                        let mut l = vec![0.0; 36];
+                        leaf::p2l_yukawa(5, &level(4), &frame(t), &sources, &q, ws, &mut l);
+                        l
+                    }
+                }
+            };
+            if chain.name == "w" {
+                let mut m = vec![0.0; 36];
+                leaf::p2m_yukawa(5, &level(ls), &frame(s), &sources, &q, &mut ws, &mut m);
+                leaf::m2p_yukawa(
+                    5,
+                    &level(ls),
+                    &frame(s),
+                    &m,
+                    &targets,
+                    &mut ws,
+                    &mut phi,
+                    Some(&mut grad),
+                );
+            } else {
+                let l = local_of(&mut ws);
+                leaf::l2p_yukawa(
+                    5,
+                    &level(lt),
+                    &frame(t),
+                    &l,
+                    &targets,
+                    &mut ws,
+                    &mut phi,
+                    Some(&mut grad),
+                );
+            }
+            // φ̃ = 4πφ: the reference's fields carry the factor 4π.
+            let scale = 1.0 / (4.0 * std::f64::consts::PI);
+            let phi: Vec<C> = phi.iter().map(|&x| C::new(x * scale, 0.0)).collect();
+            let grad: Vec<C> = grad
+                .iter()
+                .flatten()
+                .map(|&x| C::new(x * scale, 0.0))
+                .collect();
+            let (our_phi, our_grad) = pb.physical(chain.target, &chain.output, chain.n, 0);
+            let our_grad: Vec<C> = our_grad.iter().flatten().copied().collect();
+            let (dp, dg) = (relative_l2(&our_phi, &phi), relative_l2(&our_grad, &grad));
+            let (tp, tg) = chain.errors;
+            println!(
+                "Yukawa κ = {kappa}, {}: against the reference φ {dp:.1e}, ∇φ {dg:.1e}; against the direct sum φ {tp:.1e}, ∇φ {tg:.1e}",
+                chain.name
+            );
+            assert!(dp <= 2e-13 && dg <= 2e-13, "{}: {dp:e}, {dg:e}", chain.name);
+            assert!(
+                tp > 1e-9,
+                "{}: truncation not exercised ({tp:e})",
+                chain.name
+            );
+        }
+    }
+}
+
+/// Yukawa's P2P with `P2pChoice::Reference` and `Isa::Scalar` against
+/// `tetraleaf_ref::helmholtz::p2p::p2p_yukawa` bit for bit, per real column (two complex
+/// vectors: four columns), as `p2p_is_the_reference_bit_for_bit`.
+#[test]
+fn yukawa_p2p_is_the_reference_bit_for_bit() {
+    use tetraleaf_exec::operator::{Isa, P2pChoice};
+    use tetraleaf_ref::helmholtz::p2p;
+
+    for choice in [P2pChoice::Reference, P2pChoice::Isa(Isa::Scalar)] {
+        let kappa = 20.0;
+        let k = Wavenumber::new(0.0, kappa).unwrap();
+        let mut pb = Problem::new(k, ChargeKind::Complex, 2, 1e-6);
+        pb.op = pb.op.with_p2p(choice).unwrap();
+        let (s, t) = (key([2, 1, 1], 4), key([1, 1, 1], 4));
+        let mut rng = Rng(9);
+        let (other, own) = (points_in(s, 10, &mut rng), points_in(t, 8, &mut rng));
+        let q_other = Draw::all(ChargeKind::Complex, 2).charges(other.len(), &mut rng);
+        let q_own = Draw::all(ChargeKind::Complex, 2).charges(own.len(), &mut rng);
+        let other_chunk = source_chunk(&pb.densities, s, &other, &as_charges(pb.kind, &q_other));
+        let own_chunk = source_chunk(&pb.densities, t, &own, &as_charges(pb.kind, &q_own));
+        let input = target_input(t, &own);
+        let mut output = pb.output_chunk(own.len());
+        pb.op.p2p(s, t, &other_chunk, &input, &mut output);
+        pb.op.p2p(t, t, &own_chunk, &input, &mut output);
+
+        let kappa_hat = kappa * radius(4, &domain());
+        let frame = geometry::relative_frame::<f64>(s, t);
+        let mapped: Vec<[f64; 3]> = other_chunk[..30]
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|u| core::array::from_fn(|i| frame.centre[i] + frame.radius * u[i]))
+            .collect();
+        let own_units: Vec<[f64; 3]> = own_chunk[..24].as_chunks::<3>().0.to_vec();
+        let n = own.len();
+        let d = &pb.densities;
+        for (column, (v, part)) in [(0, 0), (0, 1), (1, 0), (1, 1)].into_iter().enumerate() {
+            let (mut phi, mut grad) = (vec![0.0; n], vec![[0.0; 3]; n]);
+            p2p::p2p_yukawa(
+                kappa_hat,
+                &mapped,
+                &q_other[v][part],
+                &own_units,
+                &mut phi,
+                Some(&mut grad),
+            );
+            p2p::p2p_yukawa(
+                kappa_hat,
+                &own_units,
+                &q_own[v][part],
+                &own_units,
+                &mut phi,
+                Some(&mut grad),
+            );
+            assert_eq!(d.output_column(v, part), column);
+            for i in 0..n {
+                assert_eq!(
+                    output[d.potential_index(n, column, i)],
+                    phi[i],
+                    "{choice}, column {column}, target {i}"
+                );
+                for axis in 0..3 {
+                    assert_eq!(
+                        output[d.gradient_index(n, column, i, axis)],
+                        grad[i][axis],
+                        "{choice}, column {column}, target {i}"
+                    );
+                }
             }
         }
     }
