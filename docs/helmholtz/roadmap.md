@@ -9,9 +9,10 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 
 Status (2026-11-28, after CH2.2a): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). Item 15, Yukawa on
-the host: CH2.1 and CH2.1e merged; CH2.2 split into CH2.2a (the RCR tables per level in a store, done in
-its PR, two questions for sign-off: the on-disk store, and the RCR M2L tables the diagonal form never
-reads) and CH2.2b (the M2L families in the store); next CH2.2b, then CH2.3 and CH2.1d. Eight H4 tasks
+the host: CH2.1 and CH2.1e merged; CH2.2 split into CH2.2a (the RCR tables per level in an in-memory
+store, done in its PR, signed off: no on-disk store, §6.3 amended; the RCR M2L tables the diagonal
+form never reads an Also on CH2.2b) and CH2.2b (the M2L families in the store); next CH2.2b, then
+CH2.3 and CH2.1d. Eight H4 tasks
 stay open off the list, and so does CH4.9c. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0,
 CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in
 `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G
@@ -384,12 +385,14 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   `tetraleaf_tables::helmholtz::store`, `HelmholtzFmmBuilder::table_store`; tables and outputs with a
   store bit for bit without; an octave on W1 (10⁶) reuses every RCR part of levels 3–6, 0.88–0.94× the
   RCR tables' time at kD 500–1000 (the new level 2 dominates); the same k again 0.66× the build.
-  Questions 1 (the on-disk store) and 2 (below) of its PR for sign-off.
+  Signed off on #277 ("Q1 and Q2 as recommended"): no on-disk store, §6.3 and §7 amended; the
+  unread RCR M2L tables an Also on CH2.2b.
 - [ ] **CH2.2b The M2L tables per level in the store.** Dense, Classes, Batched, the exponential
   M2L's and the diagonal form's tables keyed per level (k̂_l, the degree, the per-class choices,
   N_φ, the transfer build, the quadrature's precision and reach) in CH2.2a's store. *Done when:*
   each family with the store bit for bit without it; the sweep under the library's defaults with
-  each level's build cold and warm, on Kathleen. Also (CH2.2a, report §5, question 2 of its PR):
+  each level's build cold and warm, on Kathleen. Also (CH2.2a, report §5; #277's question 2, the
+  user, 2026-11-28: "Q1 and Q2 as recommended"):
   under the defaults at kD ≥ 500 every level of W1 takes all 34 classes on the diagonal form, yet
   `select_tables` builds their RCR M2L coaxial tables first, never read (most of the RCR tables'
   2.0 s of W1's 6.0 s build at kD = 1000): decide the classes first and build RCR M2L tables only

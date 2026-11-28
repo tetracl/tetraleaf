@@ -176,6 +176,9 @@ fully warm), and without (both cold).
 
 ## 5. Questions
 
+Both signed off 2026-11-28 on #277 (the user: "Q1 and Q2 as recommended"): no on-disk store, the
+proposal's §6.3 and §7 amended; the unread RCR M2L tables an Also on CH2.2b.
+
 1. **The on-disk store.**
    - **The proposal.** §6.3 names an on-disk table cache, keyed per level, with a byte cap and LRU
      eviction.

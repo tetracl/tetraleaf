@@ -5550,12 +5550,12 @@ request, using this template:
   - `cargo deny`: no manifest change.
   - Laplace's benchmarks: no Laplace path.
   - locust and the M6 timings.
-- Decisions: questions for sign-off (#277):
+- Decisions: questions 1 and 2 of #277 signed off 2026-11-28 (the user: "Q1 and Q2 as
+  recommended"); the proposal's §6.3 and §7 amended, with an Appendix A line:
   1. The on-disk store of §6.3: recommended none for now, §6.3 amended to the in-memory store;
      alternative a CH2.2c.
   2. The RCR M2L tables the diagonal form never reads: recommended an Also on CH2.2b (written on the
      branch); alternative a task in H4 off the list.
 - Laplace: not touched (`tetraleaf-tables`' Helmholtz module, the Helmholtz operator and builder,
   the harness; Laplace's `TableCache` unchanged).
-- Follow-ups: CH2.2b (its line gains the Also of question 2); the §6.3 amendment or CH2.2c by
-  question 1.
+- Follow-ups: CH2.2b (its line gains the Also of question 2); no CH2.2c (question 1).

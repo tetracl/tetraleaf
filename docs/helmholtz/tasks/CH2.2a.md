@@ -163,7 +163,8 @@ Outputs in `~/projects/fmm-archive/kathleen/runs/ch2-2a/` (`rotation/`, `repeat/
   diagonal form are built and never read (most of 2.0 s of a 6.0 s build at kD = 1000).
 
 ## Open questions
-For sign-off (the PR's questions; the report §5):
+Signed off 2026-11-28 on #277, the user: "Q1 and Q2 as recommended" (proposal §6.3 and §7
+amended, Appendix A; CH2.2b's line gains the Also). The questions (the report §5):
 1. The on-disk store of §6.3: recommended none for now, §6.3 amended to the in-memory store with
    the measured gains; or a CH2.2c after CH2.2b.
 2. The RCR M2L tables the diagonal form never reads: recommended an Also on CH2.2b (written on the
