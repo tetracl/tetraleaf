@@ -7,12 +7,11 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/tasks/<ID>.md`; each milestone's gate report is
 `docs/helmholtz/gates/<milestone>.md`.
 
-Status (2026-11-28, after CH2.1c): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
+Status (2026-11-28, after CH2.1e): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). Item 15, Yukawa on
-the host: CH2.1a and CH2.1b merged (D4 signed off: one operator); CH2.1c (Yukawa's batched P2M) is done
-in its PR, which completes CH2.1 and added CH2.1e (Yukawa's batched L2P), on the list next by its
-sign-off; then CH2.2, CH2.3, CH2.1d. Eight H4 tasks stay open off the list, and so does CH4.9c.
-The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0,
+the host: CH2.1 (a–c) merged (D4 signed off: one operator); CH2.1e (Yukawa's batched L2P) is done in
+its PR, so both leaf kernels run on every kind; next CH2.2, then CH2.3 and CH2.1d. Eight H4 tasks stay
+open off the list, and so does CH4.9c. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0,
 CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in
 `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G
 in `git show 8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show
@@ -24,7 +23,8 @@ until CH4.6a2 in `git show 7c8177d:docs/helmholtz/roadmap.md`; until CH4.9a1 in 
 until CH4.9a2b in `git show 9401720:docs/helmholtz/roadmap.md`; until CH4.9b1 in `git show
 c2ccf51:docs/helmholtz/roadmap.md`; until CH4.9b2 in `git show 2a65aa1:docs/helmholtz/roadmap.md`;
 until CH2.1a in `git show 72bcf40:docs/helmholtz/roadmap.md`; until CH2.1b in `git show
-2413c5b:docs/helmholtz/roadmap.md`; until CH2.1c in `git show b8d37fc:docs/helmholtz/roadmap.md`.
+2413c5b:docs/helmholtz/roadmap.md`; until CH2.1c in `git show b8d37fc:docs/helmholtz/roadmap.md`; until CH2.1e in `git show
+4f8027d:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -371,14 +371,10 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   (0.80 of C = 10 in f64, 1.54 in f32); the FMM's errors 1.0000× the per-point path's on CH2.1b's 114
   cases and the constant density, within ε; P2M 0.29–0.34× on Kathleen. Signed off on #275 ("Q1 and
   Q2 as recommended"): CH2.1e (Yukawa's L2P) on the list next; the constant density's ∇φ to CH2.3.
-- [ ] **CH2.1e Yukawa's batched L2P.** `LeafL2p` on Yukawa's real path as CH2.1c's `LeafP2m`:
-  `l2p_yukawa` restated with gradients (îₙ and îₙ′ per lane by `modified_i`, e^{κr − β} per lane, the
-  tangential factor's limit at the centre), `Densities::l2p_kernel` on it, the real output columns of
-  Yukawa's real path. *Done when:* its contract as CH4.9b2's, a target's bits independent of its
-  leaf, batch and position, the FMM's errors within 1.01× the per-point path's on CH2.1b's cases,
-  L2P's time per level on Kathleen. *Needs:* CH2.1c. Added at CH2.1c (Yukawa's reference L2P 15–25 %
-  of an evaluation after it, report §4); on the priority list in item 15 after CH2.1c (#275's
-  question 1; the user, 2026-11-28: "Q1 and Q2 as recommended").
+- [x] **CH2.1e Yukawa's batched L2P.** Report: `tetraleaf-validate/results/helmholtz-ch2-1e.md`.
+  `LeafL2p` restates `l2p_yukawa` (`LeafOutput::planes`); within CH4.9b2's contract with e's condition
+  (1.94 of C = 10 in f64, 0.64 in f32); the FMM's errors 1.0000× the reference leaves' on CH2.1b's 114
+  cases, within ε; L2P 0.21–0.28× per level on Kathleen. No sign-off.
 - [ ] **CH2.2 Per-level tables with per-level cache keys.** *Done when:* build cost and
   memory reported; levels reused across an octave sweep. *Needs:* CH2.1, D4.
 - [ ] **CH2.3 Pruning and the calibration of p_l.** *Done when:* the relative error within
