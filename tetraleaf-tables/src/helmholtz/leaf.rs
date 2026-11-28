@@ -152,6 +152,9 @@
 //! |gₐ − gₐ_ref| ≤ C u e Σₙ wₙ Sₙ (κ (((n + 1)² + 2n + 3) |îₙ′| + x îₙ + x |îₙ′|) + ((n + 1)³ + n(n + 1) + x) tₙ)
 //! ```
 //!
+//! A flushed value changes a target's output by at most τ Σₙ wₙ Sₙ (1 + κ + 1/r) (îₙ ≤ 1 and e ≤ 1
+//! inside the box), absolute, which beside the contract is negligible for the stored locals of the
+//! FMM (L̂ᵞ = e^β L sⁿ keeps them of order one) but not relative to an arbitrarily large local.
 //! (`tests/helmholtz/l2p_yukawa.rs`: C = 10, 1.9 measured in f64 to p = 45 and κ̂ a to 433; 0.6 in f32
 //! against the f64 reference, beside the f32 level's own rounding of s and β, held apart as in P2M).
 //!
@@ -536,7 +539,8 @@ pub struct LeafL2p<T> {
 }
 
 /// The per-degree sums of [`LeafL2p::l2p`], each `p + 1` rows of lanes per charge vector: the
-/// value's real and imaginary planes, then ∂θ's and (1/sin θ) ∂φ's.
+/// value's two planes (the local's real and imaginary planes; on Yukawa Re q's and Im q's real
+/// locals, or plane 0 alone), then ∂θ's and (1/sin θ) ∂φ's.
 const SUMS: usize = 6;
 
 impl<T: RealScalar> LeafL2p<T> {
@@ -963,10 +967,11 @@ pub struct L2pScratch<T> {
     p: usize,
     vectors: usize,
     harmonics: LeafScratch<T, B>,
-    /// ĵₙ per lane, its real and imaginary parts (zero for real k), n ≤ p.
+    /// ĵₙ per lane, its real and imaginary parts (zero for real k), n ≤ p; on Yukawa îₙ in the
+    /// first.
     radial: Vec<[T; B]>,
     radial_im: Vec<[T; B]>,
-    /// ĵₙ′ per lane, its real and imaginary parts.
+    /// ĵₙ′ per lane, its real and imaginary parts; on Yukawa îₙ′ in the first.
     derivative: Vec<[T; B]>,
     derivative_im: Vec<[T; B]>,
     /// One lane's ĵₙ and ĵₙ′ for complex k.

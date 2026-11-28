@@ -361,7 +361,7 @@ fn yukawa_l2p_within_the_contract_in_f32() {
 
 /// Targets whose r² underflows to zero although they are not the centre (the kernel takes the
 /// centre's path, the tangential limit κ/(3s) and î at 0, where the reference's r > 0; the two agree
-/// to rounding), and the centre alone and among others.
+/// to rounding), and the centre alone and among others; in f64, and in f32 next to the centre.
 #[test]
 fn yukawa_targets_whose_squares_underflow() {
     let x = [
@@ -383,6 +383,31 @@ fn yukawa_targets_whose_squares_underflow() {
         }
     }
     println!("Yukawa L2P where r² underflows: worst {most:.3} of the contract (C = {C})");
+    // f32: r² subnormal (r = 10⁻²⁰) or zero (10⁻²⁵, 3·10⁻³⁰) next to the centre, and a target at
+    // r ≈ 0.6, at the κ̂ whose factor e is not flushed there (κ̂ ≤ 4); two vectors of two planes.
+    let round = |x: f64| x as f32 as f64;
+    let y: Vec<[f64; 3]> = [
+        [1e-20, 0.0, 0.0],
+        [0.0, -1e-25, 0.0],
+        [3e-30, 2e-30, -1e-30],
+        [0.0; 3],
+        [0.3, -0.2, 0.5],
+    ]
+    .iter()
+    .map(|x| x.map(round))
+    .collect();
+    let mut most: f64 = 0.0;
+    for p in [0, 1, 2, 8, 17] {
+        for &kappa in &KAPPAS[..3] {
+            let kappa = round(kappa);
+            let l: Vec<f64> = locals(p, 2, 2, p as u64).into_iter().map(round).collect();
+            for gradients in [false, true] {
+                let precision = f32_precision();
+                most = most.max(worst::<f32>(p, kappa, &y, &l, 2, 2, gradients, precision));
+            }
+        }
+    }
+    println!("Yukawa L2P next to the centre, f32: worst {most:.3} of the contract (C = {C})");
 }
 
 /// The bits: each vector the one-vector call's; a complex vector's two columns the one-plane

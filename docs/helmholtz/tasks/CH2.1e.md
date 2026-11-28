@@ -119,7 +119,16 @@ The M6 is not timed.
 - Risk: f32 îₙ′ subnormal near the centre at large n; flushed below τ as îₙ.
 
 ## Pending runs
-None yet.
+- Kathleen: one `run.sbatch` job (`singlenode`, `--exclude=node-c11b-004,node-c11b-013`, 2 h): the
+  release build of `helmholtz_accuracy`, then `tools/helmholtz/ch2-1e-runs.sh
+  /scratch/scratch/ucahtbe/fmm/logs/ch2-1e/acc smoke accuracy worst` and `… /time levels`. Decides
+  the 1.01× and ε on CH2.1b's 114 cases, the constant density, and L2P's time per level.
+
+## Bits of real and complex k
+Real and complex k's L2P is `main`'s bit for bit: a scratch test (not committed) hashed `LeafL2p`'s
+outputs over k̂ ∈ {0.3, 4, 16, 4 + 0.5i, 16 + 2i, 10⁻⁶}, p ∈ {0, 3, 12, 26}, 1 and 3 vectors, with
+and without gradients, 37 targets, on the branch and on `main`'s `leaf.rs`: `ee41f6d8571cd78e` both
+(the M6, 2026-11-28).
 
 ## Open questions
 None yet.
