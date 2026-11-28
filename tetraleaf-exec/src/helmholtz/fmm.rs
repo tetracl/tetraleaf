@@ -126,6 +126,7 @@ use tetraleaf_tables::helmholtz::DEFAULT_BLOCK_BUDGET;
 use tetraleaf_tables::helmholtz::diagonal::{CLASS_COUNT, DEFAULT_SIGNATURE_NODE_BUDGET};
 use tetraleaf_tables::helmholtz::plane_wave::merge::plane_wave_degree;
 use tetraleaf_tables::helmholtz::plane_wave::quadrature::{RHO_MAX, assert_reach};
+use tetraleaf_tables::helmholtz::store::{TableBuild, TableStore};
 use thiserror::Error;
 
 use super::{
@@ -430,6 +431,49 @@ impl From<FmmError> for HelmholtzFmmError {
     }
 }
 
+/// One store of the RCR tables' parts per precision (Helmholtz CH2.2a;
+/// [`HelmholtzFmmBuilder::table_store`]), a handle that builders share by cloning it.
+#[derive(Clone, Debug)]
+pub struct TableStores {
+    f32: Arc<TableStore<f32>>,
+    f64: Arc<TableStore<f64>>,
+}
+
+impl PartialEq for TableStores {
+    /// The same stores (one handle cloned from the other), not stores of equal content.
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.f32, &other.f32) && Arc::ptr_eq(&self.f64, &other.f64)
+    }
+}
+
+impl TableStores {
+    /// Two empty stores, each of at most `cap` bytes after a build
+    /// (`tetraleaf_tables::helmholtz::store`, "Memory and eviction").
+    pub fn new(cap: usize) -> Self {
+        Self {
+            f32: Arc::new(TableStore::new(cap)),
+            f64: Arc::new(TableStore::new(cap)),
+        }
+    }
+
+    /// Two empty stores without a cap.
+    pub fn unbounded() -> Self {
+        Self::new(usize::MAX)
+    }
+
+    /// The store of the precision T.
+    pub fn of<T: SimdScalar>(&self) -> &Arc<TableStore<T>> {
+        let any: &dyn std::any::Any =
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                &self.f32
+            } else {
+                &self.f64
+            };
+        any.downcast_ref()
+            .expect("SimdScalar is f32 or f64, each with its store")
+    }
+}
+
 /// The settings of a Helmholtz FMM ([module documentation](self)).
 #[derive(Clone, Debug)]
 pub struct HelmholtzFmmBuilder {
@@ -471,6 +515,7 @@ pub struct HelmholtzFmmBuilder {
     c_leaf: f64,
     p2p: P2pChoice,
     reference_leaves: bool,
+    table_stores: Option<TableStores>,
     empty_boxes: bool,
     near_v: VNear,
     near_wx: WxNear,
@@ -537,6 +582,7 @@ impl HelmholtzFmmBuilder {
             c_leaf: DEFAULT_C_LEAF,
             p2p: P2pChoice::Auto,
             reference_leaves: false,
+            table_stores: None,
             empty_boxes: true,
             near_v: VNear::CostModel,
             near_wx: WxNear::CostModel,
@@ -998,6 +1044,18 @@ impl HelmholtzFmmBuilder {
     /// batched kernels.
     pub fn reference_leaves(mut self, reference: bool) -> Self {
         self.reference_leaves = reference;
+        self
+    }
+
+    /// Builds the RCR tables in `stores`' store of the FMM's precision (Helmholtz CH2.2a;
+    /// default none: every part built for this FMM alone). Builders that share the stores share
+    /// the parts of their levels (`tetraleaf_tables::helmholtz::store`): an FMM at the same k on
+    /// the same domain, or at k doubled, takes from the store every level it shares with an
+    /// earlier one. The output is the one without a store, bit for bit;
+    /// [`HelmholtzFmm::table_build`] reports the build per level. The stores are in memory, in
+    /// one process: each rank has its own.
+    pub fn table_store(mut self, stores: TableStores) -> Self {
+        self.table_stores = Some(stores);
         self
     }
 
@@ -1564,6 +1622,11 @@ impl HelmholtzFmmBuilder {
         .with_p2p(self.p2p)
         .expect("the P2P kernel's ISA is available (checked in step 1)")
         .with_reference_leaves(self.reference_leaves)
+        .with_table_store_option(
+            self.table_stores
+                .as_ref()
+                .map(|stores| stores.of::<T>().clone()),
+        )
         .with_m2l_max_degree(Some(usize::try_from(max_degree).unwrap_or(usize::MAX)))
         .with_m2l_plane_wave_min_degree(Some(
             usize::try_from(plane_wave_min_degree).unwrap_or(usize::MAX),
@@ -2573,6 +2636,14 @@ where
     /// The build's wall time on this rank by step (Helmholtz CH4.0h).
     pub fn build_timings(&self) -> HelmholtzBuildTimings {
         self.build_timings
+    }
+
+    /// The build of the RCR tables per level on this rank (Helmholtz CH2.2a;
+    /// `HelmholtzOperator::table_build`): the parts each level's tables hold, built or taken
+    /// from the store of [`HelmholtzFmmBuilder::table_store`], the built parts' thread-seconds
+    /// and the level's bytes.
+    pub fn table_build(&self) -> &TableBuild {
+        self.operator().table_build()
     }
 
     /// Whether the plan has the empty-box rule ([`HelmholtzFmmBuilder::empty_boxes`]);

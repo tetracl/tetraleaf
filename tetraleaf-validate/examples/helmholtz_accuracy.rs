@@ -16,7 +16,8 @@
 //! - `--workload w`: `w1` (default), `w1:<n>` (W1's sphere at n points, for Yukawa: Helmholtz
 //!   CH2.1b), `w2`, `w3` (ten points per wavelength), `w3:<n>`,
 //!   `w4-<cube|sphere|plummer|clusters>:<n>`;
-//! - `--kd x,…`: Re kD (default 10); `--kim y`: Im kD (default 0);
+//! - `--kd x,…`: Re kD (default 10); `--kim y,…`: Im kD (default 0; a list since Helmholtz
+//!   CH2.2a, each kD with each Im kD in turn, for a Yukawa sweep `--kd 0 --kim κ,…`);
 //! - `--eps e,…`: the tolerances (default 1e-3); `--degree p` names p on every level
 //!   in place of a tolerance (levels 0 and 1 hold expansions nothing reads);
 //! - `--charges real|complex` (default complex), `--vectors m` (default 1),
@@ -234,6 +235,15 @@
 //! its parts (`Row::build_parts`, in the order of `BUILD_PARTS`, each the slowest rank's;
 //! the operator's tables by part within "operator"), the evaluation and the checksum.
 //!
+//! `--table-store MB` (Helmholtz CH2.2a) builds every run's RCR tables in one store of MB
+//! megabytes per rank and precision (`Case::table_store`, `HelmholtzFmmBuilder::table_store`),
+//! shared by every run of the launch in its order (every kD, ε, M2L and thread count), so a
+//! sweep of kD in octaves takes the levels it shares with the runs before, and a run after the
+//! first at one kD (another thread count or M2L) builds warm: its build time is not the cold
+//! one's. With it, or with `--levels`, a table "RCR tables by level" has a row
+//! per run and level (`Row::table_levels`): k̂_l, p_l and q_l, the parts built and reused, the
+//! built parts' thread-seconds and the level's MB, and per run the store's MB.
+//!
 //! Run in release mode, on any number of ranks (each rank passes a contiguous block of
 //! the points, the oracle is sharded over the ranks, rank 0 prints), with one BLAS
 //! thread:
@@ -255,8 +265,8 @@ use mpi::traits::*;
 use tetraleaf_exec::helmholtz::{
     ChargeKind, DEFAULT_DENSE_BUDGET, DIAGONAL_AUTO_MIN_KA, DegreeRule, Degrees, DiagonalCosts,
     HelmholtzDiagonal, HelmholtzM2l, HelmholtzPhiStep, PlaneWavePrecision, PlaneWaveRaise,
-    PlaneWaveSplit, RUSTFFT_VERSION, RcrSplit, TransferBuild, VAfterPlan, VNear, VRaisedPrice,
-    Wavenumber, WxNear, rustfft_cpu_features, s7_degree,
+    PlaneWaveSplit, RUSTFFT_VERSION, RcrSplit, TableStores, TransferBuild, VAfterPlan, VNear,
+    VRaisedPrice, Wavenumber, WxNear, rustfft_cpu_features, s7_degree,
 };
 use tetraleaf_exec::operator::{MulAdd, P2pChoice};
 use tetraleaf_math::Complex;
@@ -275,7 +285,9 @@ use tetraleaf_validate::scaling::resident_memory;
 struct Arguments {
     workload: String,
     kds: Vec<f64>,
-    kim: f64,
+    kims: Vec<f64>,
+    /// `--table-store MB` (Helmholtz CH2.2a), in bytes.
+    table_store: Option<usize>,
     degrees: Vec<Degrees>,
     charges: ChargeKind,
     density: Density,
@@ -397,7 +409,7 @@ fn arguments() -> Arguments {
     let usage = || -> ! {
         eprintln!(
             "usage: helmholtz_accuracy [--workload w1|w1:<n>|w2|w3|w3:<n>|w4-<distribution>:<n>] \
-             [--kd x,…] [--kim y] [--eps e,…|--degree p] [--charges real|complex] \
+             [--kd x,…] [--kim y,…] [--eps e,…|--degree p] [--charges real|complex] \
              [--density random|planewave|constant] [--vectors m] [--samples n] [--no-gradients] [--threads t,…] \
              [--oracle-threads t] [--rule calibrated|ch3-3|ch4-3c2|ch4-3c3|s7] [--p2p auto|reference|<isa>,…] [--leaves kernel|reference] \
              [--m2l rotation|dense|classes|batched|batched-fused|auto|auto:<d>|auto-pw|\
@@ -410,14 +422,15 @@ fn arguments() -> Arguments {
              [--diagonal-build direct|interpolated,…] [--phi-step product|rustfft,…] \
              [--term on|off,…] [--block auto|w,…] [--empty-boxes on|off,…] [--near-v off|cost|n|inf,…] [--near-wx off|cost|n|inf,…] \
              [--v-after-plan off|taken|all,…] [--leaf-size auto|n,…] [--c-leaf auto|c,…] [--levels] \
-             [--evaluations n]; got {args:?}"
+             [--evaluations n] [--table-store MB]; got {args:?}"
         );
         std::process::exit(2);
     };
     let mut parsed = Arguments {
         workload: "w1".into(),
         kds: vec![10.0],
-        kim: 0.0,
+        kims: vec![0.0],
+        table_store: None,
         degrees: vec![Degrees::Tolerance(1e-3)],
         charges: ChargeKind::Complex,
         density: Density::Random,
@@ -473,7 +486,13 @@ fn arguments() -> Arguments {
                         workload(value, 1.0).is_some()
                     }
                     "--kd" => list(value).map(|v| parsed.kds = v).is_some(),
-                    "--kim" => value.parse().map(|v| parsed.kim = v).is_ok(),
+                    "--kim" => list(value).map(|v| parsed.kims = v).is_some(),
+                    "--table-store" => value
+                        .parse::<usize>()
+                        .ok()
+                        .and_then(|mb| mb.checked_mul(1 << 20))
+                        .map(|bytes| parsed.table_store = Some(bytes))
+                        .is_some(),
                     "--eps" => list::<f64>(value)
                         .map(|v| parsed.degrees = v.into_iter().map(Degrees::Tolerance).collect())
                         .is_some(),
@@ -803,6 +822,7 @@ fn arguments() -> Arguments {
     if parsed.vectors == 0
         || parsed.threads.contains(&0)
         || parsed.kds.is_empty()
+        || parsed.kims.is_empty()
         || parsed.p2p.is_empty()
         || parsed.m2l.is_empty()
     {
@@ -1180,6 +1200,7 @@ fn main() {
     let mut near: Vec<String> = Vec::new();
     let mut leaf_rows: Vec<String> = Vec::new();
     let mut build_rows: Vec<String> = Vec::new();
+    let mut table_rows: Vec<String> = Vec::new();
     let mut diagonal_rows: Vec<String> = Vec::new();
     let mut time_rows: Vec<String> = Vec::new();
     let mut leaf_operators: Vec<String> = Vec::new();
@@ -1190,10 +1211,18 @@ fn main() {
         arguments.leaf_sizes.iter().any(Option::is_some),
         arguments.c_leaves.iter().any(Option::is_some),
     );
-    for &kd in &arguments.kds {
+    // One store for the launch (Helmholtz CH2.2a), shared by every run in order.
+    let stores = arguments.table_store.map(TableStores::new);
+    let pairs: Vec<(f64, f64)> = arguments
+        .kds
+        .iter()
+        .flat_map(|&kd| arguments.kims.iter().map(move |&kim| (kd, kim)))
+        .collect();
+    for (kd, kim) in pairs {
         let workload = workload(&arguments.workload, kd).expect("checked");
         for degrees in &arguments.degrees {
-            let mut case = Case::new(workload, (kd, arguments.kim), degrees.clone());
+            let mut case = Case::new(workload, (kd, kim), degrees.clone());
+            case.table_store = stores.clone();
             case.charges = arguments.charges;
             case.degree_rule = arguments.degree_rule;
             case.density = arguments.density;
@@ -1214,10 +1243,10 @@ fn main() {
                 &world,
             );
             let oracle_seconds = start.elapsed().as_secs_f64();
-            let kd_string = if arguments.kim == 0.0 {
+            let kd_string = if kim == 0.0 {
                 format!("{kd}")
             } else {
-                format!("{kd} + {}i", arguments.kim)
+                format!("{kd} + {kim}i")
             };
             let degrees_name = match degrees {
                 Degrees::Tolerance(eps) if arguments.s7 => format!("S7 ε = {eps:e}"),
@@ -1231,7 +1260,7 @@ fn main() {
                 case.degrees = Degrees::PerLevel(vec![1; 64]);
                 let probe = run(&case, &problem, &oracle, oracle_threads, &world)
                     .expect("the FMM at degree 1 runs");
-                let k = Wavenumber::new(kd, arguments.kim).expect("a valid wavenumber");
+                let k = Wavenumber::new(kd, kim).expect("a valid wavenumber");
                 case.degrees = Degrees::PerLevel(
                     (0..64)
                         .map(|l| match l {
@@ -1661,6 +1690,36 @@ fn main() {
                     row.checksum,
                 )
             };
+            // The rows of the table "RCR tables by level" (Helmholtz CH2.2a): a row per level.
+            let table_lines = |row: &Row| -> Vec<String> {
+                row.table_levels
+                    .iter()
+                    .enumerate()
+                    .map(|(l, t)| {
+                        format!(
+                            "| {} | {} | {kd_string} | {degrees_name} | {} | {} × {} | {l} \
+                             | {:.6} + {:.6}i | {} | {} | {} | {} | {:.4} | {:.2} | {} |",
+                            workload.name(),
+                            problem.len(),
+                            setting_name(row),
+                            row.ranks,
+                            row.threads,
+                            t.k_hat.0,
+                            t.k_hat.1,
+                            t.degree,
+                            t.m2l_degree,
+                            t.built,
+                            t.reused,
+                            t.seconds,
+                            t.bytes as f64 / 1e6,
+                            match row.table_store_bytes {
+                                Some(b) => format!("{:.2}", b as f64 / 1e6),
+                                None => "–".into(),
+                            },
+                        )
+                    })
+                    .collect()
+            };
             // The rows of the table "Leaf operators" (Helmholtz CH4.0d3): the run's, and with
             // `--levels` one per level with P2P, P2L or M2P work.
             let operator_lines = |row: &Row| -> Vec<String> {
@@ -1996,6 +2055,11 @@ fn main() {
                                                 near.extend(near_lines(&row));
                                                 leaf_rows.push(leaves_line(&row));
                                                 build_rows.push(build_line(&row));
+                                                if arguments.levels
+                                                    || arguments.table_store.is_some()
+                                                {
+                                                    table_rows.extend(table_lines(&row));
+                                                }
                                                 leaf_operators.extend(operator_lines(&row));
                                             }
                                             if is_rotation && reference.is_none() {
@@ -2273,6 +2337,22 @@ fn main() {
         );
         for line in &build_rows {
             println!("{line}");
+        }
+        if !table_rows.is_empty() {
+            println!();
+            println!("## RCR tables by level");
+            println!();
+            println!(
+                "| Workload | N | kD | degrees | M2L | ranks × threads | level | k̂_l | p | q \
+                 | built | reused | thread-s | MB | store MB |"
+            );
+            println!(
+                "| --- | ---: | --- | --- | --- | --- | ---: | --- | ---: | ---: | ---: | ---: \
+                 | ---: | ---: | ---: |"
+            );
+            for line in &table_rows {
+                println!("{line}");
+            }
         }
     }
     if root && let Some((bytes, how)) = resident_memory() {

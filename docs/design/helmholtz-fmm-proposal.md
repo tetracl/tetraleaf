@@ -1007,6 +1007,19 @@ level's. The on-disk cache is bounded by a byte cap with least-recently-used evi
 in the builder, because a sweep would otherwise grow it by the tables of every frequency.
 Their build cost is reported per frequency (Section 7).
 
+As built (amended at CH2.2a): the cache is in memory, one store per process (per rank),
+`tetraleaf_tables::helmholtz::store::TableStore`, shared by the builds that name it
+(`HelmholtzFmmBuilder::table_store`), with the byte cap and least-recently-used eviction above;
+no on-disk store. Its keys are those of each part of a level's tables (k̂_l as bits, the degrees,
+the shift's integer class; the y-blocks by degree and angle alone), so the calibration and
+convention versions, which only an on-disk store needs, are not in them. Measured on W1 at 10⁶
+points on Kathleen (`tetraleaf-validate/results/helmholtz-ch2-2a.md`): an octave reuses every RCR
+part but the new top level's, yet the top level holds 77–80 % of the RCR tables' cost, so a warm
+octave's RCR tables take 0.88–0.94× the cold wall time at kD 500–1000 (the build 0.96–1.00×); the
+same k again takes 0.66× the build (kD = 1000). An on-disk store would serve repeated processes
+at one k; it is left to a later task if a user needs it. CH2.2a stores the RCR tables; CH2.2b the
+M2L families'.
+
 Two `Fmm`s at two tolerances on one tree (an accurate one for the outer solve and a cheap
 one inside a preconditioner, which Gumerov and Duraiswami found worth a 3× in time) should
 share the plan and the points; the builder allows that.
@@ -1475,7 +1488,9 @@ budget.
 interpolation in ŝ · t̂, if S6 shows it keeps the bound); the coaxial tables O(p³) per
 level and distance; the quadratures of the exponential M2L per level. With per-level cache
 keys (Section 6.3) a sweep in octaves rebuilds only the top level per frequency. Measured
-and reported per frequency in CH4.4.
+and reported per frequency in CH4.4. As measured at CH2.2a (amended at CH2.2a): the top level
+is most of the RCR tables' cost (77–80 % of their thread-seconds at kD 500–1000 on W1), so an
+octave's warm build saves 6–12 % of their time; the same k again saves them whole.
 
 ## 8. Risks
 
@@ -2145,6 +2160,13 @@ these.
   and Yukawa's M2L as built (Rotation and Dense, Auto as Rotation, CH2.1d for the rest); Section
   6.3, the operator's kind a field resolved at build in place of the type parameter K, with the
   complex path's measured time; Section 12, D4 signed off.
+
+- **Amended at CH2.2a, 2026-11-28** (`tetraleaf-validate/results/helmholtz-ch2-2a.md` §5; PR #277, its
+  questions 1 and 2, signed off by the user, "Q1 and Q2 as recommended"): Section 6.3, "Table
+  cache" (the store as built: in memory, per process, keyed per part, no on-disk store, the
+  measured gains); Section 7, "Build cost" (the top level's share of the RCR tables' cost, an
+  octave's and the same k's measured savings). Question 2 (the RCR M2L tables the diagonal form
+  never reads) went to CH2.2b's roadmap line, no proposal text.
 
 ## Appendix B. The stability check behind Section 3.6
 

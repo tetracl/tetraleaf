@@ -130,6 +130,19 @@
 //! ([`TableChoice`]): `dense`, `classes` and `batched` build f64 tables with the M2L of their
 //! own levels alone. [`Serial`] is `build`'s map.
 //!
+//! # The store
+//!
+//! [`HelmholtzTables::build_in`] (Helmholtz CH2.2a) takes each part that a
+//! [`TableStore`] holds from it and puts the parts it computes into it,
+//! keyed by the part's inputs alone ([`store`]'s module documentation, "Keys": k̂ of the
+//! level, the degrees, the integer class of the shift), so a later build, of the same
+//! wavenumber or of k doubled on one domain, takes the levels it shares with an earlier one;
+//! the tables are [`build_by`](HelmholtzTables::build_by)'s bit for bit. The levels hold their
+//! parts by [`Arc`], shared with the store and with other tables.
+//! [`HelmholtzTables::build_report`] gives the build per level, with or without a store: the
+//! parts computed and reused, the computed parts' time and the level's bytes
+//! ([`store::TableBuild`]).
+//!
 //! # Application
 //!
 //! [`HelmholtzTables::m2m`], [`l2l`](HelmholtzTables::l2l) and
@@ -195,6 +208,10 @@ pub mod dense;
 pub mod diagonal;
 pub mod leaf;
 pub mod plane_wave;
+pub mod store;
+
+use std::sync::Arc;
+use std::time::Instant;
 
 use tetraleaf_math::coaxial::CoaxialTable;
 use tetraleaf_math::orthonormal::rotation::{
@@ -205,6 +222,7 @@ use tetraleaf_ref::helmholtz::{Level, rcr};
 
 use crate::geometry::{M2L_OFFSET_COUNT, OCTANT_COUNT, m2l_offsets, octant_direction};
 use crate::parts::{Parts, Serial};
+use store::{LevelBuild, PartKey, PolarKey, Stored, TableBuild, TableStore};
 
 /// The default byte budget of the stored M2L y-blocks, 512 MiB.
 pub const DEFAULT_BLOCK_BUDGET: usize = 512 << 20;
@@ -226,8 +244,12 @@ pub struct HelmholtzTables<T: RealScalar> {
     offsets: Vec<OffsetKeys<T>>,
     /// The distinct (cos θ, sin θ) of the 316 shifts, by key.
     m2l_angles: Vec<(T, T)>,
+    /// The integer key of each of `m2l_angles` (Helmholtz CH2.2a: the store's key of a block set).
+    m2l_angle_keys: Vec<PolarKey>,
     /// The largest degree q_l of any level.
     p_max: usize,
+    /// The build per level (Helmholtz CH2.2a; [`build_report`](HelmholtzTables::build_report)).
+    report: TableBuild,
 }
 
 /// Which tables a build of [`HelmholtzTables`] makes ([`HelmholtzTables::build_by`];
@@ -287,20 +309,64 @@ enum Part<T> {
     Blocks(Vec<T>),
 }
 
-impl<T> Part<T> {
-    fn shift(self) -> Shift<T> {
+impl Task {
+    /// The level whose tables hold the part.
+    fn level(self) -> usize {
         match self {
-            Part::Shift(shift) => shift,
-            Part::Blocks(_) => unreachable!("a shift's part"),
+            Task::Up(l)
+            | Task::Down(l)
+            | Task::Pair(l, _)
+            | Task::M2l(l, _)
+            | Task::Blocks(l, _) => l,
         }
     }
+}
 
-    fn blocks(self) -> Vec<T> {
-        match self {
-            Part::Blocks(blocks) => blocks,
-            Part::Shift(_) => unreachable!("a blocks' part"),
-        }
-    }
+/// Where a build takes each part from (Helmholtz CH2.2a).
+#[derive(Clone, Copy, Debug)]
+enum Source {
+    /// The store.
+    Stored,
+    /// The j-th computed part, computed for this one.
+    Computed(usize),
+    /// The j-th computed part, computed for an earlier part of the same key.
+    Same(usize),
+}
+
+/// The bits of k̂, a store key's.
+fn bits(k: Complex<f64>) -> [u64; 2] {
+    [k.re.to_bits(), k.im.to_bits()]
+}
+
+/// Which parts of `keys` a build takes from `store` and which it computes (each distinct key
+/// once with a store, every part without one), and the stored parts found.
+fn sources<T: RealScalar>(
+    keys: &[PartKey],
+    store: Option<(&TableStore<T>, u64)>,
+) -> (Vec<Source>, Vec<Option<Stored<T>>>, Vec<usize>) {
+    let found = match store {
+        Some((store, build)) => store.get(keys, build),
+        None => vec![None; keys.len()],
+    };
+    let mut first: std::collections::BTreeMap<PartKey, usize> = Default::default();
+    let mut computed = Vec::new();
+    let sources = keys
+        .iter()
+        .zip(&found)
+        .enumerate()
+        .map(|(i, (key, found))| {
+            if found.is_some() {
+                Source::Stored
+            } else if let Some(&j) = store.and(first.get(key)) {
+                Source::Same(j)
+            } else {
+                first.insert(*key, computed.len());
+                computed.push(i);
+                Source::Computed(computed.len() - 1)
+            }
+        })
+        .collect();
+    (sources, found, computed)
 }
 
 /// The y-blocks of degree p at (cos θ, sin θ) = (c, s), as [`y_blocks`] forms them in T.
@@ -350,15 +416,16 @@ struct LevelTables<T: RealScalar> {
     q: usize,
     /// M2M from level l + 1 into this level, and L2L from this level into level l + 1;
     /// `None` on the finest level.
-    up: Option<Shift<T>>,
-    down: Option<Shift<T>>,
+    /// Each part is shared with the store of the build, if it had one (Helmholtz CH2.2a).
+    up: Option<Arc<Shift<T>>>,
+    down: Option<Arc<Shift<T>>>,
     /// The y-blocks of the octant angles at max(q_l, p_{l+1}), by key; empty on the finest
     /// level.
-    pair_blocks: [Vec<T>; 2],
+    pair_blocks: [Arc<Vec<T>>; 2],
     /// M2L per distance key; empty on levels 0 and 1.
-    m2l: Vec<Shift<T>>,
+    m2l: Vec<Arc<Shift<T>>>,
     /// The M2L y-blocks per polar-angle key at q_l, if stored.
-    m2l_blocks: Option<Vec<Vec<T>>>,
+    m2l_blocks: Option<Vec<Arc<Vec<T>>>>,
 }
 
 /// A coaxial step's coefficients from degrees ≤ p_in to ≤ p_out: per order m the block of
@@ -468,6 +535,36 @@ impl<T: RealScalar> HelmholtzTables<T> {
         choice: &TableChoice<'_>,
         parts: &impl Parts,
     ) -> Self {
+        Self::build_with(k_root, degrees, choice, parts, None)
+    }
+
+    /// As [`build_by`](Self::build_by), taking every part that `store` holds from it and putting
+    /// the parts it computes into it (Helmholtz CH2.2a; [`store`]'s module documentation): the
+    /// tables are `build_by`'s bit for bit, whatever the store holds. Each distinct part is
+    /// computed once, so levels and builds of one key share it, and a part another level of the
+    /// same build computed is counted as reused ([`build_report`](Self::build_report)).
+    ///
+    /// # Panics
+    ///
+    /// As [`build_by`](Self::build_by).
+    pub fn build_in(
+        k_root: Complex<f64>,
+        degrees: &[usize],
+        choice: &TableChoice<'_>,
+        parts: &impl Parts,
+        store: &TableStore<T>,
+    ) -> Self {
+        Self::build_with(k_root, degrees, choice, parts, Some(store))
+    }
+
+    /// `build_by` with or without a store.
+    fn build_with(
+        k_root: Complex<f64>,
+        degrees: &[usize],
+        choice: &TableChoice<'_>,
+        parts: &impl Parts,
+        store: Option<&TableStore<T>>,
+    ) -> Self {
         let m2l_degrees = choice.m2l_degrees.unwrap_or(degrees);
         assert!(
             k_root.re.is_finite() && k_root.im.is_finite(),
@@ -501,7 +598,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
             let d = octant_direction(o).map(|s| -s);
             (azimuth(d), usize::from(d[2] < 0))
         });
-        let octant_angles: [(T, T); 2] = [[1, 1, 1], [1, 1, -1]].map(|d| polar(d).1);
+        let octant_angles: [(PolarKey, (T, T)); 2] = [[1, 1, 1], [1, 1, -1]].map(polar);
         let mut m2l_angles: Vec<(PolarKey, (T, T))> = Vec::new();
         let mut distances: Vec<i64> = Vec::new();
         let offsets: Vec<OffsetKeys<T>> = m2l_offsets()
@@ -518,7 +615,8 @@ impl<T: RealScalar> HelmholtzTables<T> {
                 }
             })
             .collect();
-        let m2l_angles: Vec<(T, T)> = m2l_angles.into_iter().map(|(_, v)| v).collect();
+        let (m2l_angle_keys, m2l_angles): (Vec<PolarKey>, Vec<(T, T)>) =
+            m2l_angles.into_iter().unzip();
 
         // Which levels have what: M2L tables on levels ≥ 2 (all, or those named), M2L
         // blocks from the finest level up wherever they fit in what is left of the budget
@@ -602,7 +700,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
                 }
                 Task::Pair(l, key) => {
                     let degree = m2l_degrees[l].max(degrees[l + 1]);
-                    let (c, s) = octant_angles[key];
+                    let (c, s) = octant_angles[key].1;
                     Part::Blocks(blocks(degree, c, s))
                 }
                 Task::M2l(l, d) => {
@@ -638,31 +736,106 @@ impl<T: RealScalar> HelmholtzTables<T> {
                 }
             }
         };
-        let results = parts.map(tasks.len(), &part);
+        // Each part's key (the store's module documentation, "Keys"), and where it comes from:
+        // the store, or computed (each distinct key once with a store).
+        let keys: Vec<PartKey> = tasks
+            .iter()
+            .map(|&task| match task {
+                Task::Up(l) => PartKey::Up {
+                    k_hat: bits(k_hat(l + 1)),
+                    p_in: degrees[l + 1],
+                    p_out: m2l_degrees[l],
+                },
+                Task::Down(l) => PartKey::Down {
+                    k_hat: bits(k_hat(l + 1)),
+                    p_in: m2l_degrees[l],
+                    p_out: degrees[l + 1],
+                },
+                Task::Pair(l, key) => PartKey::Blocks {
+                    degree: m2l_degrees[l].max(degrees[l + 1]),
+                    polar: octant_angles[key].0,
+                },
+                Task::M2l(l, d) => PartKey::M2l {
+                    k_hat: bits(k_hat(l)),
+                    degree: m2l_degrees[l],
+                    distance: distances[d],
+                },
+                Task::Blocks(l, a) => PartKey::Blocks {
+                    degree: m2l_degrees[l],
+                    polar: m2l_angle_keys[a],
+                },
+            })
+            .collect();
+        let build = store.map(TableStore::begin);
+        let (sources, found, computed) = sources(&keys, store.zip(build));
+        let results = parts.map(computed.len(), &|j| {
+            let clock = Instant::now();
+            let part = match part(computed[j]) {
+                Part::Shift(shift) => Stored::Shift(Arc::new(shift)),
+                Part::Blocks(blocks) => Stored::Blocks(Arc::new(blocks)),
+            };
+            (part, clock.elapsed())
+        });
         assert_eq!(
             results.len(),
-            tasks.len(),
+            computed.len(),
             "the map gives one result per part"
         );
-        let mut results = results.into_iter();
+        if let (Some(store), Some(build)) = (store, build) {
+            store.insert(
+                computed
+                    .iter()
+                    .zip(&results)
+                    .map(|(&i, (part, _))| (keys[i], part.clone())),
+                build,
+            );
+        }
+        let mut report = TableBuild {
+            levels: vec![LevelBuild::default(); nlevels],
+            store_bytes: store.map(TableStore::bytes),
+        };
+        let mut results = sources
+            .iter()
+            .zip(found)
+            .zip(&tasks)
+            .map(|((source, found), task)| {
+                let level = &mut report.levels[task.level()];
+                match *source {
+                    Source::Stored => {
+                        level.reused += 1;
+                        found.expect("a stored part")
+                    }
+                    Source::Computed(j) => {
+                        level.built += 1;
+                        level.seconds += results[j].1;
+                        results[j].0.clone()
+                    }
+                    Source::Same(j) => {
+                        level.reused += 1;
+                        results[j].0.clone()
+                    }
+                }
+            })
+            .collect::<Vec<_>>()
+            .into_iter();
 
         // Put together in the parts' order.
         let levels: Vec<LevelTables<T>> = (0..nlevels)
             .map(|l| {
                 let (up, down, pair_blocks) = if choice.translations && l + 1 < nlevels {
-                    let up = results.next().map(Part::shift);
-                    let down = results.next().map(Part::shift);
+                    let up = results.next().map(Stored::shift);
+                    let down = results.next().map(Stored::shift);
                     let pair =
-                        [(); 2].map(|()| results.next().map(Part::blocks).unwrap_or_default());
+                        [(); 2].map(|()| results.next().map(Stored::blocks).unwrap_or_default());
                     (up, down, pair)
                 } else {
-                    (None, None, [Vec::new(), Vec::new()])
+                    (None, None, Default::default())
                 };
                 let m2l = if has_m2l[l] {
                     results
                         .by_ref()
                         .take(distances.len())
-                        .map(Part::shift)
+                        .map(Stored::shift)
                         .collect()
                 } else {
                     Vec::new()
@@ -671,7 +844,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
                     results
                         .by_ref()
                         .take(m2l_angles.len())
-                        .map(Part::blocks)
+                        .map(Stored::blocks)
                         .collect()
                 });
                 LevelTables {
@@ -688,7 +861,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
             .collect();
         assert!(results.next().is_none(), "every part is placed");
 
-        Self {
+        let mut tables = Self {
             real_shifts,
             yukawa,
             translations: choice.translations,
@@ -697,6 +870,17 @@ impl<T: RealScalar> HelmholtzTables<T> {
             octants,
             offsets,
             m2l_angles,
+            m2l_angle_keys,
+            report,
+        };
+        tables.count_bytes();
+        tables
+    }
+
+    /// Sets the report's bytes per level from the tables.
+    fn count_bytes(&mut self) {
+        for l in 0..self.nlevels() {
+            self.report.levels[l].bytes = self.level_bytes(l);
         }
     }
 
@@ -711,6 +895,34 @@ impl<T: RealScalar> HelmholtzTables<T> {
     ///
     /// Unless `levels` has one entry per level.
     pub fn set_m2l_blocks(&mut self, levels: &[bool], block_budget: usize, parts: &impl Parts) {
+        self.set_m2l_blocks_with(levels, block_budget, parts, None);
+    }
+
+    /// As [`set_m2l_blocks`](Self::set_m2l_blocks), taking the block sets `store` holds from it
+    /// and putting those it computes into it (Helmholtz CH2.2a), as [`build_in`](Self::build_in)
+    /// does; the parts it adds are added to the [`build_report`](Self::build_report).
+    ///
+    /// # Panics
+    ///
+    /// As [`set_m2l_blocks`](Self::set_m2l_blocks).
+    pub fn set_m2l_blocks_in(
+        &mut self,
+        levels: &[bool],
+        block_budget: usize,
+        parts: &impl Parts,
+        store: &TableStore<T>,
+    ) {
+        self.set_m2l_blocks_with(levels, block_budget, parts, Some(store));
+    }
+
+    /// `set_m2l_blocks` with or without a store.
+    fn set_m2l_blocks_with(
+        &mut self,
+        levels: &[bool],
+        block_budget: usize,
+        parts: &impl Parts,
+        store: Option<&TableStore<T>>,
+    ) {
         assert_eq!(
             levels.len(),
             self.nlevels(),
@@ -731,17 +943,62 @@ impl<T: RealScalar> HelmholtzTables<T> {
             .flat_map(|l| (0..self.m2l_angles.len()).map(move |a| (l, a)))
             .collect();
         let angles = &self.m2l_angles;
-        let new = parts.map(missing.len(), &|i| {
-            let (l, a) = missing[i];
+        let keys: Vec<PartKey> = missing
+            .iter()
+            .map(|&(l, a)| PartKey::Blocks {
+                degree: degrees[l],
+                polar: self.m2l_angle_keys[a],
+            })
+            .collect();
+        let build = store.map(TableStore::begin);
+        let (sources, found, computed) = sources(&keys, store.zip(build));
+        let results = parts.map(computed.len(), &|j| {
+            let clock = Instant::now();
+            let (l, a) = missing[computed[j]];
             let (c, s) = angles[a];
-            blocks(degrees[l], c, s)
+            let part = Stored::Blocks(Arc::new(blocks(degrees[l], c, s)));
+            (part, clock.elapsed())
         });
         assert_eq!(
-            new.len(),
-            missing.len(),
+            results.len(),
+            computed.len(),
             "the map gives one result per part"
         );
-        let mut new = new.into_iter();
+        if let (Some(store), Some(build)) = (store, build) {
+            store.insert(
+                computed
+                    .iter()
+                    .zip(&results)
+                    .map(|(&i, (part, _))| (keys[i], part.clone())),
+                build,
+            );
+        }
+        let report = &mut self.report;
+        let mut new = sources
+            .iter()
+            .zip(found)
+            .zip(&missing)
+            .map(|((source, found), &(l, _))| {
+                let level = &mut report.levels[l];
+                let part = match *source {
+                    Source::Stored => {
+                        level.reused += 1;
+                        found.expect("a stored part")
+                    }
+                    Source::Computed(j) => {
+                        level.built += 1;
+                        level.seconds += results[j].1;
+                        results[j].0.clone()
+                    }
+                    Source::Same(j) => {
+                        level.reused += 1;
+                        results[j].0.clone()
+                    }
+                };
+                part.blocks()
+            })
+            .collect::<Vec<_>>()
+            .into_iter();
         for (l, level) in self.levels.iter_mut().enumerate() {
             if !stored[l] {
                 level.m2l_blocks = None;
@@ -749,6 +1006,10 @@ impl<T: RealScalar> HelmholtzTables<T> {
                 level.m2l_blocks = Some(new.by_ref().take(angles.len()).collect());
             }
         }
+        if let Some(store) = store {
+            self.report.store_bytes = Some(store.bytes());
+        }
+        self.count_bytes();
     }
 
     /// Whether the tables translate between levels (M2M and L2L; not when built with
@@ -827,19 +1088,32 @@ impl<T: RealScalar> HelmholtzTables<T> {
         self.levels[level].m2l_blocks.is_some()
     }
 
-    /// The bytes of every table and stored block.
+    /// The bytes of every table and stored block, each level's counted whole, also where
+    /// levels or builds share a part ([`build_in`](Self::build_in)).
     pub fn bytes(&self) -> usize {
-        let values: usize = self
-            .levels
-            .iter()
-            .map(|l| {
-                let shifts = l.up.iter().chain(&l.down).chain(&l.m2l);
-                shifts.map(|s| s.re.len() + s.im.len()).sum::<usize>()
-                    + l.pair_blocks.iter().map(Vec::len).sum::<usize>()
-                    + l.m2l_blocks.iter().flatten().map(Vec::len).sum::<usize>()
-            })
-            .sum();
+        (0..self.nlevels()).map(|l| self.level_bytes(l)).sum()
+    }
+
+    /// The bytes of `level`'s tables: the M2M, L2L and octant blocks of the pair of levels
+    /// below it, its M2L tables and its stored M2L blocks (Helmholtz CH2.2a).
+    pub fn level_bytes(&self, level: usize) -> usize {
+        let l = &self.levels[level];
+        let shifts = l.up.iter().chain(&l.down).chain(&l.m2l);
+        let values = shifts.map(|s| s.re.len() + s.im.len()).sum::<usize>()
+            + l.pair_blocks.iter().map(|b| b.len()).sum::<usize>()
+            + l.m2l_blocks
+                .iter()
+                .flatten()
+                .map(|b| b.len())
+                .sum::<usize>();
         values * size_of::<T>()
+    }
+
+    /// The build of these tables per level (Helmholtz CH2.2a; [`TableBuild`]): the parts each
+    /// level's tables hold, computed or reused, their time, and the level's bytes, with what
+    /// [`set_m2l_blocks`](Self::set_m2l_blocks) added since.
+    pub fn build_report(&self) -> &TableBuild {
+        &self.report
     }
 
     /// A scratch set for the applications on every level.
@@ -883,7 +1157,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
         let (azimuth, key) = self.octants[o];
         self.translate(
             shift,
-            Blocks::Stored(&tables.pair_blocks[key]),
+            Blocks::Stored(&tables.pair_blocks[key][..]),
             azimuth,
             (child, self.yukawa_planes(planes), self.levels[level + 1].q),
             (parent, planes, tables.q),
@@ -926,7 +1200,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
         };
         self.translate(
             shift,
-            Blocks::Stored(&tables.pair_blocks[1 - key]),
+            Blocks::Stored(&tables.pair_blocks[1 - key][..]),
             azimuth,
             (parent, self.yukawa_planes(planes), tables.q),
             (child, planes, self.levels[level].q),
@@ -965,7 +1239,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
         );
         let keys = self.offsets[d];
         let blocks = match &tables.m2l_blocks {
-            Some(blocks) => Blocks::Stored(&blocks[keys.angle]),
+            Some(blocks) => Blocks::Stored(&blocks[keys.angle][..]),
             None => Blocks::PerCall(self.m2l_angles[keys.angle]),
         };
         self.translate(
@@ -1039,7 +1313,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
         );
         let keys = self.offsets[d];
         let blocks = match &tables.m2l_blocks {
-            Some(blocks) => Blocks::Stored(&blocks[keys.angle]),
+            Some(blocks) => Blocks::Stored(&blocks[keys.angle][..]),
             None => Blocks::PerCall(self.m2l_angles[keys.angle]),
         };
         self.translate(
@@ -1265,9 +1539,6 @@ enum Blocks<'a, T> {
     /// cos θ and sin θ, formed per call into the scratch.
     PerCall((T, T)),
 }
-
-/// The key of a polar-angle class: sgn d_z and the reduced fraction d_z² / |d|².
-type PolarKey = (i64, i64, i64);
 
 /// The polar-angle class of the integer direction d and its (cos θ, sin θ), sin θ ≥ 0: the
 /// key (sgn d_z, d_z² / |d|² as a reduced fraction), the values √(d_z²) / √|d|² with d_z's

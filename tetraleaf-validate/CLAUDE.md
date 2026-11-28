@@ -856,6 +856,19 @@ kernels or both references on Yukawa too. `tools/helmholtz/ch2-1e-runs.sh` runs 
 (`accuracy`, `worst`, `runs`, `levels`: L2P per level beside P2M). Its report is
 `results/helmholtz-ch2-1e.md`.
 
+Helmholtz CH2.2a (the RCR tables per level in a store; docs/helmholtz/tasks/CH2.2a.md) added
+`helmholtz_accuracy::Case::table_store` (`HelmholtzFmmBuilder::table_store`, `None` in `Case::new`
+and `Case::defaults`), `Row::{table_levels, table_store_bytes}` (`TableLevel`: per level k̂_l, p_l,
+q_l, the parts built and reused, their thread-seconds and the level's bytes, the largest rank's;
+the store's bytes), and to the example `--table-store MB` (one store for the launch, shared by the
+runs in order), `--kim` as a list (each kD with each Im kD) and a table "RCR tables by level" (with
+`--table-store` or `--levels`). `tests/helmholtz_accuracy.rs` (`check_table_store`) runs W1 at
+3,000 points, kD = 15 then 30, under Rotation and the defaults, each sharing a store: the
+storeless checksums and errors, and under Rotation every part of levels ≥ 3 reused at kD = 30.
+`tools/helmholtz/ch2-2a-runs.sh` runs the task's sweeps with and without a store
+(`smoke`, `real`, `rotation`, `yukawa`), `ch2-2a-tables.py` makes the report's tables (`sweep`,
+`levels`). Its report is `results/helmholtz-ch2-2a.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

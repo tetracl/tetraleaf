@@ -1006,6 +1006,21 @@ CH4.9b2 (the batched P2M and L2P, below).
   (every ISA within CH3.4b's bounds), `tests/helmholtz_fmm.rs` (`yukawa_scenarios`, `check_yukawa`:
   `check` and `check_vectors` on three scenarios, Auto Rotation's bits, the library's defaults,
   complex charges as two real vectors, the P2P kernels, Dense, the refused M2L).
+- The table store (Helmholtz CH2.2a; the `helmholtz::operator` module docs, "The table store";
+  docs/helmholtz/tasks/CH2.2a.md; tetraleaf-validate/results/helmholtz-ch2-2a.md):
+  `HelmholtzOperator::{with_table_store, with_table_store_option, table_store, table_build}`,
+  `HelmholtzFmmBuilder::table_store(TableStores)` (`TableStores`: one
+  `tetraleaf_tables::helmholtz::store::TableStore` per precision, a handle shared by cloning,
+  equal when the same stores; default none) and `HelmholtzFmm::table_build`. `select_tables` builds
+  the RCR tables (`build_in`, `set_m2l_blocks_in`) in the store, so operators of one process share
+  each level's parts (k̂_l, degrees and shift class as the key); the output is the storeless one bit
+  for bit. Set before `build_tables`. The M2L families' tables are each operator's own until CH2.2b.
+  `tests/helmholtz/build.rs` (`the_operator_builds_its_tables_in_a_store`: Rotation, Auto at 10⁻⁶,
+  Yukawa; cold, warm, k doubled with every RCR part of levels ≥ 3 reused; pair bodies bit for bit);
+  `check_table_store` in `tests/helmholtz_fmm.rs` (the sphere and Yukawa's clusters at 30: the
+  defaults and Rotation cold and warm at 2 threads, and Rotation at k doubled, each the storeless
+  output bit for bit, the parts per level on every rank). `helmholtz_fmm` at one rank, opt-level 1:
+  54 s on the M6.
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
   count. No `unsafe`, no atomics, no global pool; per-thread scratch created at

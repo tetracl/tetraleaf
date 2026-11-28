@@ -7,11 +7,13 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 `docs/helmholtz/tasks/<ID>.md`; each milestone's gate report is
 `docs/helmholtz/gates/<milestone>.md`.
 
-Status (2026-11-28, after CH2.1e): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
+Status (2026-11-28, after CH2.2a): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). Item 15, Yukawa on
-the host: CH2.1 (a–c) merged (D4 signed off: one operator); CH2.1e (Yukawa's batched L2P) is done in
-its PR, so both leaf kernels run on every kind; next CH2.2, then CH2.3 and CH2.1d. Eight H4 tasks stay
-open off the list, and so does CH4.9c. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0,
+the host: CH2.1 and CH2.1e merged; CH2.2 split into CH2.2a (the RCR tables per level in an in-memory
+store, done in its PR, signed off: no on-disk store, §6.3 amended; the RCR M2L tables the diagonal
+form never reads an Also on CH2.2b) and CH2.2b (the M2L families in the store); next CH2.2b, then
+CH2.3 and CH2.1d. Eight H4 tasks
+stay open off the list, and so does CH4.9c. The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0,
 CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in
 `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G
 in `git show 8475009:docs/helmholtz/roadmap.md`; until the H4 gate in `git show
@@ -24,7 +26,7 @@ until CH4.9a2b in `git show 9401720:docs/helmholtz/roadmap.md`; until CH4.9b1 in
 c2ccf51:docs/helmholtz/roadmap.md`; until CH4.9b2 in `git show 2a65aa1:docs/helmholtz/roadmap.md`;
 until CH2.1a in `git show 72bcf40:docs/helmholtz/roadmap.md`; until CH2.1b in `git show
 2413c5b:docs/helmholtz/roadmap.md`; until CH2.1c in `git show b8d37fc:docs/helmholtz/roadmap.md`; until CH2.1e in `git show
-4f8027d:docs/helmholtz/roadmap.md`.
+4f8027d:docs/helmholtz/roadmap.md`; until CH2.2a in `git show 49208e4:docs/helmholtz/roadmap.md`.
 
 ## How `/next-task` reads this file
 
@@ -117,7 +119,7 @@ on the diagonal levels).
 14. CH4.9a (CH4.9a1, CH4.9a2a, CH4.9a2b; split on 2026-11-26 and 2026-11-27), CH4.9b (CH4.9b1, CH4.9b2; split on 2026-11-27) The Helmholtz leaf expansions P2M and
     L2P by SIMD kernels (added on 2026-11-26 after CH4.6a2, the user: "Yes. Add P2M and L2P to the
     priority list as tasks")
-15. CH2.1 (CH2.1a–c; split on 2026-11-28), CH2.1e, CH2.2, CH2.3, CH2.1d, CH2.5 and H2.G Yukawa on the
+15. CH2.1 (CH2.1a–c; split on 2026-11-28), CH2.1e, CH2.2 (CH2.2a, CH2.2b; split on 2026-11-28), CH2.3, CH2.1d, CH2.5 and H2.G Yukawa on the
     host (added on 2026-11-24 at the H4 gate; D4 signed off at CH2.1b; CH2.1d added at CH2.1b, after
     CH2.3, the user on #274, 2026-11-28: "Q1 and Q2 as recommended"; CH2.1e added at CH2.1c, after
     it, the user on #275, 2026-11-28: "Q1 and Q2 as recommended")
@@ -376,7 +378,25 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   (1.94 of C = 10 in f64, 0.64 in f32); the FMM's errors 1.0000× the reference leaves' on CH2.1b's 114
   cases, within ε; L2P 0.21–0.28× per level on Kathleen. No sign-off.
 - [ ] **CH2.2 Per-level tables with per-level cache keys.** *Done when:* build cost and
-  memory reported; levels reused across an octave sweep. *Needs:* CH2.1, D4.
+  memory reported; levels reused across an octave sweep. *Needs:* CH2.1, D4. Split on 2026-11-28
+  into CH2.2a and CH2.2b by `/next-task`'s size rule (five table families: the RCR tables of every
+  path first, then the M2L families); CH2.2 is done when both are:
+- [x] **CH2.2a The RCR tables per level in a store.** Report: `tetraleaf-validate/results/helmholtz-ch2-2a.md`.
+  `tetraleaf_tables::helmholtz::store`, `HelmholtzFmmBuilder::table_store`; tables and outputs with a
+  store bit for bit without; an octave on W1 (10⁶) reuses every RCR part of levels 3–6, 0.88–0.94× the
+  RCR tables' time at kD 500–1000 (the new level 2 dominates); the same k again 0.66× the build.
+  Signed off on #277 ("Q1 and Q2 as recommended"): no on-disk store, §6.3 and §7 amended; the
+  unread RCR M2L tables an Also on CH2.2b.
+- [ ] **CH2.2b The M2L tables per level in the store.** Dense, Classes, Batched, the exponential
+  M2L's and the diagonal form's tables keyed per level (k̂_l, the degree, the per-class choices,
+  N_φ, the transfer build, the quadrature's precision and reach) in CH2.2a's store. *Done when:*
+  each family with the store bit for bit without it; the sweep under the library's defaults with
+  each level's build cold and warm, on Kathleen. Also (CH2.2a, report §5; #277's question 2, the
+  user, 2026-11-28: "Q1 and Q2 as recommended"):
+  under the defaults at kD ≥ 500 every level of W1 takes all 34 classes on the diagonal form, yet
+  `select_tables` builds their RCR M2L coaxial tables first, never read (most of the RCR tables'
+  2.0 s of W1's 6.0 s build at kD = 1000): decide the classes first and build RCR M2L tables only
+  for levels with an RCR pair, the output bit for bit. *Needs:* CH2.2a. *Machines:* Kathleen.
 - [ ] **CH2.3 Pruning and the calibration of p_l.** *Done when:* the relative error within
   target for κD from 10⁻² to 10³; on pruned levels the V, W and X lists empty and the buffers
   zeroed; the same levels pruned on both ranks of a two-rank run; θ_D set. Also (CH1.3c, the
