@@ -60,18 +60,20 @@ build per level (built or reused, time, bytes).
   - `LevelTables` and `Shift` hold their parts as `Arc` (the M2M, L2L, M2L shifts and the block
     sets), so tables from a store share memory; the applications unchanged (they read through the
     `Arc`).
-  - `HelmholtzTables::build_in(k̂₀, degrees, &TableChoice, &impl Parts, &TableStore<T>) -> (Self,
-    TableBuild)`: the parts the store holds are taken from it, the others (each distinct key once)
-    computed by `parts` and put in; `build_by` is unchanged in behaviour (a build with a private,
-    discarded store, or its own path; whichever keeps `build_by`'s bits and cost). `set_m2l_blocks_in`
-    likewise. `bytes` counts each level's values as before (shared parts counted per level).
+  - `HelmholtzTables::build_in(k̂₀, degrees, &TableChoice, &impl Parts, &TableStore<T>) -> Self`
+    (as built: the report through `build_report() -> &TableBuild`, kept with the tables, for builds
+    with or without a store; `level_bytes`): the parts the store holds are taken from it, the
+    others (each distinct key once) computed by `parts` and put in; `build_by` keeps its bits and
+    computes every part (no sharing without a store). `set_m2l_blocks_in` likewise. `bytes` counts
+    each level's values as before (shared parts counted per level).
   - The module docs: "The store".
 - `tetraleaf-exec`:
   - `HelmholtzOperator::with_table_store(Arc<TableStore<T>>)` (recorded by `unbuilt`, read by
     `select_tables`'s RCR build and `set_m2l_blocks`), `table_build()` (the last RCR build's
     `TableBuild`), `TableTimings` unchanged.
-  - `HelmholtzFmmBuilder::table_store(Arc<TableStore<T>>)` (default none: today's builds, bit for bit
-    and part for part), `HelmholtzFmm::table_build()`. The store is per process: each rank keeps its
+  - `HelmholtzFmmBuilder::table_store(TableStores)` (as built: the builder is not generic over T, so
+    `TableStores` holds one store per precision and `build::<T>` takes T's; default none: today's
+    builds, bit for bit and part for part), `HelmholtzFmm::table_build()`. The store is per process: each rank keeps its
     own (or shares one between the FMMs it builds).
   - Module docs ("The table store"), crate `CLAUDE.md`.
 - `tetraleaf-validate`: `helmholtz_accuracy::Case::table_store` (an `Option<Arc<TableStore<f64>>>`,

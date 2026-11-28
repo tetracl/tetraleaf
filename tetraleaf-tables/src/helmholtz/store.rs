@@ -34,7 +34,8 @@
 //! [`HelmholtzTables::bytes`](super::HelmholtzTables::bytes) counts them): after each build it
 //! drops the parts used least recently (by build, ties in key order, so the same parts on every
 //! run), until it fits. Dropping a part drops only the store's reference; tables that hold it
-//! keep it. With a cap of 0 the store keeps nothing and every build computes every part.
+//! keep it. With a cap of 0 the store keeps nothing, and every build computes each of its distinct
+//! parts once.
 //!
 //! # Threads and processes
 //!

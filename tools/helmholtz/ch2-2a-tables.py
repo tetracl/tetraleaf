@@ -27,16 +27,39 @@ LEVELS = "RCR tables by level"
 
 
 def runs(path):
-    """Per kD cell, in order: the run row, the "Build" row and the level rows."""
+    """Per run, in order, keyed by its kD cell (`1000 (2)` for a kD's second run, the `repeat`
+    stage's): the run row, the "Build" row and the level rows (a run's level rows start a new
+    run where the kD changes or the level does not rise)."""
     found = common.tables(path)
+
+    def keyed(rows, new_run):
+        seen, keys, last = {}, [], None
+        for r in rows:
+            if new_run(r, last):
+                seen[r["kD"]] = seen.get(r["kD"], 0) + 1
+            last = r
+            n = seen[r["kD"]]
+            keys.append(r["kD"] if n == 1 else f"{r['kD']} ({n})")
+        return keys
+
+    def level_run(r, last):
+        return (
+            last is None
+            or r["kD"] != last["kD"]
+            or common.number(r["level"], 0) <= common.number(last["level"], 0)
+        )
+
     out = {}
-    for r in common.accuracy_rows(path):
-        out.setdefault(r["kD"], {"run": r, "build": None, "levels": []})
-    for r in common.build_rows(path):
-        out[r["kD"]]["build"] = r
+    rows = common.accuracy_rows(path)
+    for key, r in zip(keyed(rows, lambda r, last: True), rows):
+        out[key] = {"run": r, "build": None, "levels": []}
+    rows = common.build_rows(path)
+    for key, r in zip(keyed(rows, lambda r, last: True), rows):
+        out[key]["build"] = r
     t = common.find_table(found, heading=LEVELS)
-    for r in t.rows if t else []:
-        out[r["kD"]]["levels"].append(r)
+    rows = t.rows if t else []
+    for key, r in zip(keyed(rows, level_run), rows):
+        out[key]["levels"].append(r)
     return out
 
 
@@ -59,11 +82,12 @@ def sweep(directory, name):
             continue
         rs, rc = (common.number(x["build"]["RCR tables s"]) for x in (s, c))
         ratio = f"{rs / rc:.2f}" if rs is not None and rc else "–"
+        seconds = ["–" if x is None else f"{x:.3f}" for x in (rs, rc)]
         store_mb = s["levels"][0]["store MB"] if s["levels"] else "–"
         same = "same" if s["run"]["checksum"] == c["run"]["checksum"] else "**differ**"
         print(
             f"| {kd} | {len(s['levels'])} | {s['build']['build s']} | {c['build']['build s']} "
-            f"| {rs:.3f} | {rc:.3f} | {ratio} | {total(s['levels'], 'built'):.0f} "
+            f"| {seconds[0]} | {seconds[1]} | {ratio} | {total(s['levels'], 'built'):.0f} "
             f"| {total(s['levels'], 'reused'):.0f} | {total(s['levels'], 'thread-s'):.3f} "
             f"| {total(c['levels'], 'thread-s'):.3f} | {total(s['levels'], 'MB'):.1f} | {store_mb} "
             f"| {same} |"

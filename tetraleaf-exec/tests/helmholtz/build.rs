@@ -315,3 +315,36 @@ fn the_operator_builds_its_tables_in_a_store() {
         }
     }
 }
+
+/// `TableStores` (Helmholtz CH2.2a): one store per precision, each with the cap, shared by the
+/// handle's clones and equal only to them.
+#[test]
+fn table_stores_hold_a_store_per_precision() {
+    use tetraleaf_exec::helmholtz::TableStores;
+    let stores = TableStores::new(1 << 20);
+    assert_eq!(stores.of::<f32>().cap(), 1 << 20);
+    assert_eq!(stores.of::<f64>().cap(), 1 << 20);
+    let clone = stores.clone();
+    assert!(Arc::ptr_eq(stores.of::<f32>(), clone.of::<f32>()));
+    assert!(Arc::ptr_eq(stores.of::<f64>(), clone.of::<f64>()));
+    assert_eq!(stores, clone);
+    assert_ne!(stores, TableStores::new(1 << 20));
+    // An f32 operator builds its tables in the f32 store, the f64 store untouched.
+    let k = Wavenumber::new(30.0, 2.0).unwrap();
+    let densities = Densities::new(k.kind(), ChargeKind::Complex, 1);
+    let op = HelmholtzOperator::<f32>::unbuilt(
+        k,
+        densities,
+        &domain(),
+        &[0, 0, 8, 6],
+        false,
+        8,
+        DEFAULT_BLOCK_BUDGET,
+    )
+    .unwrap()
+    .with_table_store(Arc::clone(stores.of::<f32>()))
+    .build_tables();
+    assert!(op.table_build().built() > 0);
+    assert!(stores.of::<f32>().entries() > 0);
+    assert_eq!(stores.of::<f64>().entries(), 0);
+}

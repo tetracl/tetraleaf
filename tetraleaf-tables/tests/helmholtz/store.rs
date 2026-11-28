@@ -353,3 +353,65 @@ fn another_k_at_the_same_degrees_builds_its_own() {
         }
     }
 }
+
+#[test]
+fn another_degree_at_the_same_k_builds_its_own() {
+    // One k̂, level 2's degree changed, then its M2L degree raised above its translations'
+    // (`TableChoice::m2l_degrees`, Helmholtz CH6.1h): only the parts of the changed degrees
+    // are built again, and each build is `build_by`'s bit for bit.
+    let k_root = Complex::new(120.0, 6.0);
+    let store = TableStore::<f64>::unbounded();
+    stored(k_root, &[0, 0, 12, 10, 8], &Serial, &store);
+    let degrees = [0, 0, 13, 10, 8];
+    let second = stored(k_root, &degrees, &Serial, &store);
+    assert_eq!(
+        applications(&second),
+        applications(&plain::<f64>(k_root, &degrees))
+    );
+    let report = second.build_report();
+    assert!(
+        report.levels[2].built >= 15,
+        "level 2's M2L at 13: {report:?}"
+    );
+    assert_eq!(report.levels[3].built, 0, "level 3 unchanged: {report:?}");
+    assert_eq!(report.levels[4].built, 0, "level 4 unchanged: {report:?}");
+    let raised = [0, 0, 14, 11, 8];
+    let choice = TableChoice {
+        m2l_degrees: Some(&raised),
+        ..TableChoice::new(DEFAULT_BLOCK_BUDGET)
+    };
+    let expected = HelmholtzTables::<f64>::build_by(k_root, &degrees, &choice, &Serial);
+    let third = HelmholtzTables::build_in(k_root, &degrees, &choice, &Threads, &store);
+    assert_eq!(applications(&third), applications(&expected));
+    let report = third.build_report();
+    assert!(
+        report.levels[2].built >= 15 && report.levels[3].built >= 15,
+        "{report:?}"
+    );
+    assert_eq!(report.levels[4].built, 0, "level 4 unchanged: {report:?}");
+}
+
+#[test]
+fn a_cap_below_one_build_keeps_the_same_parts_on_every_run() {
+    // A cap of half a build's parts: the eviction within one build (all its parts of one age,
+    // dropped in key order) keeps the same parts on every run, and changes no bit.
+    let case = CASES[0];
+    let full = TableStore::<f64>::unbounded();
+    stored(k(case), case.1, &Serial, &full);
+    let kept: Vec<(usize, usize)> = (0..2)
+        .map(|_| {
+            let store = TableStore::<f64>::new(full.bytes() / 2);
+            let tables = stored(k(case), case.1, &Threads, &store);
+            assert_eq!(
+                applications(&tables),
+                applications(&plain::<f64>(k(case), case.1))
+            );
+            assert!(store.bytes() <= full.bytes() / 2 && store.entries() > 0);
+            // The parts kept are found by the next build.
+            let warm = stored(k(case), case.1, &Serial, &store);
+            assert!(warm.build_report().reused() > tables.build_report().reused());
+            (store.bytes(), store.entries())
+        })
+        .collect();
+    assert_eq!(kept[0], kept[1]);
+}

@@ -21,6 +21,8 @@
 #             in the store)
 #   yukawa    W1 at 10⁶ points, Yukawa at κD = KAPPAS (default 15.625 31.25 62.5 125 250 500 1000;
 #             `--kd 0 --kim …`) under the defaults named (Rotation on Yukawa)
+#   repeat    W1 at 10⁶ points, kD = 1000 twice under the defaults named: the second run's tables
+#             all from the store (the same k again, the bound of what a store saves)
 # TIMEOUT per launch (default 3600 s), STORE_MB (default 65536: no eviction on a Kathleen node),
 # ONLY (a regular expression on the launch names), DRY_RUN (print the launches only). Each launch
 # writes <out-dir>/<name>.md and .err and a line in <out-dir>/runs.log. Times are read on Kathleen's
@@ -104,6 +106,9 @@ for stage in "$@"; do
         ;;
     rotation)
         sweep rotation "w1:$N" --kd "$(list $KDS)" --m2l rotation
+        ;;
+    repeat)
+        sweep repeat "w1:$N" --kd 1000,1000 "${DEFAULTS[@]}"
         ;;
     yukawa)
         sweep yukawa "w1:$N" --kd 0 --kim "$(list $KAPPAS)" "${DEFAULTS[@]}"

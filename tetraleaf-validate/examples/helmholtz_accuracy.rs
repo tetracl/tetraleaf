@@ -236,9 +236,11 @@
 //! the operator's tables by part within "operator"), the evaluation and the checksum.
 //!
 //! `--table-store MB` (Helmholtz CH2.2a) builds every run's RCR tables in one store of MB
-//! megabytes per rank (`Case::table_store`, `HelmholtzFmmBuilder::table_store`), shared by the
-//! runs of the launch in their order, so a sweep of kD in octaves takes the levels it shares
-//! with the runs before. With it, or with `--levels`, a table "RCR tables by level" has a row
+//! megabytes per rank and precision (`Case::table_store`, `HelmholtzFmmBuilder::table_store`),
+//! shared by every run of the launch in its order (every kD, ε, M2L and thread count), so a
+//! sweep of kD in octaves takes the levels it shares with the runs before, and a run after the
+//! first at one kD (another thread count or M2L) builds warm: its build time is not the cold
+//! one's. With it, or with `--levels`, a table "RCR tables by level" has a row
 //! per run and level (`Row::table_levels`): k̂_l, p_l and q_l, the parts built and reused, the
 //! built parts' thread-seconds and the level's MB, and per run the store's MB.
 //!

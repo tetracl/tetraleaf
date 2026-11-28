@@ -4642,9 +4642,6 @@ fn check_near_wx(scenario: &Scenario, crossover: f64, comm: &SimpleCommunicator)
     totals
 }
 
-/// The scenario of [`check_empty_boxes`] whose leaves the leaf rule fills with empty boxes:
-/// points on a sphere at kD = 30, leaves on level 3 or finer, about three quarters of
-/// level 3 empty.
 /// The RCR tables in a store (Helmholtz CH2.2a; `HelmholtzFmmBuilder::table_store`): under the
 /// library's defaults and under Rotation, the FMM with a store, cold and warm (at 2 threads),
 /// the FMM without one bit for bit, the warm build taking every part from the store; and at k
@@ -4734,6 +4731,9 @@ fn check_table_store(scenario: &Scenario, comm: &SimpleCommunicator) {
     }
 }
 
+/// The scenario of [`check_empty_boxes`] whose leaves the leaf rule fills with empty boxes:
+/// points on a sphere at kD = 30, leaves on level 3 or finer, about three quarters of
+/// level 3 empty.
 fn sphere_scenario() -> Scenario {
     Scenario {
         name: "sphere, kD = 30, ε = 1e-3, complex charges, gradients",
