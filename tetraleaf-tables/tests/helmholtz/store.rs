@@ -152,14 +152,10 @@ fn the_store_holds_its_parts_once() {
     let tables = stored(k_root, &degrees, &Serial, &store);
     let report = tables.build_report();
     let plain = plain::<f64>(k_root, &degrees);
-    for l in 3..5 {
+    for (l, level) in report.levels.iter().enumerate().skip(3) {
         assert!(tables.m2l_blocks_stored(l));
         // The blocks (49 angles) and the octant blocks of degree 9 are level 2's.
-        assert!(
-            report.levels[l].reused >= 49,
-            "level {l}: {:?}",
-            report.levels[l]
-        );
+        assert!(level.reused >= 49, "level {l}: {level:?}");
     }
     // The store counts each part once; the tables count each level whole.
     assert!(store.bytes() < tables.bytes());
