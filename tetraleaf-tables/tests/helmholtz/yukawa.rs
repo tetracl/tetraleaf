@@ -215,8 +215,7 @@ fn yukawa_m2m_and_l2l_on_every_octant_match_rcr() {
         let tables = HelmholtzTables::<f64>::build_with_m2l_degrees(k, &degrees, &raised, 0);
         let at_raised = HelmholtzTables::<f64>::build(k, &raised, 0);
         let (mut a, mut b) = (tables.scratch(), at_raised.scratch());
-        for level in 2..5 {
-            let q = raised[level];
+        for (level, &q) in raised.iter().enumerate().skip(2) {
             for d in (0..M2L_OFFSET_COUNT).step_by(5) {
                 let x = input(q, 1, d as u64);
                 let mut got = vec![0.5; Layout::new(q).len()];
@@ -275,14 +274,10 @@ fn yukawa_applications_bit_for_bit() {
     assert_same(&all, &applications(&serial), "build_by on Serial");
 
     let mut scratch = stored.scratch();
-    for level in 2..5 {
-        let len = Layout::new(raised[level]).len();
+    for (level, &q) in raised.iter().enumerate().skip(2) {
+        let len = Layout::new(q).len();
         for d in (0..M2L_OFFSET_COUNT).step_by(7) {
-            let x = [
-                input(raised[level], 1, d as u64),
-                input(raised[level], 1, 1000 + d as u64),
-            ]
-            .concat();
+            let x = [input(q, 1, d as u64), input(q, 1, 1000 + d as u64)].concat();
             let mut two = vec![0.5; 2 * len];
             stored.m2l(level, d, &x, 1, &mut two, 2, &mut scratch);
             for v in 0..2 {
@@ -351,8 +346,7 @@ fn yukawa_dense_matches_rotation() {
         );
         let mut scratch = tables.scratch();
         let mut worst = 0.0f64;
-        for level in 2..5 {
-            let p = degrees[level];
+        for (level, &p) in degrees.iter().enumerate().skip(2) {
             let n = Layout::new(p).len();
             let w = weights(&Level::new(tables.k_hat(level), 1.0), false, p);
             let mut identity = vec![0.0; n * n];
