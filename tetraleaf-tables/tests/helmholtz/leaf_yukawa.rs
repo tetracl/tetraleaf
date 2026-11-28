@@ -6,7 +6,8 @@
 //! C u √((2n + 1)/(4π)) Σⱼ |qⱼ eⱼ| (((n + 1)² + N) îₙ(xⱼ) + xⱼ (|îₙ′(xⱼ)| + îₙ(xⱼ))), xⱼ = κρⱼ and
 //! eⱼ = e^{κρⱼ − β}, formed in f64 from the reference's radial functions, C = [`C`]; in f32 against
 //! the f64 reference on the f32 inputs, u = 2⁻²⁴, plus the flushed values' bound and the f32 level's
-//! own rounding (s and β formed in f32: (β + n) u Σⱼ |qⱼ eⱼ| îₙ inside the bracket). The worst ratio
+//! own rounding (s and β formed in f32: [`LEVEL_C`] (β + n) u √((2n + 1)/(4π)) Σⱼ |qⱼ eⱼ| îₙ, beside
+//! the contract and not multiplied by C). The worst ratio
 //! is printed. Bit identities (vectors, complex charges as two real columns, accumulation) by
 //! `to_bits`.
 
@@ -18,8 +19,14 @@ use tetraleaf_tables::helmholtz::leaf::{LANES, LeafCharges, LeafP2m, P2mScratch}
 
 use super::leaf::{C, Lcg, points};
 
-/// κ̂ of the leaf frame (half-width 1): from the Laplace limit to strong damping (κ̂ a ≈ 104).
+/// κ̂ of the leaf frame (half-width 1): from the Laplace limit to strong damping (κ̂ a ≈ 104), and
+/// κ̂ = 250 (κ̂ a ≈ 433, a shallow leaf at κD = 10³) in f64.
 const KAPPAS: [f64; 5] = [1e-6, 0.3, 4.0, 16.0, 60.0];
+const KAPPA_LARGE: f64 = 250.0;
+
+/// The f32 level's own rounding (its s and β formed in f32 against the f64 reference's level):
+/// e^{−β} and 1/sⁿ relative (β + n) u, held apart from the contract's C (module documentation).
+const LEVEL_C: f64 = 2.0;
 
 /// m vectors of charges, point-major, complex or real.
 fn charges(n: usize, vectors: usize, complex: bool, seed: u64) -> Vec<f64> {
@@ -187,10 +194,11 @@ fn worst<T: RealScalar>(
             let size = ((n + 1) * (n + 1) + points.len()) as f64;
             // The level's s and β formed in T against the f64 reference's: e^{−β} and 1/sⁿ
             // relative (β + n) u_T (f32 only; in f64 the two share the level).
-            let level = level_rounding * (beta + n as f64) * sums[o][n];
-            let bound = C * u * norm * (size * sums[o][n] + conditioning[o][n] + level)
+            let level = LEVEL_C * level_rounding * u * norm * (beta + n as f64) * sums[o][n];
+            let bound = C * u * norm * (size * sums[o][n] + conditioning[o][n])
+                + level
                 + floor.0 * sums[o][n]
-                + floor.1 * (charge[o] + norm * plain[o])
+                + floor.1 * norm * (charge[o] + plain[o])
                 + f64::MIN_POSITIVE;
             assert!(
                 (a - b).abs() <= bound,
@@ -208,12 +216,12 @@ fn worst<T: RealScalar>(
 fn yukawa_p2m_within_the_contract_in_f64() {
     let mut most: f64 = 0.0;
     for (seed, &p) in [0usize, 1, 2, 5, 8, 17, 26, 45].iter().enumerate() {
-        for &kappa in &KAPPAS {
+        for &kappa in KAPPAS.iter().chain([&KAPPA_LARGE]) {
             for &n in &[1usize, 5, 16, 17, 40, 200] {
                 if p >= 26 && n == 200 {
                     continue;
                 }
-                for (complex, vectors) in [(false, 1), (true, 1), (false, 3), (true, 2)] {
+                for (complex, vectors) in [(false, 1), (true, 1), (false, 3), (true, 3)] {
                     let s = (seed * 1000 + n) as u64;
                     let pts = points(n, s);
                     let q = charges(n, vectors, complex, s + 7);
@@ -251,9 +259,9 @@ fn yukawa_p2m_within_the_contract_in_f32() {
                         .iter()
                         .map(|&v| round(v))
                         .collect();
-                    // The flushed values: harmonics below 2⁻⁵⁷ of |w|, îₙ below 2⁻¹⁰⁰ times
-                    // |Y| ≤ 1 of |q e|, and e below 2⁻¹⁰⁰ (strong damping) times îₙ ≤ 1 and
-                    // |Y| ≤ √((2n + 1)/(4π)) of |q| (module documentation, "Yukawa").
+                    // The flushed values: harmonics below 2⁻⁵⁷ of |w|; îₙ below 2⁻¹⁰⁰ times
+                    // |Y| ≤ √((2n + 1)/(4π)) of |q e|; and e below 2⁻¹⁰⁰ (strong damping) times
+                    // îₙ ≤ 1 and |Y| of |q| (module documentation, "Yukawa").
                     let floor = (2f64.powi(-57), 2f64.powi(-100));
                     let r = worst::<f32>(
                         p,
@@ -365,6 +373,26 @@ fn yukawa_p2m_accumulates() {
             .all(|(t, o)| t.to_bits() == (2.0 * o).to_bits())
     );
     assert!(once.iter().any(|&x| x != 0.0));
+}
+
+#[test]
+#[should_panic(expected = "values per point")]
+fn yukawa_short_charges_are_refused() {
+    let level = Level::new(Complex::new(0.0, 2.0), 1.0);
+    let mut out = vec![0.0; 2 * 16];
+    let charges = LeafCharges {
+        values: &[1.0, 0.5, 2.0],
+        vectors: 1,
+        complex: true,
+    };
+    LeafP2m::new(3).p2m(
+        3,
+        &level,
+        &[[0.1, 0.2, 0.3], [0.0; 3]],
+        charges,
+        &mut P2mScratch::new(3, 1),
+        &mut out,
+    );
 }
 
 #[test]

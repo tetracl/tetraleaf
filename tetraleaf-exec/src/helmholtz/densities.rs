@@ -498,6 +498,11 @@ impl Densities {
         // The kernel reads real k and Yukawa from k̂ rounded to T; the path's kind decides the
         // storage.
         assert_eq!(
+            level.is_yukawa(),
+            self.kind == WavenumberKind::Yukawa,
+            "k̂ = k r rounded to T changed the kind of k"
+        );
+        assert_eq!(
             LeafP2m::planes(&level, charges.complex),
             self.multipole_planes(),
             "k̂ = k r rounded to T changed the kind of k"

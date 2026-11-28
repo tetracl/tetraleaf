@@ -75,8 +75,8 @@
 //! measurement and test setting: the reference's P2M and L2P whatever the P2P kernel). A leaf's
 //! multipole depends on its chunk alone and a target's output on its offset and the local alone,
 //! so the output stays the same at every thread count and on P ranks the one-rank FMM's, and each
-//! vector the one-vector FMM's. On Yukawa (Helmholtz CH2.1c) P2M runs its kernel and L2P the
-//! reference's calls under every choice.
+//! vector the one-vector FMM's. On Yukawa (Helmholtz CH2.1c) P2M follows the same choice, and L2P
+//! runs the reference's per-target calls whatever the choice.
 //!
 //! # M2L
 //!

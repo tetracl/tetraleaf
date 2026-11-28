@@ -73,8 +73,8 @@
 //! vector on Yukawa is two real vectors), each the real-charge kernel's bits on that column. Values
 //! of îₙ and of eⱼ below the under-range threshold τ (2⁻¹⁰⁰ in f32, 2⁻⁹⁰⁰ in f64) are set to zero,
 //! as [`bessel_j_real`] flushes ĵₙ: in f32 îₙ underflows at the leaf degrees near the centre and eⱼ
-//! under strong damping (κ(a − ρ) ≳ 70), and no operand of the sum is then subnormal. A flushed
-//! term is below τ |qⱼ| √((2n + 1)/(4π)) (îₙ ≤ 1).
+//! under strong damping (κ(a − ρ) ≳ 70), and then neither is subnormal (their products may still
+//! be). A flushed term is below τ |qⱼ| √((2n + 1)/(4π)) (îₙ ≤ 1 and eⱼ ≤ 1 for ρ ≤ a).
 //!
 //! The contract is the one above with the factor's condition added: eⱼ now depends on ρⱼ, whose
 //! `sqrt` and `hypot` differ in the last bit, so
@@ -84,7 +84,8 @@
 //! ```
 //!
 //! with xⱼ = κρⱼ (`tests/helmholtz/leaf_yukawa.rs`: C = 10, about 0.8 measured in f64 to p = 45 and
-//! κ̂ a to 104, 1.1 in f32 against the f64 reference with the f32 level's own rounding of s and β).
+//! κ̂ a to 433; 1.5 in f32 against the f64 reference, beside the f32 level's own rounding of s and β,
+//! 2 (β + n) u, held apart).
 //!
 //! # L2P
 //!

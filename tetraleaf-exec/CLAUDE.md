@@ -956,7 +956,8 @@ CH4.9b2 (the batched P2M and L2P, below).
   (`check_kernels` asserts that); a leaf's multipole depends on its chunk alone, so threads, ranks
   and vectors keep their bit identities. `tests/helmholtz/densities.rs`
   (`the_batched_p2m_is_the_reference_to_rounding`: every path, three vectors, within 1e-13 of the
-  largest coefficient, vector v alone bit for bit, accumulation, Yukawa the reference's bits);
+  largest coefficient, vector v alone bit for bit, accumulation, Yukawa the reference's bits until
+  CH2.1c);
   `check_leaf_kernel` in `tests/helmholtz_fmm.rs` (every scenario and the cube at kD = 20 + 2i
   with real charges: against `reference_leaves` within `LEAF_TOLERANCE` (1e-13; 1.6–3.0e-16 on the
   M6), the errors within `LEAF_RATIO` (1.01; 1.0000× on the M6), the one-rank FMM with the

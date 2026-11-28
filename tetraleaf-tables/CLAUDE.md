@@ -319,9 +319,9 @@ tables in `helmholtz` and `helmholtz::dense`); Helmholtz CH2.1c (`LeafP2m` on Yu
   `tetraleaf-math`: 2⁻¹⁰⁰ in f32, 2⁻⁹⁰⁰ in f64) set to zero, as `bessel_j_real` does.
   `tests/helmholtz/leaf_yukawa.rs` holds every coefficient to
   C u √((2n + 1)/(4π)) Σⱼ |qⱼ eⱼ| (((n + 1)² + N) îₙ + κρⱼ (|îₙ′| + îₙ)) with C = 10 (0.80 measured in
-  f64 to p = 45 and κ̂ to 60; 1.09 in f32 against the f64 reference, with the f32 level's own
-  rounding of s and β, (β + n) u, and the flushes' floor), the vectors and the complex charges'
-  planes bit for bit, accumulation, the lengths refused.
+  f64 to p = 45 and κ̂ to 250; 1.54 in f32 against the f64 reference to p = 32 and κ̂ 60, beside the
+  f32 level's own rounding of s and β, 2 (β + n) u held apart, and the flushes' floor), the vectors
+  and the complex charges' planes bit for bit, accumulation, the lengths refused.
   Since Helmholtz CH4.9b2 `LeafL2p` restates `tetraleaf_ref::helmholtz::leaf::l2p` (its `evaluate`:
   per degree the three sums Σₘ L̂ Y, Σₘ L̂ ∂θ Y, Σₘ L̂ (1/sin θ) ∂φ Y, then the radial functions, their
   derivatives and the tangential factor ĵₙ/r with the centre's limit k/(3s), the Cartesian gradient,
