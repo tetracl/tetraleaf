@@ -116,8 +116,8 @@ on the diagonal levels).
 14. CH4.9a (CH4.9a1, CH4.9a2a, CH4.9a2b; split on 2026-11-26 and 2026-11-27), CH4.9b (CH4.9b1, CH4.9b2; split on 2026-11-27) The Helmholtz leaf expansions P2M and
     L2P by SIMD kernels (added on 2026-11-26 after CH4.6a2, the user: "Yes. Add P2M and L2P to the
     priority list as tasks")
-15. CH2.1, CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added on 2026-11-24 at the H4 gate;
-    CH2.1 and CH2.2 wait for D4, which CH2.1 prepares)
+15. CH2.1 (CH2.1a–c; split on 2026-11-28), CH2.2, CH2.3, CH2.5 and H2.G Yukawa on the host (added
+    on 2026-11-24 at the H4 gate; CH2.2 waits for D4, which CH2.1b prepares)
 16. CH5.1, CH5.2, CH5.3 and H5.G Complex wavenumber (added on 2026-11-24 at the H4 gate)
 
 Off the list, in file order: CH0.8b, CH0.5 and H0.G; CHR.3 and CH4.6b (moved off at CH0.9 by D7, the user on #264, 2026-11-26: "Q1-3 as recommended"); CH4.0f (the user, 2026-11-12, on #211);
@@ -141,7 +141,7 @@ The proposal's Section 12, plus D0. A decision is recorded here when the user ta
 | D1 | Target kD range and tolerances | for example kD ≤ 500 at 10⁻³ to 10⁻⁸ (proposal §12) | – | CH0.8b, CH3.0 | signed off 2026-10-31: kD ≤ 500 at 10⁻³ to 10⁻⁸, as recommended |
 | D2 | Placement: modules in the layer crates (A) or separate crates (B) | A (§6.1) | – | CH1.2 | signed off 2026-10-29: A, modules in the layer crates, as recommended |
 | D3 | f32 scope | f64 only until H7; then f32 for low-frequency configurations that pass an accuracy contract; high-frequency levels in f32 only if S6 finds stable classes | CH0.6 | CH7.1 | signed off 2026-11-06 (CH0.6, question 1; the user: "i agree with the recommendations"): as recommended, high-frequency levels may run the diagonal form in f32 at ε ≥ 10⁻⁴ for real k and weak damping, each class by the bound in u = 2⁻²⁴ with C_T = 0.18 and θ = 1/2, failing classes on RCR; f64 below 10⁻⁴ and for η ≈ 1; CH7.1 settles the f32 RCR and the low-frequency levels |
-| D4 | Yukawa: its own operator type, or the wavenumber kind as a type parameter | one `HelmholtzOperator<T, K>` if CH2.1 shows no cost to the complex path | CH2.1 | CH2.2 | open |
+| D4 | Yukawa: its own operator type, or the wavenumber kind as a type parameter | one `HelmholtzOperator<T, K>` if CH2.1 shows no cost to the complex path | CH2.1b | CH2.2 | open |
 | D5 | Source types of the first release | real and complex charges, potentials and gradients; dipoles once C6.4 exists for Laplace (note: Laplace dipoles were merged in Phase 6 T8 and T8d, so the condition is met) | – | CH1.1 | signed off 2026-10-29: charges now, dipoles later; §3.15 fixes real and complex charges with potentials and gradients, and dipoles get a later, separate task; that task is CH9.0, added at the H1 gate (the user, 2026-11-19, on #230: "Add CH9.0 (Recommended)") |
 | D6 | Order of H4 and H6 | H6 first | H3.G | CH6.1, CH4.1 | signed off 2026-11-02 (H3 gate, question 2): "i agree with the recommendations", H6 first, as recommended; on the gate report's reason (§3.3): the calibrated degrees cut the low-frequency share of the far field at kD = 500 to about half (an estimate), and the FMM is slowest against FMM3D on low-frequency trees at tight ε, which H6 targets |
 | D7 | Host back ends of the φ step | the product as default and reference; FFTW behind the optional `fftw` feature; rustfft if S9 finds it deterministic per box and faster, decided per machine | CH0.9 | CH4.6a, CHR.3, CH4.6b | signed off 2026-11-26: "Q1-3 as recommended" (#264; `spikes/fft-plans/SPIKE_REPORT.md` §6): the product the default and reference on every machine; rustfft the one optional FFT back end (CH4.6a), with a check across ranks and the M6's times; FFTW (CHR.3, CH4.6b) off the priority list, kept in the roadmap. Amended 2026-11-26 (CH4.6a2, questions 1–3; the user on #266: "Q1-3 as recommended"): rustfft on the product's grid (CH4.6a3 closed unrun), the time rule's costs the product's under either φ step, the M6's times not taken (the user: "Skip the M6"); proposal §6.7, §10 and §12 amended |
@@ -342,6 +342,28 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   `p2m_yukawa` restated as `tetraleaf_tables::helmholtz::leaf::LeafP2m` restates `p2m` (`LeafP2m`
   refuses Yukawa; `Densities::p2m_kernel` keeps the per-point `p2m_yukawa` there), with its contract
   and the FMM's errors within 1.01× the per-point path's. *Needs:* CH2.0, D12. *Sign-off:* D4.
+  Split on 2026-11-28 into CH2.1a–c by `/next-task`'s size rule (tables in `tetraleaf-tables`, the
+  operator and FMM in `tetraleaf-exec` with runs on three workloads, and the batched P2M);
+  CH2.1 is done when all three are:
+- [ ] **CH2.1a Yukawa's RCR and dense M2L tables.** `tetraleaf_tables::helmholtz::HelmholtzTables`
+  for k̂₀ = iκ̂₀: one real plane per expansion, real M2M, L2L and M2L with `rcr`'s `_yukawa` stored
+  form folded in; `DenseM2l` as one real n × n matrix per offset; Batched and Classes refuse
+  Yukawa. *Done when:* M2M and L2L on the 8 octants and M2L on the 316 offsets against
+  `tetraleaf_ref::helmholtz::rcr`'s `_yukawa` forms within the real and complex tables' bound
+  (2e-13 max(1, |k̂| a) in the FMM-weighted measure) from κ̂ a ≈ 10⁻³ to the strongly damped
+  levels, rectangular and raised degrees included; Dense against Rotation pair by pair; vectors,
+  stored blocks, contributions and the build in parts bit for bit; real and complex k's tables
+  bit for bit as before (by hash). *Needs:* CH2.0, D12.
+- [ ] **CH2.1b The Yukawa operator and FMM.** `HelmholtzOperator` and `HelmholtzFmmBuilder` accept
+  Yukawa: Rotation and Dense M2L on CH2.1a's tables, P2L and M2P by `tetraleaf_ref`'s `_yukawa`
+  forms, P2P by `P2pKernel::evaluate_yukawa`, the leaves per point. *Done when:* CH2.1's: the FMM
+  against the direct sum on W1, W3 and W4 for κD from 10⁻² to 10³ (the errors reported; within
+  target is CH2.3's); deterministic (threads, chunks, the one-rank FMM bit for bit); real and
+  complex k's output bit for bit as before; D4 put for sign-off with the complex path's time before
+  and after. *Needs:* CH2.1a. *Sign-off:* D4.
+- [ ] **CH2.1c Yukawa's batched P2M.** CH2.1's Also: `LeafP2m` for Yukawa as it restates `p2m`,
+  `p2m_yukawa` restated, `Densities::p2m_kernel` on it. *Done when:* its contract as CH4.9a2b's, the
+  FMM's errors within 1.01× the per-point path's. *Needs:* CH2.1b.
 - [ ] **CH2.2 Per-level tables with per-level cache keys.** *Done when:* build cost and
   memory reported; levels reused across an octave sweep. *Needs:* CH2.1, D4.
 - [ ] **CH2.3 Pruning and the calibration of p_l.** *Done when:* the relative error within
