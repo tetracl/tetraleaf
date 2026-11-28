@@ -18,7 +18,7 @@
 //! | Kind | Body |
 //! | --- | --- |
 //! | P2M | [`Densities::p2m_kernel`] in the leaf's own frame (the batched kernel of `tetraleaf_tables::helmholtz::leaf`), or [`Densities::p2m`] (the reference per point) for [`P2pChoice::Reference`] and under [`with_reference_leaves`](HelmholtzOperator::with_reference_leaves) |
-//! | L2P | [`Densities::l2p`] in the leaf's own frame |
+//! | L2P | [`Densities::l2p_kernel`] in the leaf's own frame (the batched kernel of `tetraleaf_tables::helmholtz::leaf`), or [`Densities::l2p`] (the reference per target) for [`P2pChoice::Reference`] and under [`with_reference_leaves`](HelmholtzOperator::with_reference_leaves) |
 //! | M2M, L2L, M2L | `tetraleaf_tables::helmholtz::HelmholtzTables` (RCR with the level's tables; real shifts on each plane for real k) |
 //! | M2L under [`HelmholtzM2l::Dense`] | `tetraleaf_tables::helmholtz::dense::DenseM2l` on the levels whose tables fit the budget, RCR on the others |
 //! | M2L under [`HelmholtzM2l::Classes`] | `tetraleaf_tables::helmholtz::classes::ClassM2l` on the levels whose tables fit the budget, RCR on the others |
@@ -63,18 +63,19 @@
 //! same at every thread count and on P ranks (constraint 2);
 //! [`p2p_kernel`](HelmholtzOperator::p2p_kernel) reports the kernel that runs.
 //!
-//! # P2M kernel
+//! # Leaf kernels
 //!
-//! The choice of P2P also chooses P2M (Helmholtz CH4.9a2b): under every ISA a leaf's P2M is one
-//! call of the batched kernel (`tetraleaf_tables::helmholtz::leaf::LeafP2m`, safe Rust without
-//! ISA dispatch, so the same bits on every ISA of a machine), and under
-//! [`P2pChoice::Reference`] the reference's per-point calls, the trusted path. The kernel agrees
-//! with the reference to its contract per coefficient, not bit for bit, so `Isa::Scalar` is the
-//! reference's output bit for bit only with
-//! [`with_reference_leaves`](HelmholtzOperator::with_reference_leaves) (a measurement and test
-//! setting: the reference's P2M whatever the P2P kernel). A leaf's multipole depends on its
-//! chunk alone, so the output stays the same at every thread count and on P ranks the one-rank
-//! FMM's, and each vector the one-vector FMM's.
+//! The choice of P2P also chooses P2M and L2P (Helmholtz CH4.9a2b and CH4.9b2): under every ISA a
+//! leaf's P2M and its L2P are one call each of the batched kernels
+//! (`tetraleaf_tables::helmholtz::leaf::{LeafP2m, LeafL2p}`, safe Rust without ISA dispatch, so the
+//! same bits on every ISA of a machine), and under [`P2pChoice::Reference`] the reference's
+//! per-point calls, the trusted path. The kernels agree with the reference to their contracts (per
+//! coefficient, per target), not bit for bit, so `Isa::Scalar` is the reference's output bit for
+//! bit only with [`with_reference_leaves`](HelmholtzOperator::with_reference_leaves) (a
+//! measurement and test setting: the reference's P2M and L2P whatever the P2P kernel). A leaf's
+//! multipole depends on its chunk alone and a target's output on its offset and the local alone,
+//! so the output stays the same at every thread count and on P ranks the one-rank FMM's, and each
+//! vector the one-vector FMM's.
 //!
 //! # M2L
 //!
@@ -2378,25 +2379,26 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         self.kernel.matrix.mul_add()
     }
 
-    /// Runs P2M by the reference's per-point calls ([`Densities::p2m`]) whatever the P2P kernel
-    /// if `reference` (module documentation, "P2M kernel"; default `false`: the batched kernel
-    /// under every ISA, the reference under [`P2pChoice::Reference`]). A measurement and test
-    /// setting: with it `Isa::Scalar` is [`P2pChoice::Reference`]'s output bit for bit.
+    /// Runs P2M and L2P by the reference's per-point calls ([`Densities::p2m`],
+    /// [`Densities::l2p`]) whatever the P2P kernel if `reference` (module documentation, "Leaf
+    /// kernels"; default `false`: the batched kernels under every ISA, the reference under
+    /// [`P2pChoice::Reference`]). A measurement and test setting: with it `Isa::Scalar` is
+    /// [`P2pChoice::Reference`]'s output bit for bit.
     pub fn with_reference_leaves(mut self, reference: bool) -> Self {
         self.kernel.reference_leaves = reference;
         self
     }
 
-    /// Whether P2M runs the reference's per-point calls whatever the P2P kernel
+    /// Whether P2M and L2P run the reference's per-point calls whatever the P2P kernel
     /// ([`with_reference_leaves`](Self::with_reference_leaves)).
     pub fn reference_leaves(&self) -> bool {
         self.kernel.reference_leaves
     }
 
-    /// Whether P2M runs the batched kernel: a P2P kernel of `tetraleaf-simd` and no
+    /// Whether P2M and L2P run the batched kernels: a P2P kernel of `tetraleaf-simd` and no
     /// [`with_reference_leaves`](Self::with_reference_leaves).
-    pub fn p2m_batched(&self) -> bool {
-        self.kernel.p2m_batched()
+    pub fn leaves_batched(&self) -> bool {
+        self.kernel.leaves_batched()
     }
 
     /// The P2P kernel as it runs: [`P2pChoice::Reference`] or [`P2pChoice::Isa`] with the
@@ -2504,8 +2506,8 @@ impl<T: SimdScalar> Scratch<T> {
 }
 
 impl<T: SimdScalar> Kernel<T> {
-    /// Whether P2M runs the batched kernel (module documentation, "P2M kernel").
-    fn p2m_batched(&self) -> bool {
+    /// Whether P2M and L2P run the batched kernels (module documentation, "Leaf kernels").
+    fn leaves_batched(&self) -> bool {
         self.p2p.is_some() && !self.reference_leaves
     }
 
@@ -2636,7 +2638,7 @@ impl<T: SimdScalar> Kernel<T> {
             return;
         }
         let (p, q) = (self.leaf_degree(level), self.p(level));
-        let p2m = if self.p2m_batched() {
+        let p2m = if self.leaves_batched() {
             Densities::p2m_kernel::<T>
         } else {
             Densities::p2m::<T>
@@ -2684,7 +2686,13 @@ impl<T: SimdScalar> Kernel<T> {
             copy_first_degrees(local, q, first, p);
             &*first
         };
-        self.densities.l2p(
+        let l2p = if self.leaves_batched() {
+            Densities::l2p_kernel::<T>
+        } else {
+            Densities::l2p::<T>
+        };
+        l2p(
+            &self.densities,
             &self.k,
             self.radii[level],
             p,

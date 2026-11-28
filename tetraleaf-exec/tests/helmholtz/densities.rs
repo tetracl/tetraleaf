@@ -409,6 +409,95 @@ fn the_batched_p2m_is_the_reference_to_rounding() {
     }
 }
 
+/// The batched L2P (Helmholtz CH4.9b2): every path, with and without gradients, three vectors,
+/// within 1e-13 of the largest output of the reference's per-target calls; vector v alone bit
+/// for bit; a second call adds; Yukawa the reference's bits.
+#[test]
+fn the_batched_l2p_is_the_reference_to_rounding() {
+    let (domain, key) = leaf_box();
+    let r = geometry::radius(3, &domain);
+    let (n, m, p) = (37, 3, 11);
+    let mut rng = Rng(43);
+    let points = leaf_points(&domain, key, n, &mut rng);
+    let mut scratch = LeafScratch::with_vectors(14, m);
+    for kind in KINDS {
+        let k = wavenumber(kind, 21.0);
+        for charges in CHARGES {
+            let d = Densities::new(kind, charges, m);
+            let planes = charge_planes(charges, m, n, &mut rng);
+            let chunk = source_chunk(&d, &domain, key, &points, &planes);
+            let u = &chunk[..3 * n];
+            let locals: Vec<f64> = (0..d.local_size(p)).map(|_| rng.next()).collect();
+            for gradients in [false, true] {
+                let what = format!("{kind:?} {charges:?}, gradients {gradients}");
+                let len = n * d.target_output_point_size(gradients);
+                let mut want = vec![0.0; len];
+                d.l2p(&k, r, p, &locals, u, &mut scratch, &mut want, gradients);
+                let mut got = vec![0.0; len];
+                d.l2p_kernel(&k, r, p, &locals, u, &mut scratch, &mut got, gradients);
+                if kind == WavenumberKind::Yukawa {
+                    assert_eq!(got, want, "{what}: Yukawa keeps the reference");
+                    continue;
+                }
+                // Potentials and gradients apart: their sizes differ.
+                let split = 2 * m * n;
+                for (part, (a, b)) in [
+                    (&got[..split], &want[..split]),
+                    (&got[split..], &want[split..]),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let largest = b.iter().fold(0.0_f64, |x, y| x.max(y.abs()));
+                    let worst = a
+                        .iter()
+                        .zip(b)
+                        .fold(0.0_f64, |x, (y, z)| x.max((y - z).abs()));
+                    assert!(
+                        worst <= 1e-13 * largest,
+                        "{what}, part {part}: {worst:e} of {largest:e}"
+                    );
+                }
+                let one = Densities::new(kind, charges, 1);
+                let size = d.local_size(p) / m;
+                for v in 0..m {
+                    let mut single = vec![0.0; n * one.target_output_point_size(gradients)];
+                    let local = &locals[v * size..(v + 1) * size];
+                    one.l2p_kernel(&k, r, p, local, u, &mut scratch, &mut single, gradients);
+                    for i in 0..n {
+                        for part in 0..2 {
+                            let (o, o1) = (d.output_column(v, part), one.output_column(0, part));
+                            assert_eq!(
+                                got[d.potential_index(n, o, i)].to_bits(),
+                                single[one.potential_index(n, o1, i)].to_bits(),
+                                "{what}: vector {v} alone, φ of {i}"
+                            );
+                            if gradients {
+                                for axis in 0..3 {
+                                    assert_eq!(
+                                        got[d.gradient_index(n, o, i, axis)].to_bits(),
+                                        single[one.gradient_index(n, o1, i, axis)].to_bits(),
+                                        "{what}: vector {v} alone, ∇φ of {i}"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                let mut twice = got.clone();
+                d.l2p_kernel(&k, r, p, &locals, u, &mut scratch, &mut twice, gradients);
+                assert!(
+                    twice
+                        .iter()
+                        .zip(&got)
+                        .all(|(t, g)| t.to_bits() == (g + g).to_bits()),
+                    "{what}: a second call adds"
+                );
+            }
+        }
+    }
+}
+
 /// P2M and L2P add to what their outputs hold: into a non-zero buffer, the buffer plus the
 /// operator's result into zeros, to rounding (bit for bit for the real multipole of real
 /// k, which is summed in scratch and then added).

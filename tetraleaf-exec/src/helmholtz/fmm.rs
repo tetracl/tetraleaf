@@ -67,9 +67,10 @@
 //! (`tetraleaf_ref::helmholtz::p2p::p2p`). The choice changes the output only in the last bits
 //! (the kernel's accuracy contract, the [`operator`](super::operator) module documentation,
 //! "P2P kernel"); [`HelmholtzFmm::p2p_kernel`] reports the kernel that runs. It also chooses
-//! P2M (Helmholtz CH4.9a2b): the batched kernel of `tetraleaf_tables::helmholtz::leaf` under every
-//! ISA, the reference's per-point calls under [`P2pChoice::Reference`] or with
-//! [`HelmholtzFmmBuilder::reference_leaves`] (the operator module documentation, "P2M kernel").
+//! P2M and L2P (Helmholtz CH4.9a2b and CH4.9b2): the batched kernels of
+//! `tetraleaf_tables::helmholtz::leaf` under every ISA, the reference's per-point calls under
+//! [`P2pChoice::Reference`] or with [`HelmholtzFmmBuilder::reference_leaves`] (the operator module
+//! documentation, "Leaf kernels").
 //!
 //! Not yet: overlap, the device path, the near rule and the work cut, and table caches.
 //!
@@ -985,9 +986,10 @@ impl HelmholtzFmmBuilder {
         self
     }
 
-    /// P2M by the reference's per-point calls whatever the P2P kernel (default `false`: the
-    /// batched kernel under every ISA; Helmholtz CH4.9a2b; the operator module documentation, "P2M
-    /// kernel"). A measurement and test setting, the trusted path of the batched kernel.
+    /// P2M and L2P by the reference's per-point calls whatever the P2P kernel (default `false`:
+    /// the batched kernels under every ISA; Helmholtz CH4.9a2b and CH4.9b2; the operator module
+    /// documentation, "Leaf kernels"). A measurement and test setting, the trusted path of the
+    /// batched kernels.
     pub fn reference_leaves(mut self, reference: bool) -> Self {
         self.reference_leaves = reference;
         self

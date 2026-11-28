@@ -37,12 +37,13 @@
 //!   (`DegreeRule::CH4_3C3`, the default before CH4.8b's margin);
 //! - `--p2p auto|reference|<isa>,…` (default `auto`): the P2P kernels (Helmholtz CH3.4c),
 //!   each case run with each in turn; an ISA this machine lacks is refused before MPI
-//!   starts. The kernel also chooses P2M (Helmholtz CH4.9a2b): the batched kernel under every
-//!   ISA, the reference's per-point calls under `reference`.
+//!   starts. The kernel also chooses P2M and L2P (Helmholtz CH4.9a2b, CH4.9b2): the batched
+//!   kernels under every ISA, the reference's per-point calls under `reference`.
 //! - `--leaves kernel|reference` (Helmholtz CH4.9a2b, `HelmholtzFmmBuilder::reference_leaves`;
-//!   default `kernel`, the library's): with `reference` P2M by the reference's per-point calls
-//!   whatever the P2P kernel; the column "P2P" ends with `/ref-p2m` where an ISA's P2P ran with
-//!   the reference's P2M.
+//!   default `kernel`, the library's): with `reference` P2M and L2P by the reference's per-point
+//!   calls whatever the P2P kernel (since CH4.9b2 both; P2M alone before); the column "P2P" ends
+//!   with `/ref-leaves` where an ISA's P2P ran with the reference's leaves (`/ref-p2m` before
+//!   CH4.9b2).
 //! - `--m2l rotation|dense|classes|batched|batched-fused,…` (default `rotation`, Helmholtz
 //!   CH3.2a, CH3.2b, CH3.2c; `batched-fused` the batched M2L in the fused mode): the M2L,
 //!   each case run with each in turn (and each P2P kernel);
@@ -975,11 +976,11 @@ fn reach_suffix(row: &Row) -> String {
     format!("{reach}{split}{raise}")
 }
 
-/// The column "P2P": the kernel that ran, with `/ref-p2m` where an ISA's P2P ran with the
-/// reference's P2M (Helmholtz CH4.9a2b, `--leaves reference`).
+/// The column "P2P": the kernel that ran, with `/ref-leaves` where an ISA's P2P ran with the
+/// reference's P2M and L2P (Helmholtz CH4.9a2b, CH4.9b2, `--leaves reference`).
 fn p2p_name(row: &Row) -> String {
-    match (row.p2p, row.p2m_batched) {
-        (P2pChoice::Isa(_), false) => format!("{}/ref-p2m", row.p2p),
+    match (row.p2p, row.leaves_batched) {
+        (P2pChoice::Isa(_), false) => format!("{}/ref-leaves", row.p2p),
         _ => row.p2p.to_string(),
     }
 }

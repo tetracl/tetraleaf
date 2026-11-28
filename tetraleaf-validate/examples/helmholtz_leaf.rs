@@ -1,5 +1,6 @@
 //! Where a Helmholtz leaf point's P2M and L2P time goes (Helmholtz CH4.9a1;
-//! docs/helmholtz/tasks/CH4.9a1.md; CH4.9a2a, CH4.9a2b and CH4.9b1 add the leaf routines' parts).
+//! docs/helmholtz/tasks/CH4.9a1.md; CH4.9a2a, CH4.9a2b and CH4.9b1 add the leaf routines' parts, and
+//! CH4.9b2 the L2P kernel).
 //! Prints Markdown on stdout.
 //!
 //! `tetraleaf-exec`'s Helmholtz FMM runs P2M and L2P as one `tetraleaf_ref::helmholtz::leaf`
@@ -54,6 +55,15 @@
 //!   routines' values of the batch's first 16 points, cycled over the targets; "projected L2P ∇"
 //!   adds the derivative columns, the radial functions with derivatives (the reference's for
 //!   complex k), the factor's `exp` and that sum, over the reference's L2P with gradients.
+//! - **The L2P kernel** (Helmholtz CH4.9b2; docs/helmholtz/tasks/CH4.9b2.md): the batch as one leaf
+//!   through `tetraleaf_tables::helmholtz::leaf::LeafL2p` without and with gradients (16 targets at a
+//!   time on the leaf routines, the sum vectorised over targets), checked against the reference's
+//!   L2P with gradients first ("L2P kernel check": the largest difference over the largest value,
+//!   of the potentials and of the gradients, the larger), its times over the reference's and the
+//!   projection's, and "∇ kernel sum": the kernel with gradients less the routines' parts (the
+//!   derivative columns, the radial functions with derivatives, the factor's `exp`), in ns per term
+//!   and in GFLOP/s by the sum's operation count, (p + 1) (12.5 p + 8) per target
+//!   (`l2p_sum_flops`), the ISA question's measure against the build's peak.
 //!
 //! Every figure is µs per point, the median over batches (`tetraleaf_validate::bench::
 //! median_time_per_call`); "ns per term" divides by (p + 1)². One precision per launch
@@ -75,7 +85,9 @@ use tetraleaf_math::radial::{bessel_j, bessel_j_real, bessel_j_real_derivatives}
 use tetraleaf_math::{Complex, Layout, RealScalar};
 use tetraleaf_ref::Frame;
 use tetraleaf_ref::helmholtz::{Level, Workspace, leaf};
-use tetraleaf_tables::helmholtz::leaf::{LeafCharges, LeafP2m, P2mScratch};
+use tetraleaf_tables::helmholtz::leaf::{
+    L2pScratch, LeafCharges, LeafL2p, LeafOutput, LeafP2m, P2mScratch,
+};
 use tetraleaf_validate::SplitMix64;
 use tetraleaf_validate::bench::{cores, cpu_model, median_time_per_call, target};
 
@@ -178,6 +190,13 @@ struct Times {
     kernel_check: f64,
     /// The reference's L2P sum with gradients on the leaf routines' values (Helmholtz CH4.9b1).
     sum_gradient_leaf: f64,
+    /// The batched L2P kernel over the batch as one leaf (Helmholtz CH4.9b2): potentials only,
+    /// and with gradients.
+    l2p_kernel: f64,
+    l2p_kernel_gradient: f64,
+    /// The kernel's largest difference from the reference's potentials and gradients, each over
+    /// its largest value; the larger of the two.
+    l2p_kernel_check: f64,
 }
 
 /// The leaf routines' times, µs per point, and their checks (module documentation).
@@ -621,6 +640,83 @@ fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize, lanes: usize) -> 
         8 => leaf_parts::<T, 8>(p, &level, &points),
         _ => leaf_parts::<T, 16>(p, &level, &points),
     };
+    // The batched L2P kernel (Helmholtz CH4.9b2): the batch as one leaf, without and with
+    // gradients, checked against the reference first.
+    let (l2p_kernel, l2p_kernel_gradient, l2p_kernel_check) = {
+        let table = LeafL2p::<T>::new(p);
+        let mut scratch = L2pScratch::new(p, 1);
+        let zero = Complex::new(T::zero(), T::zero());
+        let (mut phi, mut grad) = (vec![zero; n], vec![[zero; 3]; n]);
+        leaf::l2p(
+            p,
+            &level,
+            &frame,
+            &local,
+            &points,
+            &mut ws,
+            &mut phi,
+            Some(&mut grad),
+        );
+        let mut out = vec![T::zero(); 8 * n];
+        table.l2p(
+            p,
+            &level,
+            &points,
+            &local,
+            &mut scratch,
+            leaf_output(&mut out, true),
+        );
+        let largest = |values: &mut dyn Iterator<Item = f64>| values.fold(0.0f64, f64::max);
+        let parts = |c: Complex<T>| [c.re.to_f64(), c.im.to_f64()];
+        let phi_scale = largest(&mut phi.iter().flat_map(|&c| parts(c)).map(f64::abs));
+        let phi_diff = largest(&mut (0..n).flat_map(|i| {
+            let got = [out[i].to_f64(), out[n + i].to_f64()];
+            let want = parts(phi[i]);
+            [(got[0] - want[0]).abs(), (got[1] - want[1]).abs()]
+        }));
+        let grad_scale = largest(
+            &mut grad
+                .iter()
+                .flat_map(|g| g.iter().flat_map(|&c| parts(c)))
+                .map(f64::abs),
+        );
+        let grad_diff = largest(&mut (0..n).flat_map(|i| {
+            let (out, grad) = (&out, &grad);
+            (0..3).flat_map(move |a| {
+                let got = [out[2 * n + 3 * i + a], out[2 * n + 3 * (n + i) + a]];
+                let want = parts(grad[i][a]);
+                [
+                    (got[0].to_f64() - want[0]).abs(),
+                    (got[1].to_f64() - want[1]).abs(),
+                ]
+            })
+        }));
+        let check = (phi_diff / phi_scale).max(grad_diff / grad_scale);
+        let mut plain = vec![T::zero(); 2 * n];
+        let time = per_point(n, || {
+            table.l2p(
+                p,
+                &level,
+                &points,
+                &local,
+                &mut scratch,
+                leaf_output(&mut plain, false),
+            );
+            black_box(&plain);
+        });
+        let time_gradient = per_point(n, || {
+            table.l2p(
+                p,
+                &level,
+                &points,
+                &local,
+                &mut scratch,
+                leaf_output(&mut out, true),
+            );
+            black_box(&out);
+        });
+        (time, time_gradient, check)
+    };
     Times {
         p2m,
         radial: radial_t,
@@ -637,7 +733,29 @@ fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize, lanes: usize) -> 
         kernel,
         kernel_check,
         sum_gradient_leaf,
+        l2p_kernel,
+        l2p_kernel_gradient,
+        l2p_kernel_check,
     }
+}
+
+/// One vector's target output chunk for `LeafL2p::l2p`.
+fn leaf_output<T>(values: &mut [T], gradients: bool) -> LeafOutput<'_, T> {
+    LeafOutput {
+        values,
+        vectors: 1,
+        gradients,
+    }
+}
+
+/// The arithmetic of the L2P kernel's sum with gradients per target (Helmholtz CH4.9b2,
+/// `LeafL2p::l2p`'s step 2): per order m ≥ 1 and degree n, m U once and on each of the two planes
+/// A, B and the three sums (seven products and five sums), per degree n of order 0 two products
+/// and two sums per plane: (p + 1) (12.5 p + 8) operations, about 12.5 per term. The degree loop
+/// and the gradient's assembly (O(p) per target) are left out.
+fn l2p_sum_flops(p: usize) -> f64 {
+    let p = p as f64;
+    (p + 1.0) * (12.5 * p + 8.0)
 }
 
 /// The points in batches of B lanes, the last batch padded with the first point.
@@ -875,12 +993,15 @@ fn main() {
          | radial check | harmonics check | sum, leaf values µs | projected P2M µs \
          | projected ÷ P2M | P2M kernel µs | kernel ÷ P2M | kernel ÷ projected | kernel sum µs \
          | kernel check | leaf columns ′ µs | derivatives check | real radial ′ µs | radial ′ check \
-         | sum ∇, leaf values µs | projected L2P ∇ µs | projected ÷ L2P ∇ |"
+         | sum ∇, leaf values µs | projected L2P ∇ µs | projected ÷ L2P ∇ | L2P kernel µs \
+         | L2P kernel ÷ L2P | L2P ∇ kernel µs | ∇ kernel ÷ L2P ∇ | ∇ kernel ÷ projected \
+         | ∇ kernel sum µs | ∇ kernel sum ns per term | ∇ kernel sum GFLOP/s | L2P kernel check |"
     );
     println!(
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: \
          | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: \
-         | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |"
+         | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: \
+         | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
     );
     let start = Instant::now();
     for &p in &arguments.ps {
@@ -900,11 +1021,16 @@ fn main() {
             let radial_derivatives = leaf.radial_derivatives.unwrap_or(t.radial_derivatives);
             let projected_gradient =
                 leaf.derivative_columns + radial_derivatives + t.exp + t.sum_gradient_leaf;
+            // The L2P kernel with gradients less its routines' parts: its sum (with the
+            // directions, the degree loop and the output).
+            let kernel_sum =
+                t.l2p_kernel_gradient - (leaf.derivative_columns + radial_derivatives + t.exp);
             println!(
                 "| {p} | {khat} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.2} | {:.1} | {} \
                  | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.1} | {:.3} | {:.3} | {} | {} \
                  | {:.2} | {:.3} | {:.3} | {:.2} | {:.3} | {:.2} | {:.2} | {:.3} | {:.1e} \
-                 | {:.3} | {:.2} | {} | {} | {:.3} | {:.3} | {:.2} |",
+                 | {:.3} | {:.2} | {} | {} | {:.3} | {:.3} | {:.2} | {:.3} | {:.3} | {:.3} \
+                 | {:.3} | {:.3} | {:.3} | {:.3} | {:.2} | {:.1e} |",
                 t.p2m,
                 t.radial,
                 t.harmonics,
@@ -947,6 +1073,15 @@ fn main() {
                 t.sum_gradient_leaf,
                 projected_gradient,
                 projected_gradient / t.l2p_gradient,
+                t.l2p_kernel,
+                t.l2p_kernel / t.l2p,
+                t.l2p_kernel_gradient,
+                t.l2p_kernel_gradient / t.l2p_gradient,
+                t.l2p_kernel_gradient / projected_gradient,
+                kernel_sum,
+                1e3 * kernel_sum / terms,
+                l2p_sum_flops(p) / (1e3 * kernel_sum),
+                t.l2p_kernel_check,
             );
         }
     }
