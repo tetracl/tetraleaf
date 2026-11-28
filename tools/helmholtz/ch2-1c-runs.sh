@@ -18,9 +18,11 @@
 #             10⁵ and W4's four distributions at 10⁵ at κD = KAPPAS (default 0.01 0.1 1 10 100
 #             1000) and ε = 10⁻³, 10⁻⁶, 10⁻⁸ in one launch per (workload, κD, P2M); W3 at 10⁶ at
 #             10⁻⁶; real charges; and W1 at 10⁵ at κD = 1 and 100, 10⁻⁶, complex charges
-#   worst     the constant density (the worst the record names, CH4.3c3 and CH4.8): W1 and W2 at
-#             κD = 1 and 100, 10⁻⁶, real charges, the kernel and the reference
-#   levels    P2M's time: W1 (its default N) and W3 at 10⁶, κD = 1 and 100, 10⁻⁶, `--levels`, two
+#   worst     the constant density (the worst the record names, CH4.3c3 and CH4.8): W1 at 10⁶ points
+#             (`w1:1000000`) and W3 at 10⁶, κD = 1 and 100, 10⁻⁶, real charges, the kernel and the
+#             reference. W1's and W2's defaults size their points by Re k, so on Yukawa they hold no
+#             point; W2 has no fixed-N form (its cap is refined by wavelength) and is not run
+#   levels    P2M's time: W1 at 2·10⁶ points and W3 at 10⁶, κD = 1 and 100, 10⁻⁶, `--levels`, two
 #             evaluations (the rows the second's), per case kernel, reference, reference, kernel
 # TIMEOUT per launch (default 3600 s), ONLY (a regular expression on the launch names), DRY_RUN
 # (print the launches only). Each launch writes <out-dir>/<name>.md and .err and a line in
@@ -113,14 +115,15 @@ for stage in "$@"; do
         done
         ;;
     worst)
-        for w in w1 w2; do
+        for w in w1:1000000 w3:1000000; do
             for kappa in 1 100; do
-                both "worst-$w-$kappa" "$w" "$kappa" --eps 1e-6 --charges real --density constant
+                both "worst-${w%%:*}-$kappa" "$w" "$kappa" --eps 1e-6 --charges real \
+                    --density constant
             done
         done
         ;;
     levels)
-        for c in w1@1 w1@100 w3:1000000@1 w3:1000000@100; do
+        for c in w1:2000000@1 w1:2000000@100 w3:1000000@1 w3:1000000@100; do
             w=${c%@*} kappa=${c#*@}
             tag=${w%%:*}-$kappa
             for o in kernel:1 reference:1 reference:2 kernel:2; do
