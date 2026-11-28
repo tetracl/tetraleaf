@@ -85,9 +85,11 @@ Kathleen, `singlenode`, 1 × 40, slow nodes excluded, release, BLAS threads 1:
   distributions at 10⁵; κD = 10⁻² … 10³; ε = 10⁻³, 10⁻⁶, 10⁻⁸), `--leaves kernel` and
   `--leaves reference`, one launch each.
 - `worst` (the worst density the record names: the constant density, CH4.3c3, CH4.8; CH2.3's Also):
-  W1 and W2, constant density, κD = 1 and 100, 10⁻⁶, kernel and reference (errors).
-- `levels` (P2M's time, reported, not a criterion): W1 at 10⁶ points and W3 at 10⁶, κD = 1 and 100,
-  10⁻⁶, `--levels`, ABBA, one setting per launch (B12).
+  W1 and W3 at 10⁶ points, constant density, κD = 1 and 100, 10⁻⁶, kernel and reference (errors).
+  As built: W1's and W2's defaults size their points by Re k and hold none on Yukawa; W1 runs as
+  W1n, and W2, which has no fixed-N form, is replaced by W3.
+- `levels` (P2M's time, reported, not a criterion): W1 at 2·10⁶ points and W3 at 10⁶, κD = 1 and
+  100, 10⁻⁶, `--levels`, ABBA, one setting per launch (B12).
 The M6 is not timed.
 
 ## Constraints and risks
@@ -104,7 +106,35 @@ The M6 is not timed.
 - Yukawa's L2P stays the reference's (`l2p_kernel` falls back): a follow-up line in the roadmap.
 
 ## Pending runs
-(filled in step 6)
+None. Kathleen, `singlenode`, slow nodes excluded, both on node-c11a-011, 2026-11-28: job 673284
+(build, `smoke`, `accuracy`, and `worst` and `levels` on the default W1 and W2, which held no point
+on Yukawa; 4 min 47 s) and job 673285 (`worst` and `levels` on W1n and W3, 2 min 9 s, after the
+script's fix 4893d27). Every launch exited 0. Outputs in `~/projects/fmm-archive/kathleen/runs/ch2-1c/`
+(`acc`, `time`, and the jobs' logs).
+
+## Results (the report `tetraleaf-validate/results/helmholtz-ch2-1c.md`)
+- The contract per leaf: 0.80 of C = 10 in f64 (p ≤ 45, κ̂ ≤ 250), 1.54 in f32 against the f64
+  reference beside the f32 level's own rounding (2 (β + n) u, held apart) and the flushes' floor.
+- The FMM: 114 of 114 of CH2.1b's cases within ε (at most 0.27 ε), the batched P2M's errors 1.0000×
+  the reference P2M's (three printed digits) in every case, with complex charges and on the constant
+  density; the tests 1.0000×, outputs within 4.1·10⁻¹⁶.
+- P2M per run 0.29–0.34× (Kathleen 1 × 40), from 7–10 % of the evaluation to 2–3 %; the evaluation
+  0.93–0.95×. Yukawa's reference L2P is 15–25 % of an evaluation after it.
+- A finding: the constant density on W1 at 10⁶, κD = 100, 10⁻⁶ misses ε on ∇φ (2.6 ε) under either
+  P2M: an Also on CH2.3's line.
+
+## Self-review
+A subagent (plan, proposal §2 and §10, the branch) found no blocking defect in the code. Fixed after
+it: the f32 level's rounding held apart from C with its own constant 2 (inside the C bracket it could
+hide a kernel error at low degree), the flushes' floor with the harmonics' norm, κ̂ = 250 and three
+complex vectors in the f64 contract, a Yukawa charge-length refusal, a kind check in `p2m_kernel`
+(beside the planes' check), the module docs' claim on subnormal operands, the operator's and
+`tetraleaf-exec/CLAUDE.md`'s wording, and the plan's runs as built. Left as noted: f64's flush
+(2⁻⁹⁰⁰) is not reached by the test points.
 
 ## Open questions
-(filled when they arise)
+For sign-off on the PR (the report §5):
+1. CH2.1e (Yukawa's batched L2P) on the priority list in item 15 right after CH2.1c (recommended), off
+   the list, or not at all.
+2. The constant density's gradient on Yukawa recorded on CH2.3's line (recommended; done on the
+   branch), or a task of its own before CH2.3.
