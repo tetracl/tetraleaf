@@ -3362,6 +3362,11 @@ fn check_diagonal(scenario: &Scenario, comm: &SimpleCommunicator) -> usize {
         everywhere(whole_levels > 0, comm),
         "{what}: no level took every class"
     );
+    drop(fmm);
+    let (fmm, two) = run(&whole.clone().threads(2), &inputs, kind, comm);
+    drop(fmm);
+    assert_same(&format!("{what} at 2 threads"), &two, &want, comm);
+    check_one_rank(&what, &whole, &inputs, kind, &want, comm);
     let mut mixed_anywhere = 0;
     comm.all_reduce_into(&mixed, &mut mixed_anywhere, SystemOperation::max());
     mixed_anywhere
@@ -3409,6 +3414,8 @@ fn check_m2l_tables(
     );
     let tables = all.operator().tables();
     let all_bytes = tables.bytes();
+    // Fewer bytes where a level lost its tables: these trees' blocks fit the budget, so no
+    // freed budget stores another level's blocks in their place (which could outweigh them).
     let ok = (0..all.nlevels()).all(|l| tables.has_m2l(l) == (l >= 2))
         && all_bytes >= bytes
         && (dropped.is_empty() || all_bytes > bytes);

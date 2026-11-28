@@ -1027,15 +1027,18 @@ CH4.9b2 (the batched P2M and L2P, below).
   tables and stored M2L blocks only on the levels with an RCR pair (`TableChoice::{m2l_levels,
   block_levels}`): an RCR level that the form does not take whole (some V offset outside its
   classes, `DiagonalM2l::has_offset`); never on a level with waves, Batched, Dense or Classes.
-  Keep every reader of RCR's M2L tables behind `Kernel::m2l`'s dispatch (waves, a diagonal offset,
-  Dense, Classes, Batched, else RCR): a read on a level without them panics. The doc-hidden
+  Keep every reader of RCR's M2L tables behind the M2L dispatch (the pair body's in `Kernel::m2l`:
+  waves, a diagonal offset, Dense, Classes, Batched, else RCR; the level call's in
+  `FmmOperator::m2l`; the diagonal level call's RCR pairs, the offsets outside its classes): a read
+  on a level without them panics. The doc-hidden
   `HelmholtzOperator::with_m2l_tables_everywhere` and `HelmholtzFmmBuilder::m2l_tables_everywhere`
   build them on every level from 2 (blocks on every RCR level), the tables before, the trusted path:
   `tests/helmholtz/build.rs` (`the_rcr_m2l_tables_are_built_where_read`: every M2L setting and the
   form at 10⁻¹⁰, levels taken whole and in part; the levels with M2L tables and blocks, every pair
   body bit for bit the hook's, fewer bytes) and `check_m2l_tables` in `tests/helmholtz_fmm.rs` (in
   `check_diagonal`, both settings and the form at 0.1 under Rotation, which takes some level whole:
-  the levels on every rank, the output bit for bit the hook's). `helmholtz_fmm` at one rank,
+  the levels on every rank, the output bit for bit the hook's; the whole-level run also at 2
+  threads and against the one-rank FMM). `helmholtz_fmm` at one rank,
   opt-level 1: 55 s on the M6.
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread

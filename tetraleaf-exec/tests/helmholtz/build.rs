@@ -266,6 +266,8 @@ fn the_rcr_m2l_tables_are_built_where_read() {
             part += usize::from(classes > 0 && classes < 34);
             dropped += usize::from(l >= 2 && !read);
         }
+        // Fewer bytes where a level lost its tables: every block set fits the budget here, so
+        // no freed budget stores another level's blocks in their place.
         let some_dropped = (2..degrees.len()).any(|l| !op.tables().has_m2l(l));
         if some_dropped {
             assert!(op.tables().bytes() < all.tables().bytes(), "{what}");

@@ -60,10 +60,12 @@ included, before the RCR tables, with every output unchanged bit for bit.
   bytes where some level drops. Plus the existing `the_unbuilt_operator_builds_the_settings_tables`
   (the unbuilt operator's one build against the chain of setters, now under the new rule).
 - `tetraleaf-exec/tests/helmholtz_fmm.rs`, `check_m2l_tables` (in `check_diagonal`, on its cube at
-  kD = 40 + 2i and clusters at kD = 20, under the library's Auto with free form costs, where a level
-  takes every class, and Rotation with the form): the output bit for bit the FMM with
-  `m2l_tables_everywhere(true)`, the levels' M2L tables as above on every rank, 2 threads and the
-  one-rank FMM bit for bit.
+  kD = 40 + 2i and clusters at kD = 20: `HelmholtzDiagonal::Rule` under Rotation and under the
+  library's M2L Auto, whose levels with waves or Batched lose their tables, and
+  `Tolerance(0.1)` under Rotation, which takes some level whole): the levels' M2L tables as above
+  on every rank, the output bit for bit the FMM with `m2l_tables_everywhere(true)`; 2 threads and
+  the one-rank FMM bit for bit (the Rule runs by `check_diagonal`'s own checks, the whole-level run
+  by its own).
 - Every existing operator and FMM check runs on the new tables (a read of a missing table panics).
 
 H6/H4 gate rules: no bound, degree, tolerance or rule changes (only which tables are built), so no

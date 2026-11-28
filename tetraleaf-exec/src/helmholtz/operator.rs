@@ -1945,8 +1945,9 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         };
         timings.diagonal += clock.elapsed();
         // The levels with an RCR pair (Helmholtz CH2.2b1): an RCR level that the diagonal form
-        // does not take whole. Only they read RCR's M2L tables and blocks (`Kernel::m2l`'s
-        // dispatch), so only they get them; with the test hook every level from 2 gets M2L
+        // does not take whole. Only they read RCR's M2L tables and blocks (the pair body's
+        // dispatch in `Kernel::m2l`, the level call's in `FmmOperator::m2l`, and the diagonal
+        // level call's RCR pairs, the offsets outside its classes), so only they get them; with the test hook every level from 2 gets M2L
         // tables, and every RCR level may store blocks, as before CH2.2b1.
         let everywhere = kernel.m2l_tables_everywhere;
         let read: Vec<bool> = (0..degrees.len())
@@ -2527,7 +2528,8 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
 
     /// Builds RCR's M2L tables on every level from 2 if `everywhere`, read or not, and lets
     /// every level whose M2L is RCR's store M2L blocks: the tables before Helmholtz CH2.2b1,
-    /// which builds them only on the levels with an RCR pair (module documentation, "M2L").
+    /// which builds them only on the levels with an RCR pair (module documentation, "The
+    /// tables' build").
     /// The tables are chosen again; no output changes. A test hook: the trusted path of the
     /// tests that hold the levels without them to every level's bits.
     #[doc(hidden)]
@@ -2612,7 +2614,9 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         self.kernel.gradients
     }
 
-    /// The RCR tables of the levels.
+    /// The RCR tables of the levels: M2M and L2L on every level, the M2L only on the levels with
+    /// an RCR pair (`HelmholtzTables::has_m2l`; Helmholtz CH2.2b1, module documentation, "The
+    /// tables' build").
     pub fn tables(&self) -> &HelmholtzTables<T> {
         &self.kernel.tables
     }

@@ -67,6 +67,10 @@ def runs(directory, cases):
     print("| --- |" + " ---: |" * 14 + " --- |")
     for case in cases:
         got = {run: launch(directory, case, run) for side in SIDES.values() for run in side}
+        failed = [r for r, g in got.items() if g["run"] is None or g["build"] is None]
+        if failed:
+            print(f"| {case} | failed launch: {', '.join(failed)} |" + " – |" * 14)
+            continue
         side = {}
         for name, both in SIDES.items():
             side[name] = {
