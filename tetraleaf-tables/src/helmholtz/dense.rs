@@ -13,6 +13,10 @@
 //! the other in offset order, 316 · 2n² values a level (21 MB at p = 7 in f64, 331 MB at
 //! p = 15, 983 MB at p = 20).
 //!
+//! For Yukawa (k̂₀ = iκ̂₀, Helmholtz CH2.1a) the M2L is real, from a real multipole to a real
+//! local (`HelmholtzTables`' "Yukawa"): one real n × n matrix A per offset, column j the
+//! local of e_j in one plane, 316 n² values a level ([`DenseM2l::local_planes`] 1).
+//!
 //! # Build
 //!
 //! [`DenseM2l::build`] builds [`HelmholtzTables`] in f64 for the same k̂₀ and degrees, the
@@ -38,8 +42,9 @@
 //! [`DenseM2l::m2l`] adds the M2L of `vectors` multipoles to their locals, per vector the
 //! one-vector operation, each product and sum rounded apart (as `MatrixSet::apply`):
 //!
-//! - one plane (the real multipole of real k and real charges):
-//!   L\[r\] ← L\[r\] + A\[r, k\] M\[k\] for k = 0, 1, …, n − 1 in turn, over the 2n rows;
+//! - one plane (the real multipole of real k and real charges, and Yukawa's):
+//!   L\[r\] ← L\[r\] + A\[r, k\] M\[k\] for k = 0, 1, …, n − 1 in turn, over the 2n rows
+//!   (n for Yukawa);
 //! - two planes: in one pass over the table, for k = 0, 1, …, n − 1 in turn,
 //!   L_r\[r\] ← (L_r\[r\] + A_r\[r, k\] M_r\[k\]) − A_i\[r, k\] M_i\[k\] and
 //!   L_i\[r\] ← (L_i\[r\] + A_i\[r, k\] M_r\[k\]) + A_r\[r, k\] M_i\[k\], over the n rows.
@@ -60,22 +65,40 @@ use crate::parts::{Parts, Serial};
 pub struct DenseM2l<T: RealScalar> {
     /// Per level its degree and, if dense, its 316 matrices.
     levels: Vec<(usize, Option<Vec<T>>)>,
+    /// The planes of a local: 2, or 1 for Yukawa.
+    local_planes: usize,
 }
 
 impl<T: RealScalar> DenseM2l<T> {
-    /// The bytes of one level's 316 matrices at degree p: 316 · 2 (p + 1)⁴ values of T.
+    /// The bytes of one level's 316 matrices at degree p: 316 · 2 (p + 1)⁴ values of T
+    /// ([`level_bytes_for`](Self::level_bytes_for) with two local planes).
     pub fn level_bytes(p: usize) -> usize {
+        Self::level_bytes_for(p, 2)
+    }
+
+    /// The bytes of one level's 316 matrices at degree p into locals of `local_planes`
+    /// planes (2, or 1 for Yukawa; Helmholtz CH2.1a): 316 · `local_planes` (p + 1)⁴ values
+    /// of T.
+    pub fn level_bytes_for(p: usize, local_planes: usize) -> usize {
         let n = Layout::new(p).len();
-        M2L_OFFSET_COUNT * 2 * n * n * size_of::<T>()
+        M2L_OFFSET_COUNT * local_planes * n * n * size_of::<T>()
     }
 
     /// The levels whose tables fit in `budget` bytes, from the finest level up; never levels
-    /// 0 and 1 (module documentation, "Levels and the budget").
+    /// 0 and 1 (module documentation, "Levels and the budget"):
+    /// [`select_for`](Self::select_for) with two local planes.
     pub fn select(degrees: &[usize], budget: usize) -> Vec<bool> {
+        Self::select_for(degrees, budget, 2)
+    }
+
+    /// As [`select`](Self::select), for locals of `local_planes` planes (2, or 1 for
+    /// Yukawa; Helmholtz CH2.1a), each level weighed by
+    /// [`level_bytes_for`](Self::level_bytes_for).
+    pub fn select_for(degrees: &[usize], budget: usize, local_planes: usize) -> Vec<bool> {
         let mut chosen = vec![false; degrees.len()];
         let mut left = budget;
         for (l, &p) in degrees.iter().enumerate().skip(2).rev() {
-            let bytes = Self::level_bytes(p);
+            let bytes = Self::level_bytes_for(p, local_planes);
             if bytes <= left {
                 left -= bytes;
                 chosen[l] = true;
@@ -118,12 +141,16 @@ impl<T: RealScalar> DenseM2l<T> {
             levels.iter().take(2).all(|&on| !on),
             "no dense M2L on levels 0 and 1: they have no V list"
         );
+        // As `HelmholtzTables`: Re k = 0 is Yukawa's real path, one local plane.
+        let local_planes = if k_root.re == 0.0 { 1 } else { 2 };
         if !levels.contains(&true) {
             return Self {
                 levels: degrees.iter().map(|&p| (p, None)).collect(),
+                local_planes,
             };
         }
         let tables = m2l_tables(k_root, degrees, levels, parts);
+        debug_assert_eq!(tables.local_planes(), local_planes);
         let all: Vec<usize> = (0..M2L_OFFSET_COUNT).collect();
         let levels = degrees
             .iter()
@@ -131,7 +158,16 @@ impl<T: RealScalar> DenseM2l<T> {
             .enumerate()
             .map(|(l, (&p, &on))| (p, on.then(|| matrices_on(&tables, l, &all, parts))))
             .collect();
-        Self { levels }
+        Self {
+            levels,
+            local_planes,
+        }
+    }
+
+    /// The planes of a local: 1 for Yukawa (a real n × n matrix per offset), else 2 (module
+    /// documentation, "Layout").
+    pub fn local_planes(&self) -> usize {
+        self.local_planes
     }
 
     /// The number of levels.
@@ -158,8 +194,8 @@ impl<T: RealScalar> DenseM2l<T> {
             .sum()
     }
 
-    /// The 2n × n matrix of offset index `d` on `level`, column-major (module
-    /// documentation, "Layout").
+    /// The 2n × n matrix of offset index `d` on `level`, column-major, or Yukawa's n × n
+    /// (module documentation, "Layout").
     ///
     /// # Panics
     ///
@@ -170,19 +206,19 @@ impl<T: RealScalar> DenseM2l<T> {
         let matrices = matrices
             .as_ref()
             .unwrap_or_else(|| panic!("no dense M2L on level {level}"));
-        let size = 2 * Layout::new(*p).len().pow(2);
+        let size = self.local_planes * Layout::new(*p).len().pow(2);
         &matrices[d * size..(d + 1) * size]
     }
 
     /// M2L on `level` at the offset index `d`: adds the translations of `vectors`
     /// multipoles of `planes` planes (2, or 1 for the real multipoles of real k and real
-    /// charges) to the target's `vectors` complex locals (module documentation,
-    /// "Application").
+    /// charges) to the target's `vectors` complex locals, or for Yukawa of `vectors` real
+    /// multipoles to real locals (one plane each; module documentation, "Application").
     ///
     /// # Panics
     ///
-    /// If `level` has no dense tables, d ≥ 316, `planes` is not 1 or 2, or a slice is not
-    /// `vectors` expansions at the level's degree.
+    /// If `level` has no dense tables, d ≥ 316, `planes` is not 1 or 2 (1 for Yukawa), or a
+    /// slice is not `vectors` expansions at the level's degree.
     pub fn m2l(
         &self,
         level: usize,
@@ -194,12 +230,17 @@ impl<T: RealScalar> DenseM2l<T> {
     ) {
         let a = self.matrix(level, d);
         assert!(matches!(planes, 1 | 2), "{planes} multipole planes");
+        assert!(
+            self.local_planes == 2 || planes == 1,
+            "Yukawa's M2L takes one multipole plane, got {planes}"
+        );
         let n = Layout::new(self.levels[level].0).len();
+        let rows = self.local_planes * n;
         assert_eq!(multipole.len(), vectors * planes * n, "multipole length");
-        assert_eq!(local.len(), vectors * 2 * n, "local length");
+        assert_eq!(local.len(), vectors * rows, "local length");
         for (m, l) in multipole
             .chunks_exact(planes * n)
-            .zip(local.chunks_exact_mut(2 * n))
+            .zip(local.chunks_exact_mut(rows))
         {
             apply(a, n, planes, m, l);
         }
@@ -244,7 +285,7 @@ pub(super) fn matrices_on<T: RealScalar>(
 
 /// The matrices of `offsets` on `level`, one after the other: column j of each Rotation's
 /// M2L of e_j (one real plane) into zeros, in f64, rounded to T (module documentation,
-/// "Build").
+/// "Build"); a column has the local's planes (two, or Yukawa's one).
 pub(super) fn matrices<T: RealScalar>(
     tables: &HelmholtzTables<f64>,
     level: usize,
@@ -256,10 +297,11 @@ pub(super) fn matrices<T: RealScalar>(
     for j in 0..n {
         identity[j * n + j] = 1.0;
     }
-    let mut columns = vec![0.0; 2 * n * n];
-    let mut values = Vec::with_capacity(offsets.len() * 2 * n * n);
+    let size = tables.local_planes() * n * n;
+    let mut columns = vec![0.0; size];
+    let mut values = Vec::with_capacity(offsets.len() * size);
     for d in offsets {
-        // Vector j of n is e_j; its local is column j, two planes.
+        // Vector j of n is e_j; its local is column j, of the local's planes.
         columns.fill(0.0);
         tables.m2l(level, d, &identity, 1, &mut columns, n, &mut scratch);
         values.extend(columns.iter().map(|&v| T::from_f64(v)));
@@ -268,11 +310,12 @@ pub(super) fn matrices<T: RealScalar>(
 }
 
 /// Adds the M2L of one multipole `m` of `planes` planes by the 2n × n matrix `a` to one
-/// complex local `l` (module documentation, "Application").
+/// complex local `l` (module documentation, "Application"); with one plane, by a matrix of
+/// `l.len()` rows (Yukawa's n × n into one real plane).
 #[inline]
 pub(super) fn apply<T: RealScalar>(a: &[T], n: usize, planes: usize, m: &[T], l: &mut [T]) {
     if planes == 1 {
-        for (column, &x) in a.chunks_exact(2 * n).zip(m) {
+        for (column, &x) in a.chunks_exact(l.len()).zip(m) {
             for (y, &e) in l.iter_mut().zip(column) {
                 *y = *y + e * x;
             }

@@ -61,7 +61,26 @@
 //!
 //! For real k (Im k = 0) the M2M and L2L coefficients are real (§3.1): the tables keep
 //! their real parts ([`HelmholtzTables::real_shifts`]) and apply them to each plane of an
-//! expansion, the real shifts of proposal §5.2. Everything else is complex.
+//! expansion, the real shifts of proposal §5.2. Everything else is complex, but for Yukawa.
+//!
+//! # Yukawa
+//!
+//! For k = iκ (Re k̂₀ = 0; Helmholtz CH2.1a, proposal §5.5) the tables are those of Yukawa's
+//! real path, the real stored expansions M̂^Y = i⁻ⁿ M̂ and L̂^Y = iⁿ L̂ of CONVENTIONS §3.15
+//! ("Yukawa's real form"), as `rcr`'s `_yukawa` forms translate them: every step real
+//! ([`HelmholtzTables::is_yukawa`]; `real_shifts` too), each coefficient the real part of
+//!
+//! ```text
+//! M2M  i^{n−n′} Ê_{n′n} · (s_c/s_P)ⁿ s_P^{n−n′}
+//! L2L  i^{n′−n} Ê_{n′n} · (s_c/s_P)^{n′} s_P^{n′−n} · ½
+//! M2L  −i^{n+n′} Ê_{n′n} · 4πκ e^{2β − κ|t|}
+//! ```
+//!
+//! formed in f64 as `rcr` forms it and rounded to T. M2L then takes one multipole plane into
+//! one local plane ([`HelmholtzTables::local_planes`]): a complex-charge vector of Yukawa is
+//! two real vectors (`tetraleaf-exec`'s densities). Under strong damping an M2L's output is
+//! about e^{−κ(|t| − 2a)} of its input and the coaxial sum cancels; the tables cancel as
+//! `rcr` does, and agree with it relative to the output (`tests/helmholtz/yukawa.rs`).
 //!
 //! # Shifts and their classes
 //!
@@ -116,7 +135,7 @@
 //! [`HelmholtzTables::m2m`], [`l2l`](HelmholtzTables::l2l) and
 //! [`m2l`](HelmholtzTables::m2l) translate m expansions per box, one after the other, each
 //! of one or two planes of (q_l + 1)² values (real part, then imaginary part) in the layout
-//! of CONVENTIONS §3.6, and add (+=) into the output. The steps restate `rcr`'s private
+//! of CONVENTIONS §3.6 (Yukawa's one plane), and add (+=) into the output. The steps restate `rcr`'s private
 //! `translate`, in its order of operations: per plane the 2 × 2 rotations by −φ and the
 //! transposed y-block; per output slot the coaxial sum over the input degrees, a complex
 //! product per term (an input of one plane as Im = 0) or, for the real shifts, a real
@@ -195,6 +214,8 @@ pub const DEFAULT_BLOCK_BUDGET: usize = 512 << 20;
 #[derive(Clone, Debug)]
 pub struct HelmholtzTables<T: RealScalar> {
     real_shifts: bool,
+    /// Yukawa's real path (Re k = 0, Helmholtz CH2.1a): every step real, one local plane.
+    yukawa: bool,
     /// Whether the M2M and L2L tables were built ([`TableChoice::translations`]).
     translations: bool,
     levels: Vec<LevelTables<T>>,
@@ -394,8 +415,8 @@ impl<T: RealScalar> HelmholtzTables<T> {
     ///
     /// # Panics
     ///
-    /// Unless k̂₀ is finite and nonzero with Re ≥ 0, Im ≥ 0 and Re > 0 (Yukawa's real path,
-    /// Re k = 0, is not served here), and `degrees` is not empty; and as the coaxial
+    /// Unless k̂₀ is finite and nonzero with Re ≥ 0 and Im ≥ 0 (Re = 0 is Yukawa's real path,
+    /// module documentation, "Yukawa"), and `degrees` is not empty; and as the coaxial
     /// builders of `tetraleaf_math::coaxial` (for instance where the (S|R) start column leaves
     /// the f64 range); and if a coefficient is not finite, as the M2M and L2L power factors
     /// (s_c/s_P)ⁿ s_P^{n−n′} are where p log₁₀(1/s_P) exceeds about 300 (`rcr`'s limit, its
@@ -453,8 +474,8 @@ impl<T: RealScalar> HelmholtzTables<T> {
             "k̂₀ must be finite"
         );
         assert!(
-            k_root.re > 0.0 && k_root.im >= 0.0,
-            "k̂₀ must have Re > 0 and Im ≥ 0 (Yukawa's real path is not served)"
+            (k_root.re > 0.0 && k_root.im >= 0.0) || (k_root.re == 0.0 && k_root.im > 0.0),
+            "k̂₀ must be nonzero with Re ≥ 0 and Im ≥ 0, got {k_root:?}"
         );
         assert!(!degrees.is_empty(), "no levels");
         assert!(
@@ -469,7 +490,9 @@ impl<T: RealScalar> HelmholtzTables<T> {
         {
             assert_eq!(mask.len(), nlevels, "one entry per level in a level mask");
         }
-        let real_shifts = k_root.im == 0.0;
+        // Yukawa (Re k = 0): the real tables of `rcr`'s `_yukawa` forms.
+        let yukawa = k_root.re == 0.0;
+        let real_shifts = k_root.im == 0.0 || yukawa;
         let k_hat = |l: usize| k_root * (0.5f64).powi(l as i32);
 
         // The shifts' classes, from their integer directions (module documentation,
@@ -542,7 +565,16 @@ impl<T: RealScalar> HelmholtzTables<T> {
                         p_child,
                         p_parent,
                         real_shifts,
-                        |m, n_out, n_in| m2m.get(m, n_out, n_in) * power_ratio(sc, n_in, sp, n_out),
+                        |m, n_out, n_in| {
+                            let e = m2m.get(m, n_out, n_in);
+                            if yukawa {
+                                // i^{n−n′} Ê (`rcr::m2m_yukawa`).
+                                let e = real_part_times_i_power(n_in as isize - n_out as isize, e);
+                                Complex::new(e * power_ratio(sc, n_in, sp, n_out), 0.0)
+                            } else {
+                                e * power_ratio(sc, n_in, sp, n_out)
+                            }
+                        },
                     ))
                 }
                 Task::Down(l) => {
@@ -556,8 +588,15 @@ impl<T: RealScalar> HelmholtzTables<T> {
                         p_child,
                         real_shifts,
                         |m, n_out, n_in| {
+                            let e = l2l.get(m, n_out, n_in);
                             // ½: the change of units from the parent's to the child's.
-                            l2l.get(m, n_out, n_in) * power_ratio(sc, n_out, sp, n_in) * 0.5
+                            if yukawa {
+                                // i^{n′−n} Ê (`rcr::l2l_yukawa`).
+                                let e = real_part_times_i_power(n_out as isize - n_in as isize, e);
+                                Complex::new(e * power_ratio(sc, n_out, sp, n_in) * 0.5, 0.0)
+                            } else {
+                                e * power_ratio(sc, n_out, sp, n_in) * 0.5
+                            }
                         },
                     ))
                 }
@@ -574,10 +613,24 @@ impl<T: RealScalar> HelmholtzTables<T> {
                     // |t| = 2 |d| in the level's units.
                     let t = 2.0 * (distances[d] as f64).sqrt();
                     let table = CoaxialTable::m2l(k, t, a, s, q, q);
-                    let factor = four_pi_ik(k) * (beta + beta - k.im * t).exp();
-                    Part::Shift(Shift::new(q, q, false, |m, n_out, n_in| {
-                        table.get(m, n_out, n_in) * factor
-                    }))
+                    if yukawa {
+                        // −i^{n+n′} Ê with 4πκ e^{2β − κ|t|} (`rcr::m2l_yukawa`).
+                        let kappa = k.im;
+                        let factor =
+                            4.0 * core::f64::consts::PI * kappa * (beta + beta - kappa * t).exp();
+                        Part::Shift(Shift::new(q, q, true, |m, n_out, n_in| {
+                            let e = real_part_times_i_power(
+                                (n_in + n_out) as isize,
+                                table.get(m, n_out, n_in),
+                            );
+                            Complex::new(-(e * factor), 0.0)
+                        }))
+                    } else {
+                        let factor = four_pi_ik(k) * (beta + beta - k.im * t).exp();
+                        Part::Shift(Shift::new(q, q, false, |m, n_out, n_in| {
+                            table.get(m, n_out, n_in) * factor
+                        }))
+                    }
                 }
                 Task::Blocks(l, a) => {
                     let (c, s) = m2l_angles[a];
@@ -637,6 +690,7 @@ impl<T: RealScalar> HelmholtzTables<T> {
 
         Self {
             real_shifts,
+            yukawa,
             translations: choice.translations,
             p_max: m2l_degrees.iter().copied().max().unwrap_or(0),
             levels,
@@ -731,9 +785,22 @@ impl<T: RealScalar> HelmholtzTables<T> {
         self.levels[level].k_hat
     }
 
-    /// Whether the M2M and L2L coefficients are real (real k), applied to each plane.
+    /// Whether the M2M and L2L coefficients are real (real k, and Yukawa), applied to each
+    /// plane.
     pub fn real_shifts(&self) -> bool {
         self.real_shifts
+    }
+
+    /// Whether these are Yukawa's real tables (k̂₀ = iκ̂₀; module documentation, "Yukawa";
+    /// Helmholtz CH2.1a): every step real, M2L from one real plane into one real plane.
+    pub fn is_yukawa(&self) -> bool {
+        self.yukawa
+    }
+
+    /// The planes of a local that [`m2l`](Self::m2l) writes: 1 for Yukawa, else 2 (a
+    /// complex local).
+    pub fn local_planes(&self) -> usize {
+        if self.yukawa { 1 } else { 2 }
     }
 
     /// The number of M2L distance classes |d|² of the 316 offsets, 15, one coaxial table
@@ -871,12 +938,13 @@ impl<T: RealScalar> HelmholtzTables<T> {
 
     /// M2L on `level` ≥ 2 at the V-list offset index `d`: adds the `vectors` multipoles of
     /// the source, each of `multipole_planes` planes (2, or 1 for real k and real charges),
-    /// translated to the target's complex locals (two planes each).
+    /// translated to the target's complex locals (two planes each); for Yukawa the real
+    /// multipoles (one plane) to real locals (one plane, [`local_planes`](Self::local_planes)).
     ///
     /// # Panics
     ///
-    /// If `level` < 2, d ≥ 316, `multipole_planes` is not 1 or 2, or a slice is not
-    /// `vectors` expansions at the level's [`m2l_degree`](Self::m2l_degree).
+    /// If `level` < 2, d ≥ 316, `multipole_planes` is not 1 or 2 (1 for Yukawa), or a slice
+    /// is not `vectors` expansions at the level's [`m2l_degree`](Self::m2l_degree).
     #[allow(clippy::too_many_arguments)]
     pub fn m2l(
         &self,
@@ -904,19 +972,29 @@ impl<T: RealScalar> HelmholtzTables<T> {
             &tables.m2l[keys.distance],
             blocks,
             keys.azimuth,
-            (multipole, multipole_planes, tables.q),
-            (local, 2, tables.q),
+            (multipole, self.m2l_input_planes(multipole_planes), tables.q),
+            (local, self.local_planes(), tables.q),
             vectors,
             Step3::Add,
             scratch,
         );
     }
 
-    /// The values of `vectors` locals at `level`'s [`m2l_degree`](Self::m2l_degree), two
-    /// planes each, that [`m2l_contribution`](Self::m2l_contribution) writes:
-    /// `vectors` · 2 (q_l + 1)².
+    /// The values of `vectors` locals at `level`'s [`m2l_degree`](Self::m2l_degree), of
+    /// [`local_planes`](Self::local_planes) planes each, that
+    /// [`m2l_contribution`](Self::m2l_contribution) writes: `vectors` · 2 (q_l + 1)², or
+    /// `vectors` · (q_l + 1)² for Yukawa.
     pub fn m2l_contribution_len(&self, level: usize, vectors: usize) -> usize {
-        vectors * 2 * Layout::new(self.levels[level].q).len()
+        vectors * self.local_planes() * Layout::new(self.levels[level].q).len()
+    }
+
+    /// `multipole_planes` of an M2L, checked: Yukawa's M2L takes one plane.
+    fn m2l_input_planes(&self, multipole_planes: usize) -> usize {
+        assert!(
+            !self.yukawa || multipole_planes == 1,
+            "Yukawa's M2L takes one multipole plane, got {multipole_planes}"
+        );
+        multipole_planes
     }
 
     /// [`m2l`](Self::m2l) without its add (Helmholtz CH4.0i): writes the pair's contribution,
@@ -958,8 +1036,8 @@ impl<T: RealScalar> HelmholtzTables<T> {
             &tables.m2l[keys.distance],
             blocks,
             keys.azimuth,
-            (multipole, multipole_planes, tables.q),
-            (contribution, 2, tables.q),
+            (multipole, self.m2l_input_planes(multipole_planes), tables.q),
+            (contribution, self.local_planes(), tables.q),
             vectors,
             Step3::Store,
             scratch,
@@ -1298,6 +1376,17 @@ fn index(n: usize, m: isize) -> usize {
 /// aⁿ / b^{n′}, formed as (a/b)ⁿ b^{n − n′} (as `rcr`).
 fn power_ratio(a: f64, n: usize, b: f64, n_prime: usize) -> f64 {
     (a / b).powi(n as i32) * b.powi(n as i32 - n_prime as i32)
+}
+
+/// The real part of i^j e: Re(i^j e) for j mod 4 = 0, 1, 2, 3 is e.re, −e.im, −e.re, e.im
+/// (as `rcr`): the factor of Yukawa's real tables.
+fn real_part_times_i_power(j: isize, e: Complex<f64>) -> f64 {
+    match j.rem_euclid(4) {
+        0 => e.re,
+        1 => -e.im,
+        2 => -e.re,
+        _ => e.im,
+    }
 }
 
 /// 4π ik = 4π (−Im k + i Re k) (as `rcr`).
