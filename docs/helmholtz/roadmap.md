@@ -10,8 +10,8 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 Status (2026-11-28, after CH2.1c): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). Item 15, Yukawa on
 the host: CH2.1a and CH2.1b merged (D4 signed off: one operator); CH2.1c (Yukawa's batched P2M) is done
-in its PR, which completes CH2.1 and asks whether CH2.1e (Yukawa's batched L2P, added there) goes on
-the list next; then CH2.2, CH2.3, CH2.1d. Eight H4 tasks stay open off the list, and so does CH4.9c.
+in its PR, which completes CH2.1 and added CH2.1e (Yukawa's batched L2P), on the list next by its
+sign-off; then CH2.2, CH2.3, CH2.1d. Eight H4 tasks stay open off the list, and so does CH4.9c.
 The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0,
 CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in
 `progress.md` and in this file's history (`git show 4b5b37f:docs/helmholtz/roadmap.md`); until H1.G
@@ -117,9 +117,10 @@ on the diagonal levels).
 14. CH4.9a (CH4.9a1, CH4.9a2a, CH4.9a2b; split on 2026-11-26 and 2026-11-27), CH4.9b (CH4.9b1, CH4.9b2; split on 2026-11-27) The Helmholtz leaf expansions P2M and
     L2P by SIMD kernels (added on 2026-11-26 after CH4.6a2, the user: "Yes. Add P2M and L2P to the
     priority list as tasks")
-15. CH2.1 (CH2.1a–c; split on 2026-11-28), CH2.2, CH2.3, CH2.1d, CH2.5 and H2.G Yukawa on the host
-    (added on 2026-11-24 at the H4 gate; D4 signed off at CH2.1b; CH2.1d added at CH2.1b, after
-    CH2.3, the user on #274, 2026-11-28: "Q1 and Q2 as recommended")
+15. CH2.1 (CH2.1a–c; split on 2026-11-28), CH2.1e, CH2.2, CH2.3, CH2.1d, CH2.5 and H2.G Yukawa on the
+    host (added on 2026-11-24 at the H4 gate; D4 signed off at CH2.1b; CH2.1d added at CH2.1b, after
+    CH2.3, the user on #274, 2026-11-28: "Q1 and Q2 as recommended"; CH2.1e added at CH2.1c, after
+    it, the user on #275, 2026-11-28: "Q1 and Q2 as recommended")
 16. CH5.1, CH5.2, CH5.3 and H5.G Complex wavenumber (added on 2026-11-24 at the H4 gate)
 
 Off the list, in file order: CH0.8b, CH0.5 and H0.G; CHR.3 and CH4.6b (moved off at CH0.9 by D7, the user on #264, 2026-11-26: "Q1-3 as recommended"); CH4.0f (the user, 2026-11-12, on #211);
@@ -368,14 +369,16 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
 - [x] **CH2.1c Yukawa's batched P2M.** Report: `tetraleaf-validate/results/helmholtz-ch2-1c.md`.
   `LeafP2m` restates `p2m_yukawa` (îₙ per lane, e per lane, flushed below τ); within its contract
   (0.80 of C = 10 in f64, 1.54 in f32); the FMM's errors 1.0000× the per-point path's on CH2.1b's 114
-  cases and the constant density, within ε; P2M 0.29–0.34× on Kathleen. CH2.1e added (Yukawa's L2P).
+  cases and the constant density, within ε; P2M 0.29–0.34× on Kathleen. Signed off on #275 ("Q1 and
+  Q2 as recommended"): CH2.1e (Yukawa's L2P) on the list next; the constant density's ∇φ to CH2.3.
 - [ ] **CH2.1e Yukawa's batched L2P.** `LeafL2p` on Yukawa's real path as CH2.1c's `LeafP2m`:
   `l2p_yukawa` restated with gradients (îₙ and îₙ′ per lane by `modified_i`, e^{κr − β} per lane, the
   tangential factor's limit at the centre), `Densities::l2p_kernel` on it, the real output columns of
   Yukawa's real path. *Done when:* its contract as CH4.9b2's, a target's bits independent of its
   leaf, batch and position, the FMM's errors within 1.01× the per-point path's on CH2.1b's cases,
   L2P's time per level on Kathleen. *Needs:* CH2.1c. Added at CH2.1c (Yukawa's reference L2P 15–25 %
-  of an evaluation after it, report §4); its place on the priority list is #275's question 1.
+  of an evaluation after it, report §4); on the priority list in item 15 after CH2.1c (#275's
+  question 1; the user, 2026-11-28: "Q1 and Q2 as recommended").
 - [ ] **CH2.2 Per-level tables with per-level cache keys.** *Done when:* build cost and
   memory reported; levels reused across an octave sweep. *Needs:* CH2.1, D4.
 - [ ] **CH2.3 Pruning and the calibration of p_l.** *Done when:* the relative error within
@@ -391,7 +394,7 @@ history (`git show 8475009:docs/helmholtz/roadmap.md`).
   (a cap or surface refined 100×, or 30–40 points per wavelength), where the plateau's levels may
   stack as W2's cap stacked on the high-frequency branch (CH4.8a). Also (CH2.1c, report §3): the
   constant density on W1 at 10⁶ points, κD = 100, 10⁻⁶ misses ε on the gradient (∇φ 2.6 ε, the same
-  under either P2M); and W2 has no Yukawa form (its cap is refined by Re k, so on Yukawa it holds no
+  under either P2M; here by #275's question 2, the user, 2026-11-28: "Q1 and Q2 as recommended"); and W2 has no Yukawa form (its cap is refined by Re k, so on Yukawa it holds no
   point, as W1's default does): a fixed-N W2 for the check above. *Needs:* CH2.1,
   CH0.7.
 - [ ] **CH2.5 Gate: Yukawa against FMM3D.** *Done when:* both codes against the same sampled

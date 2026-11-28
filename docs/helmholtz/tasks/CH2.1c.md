@@ -133,7 +133,8 @@ complex vectors in the f64 contract, a Yukawa charge-length refusal, a kind chec
 (2⁻⁹⁰⁰) is not reached by the test points.
 
 ## Open questions
-For sign-off on the PR (the report §5):
+For sign-off on the PR (the report §5), signed off 2026-11-28, the user on #275: "Q1 and Q2 as
+recommended":
 1. CH2.1e (Yukawa's batched L2P) on the priority list in item 15 right after CH2.1c (recommended), off
    the list, or not at all.
 2. The constant density's gradient on Yukawa recorded on CH2.3's line (recommended; done on the

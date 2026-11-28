@@ -5422,11 +5422,12 @@ request, using this template:
   Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path); locust and the
   M6 timings (the kernel is safe Rust without ISA dispatch; one machine class measured, as at
   CH2.1b).
-- Decisions: none signed off yet. Questions 1 and 2 of the PR are for sign-off:
-  - CH2.1e on the priority list right after CH2.1c;
+- Decisions: questions 1 and 2 of #275 signed off 2026-11-28 (the user: "Q1 and Q2 as
+  recommended"):
+  - CH2.1e on the priority list in item 15 right after CH2.1c;
   - the constant density's gradient as an Also on CH2.3.
 - Laplace: not touched (`tetraleaf-tables`' Helmholtz `leaf` module and `tetraleaf-exec`'s
   Helmholtz densities, operator docs and tests only).
 - Follow-ups:
-  - CH2.1e (Yukawa's batched L2P; roadmap line added, its place on the list question 1);
+  - CH2.1e (Yukawa's batched L2P; roadmap line added, on the list next);
   - CH2.3's Also (the constant density's gradient on Yukawa; W2 needs a fixed-N form for Yukawa).

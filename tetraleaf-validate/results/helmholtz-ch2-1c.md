@@ -158,6 +158,8 @@ CH4.9b2's kernel, 0.17–0.27× its reference.
 
 ## 5. Questions for sign-off
 
+Signed off 2026-11-28, the user on #275: "Q1 and Q2 as recommended".
+
 1. **Yukawa's batched L2P.** Add CH2.1e, `LeafL2p` on Yukawa's real path (restating `l2p_yukawa`,
    with gradients; îₙ and îₙ′ per lane; the contract as CH4.9b2's; the FMM within 1.01×), to the
    priority list in item 15 right after CH2.1c (recommended: L2P is 15–25 % of Yukawa's evaluation
