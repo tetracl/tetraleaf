@@ -345,9 +345,17 @@
 //! # The tables' build
 //!
 //! Every setting that changes the tables chooses them again (`select_tables`), each level's
-//! M2L first, then the RCR tables: built again only where their degrees change, and with
-//! the M2L y-blocks stored for the levels whose M2L is RCR's alone (Helmholtz CH4.0h; a
-//! level with waves, Batched, Dense or Classes never reads them). The builds run their parts
+//! M2L first (the diagonal form's classes included, since Helmholtz CH2.2b1), then the RCR
+//! tables: built again only where their degrees or their levels with M2L tables change. RCR's
+//! M2L coaxial tables and stored M2L y-blocks are built only on the levels with an RCR pair
+//! (Helmholtz CH2.2b1; the y-blocks since CH4.0h on the levels whose M2L is RCR's): a level
+//! with waves, Batched, Dense or Classes never reads them, nor a level that the diagonal form
+//! takes whole, with every V offset in its classes (under the defaults at kD ≥ 500 every level
+//! of W1; `tetraleaf-validate/results/helmholtz-ch2-2b1.md`). The tables of a level are the
+//! same function of the same inputs whichever levels are built, so the output is that of RCR
+//! M2L tables on every level bit for bit; the doc-hidden
+//! `HelmholtzOperator::with_m2l_tables_everywhere` builds them so, the tests' trusted path.
+//! The builds run their parts
 //! (`tetraleaf_tables::parts`) on the operator's pool, each part a function of its inputs alone,
 //! so the tables, and the output, are the serial build's bit for bit at every thread count;
 //! the scratch sets, one per thread, are made on the pool too. An operator from
@@ -371,7 +379,7 @@
 //! [`table_build`](HelmholtzOperator::table_build) reports the build per level: the parts built
 //! and reused, their thread-seconds and the level's bytes. The M2L tables of Dense, Classes,
 //! Batched, the exponential M2L and the diagonal form are built for each operator alone
-//! (CH2.2b keys them). The store is per process: each rank has its own.
+//! (CH2.2b2 and CH2.2b3 key them). The store is per process: each rank has its own.
 //!
 //! # Execution
 //!

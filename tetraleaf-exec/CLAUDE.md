@@ -1014,13 +1014,29 @@ CH4.9b2 (the batched P2M and L2P, below).
   equal when the same stores; default none) and `HelmholtzFmm::table_build`. `select_tables` builds
   the RCR tables (`build_in`, `set_m2l_blocks_in`) in the store, so operators of one process share
   each level's parts (k̂_l, degrees and shift class as the key); the output is the storeless one bit
-  for bit. Set before `build_tables`. The M2L families' tables are each operator's own until CH2.2b.
+  for bit. Set before `build_tables`. The M2L families' tables are each operator's own until CH2.2b2
+  and CH2.2b3.
   `tests/helmholtz/build.rs` (`the_operator_builds_its_tables_in_a_store`: Rotation, Auto at 10⁻⁶,
   Yukawa; cold, warm, k doubled with every RCR part of levels ≥ 3 reused; pair bodies bit for bit);
   `check_table_store` in `tests/helmholtz_fmm.rs` (the sphere and Yukawa's clusters at 30: the
   defaults and Rotation cold and warm at 2 threads, and Rotation at k doubled, each the storeless
   output bit for bit, the parts per level on every rank). `helmholtz_fmm` at one rank, opt-level 1:
   54 s on the M6.
+  Since Helmholtz CH2.2b1 (docs/helmholtz/tasks/CH2.2b1.md; tetraleaf-validate/results/helmholtz-ch2-2b1.md)
+  `select_tables` chooses the diagonal form before the RCR tables and builds RCR's M2L coaxial
+  tables and stored M2L blocks only on the levels with an RCR pair (`TableChoice::{m2l_levels,
+  block_levels}`): an RCR level that the form does not take whole (some V offset outside its
+  classes, `DiagonalM2l::has_offset`); never on a level with waves, Batched, Dense or Classes.
+  Keep every reader of RCR's M2L tables behind `Kernel::m2l`'s dispatch (waves, a diagonal offset,
+  Dense, Classes, Batched, else RCR): a read on a level without them panics. The doc-hidden
+  `HelmholtzOperator::with_m2l_tables_everywhere` and `HelmholtzFmmBuilder::m2l_tables_everywhere`
+  build them on every level from 2 (blocks on every RCR level), the tables before, the trusted path:
+  `tests/helmholtz/build.rs` (`the_rcr_m2l_tables_are_built_where_read`: every M2L setting and the
+  form at 10⁻¹⁰, levels taken whole and in part; the levels with M2L tables and blocks, every pair
+  body bit for bit the hook's, fewer bytes) and `check_m2l_tables` in `tests/helmholtz_fmm.rs` (in
+  `check_diagonal`, both settings and the form at 0.1 under Rotation, which takes some level whole:
+  the levels on every rank, the output bit for bit the hook's). `helmholtz_fmm` at one rank,
+  opt-level 1: 55 s on the M6.
 - Threading (from T10): rayon over the targets of a level call, in a pool owned by
   `Fmm`, opt-in (`threads`, default 1). The output is bit-identical for every thread
   count. No `unsafe`, no atomics, no global pool; per-thread scratch created at
