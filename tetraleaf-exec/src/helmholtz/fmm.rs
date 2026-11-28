@@ -516,6 +516,7 @@ pub struct HelmholtzFmmBuilder {
     p2p: P2pChoice,
     reference_leaves: bool,
     table_stores: Option<TableStores>,
+    m2l_tables_everywhere: bool,
     empty_boxes: bool,
     near_v: VNear,
     near_wx: WxNear,
@@ -583,6 +584,7 @@ impl HelmholtzFmmBuilder {
             p2p: P2pChoice::Auto,
             reference_leaves: false,
             table_stores: None,
+            m2l_tables_everywhere: false,
             empty_boxes: true,
             near_v: VNear::CostModel,
             near_wx: WxNear::CostModel,
@@ -1056,6 +1058,15 @@ impl HelmholtzFmmBuilder {
     /// one process: each rank has its own.
     pub fn table_store(mut self, stores: TableStores) -> Self {
         self.table_stores = Some(stores);
+        self
+    }
+
+    /// RCR's M2L tables on every level from 2, read or not (default `false`: only on the levels
+    /// with an RCR pair, Helmholtz CH2.2b1): the operator's
+    /// `HelmholtzOperator::with_m2l_tables_everywhere`, a test hook. No output changes.
+    #[doc(hidden)]
+    pub fn m2l_tables_everywhere(mut self, everywhere: bool) -> Self {
+        self.m2l_tables_everywhere = everywhere;
         self
     }
 
@@ -1622,6 +1633,7 @@ impl HelmholtzFmmBuilder {
         .with_p2p(self.p2p)
         .expect("the P2P kernel's ISA is available (checked in step 1)")
         .with_reference_leaves(self.reference_leaves)
+        .with_m2l_tables_everywhere(self.m2l_tables_everywhere)
         .with_table_store_option(
             self.table_stores
                 .as_ref()

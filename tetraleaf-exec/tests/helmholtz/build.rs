@@ -6,13 +6,14 @@
 //! pair bodies; its RCR tables store M2L blocks only on the levels whose M2L is RCR's, and
 //! the unbuilt operator reports the degrees given and no table. And (Helmholtz CH2.2a) the
 //! operator's RCR tables in a store: the operator without one bit for bit, cold, warm and at
-//! k doubled, and the parts reused per level.
+//! k doubled, and the parts reused per level. And (Helmholtz CH2.2b1) RCR's M2L tables only on
+//! the levels with an RCR pair, every pair body the bits of the tables on every level.
 
 use std::sync::Arc;
 
 use tetraleaf_exec::geometry::Domain;
 use tetraleaf_exec::helmholtz::{
-    ChargeKind, Densities, HelmholtzM2l, HelmholtzOperator, Wavenumber,
+    ChargeKind, Densities, HelmholtzDiagonal, HelmholtzM2l, HelmholtzOperator, Wavenumber,
 };
 use tetraleaf_math::Layout;
 use tetraleaf_octree::{MortonKey, PhysicalBox, morton};
@@ -194,6 +195,92 @@ fn the_unbuilt_operator_builds_the_settings_tables() {
         let n = Layout::new(degrees[2]).len();
         assert!(a.len() > n, "{what}");
     }
+}
+
+/// RCR's M2L tables only where an RCR pair reads them (Helmholtz CH2.2b1): under every M2L
+/// setting, and with the diagonal form at a tolerance that takes every class of levels 4 and 5
+/// and 32 of levels 2 and 3 (10⁻¹⁰ at these degrees), the levels with M2L tables are those from 2 whose M2L is Rotation's
+/// and that the form does not take whole (all 34 classes), the M2L blocks stored only there;
+/// with `with_m2l_tables_everywhere` (the tables before CH2.2b1) every level from 2 has them;
+/// and every pair body is that operator's bit for bit, with fewer table bytes where a level
+/// lost its tables.
+#[test]
+fn the_rcr_m2l_tables_are_built_where_read() {
+    let k = Wavenumber::new(30.0, 0.0).unwrap();
+    let degrees = [0, 0, 14, 9, 6, 4];
+    let pool = Arc::new(
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(3)
+            .build()
+            .unwrap(),
+    );
+    let cases = [
+        (HelmholtzM2l::Rotation, None, HelmholtzDiagonal::Off),
+        (HelmholtzM2l::Auto, Some(1e-6), HelmholtzDiagonal::Off),
+        (HelmholtzM2l::Auto, Some(5e-8), HelmholtzDiagonal::Off),
+        (HelmholtzM2l::PlaneWave, Some(1e-6), HelmholtzDiagonal::Off),
+        (HelmholtzM2l::Batched, None, HelmholtzDiagonal::Off),
+        (HelmholtzM2l::Dense, None, HelmholtzDiagonal::Off),
+        (HelmholtzM2l::Classes, None, HelmholtzDiagonal::Off),
+        (
+            HelmholtzM2l::Rotation,
+            None,
+            HelmholtzDiagonal::Tolerance(1e-10),
+        ),
+    ];
+    let (mut whole, mut part, mut dropped) = (0, 0, 0);
+    for (m2l, tolerance, diagonal) in cases {
+        let what = format!("{m2l:?} at {tolerance:?}, diagonal {diagonal:?}");
+        let densities = Densities::new(k.kind(), ChargeKind::Complex, 1);
+        let build = |everywhere: bool| {
+            settings(
+                HelmholtzOperator::unbuilt(
+                    k,
+                    densities,
+                    &domain(),
+                    &degrees,
+                    false,
+                    8,
+                    DEFAULT_BLOCK_BUDGET,
+                )
+                .unwrap()
+                .with_m2l_tables_everywhere(everywhere),
+                m2l,
+                tolerance,
+            )
+            .with_diagonal(diagonal)
+            .with_pool(Arc::clone(&pool))
+            .build_tables()
+        };
+        let (mut op, mut all) = (build(false), build(true));
+        for l in 0..degrees.len() {
+            let classes = op.diagonal_classes(l).map_or(0, |c| c.len());
+            assert_eq!(classes, all.diagonal_classes(l).map_or(0, |c| c.len()));
+            assert_eq!(op.m2l_on(l), all.m2l_on(l), "{what}, level {l}");
+            let read = l >= 2 && op.m2l_on(l) == HelmholtzM2l::Rotation && classes < 34;
+            assert_eq!(op.tables().has_m2l(l), read, "{what}, level {l}");
+            assert_eq!(all.tables().has_m2l(l), l >= 2, "{what}, level {l}");
+            // Blocks only where read, and there within the budget (these fit).
+            assert_eq!(op.tables().m2l_blocks_stored(l), read, "{what}, level {l}");
+            whole += usize::from(classes == 34);
+            part += usize::from(classes > 0 && classes < 34);
+            dropped += usize::from(l >= 2 && !read);
+        }
+        let some_dropped = (2..degrees.len()).any(|l| !op.tables().has_m2l(l));
+        if some_dropped {
+            assert!(op.tables().bytes() < all.tables().bytes(), "{what}");
+        } else {
+            assert_eq!(op.tables().bytes(), all.tables().bytes(), "{what}");
+        }
+        let (a, b) = (pair_outputs(&mut op), pair_outputs(&mut all));
+        assert_eq!(a.len(), b.len());
+        for (i, (x, y)) in a.iter().zip(&b).enumerate() {
+            assert!(x == y, "{what}: value {i}: {x:e} against {y:e}");
+        }
+    }
+    assert!(whole > 0, "no level the diagonal form takes whole");
+    assert!(part > 0, "no level the diagonal form takes in part");
+    assert!(dropped > whole, "no level of another M2L lost its tables");
 }
 
 /// An operator from `with_block_budget` is built: `build_tables` changes nothing.

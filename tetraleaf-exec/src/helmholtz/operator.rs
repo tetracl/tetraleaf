@@ -436,6 +436,7 @@ use tetraleaf_simd::{
     HelmholtzCharges, Isa, IsaUnavailable, MatrixKernel, MulAdd, P2pKernel, SimdScalar,
 };
 use tetraleaf_tables::MatrixSet;
+use tetraleaf_tables::geometry::M2L_OFFSET_COUNT;
 use tetraleaf_tables::helmholtz::batched::BatchedM2l;
 use tetraleaf_tables::helmholtz::classes::{ClassM2l, ClassScratch};
 use tetraleaf_tables::helmholtz::dense::DenseM2l;
@@ -1018,6 +1019,9 @@ struct Kernel<T: SimdScalar> {
     tables: HelmholtzTables<T>,
     /// The store of the RCR tables' parts, shared with other operators (Helmholtz CH2.2a).
     table_store: Option<Arc<TableStore<T>>>,
+    /// RCR M2L tables on every level from 2, read or not (the test hook
+    /// [`HelmholtzOperator::with_m2l_tables_everywhere`]; Helmholtz CH2.2b1).
+    m2l_tables_everywhere: bool,
     /// The M2L setting.
     m2l: HelmholtzM2l,
     /// The byte budget of the M2L tables ([`HelmholtzOperator::with_m2l`]).
@@ -1211,6 +1215,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
             block_budget,
             tables,
             table_store: None,
+            m2l_tables_everywhere: false,
             m2l: HelmholtzM2l::Rotation,
             dense_budget: DEFAULT_DENSE_BUDGET,
             max_degree: None,
@@ -1894,7 +1899,7 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
         });
         timings.matrices += clock.elapsed();
         kernel.from_waves = from_waves;
-        // The levels whose M2L is RCR's: only they read its M2L blocks.
+        // The levels whose M2L is RCR's under the setting.
         let rcr: Vec<bool> = (0..degrees.len())
             .map(|l| {
                 l >= 2
@@ -1904,35 +1909,9 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
                     && kernel.batched(l).is_none()
             })
             .collect();
-        let clock = Instant::now();
-        let tables = &mut kernel.tables;
-        if !tables.has_translations()
-            || (0..degrees.len()).any(|l| {
-                tables.m2l_degree(l) != degrees[l]
-                    || tables.degree(l) != translation[l]
-                    || (l >= 2 && !tables.has_m2l(l))
-            })
-        {
-            let choice = TableChoice {
-                m2l_degrees: Some(&degrees),
-                block_levels: Some(&rcr),
-                ..TableChoice::new(kernel.block_budget)
-            };
-            *tables = match &kernel.table_store {
-                Some(store) => {
-                    HelmholtzTables::build_in(k_root, translation, &choice, &parts, store)
-                }
-                None => HelmholtzTables::build_by(k_root, translation, &choice, &parts),
-            };
-        } else {
-            match &kernel.table_store {
-                Some(store) => tables.set_m2l_blocks_in(&rcr, kernel.block_budget, &parts, store),
-                None => tables.set_m2l_blocks(&rcr, kernel.block_budget, &parts),
-            }
-        }
-        timings.rcr += clock.elapsed();
         // The diagonal form on the RCR levels where the rule takes some class (Helmholtz
-        // CH4.2b1), after the RCR tables, whose wavenumbers it reads.
+        // CH4.2b1), before the RCR tables (Helmholtz CH2.2b1): it reads only each level's
+        // k̂_l, which every build of the tables forms alike from k̂₀.
         let clock = Instant::now();
         // An override's RCR takes every class off its level (Helmholtz CH4.4b).
         let all: Vec<usize> = (0..tetraleaf_tables::helmholtz::diagonal::CLASS_COUNT).collect();
@@ -1957,6 +1936,55 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
             )
         };
         timings.diagonal += clock.elapsed();
+        // The levels with an RCR pair (Helmholtz CH2.2b1): an RCR level that the diagonal form
+        // does not take whole. Only they read RCR's M2L tables and blocks (`Kernel::m2l`'s
+        // dispatch), so only they get them; with the test hook every level from 2 gets M2L
+        // tables, and every RCR level may store blocks, as before CH2.2b1.
+        let everywhere = kernel.m2l_tables_everywhere;
+        let read: Vec<bool> = (0..degrees.len())
+            .map(|l| {
+                rcr[l]
+                    && kernel.diagonal_level(l).is_none_or(|diagonal| {
+                        (0..M2L_OFFSET_COUNT).any(|d| !diagonal.m2l.has_offset(d))
+                    })
+            })
+            .collect();
+        let m2l_levels: Vec<bool> = if everywhere {
+            (0..degrees.len()).map(|l| l >= 2).collect()
+        } else {
+            read.clone()
+        };
+        let block_levels = if everywhere { &rcr } else { &read };
+        let clock = Instant::now();
+        let tables = &mut kernel.tables;
+        if !tables.has_translations()
+            || (0..degrees.len()).any(|l| {
+                tables.m2l_degree(l) != degrees[l]
+                    || tables.degree(l) != translation[l]
+                    || tables.has_m2l(l) != m2l_levels[l]
+            })
+        {
+            let choice = TableChoice {
+                m2l_degrees: Some(&degrees),
+                m2l_levels: Some(&m2l_levels),
+                block_levels: Some(block_levels),
+                ..TableChoice::new(kernel.block_budget)
+            };
+            *tables = match &kernel.table_store {
+                Some(store) => {
+                    HelmholtzTables::build_in(k_root, translation, &choice, &parts, store)
+                }
+                None => HelmholtzTables::build_by(k_root, translation, &choice, &parts),
+            };
+        } else {
+            match &kernel.table_store {
+                Some(store) => {
+                    tables.set_m2l_blocks_in(block_levels, kernel.block_budget, &parts, store)
+                }
+                None => tables.set_m2l_blocks(block_levels, kernel.block_budget, &parts),
+            }
+        }
+        timings.rcr += clock.elapsed();
         self.diagonal_buffer.size(
             &kernel.diagonal,
             &kernel.diagonal_settings,
@@ -2487,6 +2515,18 @@ impl<T: SimdScalar> HelmholtzOperator<T> {
     /// since); this rank's.
     pub fn table_build(&self) -> &TableBuild {
         self.kernel.tables.build_report()
+    }
+
+    /// Builds RCR's M2L tables on every level from 2 if `everywhere`, read or not, and lets
+    /// every level whose M2L is RCR's store M2L blocks: the tables before Helmholtz CH2.2b1,
+    /// which builds them only on the levels with an RCR pair (module documentation, "M2L").
+    /// The tables are chosen again; no output changes. A test hook: the trusted path of the
+    /// tests that hold the levels without them to every level's bits.
+    #[doc(hidden)]
+    pub fn with_m2l_tables_everywhere(mut self, everywhere: bool) -> Self {
+        self.kernel.m2l_tables_everywhere = everywhere;
+        self.select_tables();
+        self
     }
 
     /// Runs P2M and L2P by the reference's per-point calls ([`Densities::p2m`],
