@@ -5131,3 +5131,64 @@ request, using this template:
   Also on CH4.9b (question 1): the ISA question carried (L2P's sum needs no lane reduction; one ISA
   kernel for both sums if L2P's stays far from its floor on x86), the f32 sum, `reference_leaves` for
   L2P.
+
+## 2026-11-27: CH4.9b1 The leaf harmonics' derivatives and the real radial derivatives, batched over points
+- Done:
+  - CH4.9b split into CH4.9b1 and CH4.9b2 by the skill's size rule, as CH4.9a2. Both lines are in the
+    roadmap; CH4.9b's text stays as the parent.
+  - `LeafHarmonics::{derivative_columns, derivatives}`: per order Q̄ₙᵐ (`columns`' bits), ∂θ Q̄ₙᵐ and
+    Uₙᵐ = Q̄ₙᵐ / sin θ, by a second column of the same recurrence. ∂θ Q̄ₙᵐ = n cos θ Uₙᵐ − cₙₘ Uₙ₋₁ᵐ
+    and ∂θ Q̄ₙ⁰ = −√(n(n + 1)/2) Q̄ₙ¹; there is no division by sin θ, and U's under-range flush is
+    taken on its own value.
+  - `radial::bessel_j_real_derivatives`: `bessel_j_real`'s values (one private routine) and
+    `bessel_j`'s derivatives from the neighbouring orders.
+  - `LeafHarmonics`' directions scale x and y (and z) by 2⁶⁰⁰ (2¹⁰⁰ in f32) where ρ² (or r²) is below
+    the normal range. The scale is exact and a select, so every other point keeps its bits.
+  - `helmholtz_leaf`: the derivative columns, the radial derivatives, the restated L2P sum with
+    gradients on their values, and the projected L2P with gradients.
+  - `tools/helmholtz/ch4-9b1-runs.sh` and `ch4-9b1-tables.py` on `common.py`.
+  - Report `tetraleaf-validate/results/helmholtz-ch4-9b1.md`; record `docs/helmholtz/tasks/CH4.9b1.md`.
+- Results (one core, 16 lanes, f3d24bc; locust, and Kathleen job 673246 on node-c11a-016):
+  - The derivatives are within 0.87 (∂θ) and 0.59 ((1/sin θ) ∂φ) (n + 1)³ u √((2n + 1)/(4π)) of
+    `harmonics_derivatives` in f64 to p = 100, and 0.76 and 0.26 in f32 to p = 64. ∂θ's error is
+    0.61–0.80 of that unit at every degree of p = 100. The radial derivatives are `bessel_j`'s bits
+    in f64.
+  - Per point, medians over k̂: the derivative columns take 0.064–0.100× the reference's harmonics
+    with derivatives in f64 on both machines (f32 0.043–0.077×), and the radial functions with
+    derivatives 0.15–0.24×.
+  - L2P with gradients is projected, with the reference's sum restated on the routines' values (f64,
+    medians):
+    - locust: 0.17–0.23×, the sum then 37–62 % of it at 1.12–1.57 ns per term;
+    - Kathleen: 0.24–0.27×, the sum then 49–73 % at 2.8–3.4 ns per term, with no gain from f32 on
+      the SSE2 baseline.
+  - The rescale left P2M's kernel within 1 % (ABBA on locust: 1.000× f64, 1.008× f32). The kernel's
+    1–4 % against CH4.9a2b's launches is the binary's placement.
+- Tests:
+  - `tetraleaf-math/tests/orthonormal/leaf.rs`:
+    - the derivatives' contract (C = 10) in f64 and f32, with no subnormal output;
+    - `derivative_columns`' q bit for bit `columns`';
+    - the layout bit for bit from the columns at 1, 4, 8 and 16 lanes in two positions;
+    - degree 1 at the poles and the centre;
+    - two directions with ρ² and r² below the normal range.
+  - `tests/radial/real.rs`: the derivatives bit for bit in f64, f32 beside the flush (reached),
+    mismatched lengths refused.
+  - The first run failed at (10⁻¹⁶⁰, 0, 1) and (−10⁻⁴⁰, 10⁻⁴⁰, −0.5): a subnormal ρ² cost cos φ its
+    precision, hence the rescale.
+- Checks: ran `/verify` on the M6:
+  - fmt;
+  - Clippy: default, examples, workspace;
+  - docs;
+  - at opt-level 1, `cargo test` 1,429 and `--workspace` 1,473 passed;
+  - `helmholtz_fmm` at 2 and 4 ranks, 54.3 s and 49.1 s;
+  - `orthonormal`'s debug time 22.7 s against `main`'s 22.3 s at the same load.
+
+  A self-review by a subagent found nothing blocking. Fixed: ρ through a subnormal in the rescale,
+  the example's gradient sum checked bit for bit against `leaf::l2p`, the record, and the test nits.
+  Not run: the rest of the MPI list (no change to exec, plan or octree), `cargo deny` (no manifest
+  change). Nothing pending (Kathleen job 673246 ran after 1 h 55 min in the queue).
+- Decisions: the split, by the skill's rule. No questions for sign-off.
+- Laplace: not touched. The additions are in `tetraleaf-math`'s Helmholtz modules (`orthonormal::leaf`,
+  `radial`), plus an example, scripts and documents. `tetraleaf-simd` is unchanged, and nothing
+  Laplace runs calls `LeafHarmonics` or `bessel_j_real`.
+- Follow-ups: CH4.9b2, with an Also on its line: the restated sum's share and cost per term, the
+  part its kernel vectorises.

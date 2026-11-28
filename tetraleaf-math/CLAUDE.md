@@ -23,6 +23,14 @@ tabulated once, for the leaf operators; within 10 (n + 1)² u √((2n + 1)/(4π)
 (`bessel_j` at real arguments in real arithmetic, lanes, bit for bit, in f32 but for the
 under-range values beyond the turning point, which it zeroes); tests
 `tests/orthonormal/leaf.rs` and `tests/radial/real.rs`.
+Helmholtz CH4.9b1 added the derivatives for L2P's gradient: `LeafHarmonics::{derivative_columns,
+derivatives}` (per order Q̄ₙᵐ, `columns`' bits, ∂θ Q̄ₙᵐ and Uₙᵐ = Q̄ₙᵐ / sin θ by a second column of
+the same recurrence, no division by sin θ; `harmonics_derivatives`' outputs within
+10 (n + 1)³ u √((2n + 1)/(4π)) per term in the tests, 0.87 measured) and
+`radial::bessel_j_real_derivatives` (`bessel_j`'s derivatives at real arguments, bit for bit in
+f64; `bessel_j_real` keeps its code path and bits). `LeafHarmonics`' directions now scale x, y (and
+z) by a power of two where ρ² (or r²) is below the normal range, so cos φ keeps its precision next
+to the z-axis; every other point's bits unchanged (a select by 1).
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.

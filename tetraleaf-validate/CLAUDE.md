@@ -821,6 +821,15 @@ its sum's part). `tools/helmholtz/ch4-9a2b-runs.sh` runs the task's stages (`smo
 `worst`, `parts`), `ch4-9a2b-tables.py` makes the report's tables (`runs`, `levels`, `worst`,
 `parts`). Its report is `results/helmholtz-ch4-9a2b.md`.
 
+Helmholtz CH4.9b1 (the leaf harmonics' and the real radial functions' derivatives;
+docs/helmholtz/tasks/CH4.9b1.md) added to `helmholtz_leaf`, per case, `LeafHarmonics::derivative_columns`
+and `radial::bessel_j_real_derivatives` over the batch, checked first (the derivatives against
+`harmonics_derivatives` in the contract's units, the radial derivatives against `bessel_j`'s bits but
+beside flushed values), the reference's L2P sum with gradients on their values of 16 points, and the
+projected L2P with gradients per point. `tools/helmholtz/ch4-9b1-runs.sh` runs it (`smoke`, `parts`),
+`ch4-9b1-tables.py` makes the report's tables (`summary`, `cases`). Its report is
+`results/helmholtz-ch4-9b1.md`.
+
 Since Phase 3, building this crate, and so `cargo test -p tetraleaf-validate`, needs an MPI
 installation. Tests that run an FMM initialise MPI, at most one test per test
 executable (`tests/fmm_accuracy.rs`; `tests/helmholtz_accuracy.rs`; `tests/scaling.rs`, the smoke run of the `scaling`

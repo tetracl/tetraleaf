@@ -2,7 +2,7 @@
 //! docs/helmholtz/tasks/CH4.9a2a.md, "Tests that prove it"): bit for bit, in f32 but for the
 //! values it flushes beyond the turning point.
 
-use tetraleaf_math::radial::{bessel_j, bessel_j_real};
+use tetraleaf_math::radial::{bessel_j, bessel_j_real, bessel_j_real_derivatives};
 use tetraleaf_math::{Complex, RealScalar};
 
 /// The arguments of the plan, mixed within each batch.
@@ -97,4 +97,98 @@ fn the_real_radial_functions_are_bessel_j_bit_for_bit_in_f32_but_the_flushed() {
     let flushed = check::<f32, 1>(tau) + check::<f32, 8>(tau) + check::<f32, 16>(tau);
     println!("f32: {flushed} values flushed below 2^-100 beyond the turning point");
     assert!(flushed > 0, "the f32 cases reach the flush");
+}
+
+// The derivatives (Helmholtz CH4.9b1, docs/helmholtz/tasks/CH4.9b1.md, "Tests that prove it").
+
+/// `bessel_j_real_derivatives` in B lanes, as `check`: its values are `bessel_j_real`'s bits, and
+/// each lane's derivatives `bessel_j`'s derivatives' real parts bit for bit, or, for τ > 0, zero
+/// beyond the turning point where the reference is below τ, or within (n + 1) τ / s of the
+/// reference where a neighbouring value was flushed; no output is subnormal where τ > 0. Returns
+/// the derivatives that differ.
+fn check_derivatives<T: Real, const B: usize>(tau: f64) -> usize {
+    let mut differ = 0;
+    for s in [1.0, 0.3, 1e-3] {
+        for len in [1, 2, 9, 46, 101] {
+            for rotation in 0..XS.len() {
+                let x: [T; B] =
+                    core::array::from_fn(|j| T::from_f64(XS[(rotation + j) % XS.len()]));
+                let s = T::from_f64(s);
+                let mut values = vec![[T::zero(); B]; len];
+                let mut derivatives = vec![[T::zero(); B]; len];
+                bessel_j_real_derivatives(&x, s, &mut values, &mut derivatives);
+                let mut plain = vec![[T::zero(); B]; len];
+                bessel_j_real(&x, s, &mut plain);
+                for (a, b) in values.iter().zip(&plain) {
+                    for j in 0..B {
+                        assert_eq!(
+                            a[j].to_bits_u64(),
+                            b[j].to_bits_u64(),
+                            "values as bessel_j_real"
+                        );
+                    }
+                }
+                for j in 0..B {
+                    let zero = Complex::new(T::zero(), T::zero());
+                    let (mut one, mut d_one) = (vec![zero; len], vec![zero; len]);
+                    bessel_j(Complex::new(x[j], T::zero()), s, &mut one, Some(&mut d_one));
+                    for n in 0..len {
+                        let (got, want) = (derivatives[n][j], d_one[n].re);
+                        if !want.is_finite() || !one[n].re.is_finite() {
+                            continue;
+                        }
+                        let g = got.to_f64().abs();
+                        assert!(
+                            tau == 0.0 || g == 0.0 || g >= T::min_positive_value().to_f64(),
+                            "subnormal derivative at x = {}, n = {n}",
+                            x[j].to_f64()
+                        );
+                        if got.to_bits_u64() == want.to_bits_u64() {
+                            continue;
+                        }
+                        let (xj, sf) = (x[j].to_f64(), s.to_f64());
+                        let beyond = n as f64 >= xj;
+                        let flushed_zero = got == T::zero() && want.abs().to_f64() < tau && beyond;
+                        let near =
+                            (got.to_f64() - want.to_f64()).abs() <= (n + 1) as f64 * tau / sf;
+                        assert!(
+                            tau > 0.0 && (flushed_zero || near),
+                            "x = {xj}, s = {sf}, len {len}, n = {n}: ĵ′ {:e} against {:e}",
+                            got.to_f64(),
+                            want.to_f64()
+                        );
+                        differ += 1;
+                    }
+                }
+            }
+        }
+    }
+    differ
+}
+
+#[test]
+fn the_real_radial_derivatives_are_bessel_j_bit_for_bit_in_f64() {
+    let differ = check_derivatives::<f64, 1>(0.0)
+        + check_derivatives::<f64, 4>(0.0)
+        + check_derivatives::<f64, 8>(0.0);
+    assert_eq!(differ, 0, "f64 keeps every bit");
+}
+
+#[test]
+fn the_real_radial_derivatives_in_f32_but_the_flushed() {
+    let tau = 2f64.powi(-100);
+    let differ = check_derivatives::<f32, 1>(tau)
+        + check_derivatives::<f32, 8>(tau)
+        + check_derivatives::<f32, 16>(tau);
+    println!("f32: {differ} derivatives differ beside flushed values");
+    assert!(differ > 0, "the f32 cases reach the flush");
+}
+
+/// Lengths that differ refuse.
+#[test]
+#[should_panic(expected = "derivatives")]
+fn the_real_radial_derivatives_need_matching_lengths() {
+    let mut values = vec![[0.0f64; 2]; 4];
+    let mut derivatives = vec![[0.0f64; 2]; 3];
+    bessel_j_real_derivatives(&[1.0, 2.0], 1.0, &mut values, &mut derivatives);
 }

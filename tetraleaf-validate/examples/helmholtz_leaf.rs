@@ -1,5 +1,6 @@
 //! Where a Helmholtz leaf point's P2M and L2P time goes (Helmholtz CH4.9a1;
-//! docs/helmholtz/tasks/CH4.9a1.md). Prints Markdown on stdout.
+//! docs/helmholtz/tasks/CH4.9a1.md; CH4.9a2a, CH4.9a2b and CH4.9b1 add the leaf routines' parts).
+//! Prints Markdown on stdout.
 //!
 //! `tetraleaf-exec`'s Helmholtz FMM runs P2M and L2P as one `tetraleaf_ref::helmholtz::leaf`
 //! call per point, in the leaf's own frame: half-width 1, the points in [−1, 1)³, k̂ = k r
@@ -43,6 +44,16 @@
 //!   ("kernel check": the largest difference over the largest value), its time over the
 //!   reference's and the projection's, and "kernel sum": the kernel less the routines' parts
 //!   (the columns, the radial functions, the factor's `exp`), its sum's share.
+//! - **The derivatives** (Helmholtz CH4.9b1; docs/helmholtz/tasks/CH4.9b1.md): the harmonics with
+//!   their derivatives column by column (`LeafHarmonics::derivative_columns`, every value summed),
+//!   checked first against `harmonics_derivatives` ("derivatives check": the largest difference of
+//!   ∂θ and (1/sin θ) ∂φ over (n + 1)³ u √((2n + 1)/(4π)), the contract of its tests), and for real
+//!   k `bessel_j_real_derivatives` (checked against `bessel_j`'s derivatives: bit for bit, or in f32
+//!   beside a flushed value within (n + 1) τ / s). "sum ∇, leaf values" is the reference's L2P sum
+//!   with gradients (`evaluate`'s loop and the gradient's Cartesian assembly, restated) on the
+//!   routines' values of the batch's first 16 points, cycled over the targets; "projected L2P ∇"
+//!   adds the derivative columns, the radial functions with derivatives (the reference's for
+//!   complex k), the factor's `exp` and that sum, over the reference's L2P with gradients.
 //!
 //! Every figure is µs per point, the median over batches (`tetraleaf_validate::bench::
 //! median_time_per_call`); "ns per term" divides by (p + 1)². One precision per launch
@@ -60,7 +71,7 @@ use std::time::{Duration, Instant};
 use tetraleaf_math::orthonormal::{
     DerivativeScratch, LeafHarmonics, LeafScratch, harmonics, harmonics_derivatives,
 };
-use tetraleaf_math::radial::{bessel_j, bessel_j_real};
+use tetraleaf_math::radial::{bessel_j, bessel_j_real, bessel_j_real_derivatives};
 use tetraleaf_math::{Complex, Layout, RealScalar};
 use tetraleaf_ref::Frame;
 use tetraleaf_ref::helmholtz::{Level, Workspace, leaf};
@@ -165,6 +176,8 @@ struct Times {
     kernel: f64,
     /// The kernel's largest difference from the reference's multipole over its largest value.
     kernel_check: f64,
+    /// The reference's L2P sum with gradients on the leaf routines' values (Helmholtz CH4.9b1).
+    sum_gradient_leaf: f64,
 }
 
 /// The leaf routines' times, µs per point, and their checks (module documentation).
@@ -177,6 +190,87 @@ struct Leaf {
     radial_differ: Option<usize>,
     /// The harmonics' largest difference over (n + 1)² u √((2n + 1)/(4π)).
     harmonics_error: f64,
+    /// The harmonics with their derivatives column by column (Helmholtz CH4.9b1).
+    derivative_columns: f64,
+    /// The derivatives' largest difference over (n + 1)³ u √((2n + 1)/(4π)).
+    derivatives_error: f64,
+    /// The real radial functions with their derivatives; `None` for complex k.
+    radial_derivatives: Option<f64>,
+    /// The radial derivatives that differ from `bessel_j`'s, each beside a flushed value;
+    /// `None` for complex k.
+    radial_derivatives_differ: Option<usize>,
+}
+
+/// One target of the L2P sum with gradients: the radial functions and their derivatives, the
+/// harmonics with their derivatives (value, ∂θ, (1/sin θ) ∂φ), the angles of `Polar::of` and the
+/// factor e.
+struct Target<T> {
+    r: T,
+    angles: [T; 4],
+    e: T,
+    values: Vec<Complex<T>>,
+    derivatives: Vec<Complex<T>>,
+    harmonics: [Vec<T>; 3],
+}
+
+/// r and the angles [cos θ, sin θ, cos φ, sin φ] of `Polar::of` (by `hypot`; θ = 0 at the centre,
+/// φ = 0 on the z-axis).
+fn polar<T: RealScalar>(x: [T; 3]) -> (T, [T; 4]) {
+    let rho = x[0].hypot(x[1]);
+    let r = rho.hypot(x[2]);
+    if r == T::zero() {
+        return (r, [T::one(), T::zero(), T::one(), T::zero()]);
+    }
+    let (cp, sp) = if rho > T::zero() {
+        (x[0] / rho, x[1] / rho)
+    } else {
+        (T::one(), T::zero())
+    };
+    (r, [x[2] / r, rho / r, cp, sp])
+}
+
+/// The reference's L2P sum with gradients at one target (`leaf::evaluate` with its gradient and
+/// `Polar::cartesian`, restated as `sum` restates `form`): per degree the local's coefficients times
+/// the harmonics and their derivatives, then the radial function, its derivative and the
+/// tangential factor, the gradient in Cartesian components, all times e.
+fn sum_gradient<T: RealScalar>(
+    p: usize,
+    level: &Level<T>,
+    local: (&[T], &[T]),
+    t: &Target<T>,
+) -> (Complex<T>, [Complex<T>; 3]) {
+    let zero = Complex::new(T::zero(), T::zero());
+    let k = level.k();
+    let at_centre = k * (T::one() / (T::from_f64(3.0) * level.scale()));
+    let (mut phi, mut radial, mut polar, mut azimuthal) = (zero, zero, zero, zero);
+    for n in 0..=p {
+        let (mut value, mut theta, mut phi_sum) = (zero, zero, zero);
+        for i in n * n..(n + 1) * (n + 1) {
+            let c = Complex::new(local.0[i], local.1[i]);
+            value = value + c * t.harmonics[0][i];
+            theta = theta + c * t.harmonics[1][i];
+            phi_sum = phi_sum + c * t.harmonics[2][i];
+        }
+        let tangential = if t.r > T::zero() {
+            t.values[n] * (T::one() / t.r)
+        } else if n == 1 {
+            at_centre
+        } else {
+            zero
+        };
+        phi = phi + t.values[n] * value;
+        radial = radial + t.derivatives[n] * value;
+        polar = polar + tangential * theta;
+        azimuthal = azimuthal + tangential * phi_sum;
+    }
+    let [ct, st, cp, sp] = t.angles;
+    let kr = k * radial;
+    let gradient = [
+        kr * (st * cp) + polar * (ct * cp) + azimuthal * (-sp),
+        kr * (st * sp) + polar * (ct * sp) + azimuthal * cp,
+        kr * ct + polar * (-st),
+    ];
+    (phi * t.e, gradient.map(|g| g * t.e))
 }
 
 /// µs per point of `pass` over `n` points.
@@ -427,6 +521,100 @@ fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize, lanes: usize) -> 
             black_box(&d_phi);
         }
     });
+    // The L2P sum with gradients on the leaf routines' values (`LeafHarmonics::derivatives`, and
+    // for real k `bessel_j_real_derivatives`) of 16 points, cycled over the targets.
+    let sum_gradient_leaf = {
+        let table = LeafHarmonics::<T>::new(p);
+        let mut scratch = LeafScratch::<T, 1>::new(p);
+        let mut out: [Vec<[T; 1]>; 3] = core::array::from_fn(|_| vec![[T::zero(); 1]; len]);
+        let (mut radial_lanes, mut derivative_lanes) =
+            (vec![[T::zero(); 1]; p + 1], vec![[T::zero(); 1]; p + 1]);
+        let k = level.k();
+        let data: Vec<Target<T>> = points
+            .iter()
+            .take(16)
+            .map(|&x| {
+                let (r, angles) = polar(x);
+                let zero = Complex::new(T::zero(), T::zero());
+                let (mut values, mut derivatives) = (vec![zero; p + 1], vec![zero; p + 1]);
+                if k.im == T::zero() {
+                    bessel_j_real_derivatives(
+                        &[k.re * r],
+                        level.scale(),
+                        &mut radial_lanes,
+                        &mut derivative_lanes,
+                    );
+                    for n in 0..=p {
+                        values[n] = Complex::new(radial_lanes[n][0], T::zero());
+                        derivatives[n] = Complex::new(derivative_lanes[n][0], T::zero());
+                    }
+                } else {
+                    bessel_j(k * r, level.scale(), &mut values, Some(&mut derivatives));
+                }
+                {
+                    let [v, t, f] = &mut out;
+                    table.derivatives(p, &[x], &mut scratch, v, t, f);
+                }
+                Target {
+                    r,
+                    angles,
+                    e: (k.im * r - level.damping()).exp(),
+                    values,
+                    derivatives,
+                    harmonics: out.clone().map(|o| o.iter().map(|v| v[0]).collect()),
+                }
+            })
+            .collect();
+        let (re, im) = local.split_at(len);
+        // The check: the restated sum on the reference's own values (`bessel_j` with derivatives,
+        // `harmonics_derivatives`) is `leaf::l2p` with gradients, bit for bit, at the 16 points.
+        {
+            let zero = Complex::new(T::zero(), T::zero());
+            let mut scratch = DerivativeScratch::new(p);
+            for &x in points.iter().take(16) {
+                let (r, angles) = polar(x);
+                let (mut values, mut derivatives) = (vec![zero; p + 1], vec![zero; p + 1]);
+                bessel_j(k * r, level.scale(), &mut values, Some(&mut derivatives));
+                let mut harmonics: [Vec<T>; 3] = core::array::from_fn(|_| vec![T::zero(); len]);
+                {
+                    let [v, t, f] = &mut harmonics;
+                    harmonics_derivatives(p, x, v, t, f, &mut scratch);
+                }
+                let target = Target {
+                    r,
+                    angles,
+                    e: (k.im * r - level.damping()).exp(),
+                    values,
+                    derivatives,
+                    harmonics,
+                };
+                let (phi, g) = sum_gradient(p, &level, (re, im), &target);
+                let (mut want, mut want_g) = ([zero], [[zero; 3]]);
+                leaf::l2p(
+                    p,
+                    &level,
+                    &frame,
+                    &local,
+                    &[x],
+                    &mut ws,
+                    &mut want,
+                    Some(&mut want_g),
+                );
+                let same = |a: Complex<T>, b: Complex<T>| a.re == b.re && a.im == b.im;
+                assert!(
+                    same(phi + zero, want[0]) && (0..3).all(|i| same(g[i] + zero, want_g[0][i])),
+                    "the restated L2P sum with gradients differs from leaf::l2p"
+                );
+            }
+        }
+        per_point(n, || {
+            for (out, t) in potential.iter_mut().zip(data.iter().cycle()) {
+                let (phi, g) = sum_gradient(p, &level, (re, im), t);
+                *out = *out + phi + g[0] + g[1] + g[2];
+            }
+            black_box(&potential);
+        })
+    };
     let leaf = match lanes {
         1 => leaf_parts::<T, 1>(p, &level, &points),
         4 => leaf_parts::<T, 4>(p, &level, &points),
@@ -448,6 +636,7 @@ fn run<T: RealScalar>(p: usize, khat: f64, kim: f64, n: usize, lanes: usize) -> 
         sum_leaf,
         kernel,
         kernel_check,
+        sum_gradient_leaf,
     }
 }
 
@@ -552,12 +741,114 @@ fn leaf_parts<T: RealScalar, const B: usize>(
     } else {
         (None, None)
     };
+    // The derivatives (Helmholtz CH4.9b1): their check against `harmonics_derivatives` per point
+    // and term, then the columns timed with every value summed.
+    let mut derivatives_error = 0.0f64;
+    {
+        let mut out: [Vec<[T; B]>; 3] =
+            core::array::from_fn(|_| vec![[T::zero(); B]; layout.len()]);
+        let mut reference: [Vec<T>; 3] = core::array::from_fn(|_| vec![T::zero(); layout.len()]);
+        let mut ref_scratch = DerivativeScratch::new(p);
+        for (b, block) in blocks.iter().enumerate() {
+            {
+                let [v, t, f] = &mut out;
+                table.derivatives(p, block, &mut scratch, v, t, f);
+            }
+            for (j, &x) in block.iter().enumerate().take(n - (b * B).min(n)) {
+                {
+                    let [v, t, f] = &mut reference;
+                    harmonics_derivatives(p, x, v, t, f, &mut ref_scratch);
+                }
+                for (degree, range) in layout.degrees() {
+                    let d = (degree + 1) as f64;
+                    let scale = d
+                        * d
+                        * d
+                        * unit
+                        * ((2 * degree + 1) as f64 / (4.0 * std::f64::consts::PI)).sqrt();
+                    for i in range {
+                        for part in 1..3 {
+                            let e = (out[part][i][j].to_f64() - reference[part][i].to_f64()).abs();
+                            derivatives_error = derivatives_error.max(e / scale);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // The contract of `tests/orthonormal/leaf.rs` (C = 10), checked before timing.
+    assert!(
+        derivatives_error <= 10.0,
+        "the leaf derivatives outside their contract: {derivatives_error}"
+    );
+    let derivative_columns = per_point(n, || {
+        for block in &blocks {
+            table.derivative_columns(p, block, &mut scratch, |_, q, d, u, cos, sin| {
+                for ((row, dr), ur) in q.iter().zip(d).zip(u) {
+                    for j in 0..B {
+                        sink[j] = sink[j] + row[j] * cos[j] + dr[j] * sin[j] + ur[j] * cos[j];
+                    }
+                }
+            });
+        }
+        black_box(&sink);
+    });
+    let (radial_derivatives, radial_derivatives_differ) = if level.k().im == T::zero() {
+        let k = level.k().re;
+        let xs: Vec<[T; B]> = blocks
+            .iter()
+            .map(|block| {
+                core::array::from_fn(|j| {
+                    let [a, b, c] = block[j];
+                    k * a.hypot(b).hypot(c)
+                })
+            })
+            .collect();
+        let (mut lanes, mut d_lanes) = (vec![[T::zero(); B]; p + 1], vec![[T::zero(); B]; p + 1]);
+        let zero = Complex::new(T::zero(), T::zero());
+        let (mut one, mut d_one) = (vec![zero; p + 1], vec![zero; p + 1]);
+        let mut differ = 0;
+        for x in &xs {
+            bessel_j_real_derivatives(x, level.scale(), &mut lanes, &mut d_lanes);
+            for (j, &xj) in x.iter().enumerate() {
+                bessel_j(
+                    Complex::new(xj, T::zero()),
+                    level.scale(),
+                    &mut one,
+                    Some(&mut d_one),
+                );
+                for (order, (row, want)) in d_lanes.iter().zip(&d_one).enumerate() {
+                    if row[j] != want.re {
+                        // Only f32's flush may differ: beside a flushed neighbour, within
+                        // (n + 1) τ / s of the reference.
+                        let near = (row[j].to_f64() - want.re.to_f64()).abs()
+                            <= (order + 1) as f64 * 2f64.powi(-100) / level.scale().to_f64();
+                        assert!(near, "bessel_j_real_derivatives differs from bessel_j");
+                        differ += 1;
+                    }
+                }
+            }
+        }
+        let time = per_point(n, || {
+            for x in &xs {
+                bessel_j_real_derivatives(x, level.scale(), &mut lanes, &mut d_lanes);
+                black_box(&d_lanes);
+            }
+        });
+        (Some(time), Some(differ))
+    } else {
+        (None, None)
+    };
     Leaf {
         values,
         columns,
         radial,
         radial_differ,
         harmonics_error,
+        derivative_columns,
+        derivatives_error,
+        radial_derivatives,
+        radial_derivatives_differ,
     }
 }
 
@@ -583,12 +874,13 @@ fn main() {
          | rest ∇ µs | L2P ∇ ns per term | leaf harmonics µs | leaf columns µs | real radial µs \
          | radial check | harmonics check | sum, leaf values µs | projected P2M µs \
          | projected ÷ P2M | P2M kernel µs | kernel ÷ P2M | kernel ÷ projected | kernel sum µs \
-         | kernel check |"
+         | kernel check | leaf columns ′ µs | derivatives check | real radial ′ µs | radial ′ check \
+         | sum ∇, leaf values µs | projected L2P ∇ µs | projected ÷ L2P ∇ |"
     );
     println!(
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: \
          | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: \
-         | ---: | ---: | ---: | ---: | ---: |"
+         | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |"
     );
     let start = Instant::now();
     for &p in &arguments.ps {
@@ -605,10 +897,14 @@ fn main() {
             let radial = leaf.radial.unwrap_or(t.radial);
             let projected = leaf.columns + radial + t.exp + t.sum_leaf;
             let or_dash = |v: Option<String>| v.unwrap_or_else(|| "–".to_string());
+            let radial_derivatives = leaf.radial_derivatives.unwrap_or(t.radial_derivatives);
+            let projected_gradient =
+                leaf.derivative_columns + radial_derivatives + t.exp + t.sum_gradient_leaf;
             println!(
                 "| {p} | {khat} | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.2} | {:.1} | {} \
                  | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.1} | {:.3} | {:.3} | {} | {} \
-                 | {:.2} | {:.3} | {:.3} | {:.2} | {:.3} | {:.2} | {:.2} | {:.3} | {:.1e} |",
+                 | {:.2} | {:.3} | {:.3} | {:.2} | {:.3} | {:.2} | {:.2} | {:.3} | {:.1e} \
+                 | {:.3} | {:.2} | {} | {} | {:.3} | {:.3} | {:.2} |",
                 t.p2m,
                 t.radial,
                 t.harmonics,
@@ -640,6 +936,17 @@ fn main() {
                 t.kernel / projected,
                 t.kernel - (leaf.columns + radial + t.exp),
                 t.kernel_check,
+                leaf.derivative_columns,
+                leaf.derivatives_error,
+                or_dash(leaf.radial_derivatives.map(|r| format!("{r:.3}"))),
+                or_dash(leaf.radial_derivatives_differ.map(|d| if d == 0 {
+                    "bit for bit".to_string()
+                } else {
+                    format!("{d} beside flushed")
+                })),
+                t.sum_gradient_leaf,
+                projected_gradient,
+                projected_gradient / t.l2p_gradient,
             );
         }
     }
