@@ -292,6 +292,8 @@ kernel for both sums.
 
 ## 8. Question for sign-off
 
+Signed off 2026-11-28 by the user on #272: "Q1 as recommended" (no ISA kernel; the question closes).
+
 1. **The ISA question** (§6).
    - **Recommended: no ISA kernel for the leaf sums.** On the baseline build both sums stay within
      about 2–3× of the baseline's peak. An AVX-512 kernel would save 0.9–2.9 % of an evaluation on

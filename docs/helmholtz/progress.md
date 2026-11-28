@@ -5252,10 +5252,10 @@ request, using this template:
   - `helmholtz_leaf`'s sum subtracting `exp` for real k (recomputed by the tables script).
 
   Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path).
-- Decisions: question 1 for sign-off, the ISA question. Recommended: no ISA kernel; the question
-  closes.
+- Decisions: question 1 of #272, the ISA question, signed off 2026-11-28 (the user: "Q1 as
+  recommended"): no ISA kernel for the leaf sums; the question closes.
 - Laplace: not touched. The additions are a new kernel in `tetraleaf-tables`' Helmholtz module and
   Helmholtz code in `tetraleaf-exec`, plus the harness, scripts and documents. `LeafDirections` is a
   rename and `pub` of a Helmholtz type in `tetraleaf-math`, and nothing Laplace runs calls it.
-- Follow-ups: none unless question 1 takes the alternative (then CH4.9d off the list). Item 14 is
-  complete; next CH2.1 (item 15).
+- Follow-ups: none (question 1 took the recommendation, so no CH4.9d). Item 14 is complete; next
+  CH2.1 (item 15).

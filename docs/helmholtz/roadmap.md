@@ -10,7 +10,8 @@ Progress is logged in `docs/helmholtz/progress.md`; each task's plan is
 Status (2026-11-28): **H1, H3, H4 and H6 closed** (`docs/helmholtz/gates/H1.md`, 2026-11-19;
 `gates/H3.md`, 2026-11-02; `gates/H4.md`, 2026-11-25; `gates/H6.md`, 2026-11-12). Item 14, the leaf
 expansions: CH4.9a1–CH4.9b1 merged; CH4.9b2 (L2P by the batched kernel; the evaluation 0.77–0.94× of
-the one before CH4.9a–b on Kathleen and locust) is done in its PR, with the ISA question for sign-off.
+the one before CH4.9a–b on Kathleen and locust) is done in its PR, its ISA question signed off (no ISA
+kernel), and waits for the merge.
 Next H2 and H5 (items 15–16), CH2.1 first. Eight H4 tasks stay open off the list, and so does CH4.9c.
 The project was renamed tetraleaf on 2026-11-21. HR, H0, H2, H5, H7, H8 and H9 are open; of H0,
 CH0.4, CH0.6 and CH0.9 are done, and of H7, CH7.5a–c. The history of this line until H6.G is in
@@ -798,7 +799,8 @@ CH4.8a, CH4.8b and H4.G condensed at its second run (2026-11-25), in full in `gi
   and the FMM's errors are 0.993–1.000× the reference's, W1's and W2's constant density included.
   L2P per run takes 0.19–0.23× (Kathleen) and 0.17–0.27× (locust); the evaluation is 0.77–0.94× and
   0.82–0.94× of the one before CH4.9a–b. The ISA question: the sum is within 2–3× of the baseline's
-  peak, and an AVX-512 kernel would save at most 2.9 % of an evaluation (question 1 on the PR). Report
+  peak, and an AVX-512 kernel would save at most 2.9 % of an evaluation; no ISA kernel, the question
+  closed (question 1, signed off 2026-11-28, the user on #272: "Q1 as recommended"). Report
   `tetraleaf-validate/results/helmholtz-ch4-9b2.md`, record `docs/helmholtz/tasks/CH4.9b2.md`.
 - [ ] **CH4.9c Laplace's P2M and L2P by SIMD kernels.** Added on 2026-11-26 (the user: "Please add it
   to the roadmap"); off the priority list. A Laplace task: constraint 1 binds in full. Measured on

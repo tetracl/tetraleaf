@@ -190,7 +190,8 @@ Not run:
 
 ## Open questions
 For sign-off on the PR (the report §8):
-1. The ISA question.
+1. The ISA question. **Signed off 2026-11-28 by the user on #272: "Q1 as recommended"**: no ISA
+   kernel for the leaf sums; the question closes.
    - Recommended: no ISA kernel for the leaf sums; the question closes.
    - Alternative: a follow-up CH4.9d off the list, the two sums as `tetraleaf-simd` kernels.
    - Alternative: that kernel now.
