@@ -5365,3 +5365,69 @@ request, using this template:
   `pipeline.rs`, `tetraleaf-tables`, `tetraleaf-simd`, `tetraleaf-plan`, `tetraleaf-octree` unchanged).
 - Follow-ups: CH2.1d (Yukawa's Batched, Classes, exponential M2L and Auto; roadmap line added);
   CH2.1c next (Yukawa's batched P2M).
+
+## 2026-11-28: CH2.1c Yukawa's batched P2M
+- Done:
+  - `tetraleaf_tables::helmholtz::leaf::LeafP2m` restates `p2m_yukawa` (k = iκ): îₙ by `modified_i`
+    per lane at the reference's length p + 1, e^{κρ − β} per lane, real weights (q e) îₙ per real
+    charge column, then CH4.9a2b's columns and lane sums. `planes` is 1 for real charges, 2 for
+    complex ones (Re q's and Im q's real multipoles, `Densities`' layout). îₙ and e below the
+    under-range τ (2⁻¹⁰⁰ in f32, 2⁻⁹⁰⁰ in f64) are set to zero, as `bessel_j_real` does. The
+    refusal is gone; the module docs gain "Yukawa".
+  - `Densities::p2m_kernel` runs the kernel on Yukawa (its fall-back gone, a kind check added); the
+    operator's P2M follows the P2P choice on Yukawa as for real and complex k. L2P stays the
+    reference's on Yukawa (`leaves_batched` says so).
+  - `tools/helmholtz/ch2-1c-runs.sh` and `ch2-1c-tables.py` (on `common.py`).
+  - Report `tetraleaf-validate/results/helmholtz-ch2-1c.md`; record `docs/helmholtz/tasks/CH2.1c.md`.
+  - CH2.1 is complete (CH2.1a–c).
+- Results (Kathleen jobs 673284 and 673285 on node-c11a-011, 1 × 40):
+  - The FMM: CH2.1b's 114 cases within ε (at most 0.27 ε), the batched P2M's errors 1.0000× the
+    reference P2M's in every case (the harness prints three digits); also with complex charges and
+    on the constant density (W1 and W3 at 10⁶).
+  - P2M per run 0.29–0.34× the reference's, from 7–10 % of an evaluation to 2–3 %; the evaluation
+    0.93–0.95×.
+  - Yukawa's reference L2P is 15–25 % of an evaluation after this.
+  - The constant density on W1 at κD = 100, 10⁻⁶ misses ε on ∇φ (2.6 ε) under either P2M.
+  - W1's and W2's defaults hold no point on Yukawa (their N follows Re k): the first job's `worst`
+    and W1 `levels` ran empty and were rerun on W1n and W3.
+- Tests:
+  - `tetraleaf-tables/tests/helmholtz/leaf_yukawa.rs`, against `p2m_yukawa` per coefficient,
+    C = 10:
+    - f64: p ≤ 45, κ̂ 10⁻⁶–250, N 1–200, real and complex charges, one to three vectors; 0.80 of C.
+    - f32 against the f64 reference: 1.54 of C, beside the f32 level's own rounding of s and β
+      (2 (β + n) u, held apart) and the flushes' floor; no subnormal coefficient.
+    - Bits: vector v the one-vector call's; complex charges' planes the real-charge kernel on Re q
+      and on Im q; accumulation.
+    - Two refusals.
+    - `leaf.rs`'s `yukawa_is_refused` is removed.
+  - `tetraleaf-exec/tests/helmholtz/densities.rs`: Yukawa's kernel within 10⁻¹³ like the other
+    paths (the "Yukawa keeps the reference" asserts go), and complex vectors two real ones under
+    the kernel.
+  - `tests/helmholtz_fmm.rs`: `check_leaf_kernel` on Yukawa's three scenarios: 1.0000×, outputs
+    within 4.1·10⁻¹⁶ on the M6.
+- Checks: `/verify` on the M6.
+  - fmt; Clippy default, examples, workspace; docs.
+  - At opt-level 1, `cargo test` 1,469 and `--workspace` 1,513 passed.
+  - The MPI list at 2 and 4 ranks passed; `helmholtz_fmm` again on the final code at 1, 2 and 4
+    ranks: 53.4, 52.9 and 49.8 s.
+  - Opt-level 0 debug runs:
+    - tables' `helmholtz` 42 s at load 3–4 (CH2.1a 41.4 s);
+    - exec's `helmholtz` 120 s at load 5 (CH2.1b 119 s);
+    - `helmholtz_fmm` 953 s at load 2–5 (CH2.1b 936 s).
+
+  A self-review by a subagent found no blocking defect. Fixed after it: the f32 level's rounding
+  held apart from C, the floor's norm, κ̂ = 250 and three complex vectors in the f64 test, a
+  charge-length refusal, the kind check, and doc wording.
+
+  Not run: `cargo deny` (no manifest change); Laplace's benchmarks (no Laplace path); locust and the
+  M6 timings (the kernel is safe Rust without ISA dispatch; one machine class measured, as at
+  CH2.1b).
+- Decisions: questions 1 and 2 of #275 signed off 2026-11-28 (the user: "Q1 and Q2 as
+  recommended"):
+  - CH2.1e on the priority list in item 15 right after CH2.1c;
+  - the constant density's gradient as an Also on CH2.3.
+- Laplace: not touched (`tetraleaf-tables`' Helmholtz `leaf` module and `tetraleaf-exec`'s
+  Helmholtz densities, operator docs and tests only).
+- Follow-ups:
+  - CH2.1e (Yukawa's batched L2P; roadmap line added, on the list next);
+  - CH2.3's Also (the constant density's gradient on Yukawa; W2 needs a fixed-N form for Yukawa).

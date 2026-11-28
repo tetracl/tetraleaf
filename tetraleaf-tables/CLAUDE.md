@@ -26,7 +26,7 @@ and the build by ring); Helmholtz CH4.6a1
 (`Conversions::{s2f_modes, f2r_modes}`, the conversions' halves around the φ step); Helmholtz
 CH4.9a2b (`helmholtz::leaf`, the batched P2M of a leaf); Helmholtz CH4.9b2 (`helmholtz::leaf`'s
 `LeafL2p`, the batched L2P with gradients); Helmholtz CH2.1a (Yukawa's real RCR and dense M2L
-tables in `helmholtz` and `helmholtz::dense`).
+tables in `helmholtz` and `helmholtz::dense`); Helmholtz CH2.1c (`LeafP2m` on Yukawa).
 
 ## Rules
 - Read docs/CONVENTIONS.md before changing any formula; never change a convention here.
@@ -308,9 +308,20 @@ tables in `helmholtz` and `helmholtz::dense`).
   C u √((2n + 1)/(4π)) Σⱼ |qⱼ eⱼ| (((n + 1)² + N) |ĵₙ| + |kρⱼ| |ĵₙ′|) with C = 10 (about 1
   measured, f64 to p = 45 and f32 against the f64 reference to p = 32), and checks vector v the
   one-vector call's bits, real charges the real plane of complex ones with Im q = 0 bit for bit,
-  accumulation, the scratch's degree, Yukawa refused. A leaf's values depend on its points and
+  accumulation, the scratch's degree. A leaf's values depend on its points and
   charges in order alone; no `mul_add`, no allocation in `p2m` (`P2mScratch`, sized by the degree
   and the vectors).
+  Since Helmholtz CH2.1c (docs/helmholtz/tasks/CH2.1c.md; the module docs, "Yukawa") `LeafP2m` also
+  restates `p2m_yukawa` (k = iκ): îₙ by `modified_i` per lane at the reference's length p + 1,
+  e = e^{κρ − β} per lane, real weights (q e) îₙ per real charge column, then the same columns and
+  lane sums; `planes` is 1 for real charges, 2 for complex ones (Re q's and Im q's real multipoles,
+  each the real-charge kernel's bits); îₙ and e below the under-range τ (restated from
+  `tetraleaf-math`: 2⁻¹⁰⁰ in f32, 2⁻⁹⁰⁰ in f64) set to zero, as `bessel_j_real` does.
+  `tests/helmholtz/leaf_yukawa.rs` holds every coefficient to
+  C u √((2n + 1)/(4π)) Σⱼ |qⱼ eⱼ| (((n + 1)² + N) îₙ + κρⱼ (|îₙ′| + îₙ)) with C = 10 (0.80 measured in
+  f64 to p = 45 and κ̂ to 250; 1.54 in f32 against the f64 reference to p = 32 and κ̂ 60, beside the
+  f32 level's own rounding of s and β, 2 (β + n) u held apart, and the flushes' floor), the vectors
+  and the complex charges' planes bit for bit, accumulation, the lengths refused.
   Since Helmholtz CH4.9b2 `LeafL2p` restates `tetraleaf_ref::helmholtz::leaf::l2p` (its `evaluate`:
   per degree the three sums Σₘ L̂ Y, Σₘ L̂ ∂θ Y, Σₘ L̂ (1/sin θ) ∂φ Y, then the radial functions, their
   derivatives and the tangential factor ĵₙ/r with the centre's limit k/(3s), the Cartesian gradient,

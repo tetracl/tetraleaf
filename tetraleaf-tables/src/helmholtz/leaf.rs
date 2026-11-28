@@ -56,6 +56,37 @@
 //! 2⁻¹⁰⁰ beyond the turning point; [`tetraleaf_math::orthonormal::leaf`], "Under-range
 //! values"), which moves a term by at most about 2⁻⁵⁷ |wₙⱼ|, far below u.
 //!
+//! # Yukawa
+//!
+//! On Yukawa's real path (k = iκ, Helmholtz CH2.1c) the kernel restates
+//! [`tetraleaf_ref::helmholtz::leaf::p2m_yukawa`], the real multipole of real charges,
+//!
+//! ```text
+//! M̂ᵞₙᵐ += Σⱼ qⱼ îₙ(κρⱼ) e^{κρⱼ − β} Yₙᵐ(ρ̂ⱼ)
+//! ```
+//!
+//! with the same steps: îₙ by [`modified_i`] per lane (the reference's routine at the reference's
+//! length p + 1, so a lane's values are the reference's at its ρ), eⱼ = e^{κρⱼ − β} per lane, the
+//! real weights wₙⱼ = (qⱼ eⱼ) îₙ(κρⱼ) as for real k, then the columns and the lane sums. Each real
+//! charge column is one real multipole: [`LeafP2m::planes`] is 1 for real charges, and for complex
+//! charges plane 0 is Re q's multipole and plane 1 Im q's (`tetraleaf-exec`'s densities: a complex
+//! vector on Yukawa is two real vectors), each the real-charge kernel's bits on that column. Values
+//! of îₙ and of eⱼ below the under-range threshold τ (2⁻¹⁰⁰ in f32, 2⁻⁹⁰⁰ in f64) are set to zero,
+//! as [`bessel_j_real`] flushes ĵₙ: in f32 îₙ underflows at the leaf degrees near the centre and eⱼ
+//! under strong damping (κ(a − ρ) ≳ 70), and then neither is subnormal (their products may still
+//! be). A flushed term is below τ |qⱼ| √((2n + 1)/(4π)) (îₙ ≤ 1 and eⱼ ≤ 1 for ρ ≤ a).
+//!
+//! The contract is the one above with the factor's condition added: eⱼ now depends on ρⱼ, whose
+//! `sqrt` and `hypot` differ in the last bit, so
+//!
+//! ```text
+//! |M̂ᵞₙᵐ − M̂ᵞₙᵐ_ref| ≤ C u √((2n + 1)/(4π)) Σⱼ |qⱼ eⱼ| (((n + 1)² + N) îₙ(xⱼ) + xⱼ (|îₙ′(xⱼ)| + îₙ(xⱼ)))
+//! ```
+//!
+//! with xⱼ = κρⱼ (`tests/helmholtz/leaf_yukawa.rs`: C = 10, about 0.8 measured in f64 to p = 45 and
+//! κ̂ a to 433; 1.5 in f32 against the f64 reference, beside the f32 level's own rounding of s and β,
+//! 2 (β + n) u, held apart).
+//!
 //! # L2P
 //!
 //! [`tetraleaf_ref::helmholtz::leaf::l2p`] evaluates a box's stored local point by point:
@@ -135,7 +166,7 @@
 use core::array;
 
 use tetraleaf_math::orthonormal::{LeafDirections, LeafHarmonics, LeafScratch};
-use tetraleaf_math::radial::{bessel_j, bessel_j_real, bessel_j_real_derivatives};
+use tetraleaf_math::radial::{bessel_j, bessel_j_real, bessel_j_real_derivatives, modified_i};
 use tetraleaf_math::{Complex, Layout, RealScalar};
 use tetraleaf_ref::helmholtz::Level;
 
@@ -191,10 +222,12 @@ impl<T: RealScalar> LeafP2m<T> {
         self.harmonics.p()
     }
 
-    /// The planes of a multipole of `level` with these charges: 1 for real k with real
-    /// charges (a real multipole, CONVENTIONS §3.15's storage), 2 otherwise.
+    /// The planes of a multipole of `level` with these charges: 1 for real charges with real k
+    /// or on Yukawa's real path (k = iκ; a real multipole, CONVENTIONS §3.15's storage), 2
+    /// otherwise: a complex multipole, or on Yukawa the real multipoles of Re q and Im q (the
+    /// [module documentation](self), "Yukawa").
     pub fn planes(level: &Level<T>, complex: bool) -> usize {
-        if level.k().im == T::zero() && !complex {
+        if (level.k().im == T::zero() || level.is_yukawa()) && !complex {
             1
         } else {
             2
@@ -208,14 +241,16 @@ impl<T: RealScalar> LeafP2m<T> {
     /// values per vector in the layout of §3.6, the real plane then the imaginary plane, the
     /// vectors one after the other. The sum of
     /// [`tetraleaf_ref::helmholtz::leaf::p2m`] over the points, to the contract of the [module
-    /// documentation](self).
+    /// documentation](self). On Yukawa's real path (k = iκ, Helmholtz CH2.1c) it is the sum of
+    /// [`tetraleaf_ref::helmholtz::leaf::p2m_yukawa`], M̂ᵞₙᵐ += Σⱼ qⱼ îₙ(κρⱼ) e^{κρⱼ − β} Yₙᵐ(ρ̂ⱼ),
+    /// per real charge column: one plane per vector for real charges, the planes of Re q and Im q
+    /// for complex ones.
     ///
     /// # Panics
     ///
     /// If `p` exceeds the kernel's or the scratch's degree, the charges have more vectors than
-    /// the scratch, the level is Yukawa's (k = iκ: H2's path), `charges.values` does not hold
-    /// [`columns`](LeafCharges::columns) values per point, or `multipoles` does not have
-    /// m [`planes`](Self::planes) (p + 1)² values.
+    /// the scratch, `charges.values` does not hold [`columns`](LeafCharges::columns) values per
+    /// point, or `multipoles` does not have m [`planes`](Self::planes) (p + 1)² values.
     pub fn p2m(
         &self,
         p: usize,
@@ -237,10 +272,6 @@ impl<T: RealScalar> LeafP2m<T> {
             charges.vectors,
             scratch.vectors
         );
-        assert!(
-            !level.is_yukawa(),
-            "the batched P2M takes Helmholtz's complex path, not Yukawa's"
-        );
         let columns = charges.columns();
         assert_eq!(
             charges.values.len(),
@@ -257,7 +288,11 @@ impl<T: RealScalar> LeafP2m<T> {
         );
         let k = level.k();
         let real_k = k.im == T::zero();
+        let yukawa = level.is_yukawa();
+        // Real weights, wₙ = (q e) ĵₙ or (q e) îₙ per real charge column.
+        let real_radial = real_k || yukawa;
         let (s, beta) = (level.scale(), level.damping());
+        let tau = under_range::<T>();
         // For real k the factor is e^{0·ρ − β}, the same for every point.
         let e_real = (T::zero() - beta).exp();
         let P2mScratch {
@@ -265,6 +300,7 @@ impl<T: RealScalar> LeafP2m<T> {
             radial,
             radial_im,
             one,
+            one_real,
             weights,
             ..
         } = scratch;
@@ -287,6 +323,20 @@ impl<T: RealScalar> LeafP2m<T> {
                 let x: [T; B] = array::from_fn(|j| k.re * rho[j]);
                 bessel_j_real(&x, s, &mut radial[..degrees]);
                 [e_real; B]
+            } else if yukawa {
+                // îₙ(κρ) per lane by the reference's routine and length, and e = e^{κρ − β} per
+                // lane, the values below τ flushed (module documentation, "Yukawa").
+                let kappa = k.im;
+                for j in 0..B {
+                    modified_i(kappa * rho[j], s, &mut one_real[..degrees], None);
+                    for (n, &value) in one_real[..degrees].iter().enumerate() {
+                        radial[n][j] = if value < tau { T::zero() } else { value };
+                    }
+                }
+                array::from_fn(|j| {
+                    let e = (kappa * rho[j] - beta).exp();
+                    if e < tau { T::zero() } else { e }
+                })
             } else {
                 for j in 0..B {
                     bessel_j(k * rho[j], s, &mut one[..degrees], None);
@@ -317,7 +367,7 @@ impl<T: RealScalar> LeafP2m<T> {
                 let (re, im) = out.split_at_mut(degrees);
                 for n in 0..degrees {
                     let j_re = &radial[n];
-                    if real_k {
+                    if real_radial {
                         re[n] = array::from_fn(|j| w_re[j] * j_re[j]);
                         if planes == 2 {
                             im[n] = array::from_fn(|j| w_im[j] * j_re[j]);
@@ -362,6 +412,18 @@ impl<T: RealScalar> LeafP2m<T> {
     }
 }
 
+/// The under-range threshold τ of `tetraleaf_math::orthonormal::leaf` ("Under-range values"),
+/// restated (it is private there): 2⁻⁹⁰⁰ for a type with f64's range, 2⁻¹⁰⁰ for f32's. Yukawa's
+/// îₙ below it are flushed to zero, as `bessel_j_real` flushes ĵₙ.
+#[inline]
+fn under_range<T: RealScalar>() -> T {
+    if T::max_value().to_f64() > 1e300 {
+        T::from_f64(2f64.powi(-900))
+    } else {
+        T::from_f64(2f64.powi(-100))
+    }
+}
+
 /// Σⱼ aⱼ bⱼ over the lanes, the products added pairwise in a fixed order: lane j with j + 8,
 /// then j with j + 4, j + 2, j + 1.
 #[inline(always)]
@@ -386,6 +448,8 @@ pub struct P2mScratch<T> {
     radial_im: Vec<[T; B]>,
     /// One lane's ĵₙ for complex k.
     one: Vec<Complex<T>>,
+    /// One lane's îₙ on Yukawa's real path.
+    one_real: Vec<T>,
     /// Per vector the weights' real then imaginary planes, p + 1 rows each.
     weights: Vec<[T; B]>,
 }
@@ -401,6 +465,7 @@ impl<T: RealScalar> P2mScratch<T> {
             radial: vec![[T::zero(); B]; degrees],
             radial_im: vec![[T::zero(); B]; degrees],
             one: vec![Complex::new(T::zero(), T::zero()); degrees],
+            one_real: vec![T::zero(); degrees],
             weights: vec![[T::zero(); B]; 2 * vectors * degrees],
         }
     }

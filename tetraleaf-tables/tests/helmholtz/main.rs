@@ -31,6 +31,7 @@ mod diagonal_modes;
 mod diagonal_transfer;
 mod l2p;
 mod leaf;
+mod leaf_yukawa;
 mod parts;
 mod plane_wave_merge;
 mod plane_wave_pair;

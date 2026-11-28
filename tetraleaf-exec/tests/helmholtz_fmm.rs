@@ -21,8 +21,8 @@
 //! bit `Reference`, `Auto`
 //! bit for bit `Isa(Isa::detect())`, and every ISA within `KERNEL_TOLERANCE` of `Reference`
 //! (relative L2 over every rank's targets) and within the scenario's bound of the direct sum.
-//! On every scenario and a cube of complex k with real charges the batched P2M and L2P
-//! (`check_leaf_kernel`): against the reference's on the same ISA within
+//! On every scenario, a cube of complex k with real charges and (Helmholtz CH2.1c, the batched P2M
+//! alone) Yukawa's three scenarios the batched P2M and L2P (`check_leaf_kernel`): against the reference's on the same ISA within
 //! `LEAF_TOLERANCE`, the errors against the direct sum within `LEAF_RATIO` (1.01) of the
 //! reference's, and on P ranks the one-rank FMM bit for bit under both.
 //!
@@ -5201,6 +5201,7 @@ fn helmholtz_fmm() {
         check(&scenario, &comm);
         check_vectors(&scenario, &comm);
         check_yukawa(&scenario, &comm);
+        check_leaf_kernel(&scenario, &comm);
     }
     check_kernels(&yukawa_scenarios()[0], &comm);
     check_tables(&yukawa_scenarios()[2], HelmholtzM2l::Dense, None, &comm);

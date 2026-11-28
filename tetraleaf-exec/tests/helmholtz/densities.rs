@@ -1,7 +1,8 @@
 //! Complex densities (Helmholtz CH3.0c; CONVENTIONS §3.15, "Storage" and "Inputs and
 //! outputs"): the sizes of every path against §3.15's table, the chunk indices against
 //! §3.13's several-vector layout, the charges in, P2M and L2P bit for bit against
-//! `tetraleaf_ref::helmholtz::leaf`, the batched P2M to rounding (Helmholtz CH4.9a2b), Yukawa's complex vectors as two real ones, and the
+//! `tetraleaf_ref::helmholtz::leaf`, the batched P2M to rounding (Helmholtz CH4.9a2b; Yukawa's since
+//! CH2.1c), Yukawa's complex vectors as two real ones, and the
 //! leaf's chunks end to end against the direct sum (`tetraleaf_ref::helmholtz::p2p::
 //! direct_sum`, 1/(4π) applied), relative L2 over the targets.
 
@@ -350,7 +351,7 @@ fn p2m_is_the_reference_bit_for_bit() {
 /// The batched P2M (Helmholtz CH4.9a2b) against the reference's on every path, three vectors:
 /// each vector's expansion within 1e-13 of its largest coefficient (relative to the
 /// reference's; the contract per term is `tetraleaf-tables`' `tests/helmholtz/leaf.rs`), vector
-/// v the one-vector call's bits, a second call added (+=), and Yukawa the reference's bits.
+/// v the one-vector call's bits, and a second call added (+=); Yukawa too since Helmholtz CH2.1c.
 #[test]
 fn the_batched_p2m_is_the_reference_to_rounding() {
     let (domain, key) = leaf_box();
@@ -370,10 +371,6 @@ fn the_batched_p2m_is_the_reference_to_rounding() {
             d.p2m(&k, r, p, &chunk, n, &mut scratch, &mut want);
             let mut got = vec![0.0; d.multipole_size(p)];
             d.p2m_kernel(&k, r, p, &chunk, n, &mut scratch, &mut got);
-            if kind == WavenumberKind::Yukawa {
-                assert_eq!(got, want, "{what}: Yukawa keeps the reference");
-                continue;
-            }
             let size = d.multipole_size(p) / m;
             for v in 0..m {
                 let (a, b) = (
@@ -574,6 +571,15 @@ fn yukawa_complex_vectors_are_two_real_vectors() {
     );
     complex.p2m(&k, r, p, &chunk, n, &mut scratch, &mut a);
     real.p2m(&k, r, p, &real_chunk, n, &mut scratch, &mut b);
+    assert_eq!(a, b);
+    // The batched P2M (Helmholtz CH2.1c) too.
+    let mut scratch = LeafScratch::with_vectors(p, 2 * m);
+    let (mut a, mut b) = (
+        vec![0.0; complex.multipole_size(p)],
+        vec![0.0; real.multipole_size(p)],
+    );
+    complex.p2m_kernel(&k, r, p, &chunk, n, &mut scratch, &mut a);
+    real.p2m_kernel(&k, r, p, &real_chunk, n, &mut scratch, &mut b);
     assert_eq!(a, b);
 
     let locals: Vec<f64> = (0..complex.local_size(p)).map(|_| rng.next()).collect();

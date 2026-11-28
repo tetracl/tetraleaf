@@ -447,26 +447,6 @@ fn a_leafs_bits_do_not_depend_on_the_scratch() {
 }
 
 #[test]
-#[should_panic(expected = "Yukawa")]
-fn yukawa_is_refused() {
-    let level = Level::new(Complex::new(0.0, 2.0), 1.0);
-    let mut out = vec![0.0; 2 * 16];
-    let charges = LeafCharges {
-        values: &[1.0, 0.0],
-        vectors: 1,
-        complex: true,
-    };
-    LeafP2m::new(3).p2m(
-        3,
-        &level,
-        &[[0.1, 0.2, 0.3]],
-        charges,
-        &mut P2mScratch::new(3, 1),
-        &mut out,
-    );
-}
-
-#[test]
 #[should_panic(expected = "the multipoles must hold")]
 fn a_short_multipole_is_refused() {
     let level = Level::new(Complex::new(2.0, 0.0), 1.0);

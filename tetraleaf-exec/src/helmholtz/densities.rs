@@ -76,7 +76,8 @@
 //! and [`Densities::l2p_kernel`] (Helmholtz CH4.9b2) form the same multipoles and outputs by the
 //! batched kernels of `tetraleaf_tables::helmholtz::leaf` (all the leaf's points and vectors in one
 //! call, 16 points at a time; the reference's values to the kernels' contracts, not their bits);
-//! the Yukawa path keeps the reference calls. Their scratch is a [`LeafScratch`], sized at construction. The
+//! on the Yukawa path P2M runs its kernel too (Helmholtz CH2.1c) and L2P keeps the reference
+//! calls. Their scratch is a [`LeafScratch`], sized at construction. The
 //! operators that need a second box's frame (P2L, M2P, P2P) belong to the Helmholtz operator
 //! (CH3.1), which chooses between the two P2Ms.
 
@@ -468,7 +469,8 @@ impl Densities {
     /// of `tetraleaf_tables::helmholtz::leaf::LeafP2m::p2m` on the leaf's points and every
     /// vector's charges as the chunk holds them. Within the kernel's contract of the reference's
     /// values, not its bits; a leaf's values depend on its chunk alone, and vector v is the
-    /// one-vector call's bits. On the Yukawa path it is [`p2m`](Self::p2m) (H2's path).
+    /// one-vector call's bits. On the Yukawa path (Helmholtz CH2.1c) the kernel restates
+    /// `p2m_yukawa` per real charge column, a complex vector's two planes those of Re q and Im q.
     ///
     /// # Panics
     ///
@@ -484,10 +486,6 @@ impl Densities {
         scratch: &mut LeafScratch<T>,
         multipoles: &mut [T],
     ) {
-        if self.kind == WavenumberKind::Yukawa {
-            self.p2m(k, radius, p, chunk, n, scratch, multipoles);
-            return;
-        }
         let (level, _) = self.leaf_level::<T>(k, radius);
         assert!(scratch.p >= p, "scratch for degree {}, not {p}", scratch.p);
         assert_eq!(multipoles.len(), self.multipole_size(p), "multipoles");
@@ -497,7 +495,13 @@ impl Densities {
             vectors: self.vectors,
             complex: self.charges == ChargeKind::Complex,
         };
-        // The kernel reads real k from k̂ rounded to T; the path's kind decides the storage.
+        // The kernel reads real k and Yukawa from k̂ rounded to T; the path's kind decides the
+        // storage.
+        assert_eq!(
+            level.is_yukawa(),
+            self.kind == WavenumberKind::Yukawa,
+            "k̂ = k r rounded to T changed the kind of k"
+        );
         assert_eq!(
             LeafP2m::planes(&level, charges.complex),
             self.multipole_planes(),
